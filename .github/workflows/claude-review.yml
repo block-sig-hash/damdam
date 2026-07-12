@@ -1,0 +1,101 @@
+name: Claude Review
+
+# Claude is the QA/review layer, not the primary implementer, so
+# this triggers on PR events (review Codex's output) and on
+# explicit @claude mentions — not on every push, to keep cost
+# predictable per docs/AGENTS.md's cost-optimization guidance.
+#
+# TOKEN OPTIMIZATION: this workflow's output is a structured
+# blocking/non-blocking checklist, not prose meant to explain or
+# teach — terse output is the correct UX here, not a compromise.
+# Consider installing JuliusBrussee/caveman (github.com/
+# JuliusBrussee/caveman), scoped to this workflow's system prompt
+# only, for ~65% output token reduction on review comments while
+# keeping code/commands/errors byte-exact. Deliberately NOT
+# recommended for interactive CTO/QA sessions (local `claude`
+# usage, architecture discussion) — that reasoning depth is doing
+# real work catching spec inconsistencies, and compressing it
+# would cost more in missed issues than it saves in tokens.
+#
+# NOTE: the prompt below asks Claude to look at a rendered
+# screenshot when reviewing mobile screens. That only works if a
+# screenshot-generation step actually runs and uploads an artifact
+# before this job — e.g. a Detox/Maestro screenshot test, or an
+# Expo/React Native preview build step. That CI step doesn't exist
+# yet as of this workflow's authoring; add it before relying on
+# the visual-review guidance below, or Claude will be reviewing
+# code only and the design-system compliance check will be
+# text-based inference rather than an actual look at the screen.
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  claude-review:
+    # Only run on: a freshly opened/ready PR, or a comment that
+    # actually mentions @claude — avoids firing on every unrelated
+    # issue comment or draft-PR push.
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@claude') &&
+       github.event.comment.user.type != 'Bot')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Sonnet by default for cost control, per AGENTS.md's
+          # "default to Sonnet, escalate to Opus only when it
+          # earns it" guidance — override manually for a specific
+          # hard review by commenting "@claude use opus" if needed.
+          claude_args: >-
+            --model claude-sonnet-5
+            --max-turns 8
+          prompt: |
+            Review this PR against docs/testing-qa.md and the
+            linked user story's acceptance criteria in docs/prd.md.
+
+            If this PR touches apps/mobile/src/screens or
+            apps/mobile/src/components (excluding the SosConfirm,
+            SosSent, and onboarding screens, which Claude implements
+            directly and reviews for design intent rather than
+            system compliance): verify the implementation actually
+            follows docs/design-system.md — check spacing, color,
+            and component choices against the system, not just
+            whether the screen renders and passes its tests. If a
+            rendered screenshot is available as a CI artifact on
+            this PR, look at it and flag anything that reads as
+            generic, inconsistent with the system, or a plausible
+            departure from what a real design review would catch —
+            this is a design-quality gate, not just a code-quality
+            one. If design-system.md doesn't yet cover a pattern
+            this PR needed, flag that as a system gap to fix once,
+            not a one-off judgment call Codex should have made
+            unassisted.
+
+            If this PR touches check-in, SOS, payment, or auth
+            logic (US-15, US-16, US-09, US-25, US-01/02/23 in
+            docs/prd.md): confirm test-first discipline was
+            followed per docs/testing-qa.md §14.1, and re-check
+            the offline/chaos scenarios in §14.4.1 are still
+            covered, not just that new tests were added.
+
+            Flag missing tests, spec drift (implementation not
+            matching docs/api-spec.md or docs/data-model.md), and
+            cross-tenant isolation gaps (docs/security.md §10.5)
+            as blocking. Everything else as non-blocking suggestions.

@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+
+jobs:
+  lint-and-test-api:
+    name: API — Lint, type-check, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Type-check (mypy)
+        run: mypy app
+      - name: Test (pytest)
+        run: pytest --cov=app
+      - name: Export OpenAPI spec and check for drift
+        run: |
+          python -c "from app.main import app; import json; json.dump(app.openapi(), open('openapi-generated.json', 'w'))"
+          # Compare against committed docs/api-spec.yaml — fails
+          # the check if the API implementation has drifted from
+          # the documented contract without an updated spec commit
+          python scripts/check_api_spec_drift.py
+
+  lint-and-test-dashboard:
+    name: Dashboard — Lint, type-check, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm run test
+
+  lint-and-test-mobile:
+    name: Mobile — Lint, type-check, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run type-check
+      - run: npm run test
+
+  build-check:
+    name: Docker build check (multi-arch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU (for arm64 emulation)
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build API image for both architectures
+        # Catches aarch64 wheel/dependency availability issues in
+        # CI rather than at OCI deploy time — see
+        # docs/infrastructure.md §11.9.2 and
+        # docs/scaling-infrastructure.md §12.2. This is what lets
+        # local development stay on the founder's actual machine
+        # (x86, per infrastructure.md §11.9) without losing early
+        # warning on ARM-specific breakage before it reaches the
+        # OCI Ampere A1 production instance.
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -t damdam-api:ci \
+            ./apps/api
