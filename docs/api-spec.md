@@ -78,11 +78,13 @@ POST   /auth/hto/register
 POST   /auth/hto/verify-email
   Body: { token: string }
   200: { message: "Email verified, pending admin approval" }
+  400: { error: "invalid_verification_token" }
 
 POST   /auth/hto/login
   Body: { email, password }
   200: { access_token, refresh_token, operator: {..} }
-  403: { error: "pending_approval" | "rejected" }
+  401: { error: "invalid_credentials" }
+  403: { error: "email_not_verified" | "pending_approval" | "rejected" }
 ```
 
 ---
@@ -395,9 +397,22 @@ POST   /webhooks/otp/termii
 ## 7.10 Admin
 
 ```
+GET    /admin/hto-operators
+  Admin auth required
+  Query: ?status=pending|approved|rejected
+  200: { operators: [{ id, business_name, operator_name, email,
+          phone_number, nahcon_licence_number, email_verified,
+          approval_status, created_at }] }
+
 POST   /admin/hto-operators/{id}/approve
+  Admin auth required
+  200: { approval_status: "approved" }
+  Triggers operator approval notifications via email + WhatsApp
+
 POST   /admin/hto-operators/{id}/reject
+  Admin auth required
   Body: { reason: string }  (reject only)
+  200: { approval_status: "rejected" }
 
 GET    /admin/manifest-orders
   Query: ?status=awaiting_payment&search=
@@ -500,3 +515,21 @@ existing account; ordinary signup requests continue returning
 failure counters, issues a normal authenticated session, and requires
 the pilgrim to choose a replacement PIN through the existing PIN-set
 route.
+
+---
+
+## 7.16 Amendment — US-04 HTO Registration and Approval Contract
+
+US-04 makes email verification and manual DamDam-admin approval
+independent activation gates. An operator therefore receives an
+`email_not_verified` response until the signed 24-hour verification
+link is used, then `pending_approval` until an admin reviews the stored
+NAHCON licence number. The licence is displayed to the admin exactly
+as submitted and is not sent to a programmatic validation provider
+for MVP.
+
+The HTO approvals list is added so the specified Admin Screen 14 can
+review pending registrations without direct database access. Approval
+is admin-authenticated and dispatches both Resend email and WhatsApp
+Business notifications through internal provider abstractions; vendor
+response shapes do not leak into the API contract.

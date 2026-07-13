@@ -198,6 +198,140 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/hto/register:
+    post:
+      tags:
+      - authentication
+      summary: Register Hto
+      operationId: register_hto_v1_auth_hto_register_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HTORegistrationRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/hto/verify-email:
+    post:
+      tags:
+      - authentication
+      summary: Verify Hto Email
+      operationId: verify_hto_email_v1_auth_hto_verify_email_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HTOVerifyEmailRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/hto/login:
+    post:
+      tags:
+      - authentication
+      summary: Login Hto
+      operationId: login_hto_v1_auth_hto_login_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HTOLoginRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTOLoginResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/hto-operators:
+    get:
+      tags:
+      - admin
+      summary: List Hto Operators
+      operationId: list_hto_operators_v1_admin_hto_operators_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/HTOApprovalStatus'
+          - type: 'null'
+          title: Status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTOOperatorListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/hto-operators/{operator_id}/approve:
+    post:
+      tags:
+      - admin
+      summary: Approve Hto Operator
+      operationId: approve_hto_operator_v1_admin_hto_operators__operator_id__approve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: operator_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Operator Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTOApprovalResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/webhooks/otp/termii:
     post:
       tags:
@@ -236,6 +370,152 @@ components:
       - user
       - is_new_user
       title: AuthResponse
+    HTOApprovalResponse:
+      properties:
+        approval_status:
+          $ref: '#/components/schemas/HTOApprovalStatus'
+      type: object
+      required:
+      - approval_status
+      title: HTOApprovalResponse
+    HTOApprovalStatus:
+      type: string
+      enum:
+      - pending
+      - approved
+      - rejected
+      title: HTOApprovalStatus
+    HTOLoginRequest:
+      properties:
+        email:
+          type: string
+          title: Email
+        password:
+          type: string
+          title: Password
+      type: object
+      required:
+      - email
+      - password
+      title: HTOLoginRequest
+    HTOLoginResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        refresh_token:
+          type: string
+          title: Refresh Token
+        operator:
+          $ref: '#/components/schemas/HTOOperatorResponse'
+      type: object
+      required:
+      - access_token
+      - refresh_token
+      - operator
+      title: HTOLoginResponse
+    HTOOperatorListResponse:
+      properties:
+        operators:
+          items:
+            $ref: '#/components/schemas/HTOOperatorResponse'
+          type: array
+          title: Operators
+      type: object
+      required:
+      - operators
+      title: HTOOperatorListResponse
+    HTOOperatorResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        business_name:
+          type: string
+          title: Business Name
+        operator_name:
+          type: string
+          title: Operator Name
+        email:
+          type: string
+          title: Email
+        phone_number:
+          type: string
+          title: Phone Number
+        nahcon_licence_number:
+          type: string
+          title: Nahcon Licence Number
+        email_verified:
+          type: boolean
+          title: Email Verified
+        approval_status:
+          $ref: '#/components/schemas/HTOApprovalStatus'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - business_name
+      - operator_name
+      - email
+      - phone_number
+      - nahcon_licence_number
+      - email_verified
+      - approval_status
+      - created_at
+      title: HTOOperatorResponse
+    HTORegistrationRequest:
+      properties:
+        business_name:
+          type: string
+          maxLength: 255
+          minLength: 1
+          title: Business Name
+        operator_name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Operator Name
+        email:
+          type: string
+          maxLength: 255
+          minLength: 3
+          title: Email
+        password:
+          type: string
+          maxLength: 128
+          minLength: 8
+          title: Password
+        phone_number:
+          type: string
+          title: Phone Number
+        nahcon_licence_number:
+          type: string
+          maxLength: 50
+          minLength: 1
+          title: Nahcon Licence Number
+      type: object
+      required:
+      - business_name
+      - operator_name
+      - email
+      - password
+      - phone_number
+      - nahcon_licence_number
+      title: HTORegistrationRequest
+    HTOVerifyEmailRequest:
+      properties:
+        token:
+          type: string
+          minLength: 1
+          title: Token
+      type: object
+      required:
+      - token
+      title: HTOVerifyEmailRequest
     HTTPValidationError:
       properties:
         detail:

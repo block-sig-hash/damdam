@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     twilio_auth_token: str = ""
     twilio_verify_service_sid: str = ""
 
+    dashboard_base_url: str = "http://localhost:3000"
+    hto_email_verification_ttl_hours: int = 24
+    notification_timeout_seconds: int = 10
+    resend_api_key: str = ""
+    resend_from_email: str = "DamDam <operators@damdam.app>"
+    whatsapp_access_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_api_version: str = "v23.0"
+    whatsapp_approval_template: str = "hto_account_approved"
+
     @model_validator(mode="after")
     def providers_must_differ(self) -> "Settings":
         if self.otp_provider_primary == self.otp_provider_secondary:

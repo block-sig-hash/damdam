@@ -4,14 +4,22 @@ from typing import Any, cast
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis import Redis
 
+from app.admin.routes import router as admin_router
+from app.auth.hto import HTOAuthError, HTOService
 from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
 from app.config import Settings, get_settings
-from app.container import build_otp_service, default_dependencies
+from app.container import (
+    build_notification_service,
+    build_otp_service,
+    default_dependencies,
+)
 from app.db import SessionFactory
+from app.notifications.service import EmailSender, WhatsAppSender
 from app.otp.providers.base import OTPProvider
 from app.otp.routes import router as otp_webhook_router
 from app.otp.service import FailoverScheduler, OTPError, RedisClient, utc_now
@@ -24,6 +32,8 @@ def create_app(
     scheduler: FailoverScheduler | None = None,
     session_factory: SessionFactory | None = None,
     clock: Callable[[], datetime] = utc_now,
+    email_sender: EmailSender | None = None,
+    whatsapp_sender: WhatsAppSender | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     supplied = (redis_client, providers, scheduler, session_factory)
@@ -44,6 +54,13 @@ def create_app(
     assert providers is not None
 
     api = FastAPI(title="DamDam API", version="0.1.0")
+    api.add_middleware(
+        CORSMiddleware,
+        allow_origins=[resolved_settings.dashboard_base_url.rstrip("/")],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     api.state.settings = resolved_settings
     api.state.session_factory = session_factory
     api.state.otp_service = build_otp_service(
@@ -54,6 +71,13 @@ def create_app(
         clock,
     )
     api.state.pin_service = PINService(clock)
+    api.state.hto_service = HTOService(
+        resolved_settings,
+        build_notification_service(
+            resolved_settings, email_sender, whatsapp_sender
+        ),
+        clock,
+    )
 
     @api.exception_handler(OTPError)
     async def otp_error_handler(request: Request, exc: OTPError) -> JSONResponse:
@@ -128,11 +152,50 @@ def create_app(
             },
         )
 
+    @api.exception_handler(HTOAuthError)
+    async def hto_error_handler(request: Request, exc: HTOAuthError) -> JSONResponse:
+        del request
+        statuses = {
+            "email_already_registered": 409,
+            "invalid_verification_token": 400,
+            "invalid_credentials": 401,
+            "email_not_verified": 403,
+            "pending_approval": 403,
+            "rejected": 403,
+            "invalid_admin_token": 401,
+            "operator_not_found": 404,
+            "invalid_approval_transition": 409,
+            "notification_unavailable": 503,
+        }
+        messages = {
+            "email_already_registered": "This email already has an account.",
+            "invalid_verification_token": (
+                "The verification link is invalid or expired."
+            ),
+            "invalid_credentials": "The email or password is incorrect.",
+            "email_not_verified": "Verify your email before continuing.",
+            "pending_approval": "Your account is pending admin approval.",
+            "rejected": "Your operator registration was rejected.",
+            "invalid_admin_token": "A valid administrator session is required.",
+            "operator_not_found": "The operator account was not found.",
+            "invalid_approval_transition": (
+                "The account cannot be approved from its current state."
+            ),
+            "notification_unavailable": (
+                "Notification delivery is temporarily unavailable."
+            ),
+        }
+        return JSONResponse(
+            status_code=statuses[exc.code],
+            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+        )
+
     @api.get("/health", tags=["system"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
     api.include_router(auth_router, prefix="/v1")
+    api.include_router(admin_router, prefix="/v1")
     api.include_router(otp_webhook_router, prefix="/v1")
     return api
 

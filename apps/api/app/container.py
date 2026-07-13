@@ -5,6 +5,8 @@ from redis import Redis
 
 from app.config import Settings
 from app.db import SessionFactory, create_session_factory
+from app.notifications.providers import MetaWhatsAppSender, ResendEmailSender
+from app.notifications.service import EmailSender, NotificationService, WhatsAppSender
 from app.otp.providers import OTPProvider, TermiiProvider, TwilioVerifyProvider
 from app.otp.service import FailoverScheduler, OTPService, RedisClient, utc_now
 
@@ -49,4 +51,15 @@ def default_dependencies(
         create_session_factory(settings),
         CeleryFailoverScheduler(),
         providers,
+    )
+
+
+def build_notification_service(
+    settings: Settings,
+    email_sender: EmailSender | None = None,
+    whatsapp_sender: WhatsAppSender | None = None,
+) -> NotificationService:
+    return NotificationService(
+        email_sender or ResendEmailSender(settings),
+        whatsapp_sender or MetaWhatsAppSender(settings),
     )
