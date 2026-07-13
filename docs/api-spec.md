@@ -533,3 +533,18 @@ review pending registrations without direct database access. Approval
 is admin-authenticated and dispatches both Resend email and WhatsApp
 Business notifications through internal provider abstractions; vendor
 response shapes do not leak into the API contract.
+
+---
+
+## 7.17 Amendment — Organization-Backed HTO Identity
+
+The HTO authentication and admin-review endpoints are now backed by the
+generic `organizations` entity described in `data-model.md` §6.11. US-04
+registrations always create an organization with `org_type = hto_operator`;
+enterprise and government values are reserved and are not accepted by the HTO
+login or approval flow.
+
+This is deliberately not a public contract change. The existing `/auth/hto/*`
+and `/admin/hto-operators/*` paths, request and response field names, status
+codes, JWT audience, and error codes remain unchanged so current dashboard
+clients and all US-04 acceptance criteria continue to work without migration.

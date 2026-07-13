@@ -138,12 +138,12 @@ def verify_hto_email(
 @router.post("/hto/login", response_model=HTOLoginResponse)
 def login_hto(payload: HTOLoginRequest, request: Request) -> HTOLoginResponse:
     with request.app.state.session_factory() as session:
-        pair, operator = _hto_service(request).login(
+        pair, organization = _hto_service(request).login(
             session, payload.email, payload.password
         )
         response = HTOLoginResponse(
             access_token=pair.access_token,
             refresh_token=pair.refresh_token,
-            operator=HTOOperatorResponse.model_validate(operator),
+            operator=HTOOperatorResponse.model_validate(organization),
         )
     return response

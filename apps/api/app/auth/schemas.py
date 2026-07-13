@@ -148,8 +148,8 @@ class HTOOperatorResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    business_name: str
-    operator_name: str
+    business_name: str = Field(validation_alias="name")
+    operator_name: str = Field(validation_alias="primary_contact_name")
     email: str
     phone_number: str
     nahcon_licence_number: str

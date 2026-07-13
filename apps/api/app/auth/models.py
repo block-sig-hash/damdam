@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey, String
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, String
 from sqlalchemy import Enum as SAEnum
 from sqlmodel import Field, SQLModel
 
@@ -30,6 +30,12 @@ class HTOApprovalStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+
+
+class OrganizationType(str, Enum):
+    HTO_OPERATOR = "hto_operator"
+    ENTERPRISE = "enterprise"
+    GOVERNMENT = "government"
 
 
 class AdminRole(str, Enum):
@@ -144,25 +150,42 @@ class AdminUser(SQLModel, table=True):
     )
 
 
-class HTOOperator(SQLModel, table=True):
-    __tablename__ = "hto_operators"
+class Organization(SQLModel, table=True):
+    __tablename__ = "organizations"
+    __table_args__ = (
+        CheckConstraint(
+            "(org_type = 'hto_operator' AND nahcon_licence_number IS NOT NULL) "
+            "OR (org_type != 'hto_operator' AND nahcon_licence_number IS NULL)",
+            name="ck_organizations_hto_licence",
+        ),
+    )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    business_name: str = Field(max_length=255)
-    operator_name: str = Field(max_length=100)
+    org_type: OrganizationType = Field(
+        sa_column=Column(
+            SAEnum(
+                OrganizationType,
+                name="organization_type",
+                values_callable=lambda choices: [choice.value for choice in choices],
+            ),
+            nullable=False,
+        )
+    )
+    name: str = Field(max_length=255)
+    primary_contact_name: str = Field(max_length=100)
     email: str = Field(
         sa_column=Column(String(255), unique=True, nullable=False, index=True)
     )
     password_hash: str = Field(max_length=255)
     phone_number: str = Field(max_length=14)
-    nahcon_licence_number: str = Field(max_length=50)
+    nahcon_licence_number: str | None = Field(default=None, max_length=50)
     email_verified: bool = Field(default=False)
     approval_status: HTOApprovalStatus = Field(
         default=HTOApprovalStatus.PENDING,
         sa_column=Column(
             SAEnum(
                 HTOApprovalStatus,
-                name="hto_approval_status",
+                name="organization_approval_status",
                 values_callable=lambda choices: [choice.value for choice in choices],
             ),
             nullable=False,
@@ -189,11 +212,11 @@ class HTOOperator(SQLModel, table=True):
     )
 
 
-class HTORefreshToken(SQLModel, table=True):
-    __tablename__ = "hto_refresh_tokens"
+class OrganizationRefreshToken(SQLModel, table=True):
+    __tablename__ = "organization_refresh_tokens"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    hto_operator_id: UUID = Field(foreign_key="hto_operators.id", index=True)
+    organization_id: UUID = Field(foreign_key="organizations.id", index=True)
     token_hash: str = Field(
         sa_column=Column(String(64), unique=True, nullable=False, index=True)
     )
