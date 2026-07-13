@@ -12,8 +12,9 @@ from sqlmodel import Session, col, select
 
 from app.auth.models import (
     HTOApprovalStatus,
-    HTOOperator,
-    HTORefreshToken,
+    Organization,
+    OrganizationRefreshToken,
+    OrganizationType,
 )
 from app.auth.schemas import HTORegistrationRequest, to_e164
 from app.config import Settings
@@ -47,16 +48,17 @@ class HTOService:
 
     def register(
         self, session: Session, payload: HTORegistrationRequest
-    ) -> HTOOperator:
+    ) -> Organization:
         existing = session.exec(
-            select(HTOOperator).where(HTOOperator.email == payload.email)
+            select(Organization).where(Organization.email == payload.email)
         ).first()
         if existing is not None:
             raise HTOAuthError("email_already_registered")
 
-        operator = HTOOperator(
-            business_name=payload.business_name,
-            operator_name=payload.operator_name,
+        organization = Organization(
+            org_type=OrganizationType.HTO_OPERATOR,
+            name=payload.business_name,
+            primary_contact_name=payload.operator_name,
             email=payload.email,
             password_hash=bcrypt.hashpw(
                 payload.password.encode(), bcrypt.gensalt(rounds=12)
@@ -65,11 +67,13 @@ class HTOService:
             nahcon_licence_number=payload.nahcon_licence_number,
         )
         try:
-            session.add(operator)
+            session.add(organization)
             session.flush()
-            verification_url = self._verification_url(operator)
+            verification_url = self._verification_url(organization)
             self.notifications.send_verification(
-                operator.email, operator.operator_name, verification_url
+                organization.email,
+                organization.primary_contact_name,
+                verification_url,
             )
             session.commit()
         except NotificationError as exc:
@@ -78,17 +82,17 @@ class HTOService:
         except IntegrityError as exc:
             session.rollback()
             raise HTOAuthError("email_already_registered") from exc
-        session.refresh(operator)
-        return operator
+        session.refresh(organization)
+        return organization
 
-    def _verification_url(self, operator: HTOOperator) -> str:
+    def _verification_url(self, organization: Organization) -> str:
         now = self.clock()
         token = jwt.encode(
             {
-                "sub": str(operator.id),
+                "sub": str(organization.id),
                 "aud": "hto_dashboard",
                 "type": "email_verification",
-                "email": operator.email,
+                "email": organization.email,
                 "iat": now,
                 "exp": now
                 + timedelta(hours=self.settings.hto_email_verification_ttl_hours),
@@ -99,7 +103,7 @@ class HTOService:
         query = urlencode({"token": token})
         return f"{self.settings.dashboard_base_url}/verify-email?{query}"
 
-    def verify_email(self, session: Session, token: str) -> HTOOperator:
+    def verify_email(self, session: Session, token: str) -> Organization:
         try:
             claims = jwt.decode(
                 token,
@@ -113,45 +117,54 @@ class HTOService:
             expires_at = datetime.fromtimestamp(claims["exp"], timezone.utc)
             if expires_at <= self.clock():
                 raise HTOAuthError("invalid_verification_token")
-            operator_id = UUID(claims["sub"])
+            organization_id = UUID(claims["sub"])
         except HTOAuthError:
             raise
         except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
             raise HTOAuthError("invalid_verification_token") from exc
 
-        operator = session.get(HTOOperator, operator_id)
-        if operator is None or operator.email != claims.get("email"):
+        organization = session.get(Organization, organization_id)
+        if organization is None or organization.email != claims.get("email"):
             raise HTOAuthError("invalid_verification_token")
-        operator.email_verified = True
-        session.add(operator)
+        organization.email_verified = True
+        session.add(organization)
         session.commit()
-        session.refresh(operator)
-        return operator
+        session.refresh(organization)
+        return organization
 
     def login(
         self, session: Session, email: str, password: str
-    ) -> tuple[HTOTokenPair, HTOOperator]:
-        operator = session.exec(
-            select(HTOOperator).where(HTOOperator.email == email)
+    ) -> tuple[HTOTokenPair, Organization]:
+        organization = session.exec(
+            select(Organization).where(Organization.email == email)
         ).first()
-        password_hash = operator.password_hash.encode() if operator else _DUMMY_HASH
-        if not bcrypt.checkpw(password.encode(), password_hash) or operator is None:
+        password_hash = (
+            organization.password_hash.encode() if organization else _DUMMY_HASH
+        )
+        if (
+            not bcrypt.checkpw(password.encode(), password_hash)
+            or organization is None
+        ):
             raise HTOAuthError("invalid_credentials")
-        if not operator.email_verified:
+        if organization.org_type != OrganizationType.HTO_OPERATOR:
+            raise HTOAuthError("invalid_credentials")
+        if not organization.email_verified:
             raise HTOAuthError("email_not_verified")
-        if operator.approval_status == HTOApprovalStatus.PENDING:
+        if organization.approval_status == HTOApprovalStatus.PENDING:
             raise HTOAuthError("pending_approval")
-        if operator.approval_status == HTOApprovalStatus.REJECTED:
+        if organization.approval_status == HTOApprovalStatus.REJECTED:
             raise HTOAuthError("rejected")
-        return self._issue_tokens(session, operator), operator
+        return self._issue_tokens(session, organization), organization
 
-    def _issue_tokens(self, session: Session, operator: HTOOperator) -> HTOTokenPair:
+    def _issue_tokens(
+        self, session: Session, organization: Organization
+    ) -> HTOTokenPair:
         now = self.clock()
         access_expiry = now + timedelta(minutes=self.settings.jwt_access_ttl_minutes)
         refresh_expiry = now + timedelta(days=self.settings.jwt_refresh_ttl_days)
         access = jwt.encode(
             {
-                "sub": str(operator.id),
+                "sub": str(organization.id),
                 "aud": "hto_dashboard",
                 "type": "access",
                 "jti": str(uuid4()),
@@ -164,7 +177,7 @@ class HTOService:
         refresh_id = uuid4()
         refresh = jwt.encode(
             {
-                "sub": str(operator.id),
+                "sub": str(organization.id),
                 "aud": "hto_dashboard",
                 "type": "refresh",
                 "jti": str(refresh_id),
@@ -175,9 +188,9 @@ class HTOService:
             algorithm="HS256",
         )
         session.add(
-            HTORefreshToken(
+            OrganizationRefreshToken(
                 id=refresh_id,
-                hto_operator_id=operator.id,
+                organization_id=organization.id,
                 token_hash=hashlib.sha256(refresh.encode()).hexdigest(),
                 expires_at=refresh_expiry,
             )
@@ -185,59 +198,67 @@ class HTOService:
         session.commit()
         return HTOTokenPair(access_token=access, refresh_token=refresh)
 
-    def list_operators(
+    def list_organizations(
         self, session: Session, status: HTOApprovalStatus | None
-    ) -> list[HTOOperator]:
-        statement = select(HTOOperator)
+    ) -> list[Organization]:
+        statement = select(Organization).where(
+            Organization.org_type == OrganizationType.HTO_OPERATOR
+        )
         if status is not None:
-            statement = statement.where(HTOOperator.approval_status == status)
-        return list(session.exec(statement.order_by(col(HTOOperator.created_at))).all())
+            statement = statement.where(Organization.approval_status == status)
+        return list(
+            session.exec(statement.order_by(col(Organization.created_at))).all()
+        )
 
     def approve(
-        self, session: Session, operator_id: UUID, admin_id: UUID
-    ) -> HTOOperator:
-        operator = session.get(HTOOperator, operator_id)
-        if operator is None:
+        self, session: Session, organization_id: UUID, admin_id: UUID
+    ) -> Organization:
+        organization = session.get(Organization, organization_id)
+        if (
+            organization is None
+            or organization.org_type != OrganizationType.HTO_OPERATOR
+        ):
             raise HTOAuthError("operator_not_found")
-        if operator.approval_status == HTOApprovalStatus.REJECTED:
+        if organization.approval_status == HTOApprovalStatus.REJECTED:
             raise HTOAuthError("invalid_approval_transition")
-        if operator.approval_status == HTOApprovalStatus.PENDING:
-            if not operator.email_verified:
+        if organization.approval_status == HTOApprovalStatus.PENDING:
+            if not organization.email_verified:
                 raise HTOAuthError("email_not_verified")
-            operator.approval_status = HTOApprovalStatus.APPROVED
-            operator.approved_at = self.clock()
-            operator.approved_by = admin_id
-            session.add(operator)
+            organization.approval_status = HTOApprovalStatus.APPROVED
+            organization.approved_at = self.clock()
+            organization.approved_by = admin_id
+            session.add(organization)
             session.commit()
-            session.refresh(operator)
+            session.refresh(organization)
 
         notification_failed = False
-        if operator.approval_email_sent_at is None:
+        if organization.approval_email_sent_at is None:
             try:
                 self.notifications.send_approval_email(
-                    operator.email, operator.operator_name
+                    organization.email, organization.primary_contact_name
                 )
             except NotificationError:
                 notification_failed = True
             else:
-                operator.approval_email_sent_at = self.clock()
-                session.add(operator)
+                organization.approval_email_sent_at = self.clock()
+                session.add(organization)
                 session.commit()
-                session.refresh(operator)
+                session.refresh(organization)
 
-        if operator.approval_whatsapp_sent_at is None:
+        if organization.approval_whatsapp_sent_at is None:
             try:
                 self.notifications.send_approval_whatsapp(
-                    operator.phone_number, operator.operator_name
+                    organization.phone_number,
+                    organization.primary_contact_name,
                 )
             except NotificationError:
                 notification_failed = True
             else:
-                operator.approval_whatsapp_sent_at = self.clock()
-                session.add(operator)
+                organization.approval_whatsapp_sent_at = self.clock()
+                session.add(organization)
                 session.commit()
-                session.refresh(operator)
+                session.refresh(organization)
 
         if notification_failed:
             raise HTOAuthError("notification_unavailable")
-        return operator
+        return organization

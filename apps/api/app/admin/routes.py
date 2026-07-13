@@ -64,9 +64,11 @@ def list_hto_operators(
 ) -> HTOOperatorListResponse:
     del admin
     with request.app.state.session_factory() as session:
-        operators = _service(request).list_operators(session, status)
+        organizations = _service(request).list_organizations(session, status)
     return HTOOperatorListResponse(
-        operators=[HTOOperatorResponse.model_validate(item) for item in operators]
+        operators=[
+            HTOOperatorResponse.model_validate(item) for item in organizations
+        ]
     )
 
 
@@ -79,5 +81,5 @@ def approve_hto_operator(
     admin: Annotated[AdminUser, Depends(current_admin)],
 ) -> HTOApprovalResponse:
     with request.app.state.session_factory() as session:
-        operator = _service(request).approve(session, operator_id, admin.id)
-    return HTOApprovalResponse(approval_status=operator.approval_status)
+        organization = _service(request).approve(session, operator_id, admin.id)
+    return HTOApprovalResponse(approval_status=organization.approval_status)

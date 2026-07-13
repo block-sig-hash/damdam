@@ -22,12 +22,12 @@ User (pilgrim)
   ├── belongs to → ManifestPilgrim (nullable, if HTO-sourced)
   └── has many → RefreshToken
 
-HtoOperator
+Organization
   ├── has many → Manifest
-  └── has one → Organization
+  └── has many → OrganizationRefreshToken
 
 Manifest
-  ├── belongs to → HtoOperator
+  ├── belongs to → Organization
   ├── has many → ManifestPilgrim
   └── has many → ManifestOrder        (see §6.5 — was one-to-one, now one-to-many)
 
@@ -141,17 +141,18 @@ DeviceCompatibilityLog
 
 ---
 
-### `hto_operators`
+### `organizations`
 
 | Field | Type | Constraints | Notes |
 |---|---|---|---|
 | id | UUID | PK | |
-| business_name | VARCHAR(255) | NOT NULL | |
-| operator_name | VARCHAR(100) | NOT NULL | |
+| org_type | ENUM | NOT NULL | `hto_operator` \| `enterprise` \| `government` |
+| name | VARCHAR(255) | NOT NULL | Business or organization name |
+| primary_contact_name | VARCHAR(100) | NOT NULL | Current HTO API field: `operator_name` |
 | email | VARCHAR(255) | UNIQUE, NOT NULL | |
 | password_hash | VARCHAR(255) | NOT NULL | bcrypt |
 | phone_number | VARCHAR(14) | NOT NULL | |
-| nahcon_licence_number | VARCHAR(50) | NOT NULL | Manually verified |
+| nahcon_licence_number | VARCHAR(50) | NULLABLE | Required only when `org_type = hto_operator`; must otherwise be null |
 | email_verified | BOOLEAN | DEFAULT FALSE | |
 | approval_status | ENUM | DEFAULT 'pending' | `pending` \| `approved` \| `rejected` |
 | approved_at | TIMESTAMPTZ | NULLABLE | |
@@ -166,7 +167,7 @@ DeviceCompatibilityLog
 | Field | Type | Constraints | Notes |
 |---|---|---|---|
 | id | UUID | PK | |
-| hto_operator_id | UUID | FK → hto_operators | |
+| organization_id | UUID | FK → organizations | Owning HTO organization for MVP |
 | name | VARCHAR(255) | NULLABLE | e.g. "Flight NAF203 — 14 May" |
 | status | ENUM | DEFAULT 'draft' | `draft` \| `validated` \| `partially_ordered` \| `provisioned` — see §6.5 |
 | total_rows | INTEGER | DEFAULT 0 | |
@@ -349,7 +350,7 @@ raw / daily-summary retention policy, see security.md §10.3
 | longitude | DECIMAL(9,6) | NULLABLE | |
 | status | ENUM | DEFAULT 'active' | `active` \| `resolved` \| `cancelled` |
 | resolved_at | TIMESTAMPTZ | NULLABLE | |
-| resolved_by | UUID | FK → hto_operators, NULLABLE | |
+| resolved_by | UUID | FK → organizations, NULLABLE | |
 
 **Indexes:** `user_id`, `status`
 
@@ -625,36 +626,58 @@ device.
 
 ---
 
-## 6.9 Amendment — HTO Dashboard Refresh-Token Sessions
+## 6.9 Amendment — Organization Dashboard Refresh-Token Sessions
 
 `POST /auth/hto/login` has always returned a refresh token, while the
 original `refresh_tokens` table can only reference pilgrim `users`.
-`hto_refresh_tokens` closes that mismatch for US-04 using the same
+`organization_refresh_tokens` closes that mismatch for US-04 using the same
 security properties as pilgrim sessions: JWT `jti` primary key,
-`hto_operator_id` foreign key, SHA-256 token digest, expiry, and
+`organization_id` foreign key, SHA-256 token digest, expiry, and
 revocation timestamp. Keeping the tables separate preserves strict
 actor typing and prevents an HTO token from being accepted by the
 pilgrim refresh path.
 
-### `hto_refresh_tokens`
+### `organization_refresh_tokens`
 
 | Field | Type | Constraints | Notes |
 |---|---|---|---|
 | id | UUID | PK | JWT `jti` |
-| hto_operator_id | UUID | FK → hto_operators, NOT NULL | |
+| organization_id | UUID | FK → organizations, NOT NULL | |
 | token_hash | VARCHAR(64) | UNIQUE, NOT NULL | SHA-256 |
 | expires_at | TIMESTAMPTZ | NOT NULL | |
 | revoked_at | TIMESTAMPTZ | NULLABLE | |
 
-**Indexes:** `token_hash` (unique), `hto_operator_id`, `expires_at`.
+**Indexes:** `token_hash` (unique), `organization_id`, `expires_at`.
 
 ---
 
 ## 6.10 Amendment — HTO Approval Notification Delivery State
 
 US-04 sends approval notifications over email and WhatsApp. Because those are
-independent external calls, `hto_operators` records delivery of each channel
+independent external calls, `organizations` records delivery of each channel
 separately. Approval is committed before notification dispatch, and a retry
 only sends channels whose timestamp is still null. This prevents a successful
 email followed by a failed WhatsApp call from rolling the operator back to
 `pending` or sending the email twice on retry.
+
+---
+
+## 6.11 Amendment — Generic Organization Identity
+
+The US-04 `hto_operators` table is renamed to `organizations` before US-05/06
+add dependent records. The base identity now uses generic `name` and
+`primary_contact_name` columns plus a required `org_type` enum. Existing rows
+are migrated to `hto_operator`; `enterprise` and `government` are reserved for
+future customer types and do not enable any new behavior.
+
+NAHCON licensing remains on the base table as a nullable, type-conditional
+field: a check constraint requires it for `hto_operator` organizations and
+requires it to be null for other organization types. This keeps the current
+HTO read path simple while preventing a Hajj-specific credential from becoming
+a required attribute of every future organization.
+
+The same migration renames `hto_refresh_tokens` to
+`organization_refresh_tokens`, changes its owner key to `organization_id`, and
+renames the existing approval enum and database constraints. The public US-04
+HTO API retains its current field names and behavior; this amendment changes
+only internal persistence and ownership terminology.

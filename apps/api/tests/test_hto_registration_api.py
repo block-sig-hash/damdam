@@ -12,7 +12,12 @@ from sqlmodel import select
 
 from app.admin.routes import approve_hto_operator, current_admin, list_hto_operators
 from app.auth.hto import HTOAuthError
-from app.auth.models import AdminUser, HTOApprovalStatus, HTOOperator
+from app.auth.models import (
+    AdminUser,
+    HTOApprovalStatus,
+    Organization,
+    OrganizationType,
+)
 from app.auth.routes import login_hto, register_hto, verify_hto_email
 from app.auth.schemas import (
     HTOLoginRequest,
@@ -137,19 +142,25 @@ def test_registration_hashes_password_and_records_unvalidated_licence(
     assert response.model_dump() == {"message": "Verification email sent"}
     assert len(email_sender.verifications) == 1
     with session_factory() as session:
-        operator = session.exec(select(HTOOperator)).one()
-        assert operator.email == "amina@example.com"
-        assert operator.phone_number == "+2348012345678"
+        organization = session.exec(select(Organization)).one()
+        assert organization.org_type == OrganizationType.HTO_OPERATOR
+        assert organization.name == registration_payload["business_name"]
         assert (
-            operator.nahcon_licence_number
+            organization.primary_contact_name
+            == registration_payload["operator_name"]
+        )
+        assert organization.email == "amina@example.com"
+        assert organization.phone_number == "+2348012345678"
+        assert (
+            organization.nahcon_licence_number
             == registration_payload["nahcon_licence_number"]
         )
-        assert operator.password_hash != registration_payload["password"]
+        assert organization.password_hash != registration_payload["password"]
         assert bcrypt.checkpw(
             registration_payload["password"].encode(),
-            operator.password_hash.encode(),
+            organization.password_hash.encode(),
         )
-        assert operator.password_hash.startswith("$2b$12$")
+        assert organization.password_hash.startswith("$2b$12$")
 
 
 def test_email_verification_is_required_and_token_expires_after_24_hours(
@@ -201,8 +212,8 @@ def test_verified_account_remains_pending_until_admin_approval(
         )
 
     with session_factory() as session:
-        operator = session.exec(select(HTOOperator)).one()
-        assert operator.approval_status == HTOApprovalStatus.PENDING
+        organization = session.exec(select(Organization)).one()
+        assert organization.approval_status == HTOApprovalStatus.PENDING
         admin = AdminUser(
             id=uuid4(),
             email="admin@damdam.app",
@@ -211,7 +222,7 @@ def test_verified_account_remains_pending_until_admin_approval(
         session.add(admin)
         session.commit()
         admin_id = admin.id
-        operator_id = operator.id
+        operator_id = organization.id
 
     admin_token = jwt.encode(
         {
@@ -242,10 +253,10 @@ def test_verified_account_remains_pending_until_admin_approval(
     assert whatsapp_sender.approvals == [("+2348012345678", "Amina Yusuf")]
 
     with session_factory() as session:
-        operator = session.get(HTOOperator, operator_id)
-        assert operator is not None
-        assert operator.approval_email_sent_at is not None
-        assert operator.approval_whatsapp_sent_at is not None
+        organization = session.get(Organization, operator_id)
+        assert organization is not None
+        assert organization.approval_email_sent_at is not None
+        assert organization.approval_whatsapp_sent_at is not None
 
     login = login_hto(
         HTOLoginRequest(
@@ -277,7 +288,7 @@ def test_partial_notification_failure_keeps_approval_and_retries_missing_channel
     verify_hto_email(HTOVerifyEmailRequest(token=token), request)
 
     with session_factory() as session:
-        operator = session.exec(select(HTOOperator)).one()
+        organization = session.exec(select(Organization)).one()
         admin = AdminUser(
             id=uuid4(),
             email="admin@damdam.app",
@@ -285,7 +296,7 @@ def test_partial_notification_failure_keeps_approval_and_retries_missing_channel
         )
         session.add(admin)
         session.commit()
-        operator_id = operator.id
+        operator_id = organization.id
         admin_id = admin.id
 
     whatsapp_sender.fail_approval = True
@@ -296,11 +307,11 @@ def test_partial_notification_failure_keeps_approval_and_retries_missing_channel
         hto_api.state.hto_service.approve(session, operator_id, admin_id)
 
     with session_factory() as session:
-        operator = session.get(HTOOperator, operator_id)
-        assert operator is not None
-        assert operator.approval_status == HTOApprovalStatus.APPROVED
-        assert operator.approval_email_sent_at is not None
-        assert operator.approval_whatsapp_sent_at is None
+        organization = session.get(Organization, operator_id)
+        assert organization is not None
+        assert organization.approval_status == HTOApprovalStatus.APPROVED
+        assert organization.approval_email_sent_at is not None
+        assert organization.approval_whatsapp_sent_at is None
     assert email_sender.approvals == [("amina@example.com", "Amina Yusuf")]
     assert whatsapp_sender.approvals == []
 
@@ -310,10 +321,10 @@ def test_partial_notification_failure_keeps_approval_and_retries_missing_channel
         assert approved.approval_status == HTOApprovalStatus.APPROVED
 
     with session_factory() as session:
-        operator = session.get(HTOOperator, operator_id)
-        assert operator is not None
-        assert operator.approval_email_sent_at is not None
-        assert operator.approval_whatsapp_sent_at is not None
+        organization = session.get(Organization, operator_id)
+        assert organization is not None
+        assert organization.approval_email_sent_at is not None
+        assert organization.approval_whatsapp_sent_at is not None
     assert email_sender.approvals == [("amina@example.com", "Amina Yusuf")]
     assert whatsapp_sender.approvals == [("+2348012345678", "Amina Yusuf")]
 
