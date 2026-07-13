@@ -620,3 +620,28 @@ This is deliberately a separate one-to-many table rather than fields
 on `users`, so one pilgrim can have independent iOS/Android sessions
 and one compromised device can be revoked without signing out every
 device.
+
+---
+
+## 6.9 Amendment — HTO Dashboard Refresh-Token Sessions
+
+`POST /auth/hto/login` has always returned a refresh token, while the
+original `refresh_tokens` table can only reference pilgrim `users`.
+`hto_refresh_tokens` closes that mismatch for US-04 using the same
+security properties as pilgrim sessions: JWT `jti` primary key,
+`hto_operator_id` foreign key, SHA-256 token digest, expiry, and
+revocation timestamp. Keeping the tables separate preserves strict
+actor typing and prevents an HTO token from being accepted by the
+pilgrim refresh path.
+
+### `hto_refresh_tokens`
+
+| Field | Type | Constraints | Notes |
+|---|---|---|---|
+| id | UUID | PK | JWT `jti` |
+| hto_operator_id | UUID | FK → hto_operators, NOT NULL | |
+| token_hash | VARCHAR(64) | UNIQUE, NOT NULL | SHA-256 |
+| expires_at | TIMESTAMPTZ | NOT NULL | |
+| revoked_at | TIMESTAMPTZ | NULLABLE | |
+
+**Indexes:** `token_hash` (unique), `hto_operator_id`, `expires_at`.

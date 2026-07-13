@@ -4,10 +4,16 @@ from typing import Annotated, cast
 from fastapi import APIRouter, Depends, Request
 
 from app.auth.dependencies import get_current_user
+from app.auth.hto import HTOService
 from app.auth.models import User
 from app.auth.pin import PINService
 from app.auth.schemas import (
     AuthResponse,
+    HTOLoginRequest,
+    HTOLoginResponse,
+    HTOOperatorResponse,
+    HTORegistrationRequest,
+    HTOVerifyEmailRequest,
     MessageResponse,
     OTPRequest,
     OTPVerifyRequest,
@@ -29,6 +35,10 @@ def _service(request: Request) -> OTPService:
 
 def _pin_service(request: Request) -> PINService:
     return cast(PINService, request.app.state.pin_service)
+
+
+def _hto_service(request: Request) -> HTOService:
+    return cast(HTOService, request.app.state.hto_service)
 
 
 @router.post("/otp/request", response_model=MessageResponse)
@@ -105,3 +115,35 @@ def refresh_token(payload: RefreshRequest, request: Request) -> TokenResponse:
     return TokenResponse(
         access_token=pair.access_token, refresh_token=pair.refresh_token
     )
+
+
+@router.post("/hto/register", response_model=MessageResponse, status_code=201)
+def register_hto(
+    payload: HTORegistrationRequest, request: Request
+) -> MessageResponse:
+    with request.app.state.session_factory() as session:
+        _hto_service(request).register(session, payload)
+    return MessageResponse(message="Verification email sent")
+
+
+@router.post("/hto/verify-email", response_model=MessageResponse)
+def verify_hto_email(
+    payload: HTOVerifyEmailRequest, request: Request
+) -> MessageResponse:
+    with request.app.state.session_factory() as session:
+        _hto_service(request).verify_email(session, payload.token)
+    return MessageResponse(message="Email verified, pending admin approval")
+
+
+@router.post("/hto/login", response_model=HTOLoginResponse)
+def login_hto(payload: HTOLoginRequest, request: Request) -> HTOLoginResponse:
+    with request.app.state.session_factory() as session:
+        pair, operator = _hto_service(request).login(
+            session, payload.email, payload.password
+        )
+        response = HTOLoginResponse(
+            access_token=pair.access_token,
+            refresh_token=pair.refresh_token,
+            operator=HTOOperatorResponse.model_validate(operator),
+        )
+    return response

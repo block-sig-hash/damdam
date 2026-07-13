@@ -9,6 +9,12 @@ __pycache__/
 htmlcov/
 openapi-generated.json
 
+# Node / Next.js
+node_modules/
+.next/
+coverage/
+*.tsbuildinfo
+
 # Generated local environment
 .env
 .env.*
