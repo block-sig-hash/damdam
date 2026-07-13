@@ -107,12 +107,24 @@ def create_app(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         del request
+        errors = exc.errors()
+        if any(error["type"] == "pin_too_weak" for error in errors):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "pin_too_weak",
+                    "message": (
+                        "Choose a non-repeated, non-sequential 4-digit PIN."
+                    ),
+                    "details": {},
+                },
+            )
         return JSONResponse(
             status_code=422,
             content={
                 "error": "validation_error",
                 "message": "The request contains invalid fields.",
-                "details": {"errors": exc.errors()},
+                "details": {"errors": errors},
             },
         )
 

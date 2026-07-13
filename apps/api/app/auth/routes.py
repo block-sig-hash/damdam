@@ -65,8 +65,8 @@ def verify_pin(
     user: Annotated[User, Depends(get_current_user)],
 ) -> PINVerifyResponse:
     with request.app.state.session_factory() as session:
-        unlocked = _pin_service(request).verify_pin(session, user.id, payload.pin)
-    return PINVerifyResponse(unlocked=unlocked)
+        _pin_service(request).verify_pin(session, user.id, payload.pin)
+    return PINVerifyResponse()
 
 
 @router.post("/pin/recovery/request", response_model=MessageResponse)

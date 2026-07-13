@@ -301,10 +301,10 @@ components:
       properties:
         unlocked:
           type: boolean
+          const: true
           title: Unlocked
+          default: true
       type: object
-      required:
-      - unlocked
       title: PINVerifyResponse
     Platform:
       type: string

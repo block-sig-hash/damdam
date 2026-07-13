@@ -77,7 +77,7 @@ def test_valid_pin_unlocks_and_resets_previous_failures(
         with pytest.raises(PINError, match="invalid_pin"):
             service.verify_pin(session, user.id, "1357")
 
-        assert service.verify_pin(session, user.id, "2580") is True
+        service.verify_pin(session, user.id, "2580")
         session.refresh(user)
         assert user.pin_failed_attempts == 0
         assert user.pin_locked_until is None
@@ -106,7 +106,7 @@ def test_fifth_failure_locks_for_thirty_minutes(
         assert caught.value.retry_after == 1
 
         clock.advance(seconds=1)
-        assert service.verify_pin(session, user.id, "2580") is True
+        service.verify_pin(session, user.id, "2580")
 
 
 def test_otp_recovery_clears_pin_lock_immediately(

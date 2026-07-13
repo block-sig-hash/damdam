@@ -1,5 +1,4 @@
 import math
-import re
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -8,6 +7,7 @@ import bcrypt
 from sqlmodel import Session, select
 
 from app.auth.models import User
+from app.auth.schemas import is_strong_pin
 from app.otp.service import OTPError
 
 
@@ -28,18 +28,6 @@ class PINService:
         self.clock = clock
 
     @staticmethod
-    def is_strong(pin: str) -> bool:
-        if re.fullmatch(r"\d{4}", pin) is None:
-            return False
-        if len(set(pin)) == 1:
-            return False
-        digits = [int(digit) for digit in pin]
-        differences = [
-            right - left for left, right in zip(digits, digits[1:], strict=False)
-        ]
-        return differences not in ([1, 1, 1], [-1, -1, -1])
-
-    @staticmethod
     def _aware(value: datetime) -> datetime:
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
@@ -54,7 +42,7 @@ class PINService:
         return user
 
     def set_pin(self, session: Session, user_id: UUID, pin: str) -> None:
-        if not self.is_strong(pin):
+        if not is_strong_pin(pin):
             raise PINError("pin_too_weak")
         user = self._user_for_update(session, user_id)
         user.pin_hash = bcrypt.hashpw(
@@ -66,7 +54,7 @@ class PINService:
         session.add(user)
         session.commit()
 
-    def verify_pin(self, session: Session, user_id: UUID, pin: str) -> bool:
+    def verify_pin(self, session: Session, user_id: UUID, pin: str) -> None:
         user = self._user_for_update(session, user_id)
         if user.pin_hash is None:
             raise PINError("pin_not_set")
@@ -85,7 +73,7 @@ class PINService:
             user.updated_at = now
             session.add(user)
             session.commit()
-            return True
+            return
 
         user.pin_failed_attempts += 1
         if user.pin_failed_attempts >= self.ATTEMPT_LIMIT:

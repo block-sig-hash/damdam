@@ -1,9 +1,12 @@
+import json
 from contextlib import suppress
 from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.security import HTTPAuthorizationCredentials
+from pydantic import ValidationError
 
 from app.auth.dependencies import get_current_user
 from app.auth.pin import PINError
@@ -55,6 +58,24 @@ def test_pin_set_and_verify_api_contract(api: FastAPI) -> None:
     assert unlocked.model_dump() == {"unlocked": True}
 
 
+@pytest.mark.anyio
+async def test_pin_payload_validation_preserves_pin_too_weak_contract(
+    api: FastAPI,
+) -> None:
+    """AC-02.1: schema validation retains the documented 400 error contract."""
+    with pytest.raises(ValidationError) as validation:
+        PINPayload(pin="1234")
+
+    error = validation.value.errors()[0]
+    assert error["type"] == "pin_too_weak"
+    handler = api.exception_handlers[RequestValidationError]
+    response = await handler(
+        SimpleNamespace(), RequestValidationError(validation.value.errors())
+    )
+    assert response.status_code == 400
+    assert json.loads(response.body)["error"] == "pin_too_weak"
+
+
 def test_pin_endpoints_reject_invalid_access_token(api: FastAPI) -> None:
     """AC-02.3: PIN operations require a valid pilgrim access session."""
     with pytest.raises(PINError, match="invalid_access_token"):
@@ -92,4 +113,4 @@ def test_locked_user_can_recover_with_otp_immediately(api: FastAPI) -> None:
     assert sent.model_dump() == {"message": "OTP sent"}
     assert recovered.is_new_user is False
     with api.state.session_factory() as session:
-        assert api.state.pin_service.verify_pin(session, user.id, "2580")
+        api.state.pin_service.verify_pin(session, user.id, "2580")
