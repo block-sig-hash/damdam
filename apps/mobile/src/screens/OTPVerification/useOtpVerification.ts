@@ -1,0 +1,152 @@
+import { useCallback, useEffect, useState } from 'react';
+import { AuthResponse, OtpApiError, Platform, requestOtp, verifyOtp } from '../../api/authClient';
+import { useCountdownSeconds } from '../../hooks/useCountdownSeconds';
+import { useElapsedSeconds } from '../../hooks/useElapsedSeconds';
+
+/**
+ * AC-01.9: "Sending your code..." after 10s, manual resend from 30s —
+ * both independent of the backend's own 180s provider-failover
+ * threshold (apps/api/app/config.py otp_failover_threshold_seconds),
+ * which the pilgrim never sees directly.
+ */
+const SENDING_REASSURANCE_THRESHOLD_SECONDS = 10;
+const MANUAL_RESEND_THRESHOLD_SECONDS = 30;
+const OTP_CODE_LENGTH = 6;
+
+export type OtpVerificationStatus = 'awaiting_code' | 'verifying' | 'locked';
+
+interface UseOtpVerificationArgs {
+  phoneNumber: string;
+  platform: Platform;
+  onVerified: (result: AuthResponse) => void;
+}
+
+export interface UseOtpVerificationResult {
+  code: string;
+  setCode: (value: string) => void;
+  status: OtpVerificationStatus;
+  errorMessage: string | null;
+  showSendingReassurance: boolean;
+  canResend: boolean;
+  secondsUntilResend: number;
+  lockoutSecondsRemaining: number;
+  isResending: boolean;
+  resend: () => Promise<void>;
+  submit: () => Promise<void>;
+}
+
+export function useOtpVerification({
+  phoneNumber,
+  platform,
+  onVerified,
+}: UseOtpVerificationArgs): UseOtpVerificationResult {
+  const [sentAt, setSentAt] = useState(() => Date.now());
+  const [code, setCodeState] = useState('');
+  const [status, setStatus] = useState<OtpVerificationStatus>('awaiting_code');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lockoutTotalSeconds, setLockoutTotalSeconds] = useState(0);
+  const [resendBlockedTotalSeconds, setResendBlockedTotalSeconds] = useState(0);
+  const [isResending, setIsResending] = useState(false);
+
+  const secondsSinceSend = useElapsedSeconds(sentAt);
+  const lockoutSecondsRemaining = useCountdownSeconds(lockoutTotalSeconds);
+  const resendBlockedSecondsRemaining = useCountdownSeconds(resendBlockedTotalSeconds);
+
+  useEffect(() => {
+    if (status === 'locked' && lockoutTotalSeconds > 0 && lockoutSecondsRemaining === 0) {
+      setStatus('awaiting_code');
+      setErrorMessage(null);
+      setLockoutTotalSeconds(0);
+    }
+  }, [status, lockoutSecondsRemaining, lockoutTotalSeconds]);
+
+  const setCode = useCallback((value: string) => {
+    setErrorMessage(null);
+    setCodeState(value.replace(/\D/g, '').slice(0, OTP_CODE_LENGTH));
+  }, []);
+
+  const submit = useCallback(async () => {
+    if (code.length !== OTP_CODE_LENGTH || status === 'locked' || status === 'verifying') {
+      return;
+    }
+    setStatus('verifying');
+    setErrorMessage(null);
+    try {
+      const result = await verifyOtp(phoneNumber, code, platform);
+      onVerified(result);
+    } catch (err) {
+      if (err instanceof OtpApiError && err.code === 'locked') {
+        setStatus('locked');
+        setLockoutTotalSeconds(err.retryAfter ?? 60);
+        setErrorMessage('Too many attempts. Please wait before trying again.');
+      } else if (err instanceof OtpApiError && err.code === 'otp_expired') {
+        setStatus('awaiting_code');
+        setCodeState('');
+        setErrorMessage('That code expired. Send a new one.');
+      } else if (err instanceof OtpApiError && err.code === 'invalid_otp') {
+        setStatus('awaiting_code');
+        setCodeState('');
+        setErrorMessage('That code is incorrect. Try again.');
+      } else if (err instanceof OtpApiError) {
+        setStatus('awaiting_code');
+        setErrorMessage(err.message);
+      } else {
+        setStatus('awaiting_code');
+        setErrorMessage('Something went wrong. Please try again.');
+      }
+    }
+  }, [code, status, phoneNumber, platform, onVerified]);
+
+  const resend = useCallback(async () => {
+    const canResendNow =
+      !isResending &&
+      status !== 'locked' &&
+      secondsSinceSend >= MANUAL_RESEND_THRESHOLD_SECONDS &&
+      resendBlockedSecondsRemaining === 0;
+    if (!canResendNow) {
+      return;
+    }
+    setIsResending(true);
+    setErrorMessage(null);
+    try {
+      await requestOtp(phoneNumber);
+      setSentAt(Date.now());
+      setCodeState('');
+      setStatus('awaiting_code');
+    } catch (err) {
+      if (err instanceof OtpApiError && err.code === 'rate_limited') {
+        setResendBlockedTotalSeconds(err.retryAfter ?? MANUAL_RESEND_THRESHOLD_SECONDS);
+        setErrorMessage('Please wait before requesting another code.');
+      } else if (err instanceof OtpApiError) {
+        setErrorMessage(err.message);
+      } else {
+        setErrorMessage('Something went wrong. Please try again.');
+      }
+    } finally {
+      setIsResending(false);
+    }
+  }, [isResending, status, phoneNumber, secondsSinceSend, resendBlockedSecondsRemaining]);
+
+  return {
+    code,
+    setCode,
+    status,
+    errorMessage,
+    showSendingReassurance:
+      status === 'awaiting_code' && secondsSinceSend >= SENDING_REASSURANCE_THRESHOLD_SECONDS,
+    canResend:
+      status !== 'locked' &&
+      !isResending &&
+      secondsSinceSend >= MANUAL_RESEND_THRESHOLD_SECONDS &&
+      resendBlockedSecondsRemaining === 0,
+    secondsUntilResend: Math.max(
+      MANUAL_RESEND_THRESHOLD_SECONDS - secondsSinceSend,
+      resendBlockedSecondsRemaining,
+      0,
+    ),
+    lockoutSecondsRemaining,
+    isResending,
+    resend,
+    submit,
+  };
+}
