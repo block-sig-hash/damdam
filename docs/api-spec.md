@@ -46,6 +46,22 @@ POST   /auth/pin/verify
   Auth required (session token, pre-PIN-unlock state)
   Body: { pin: string }
   200: { unlocked: true }
+  400: { error: "invalid_pin" | "pin_not_set" }
+  423: { error: "locked", retry_after: int }
+
+POST   /auth/pin/recovery/request
+  Body: { phone_number: string }
+  200: { message: "OTP sent" }
+  404: { error: "account_not_found" }
+  429: { error: "rate_limited", retry_after: int }
+  503: { error: "otp_unavailable" }
+
+POST   /auth/pin/recovery/verify
+  Body: { phone_number: string, otp: string, platform: "ios"|"android" }
+  200: { access_token, refresh_token, user: {..}, is_new_user: false }
+  Resets the PIN attempt lock and returns an authenticated session;
+  the client then replaces the PIN through `/auth/pin/set`.
+  400: { error: "invalid_otp" | "otp_expired" }
   423: { error: "locked", retry_after: int }
 
 POST   /auth/token/refresh
@@ -471,3 +487,16 @@ Redis challenge state and never stored on the pilgrim account.
 `POST /auth/otp/request` now documents the already-required
 `account_exists` result (AC-01.7) and the total-provider-outage result
 from PRD §5.1. Neither response leaks which provider was attempted.
+
+---
+
+## 7.15 Amendment — US-02 PIN Recovery Contract
+
+AC-02.4 requires OTP recovery to remain available even while PIN
+verification is locked. The dedicated recovery request route therefore
+reuses the provider-agnostic OTP service while explicitly allowing an
+existing account; ordinary signup requests continue returning
+`account_exists` per AC-01.7. Successful recovery clears only the PIN
+failure counters, issues a normal authenticated session, and requires
+the pilgrim to choose a replacement PIN through the existing PIN-set
+route.

@@ -69,6 +69,110 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/pin/set:
+    post:
+      tags:
+      - authentication
+      summary: Set Pin
+      operationId: set_pin_v1_auth_pin_set_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PINPayload'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/auth/pin/verify:
+    post:
+      tags:
+      - authentication
+      summary: Verify Pin
+      operationId: verify_pin_v1_auth_pin_verify_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PINPayload'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PINVerifyResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/auth/pin/recovery/request:
+    post:
+      tags:
+      - authentication
+      summary: Request Pin Recovery
+      operationId: request_pin_recovery_v1_auth_pin_recovery_request_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PINRecoveryRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/pin/recovery/verify:
+    post:
+      tags:
+      - authentication
+      summary: Verify Pin Recovery
+      operationId: verify_pin_recovery_v1_auth_pin_recovery_verify_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTPVerifyRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/auth/token/refresh:
     post:
       tags:
@@ -175,6 +279,33 @@ components:
       - otp
       - platform
       title: OTPVerifyRequest
+    PINPayload:
+      properties:
+        pin:
+          type: string
+          title: Pin
+      type: object
+      required:
+      - pin
+      title: PINPayload
+    PINRecoveryRequest:
+      properties:
+        phone_number:
+          type: string
+          title: Phone Number
+      type: object
+      required:
+      - phone_number
+      title: PINRecoveryRequest
+    PINVerifyResponse:
+      properties:
+        unlocked:
+          type: boolean
+          title: Unlocked
+      type: object
+      required:
+      - unlocked
+      title: PINVerifyResponse
     Platform:
       type: string
       enum:
@@ -264,3 +395,7 @@ components:
       - msg
       - type
       title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

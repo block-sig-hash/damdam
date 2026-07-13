@@ -40,8 +40,20 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class PINPayload(BaseModel):
+    pin: str
+
+
+class PINRecoveryRequest(OTPRequest):
+    pass
+
+
 class MessageResponse(BaseModel):
     message: str
+
+
+class PINVerifyResponse(BaseModel):
+    unlocked: bool
 
 
 class UserResponse(BaseModel):
