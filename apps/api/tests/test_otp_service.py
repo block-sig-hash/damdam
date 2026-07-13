@@ -76,6 +76,7 @@ def test_success_creates_account_and_returns_session(
     assert user is not None
     assert user.phone_number == "+2348012345678"
     assert user.platform == "ios"
+    assert user.verified_cli is True
 
 
 def test_existing_account_is_directed_to_login(
@@ -124,11 +125,36 @@ def test_delivery_confirmation_suppresses_failover(
     """AC-01.8: a confirmed primary delivery never duplicates via secondary."""
     with session_factory() as session:
         otp_service.request(session, PHONE)
-    otp_service.confirm_delivery("termii-message-1", "DELIVERED")
+    otp_service.confirm_delivery("termii", "termii-message-1", "DELIVERED")
     clock.advance(seconds=180)
 
     assert otp_service.failover(PHONE) is False
     assert providers["twilio"].send_calls == []
+
+
+def test_delivery_confirmation_is_scoped_to_the_reporting_provider(
+    otp_service: OTPService,
+    session_factory: type[Session],
+    providers: dict,
+    clock: object,
+) -> None:
+    """A delivery report for a different provider must not suppress failover.
+
+    Regression test: `confirm_delivery` previously always looked up the
+    correlation key under a hardcoded "termii" prefix regardless of which
+    provider is actually configured as primary, which would silently break
+    delivery confirmation if OTP_PROVIDER_PRIMARY were ever changed.
+    """
+    with session_factory() as session:
+        otp_service.request(session, PHONE)
+
+    unconfirmed = otp_service.confirm_delivery(
+        "twilio", "termii-message-1", "DELIVERED"
+    )
+    assert unconfirmed is False
+    clock.advance(seconds=180)
+    assert otp_service.failover(PHONE) is True
+    assert providers["twilio"].send_calls == ["+2348012345678"]
 
 
 def test_resend_available_at_thirty_seconds_and_rate_limited_per_hour(

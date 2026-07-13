@@ -237,10 +237,12 @@ class OTPService:
         self._save(challenge)
         return True
 
-    def confirm_delivery(self, delivery_reference: str, status: str) -> bool:
+    def confirm_delivery(
+        self, provider: str, delivery_reference: str, status: str
+    ) -> bool:
         if status.upper() != "DELIVERED":
             return False
-        raw = self.redis.get(self._delivery_key("termii", delivery_reference))
+        raw = self.redis.get(self._delivery_key(provider, delivery_reference))
         if raw is None:
             return False
         correlation: dict[str, Any] = json.loads(raw)
@@ -301,6 +303,11 @@ class OTPService:
                 is_new_user = False
         else:
             user.last_login_at = now
+
+        # AC-14.1/prd.md §5.5: the account-setup OTP is the CLI ownership
+        # verification for Path A pilgrims, reusing this same login number
+        # with no separate verification step.
+        user.verified_cli = True
 
         pair = self.tokens.issue(session, user, now)
         session.commit()

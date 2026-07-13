@@ -34,6 +34,7 @@ POST   /auth/otp/verify
   200: { access_token, refresh_token, user: {..}, is_new_user: bool }
   400: { error: "invalid_otp" | "otp_expired" }
   423: { error: "locked", retry_after: int }
+  503: { error: "otp_unavailable" }
 
 POST   /auth/pin/set
   Auth required

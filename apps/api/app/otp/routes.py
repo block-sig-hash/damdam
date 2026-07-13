@@ -23,5 +23,5 @@ async def termii_delivery_report(request: Request) -> dict[str, bool]:
         status = str(payload["status"])
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         raise OTPError("invalid_webhook_payload") from exc
-    request.app.state.otp_service.confirm_delivery(message_id, status)
+    request.app.state.otp_service.confirm_delivery("termii", message_id, status)
     return {"received": True}
