@@ -154,6 +154,14 @@ without needing an invitation.
 - AC-01.6: On successful OTP entry, account is created and user
   is logged in
 - AC-01.7: If the number already has an account, direct to login
+- AC-01.8: If the primary OTP provider (Termii) has not returned
+  a delivery confirmation within 180 seconds (config value:
+  `OTP_FAILOVER_THRESHOLD_SECONDS`), the system automatically
+  retries via the secondary OTP provider (Twilio Verify) without
+  user action or visible error
+- AC-01.9: UI shows a "Sending your code..." state after 10
+  seconds and offers a manual resend option from 30 seconds,
+  independent of the automatic provider failover threshold
 
 **US-02** [P0] — As a Pilgrim, I want to set a 4-digit PIN after
 phone verification so that my account is protected without needing
@@ -358,6 +366,9 @@ poor connectivity.
 - AC-15.7: Includes a Google Maps link if location available
 - AC-15.8: Pilgrim sees "Check-in sent" confirmation
 - AC-15.9: Rate-limited to one per 15 minutes
+- AC-15.10: If the WhatsApp notification to the family contact
+  fails or does not confirm delivery within 60 seconds, an SMS
+  with equivalent content is sent automatically as a fallback
 
 **US-16** [P0] — As a Pilgrim, I want to trigger an SOS that
 immediately notifies my HTO and family with my location so that I
@@ -429,6 +440,9 @@ when my pilgrim checks in so I know they're safe without calling.
 when my pilgrim triggers an SOS so I know immediately.
 - AC-22.1: Message begins with "URGENT:"
 - AC-22.2: Includes the HTO operator's direct phone number
+- AC-22.3: If the WhatsApp SOS notification to the family contact
+  fails or does not confirm delivery within 60 seconds, an SMS
+  with equivalent content is sent automatically as a fallback
 
 ### 4.9 Authentication and Session Management
 
@@ -487,7 +501,7 @@ Trigger → Flow → Dependencies → Failure modes.
 Phone-number-based identity for pilgrims (OTP + PIN); email-based
 for HTO operators (email + password + admin approval gate).
 
-**Flow — Pilgrim:** Phone entry → Twilio Verify OTP (Redis-cached,
+**Flow — Pilgrim:** Phone entry → Termii OTP (Redis-cached,
 10-min TTL) → JWT issued on success → PIN set (bcrypt hash, never
 transmitted post-set).
 
@@ -496,12 +510,30 @@ verification link (24h expiry) → `pending_approval` state → manual
 admin review of NAHCON licence → approved, notified via email +
 WhatsApp.
 
-**Dependencies:** Twilio Verify, Redis, Postgres, Resend.
+**Dependencies:** Termii (primary OTP provider — direct-carrier
+connections and lower cost for Nigerian numbers, vs. Twilio's
+per-verification fee and aggregator routing into Nigeria), Twilio
+Verify (secondary OTP provider), Redis, Postgres, Resend.
 
 **Failure modes:** OTP delivery failure → 30s cooldown, max 3
-resends/hour; Twilio outage → no fallback for Path A phone
-verification (hard dependency); PIN lockout → 30-min lock, OTP
-recovery available immediately.
+resends/hour across both providers combined; if the primary
+provider (Termii) has not returned a delivery confirmation within
+180 seconds (config value: `OTP_FAILOVER_THRESHOLD_SECONDS`) the
+system automatically retries via the secondary provider (Twilio
+Verify), transparent to the user — the UI shows a "Sending your
+code..." state after 10 seconds and offers a manual resend option
+from 30 seconds, so the automatic failover threshold can be tuned
+later based on real delivery-latency data without needing a UX
+change; total OTP-provider outage (both down) → account creation
+and CLI verification blocked; PIN lockout → 30-min lock, OTP
+recovery available immediately once a provider is reachable.
+
+**Configuration note:** Provider primary/secondary designation and
+the failover threshold are held as configuration
+(`OTP_PROVIDER_PRIMARY` / `OTP_PROVIDER_SECONDARY` /
+`OTP_FAILOVER_THRESHOLD_SECONDS`), not hardcoded, so they can be
+adjusted post-launch based on observed delivery reliability without
+a logic rewrite.
 
 ### 5.2 HTO Manifest & Bulk Provisioning
 **Maps to:** US-05, US-06, US-25
@@ -558,6 +590,16 @@ where both processors being unavailable simultaneously isn't
 architected around, since it's judged low-probability enough not
 to warrant a third processor at MVP.
 
+**Configuration note:** Processor primary/secondary designation
+(Paystack primary, Flutterwave secondary) is held as configuration
+(`PAYMENT_PROCESSOR_PRIMARY` / `PAYMENT_PROCESSOR_SECONDARY`), not
+hardcoded — consistent with the OTP and eSIM vendor pattern — so
+the order, or a future third processor, can be adjusted post-launch
+based on observed success rates, settlement speed, or fee changes,
+without a logic rewrite. This doesn't change the idempotency/webhook
+behavior above, which already works correctly regardless of which
+processor is primary at any given time.
+
 ### 5.4 eSIM Provisioning & Activation
 **Maps to:** US-10, US-11, US-13
 
@@ -585,11 +627,15 @@ Device capability check differs meaningfully by platform:
 1. Compatibility check (platform-specific, as above); result
    logged to `device_compatibility_log`
 2. Unsupported → warning modal (AC-10.3), QR-only path
-3. Aggregator (eSIM Access as primary; Monty Mobile as a qualified
-   secondary for redundancy — see `data-model.md` §6.6 for why a
-   second supplier is a deliberate risk decision, not just cost
-   comparison) issues an eSIM profile: `iccid`, `activation_code`
-   (LPA string), QR image URL
+3. Aggregator issuance attempted against the primary vendor
+   (Monty Mobile); on issuance failure (a real error response or
+   timeout, not merely slow), the system automatically retries
+   against the secondary vendor (eSIM Access), then the tertiary
+   (1Global), before falling to the retry-with-backoff-then-
+   admin-queue behavior below. Each attempt is logged to
+   `device_compatibility_log` with the vendor used, so admin can
+   see which vendor actually served a given pilgrim's profile.
+   Issues: `iccid`, `activation_code` (LPA string), QR image URL.
 4. Activation trigger: **primary** is the date-based banner (7
    days pre-departure, no permission required); **secondary** is
    the opt-in geofence push
@@ -597,19 +643,23 @@ Device capability check differs meaningfully by platform:
    **All other devices (all iOS, non-privileged Android):**
    device-model-specific manual guide with screenshots
 
-**Dependencies:** eSIM Access (primary aggregator), Monty Mobile
-(secondary aggregator, onboarded and tested before relied upon in
-production — not dynamically selected per-request at MVP), Airalo
-Partner API (evaluated, not the committed primary — see
-`data-model.md` §6.6), Android `EuiccManager`, Firebase Cloud
-Messaging (push, cross-platform via React Native Firebase), Android
-Geofencing API / iOS Core Location region monitoring.
+**Dependencies:** Monty Mobile (primary aggregator,
+`ESIM_VENDOR_PRIMARY`), eSIM Access (secondary aggregator,
+`ESIM_VENDOR_SECONDARY`), 1Global (tertiary aggregator,
+`ESIM_VENDOR_TERTIARY`) — vendor ranking held as configuration,
+not hardcoded, since relative pricing, coverage, and reliability
+across the Nigeria/Saudi Arabia corridor are expected to shift as
+real usage data comes in. Also: Android `EuiccManager`, Firebase
+Cloud Messaging (push, cross-platform via React Native Firebase),
+Android Geofencing API / iOS Core Location region monitoring.
 
-**Failure modes:** Aggregator issuance failure → retried with
-backoff, admin-queued after 3 attempts; device-specific download
-failure → QR always available as universal fallback; geofence
-non-fire → date-based banner is the reliable primary path on both
-platforms.
+**Failure modes:** Single-vendor issuance failure → automatic
+cascading fallback through the ranked list above (Monty Mobile →
+eSIM Access → 1Global), not just retry against the same vendor;
+all three vendors failing → retried with backoff, admin-queued
+after 3 attempts; device-specific download failure → QR always
+available as universal fallback; geofence non-fire → date-based
+banner is the reliable primary path on both platforms.
 
 **Content production note:** The manual activation guide needs
 device-specific screenshot walkthroughs for the top Android models
@@ -624,24 +674,49 @@ iPhone models). This is a content workstream, not just engineering
 
 One-time CLI ownership verification, then in-app VoIP calling
 (WebRTC over data) displaying the verified number for
-PSTN-terminated calls.
+PSTN-terminated calls, built on **Telnyx** as the primary voice
+vendor (selected at Phase 0 per §6, based on PSTN termination
+rates for the Nigeria/Saudi Arabia corridor) through a thin
+`VoiceProvider` abstraction (`initiate_call`, `set_caller_id`,
+`handle_webhook`) rather than a direct SDK integration, so a
+future vendor migration or BYOC architecture change doesn't
+require rewriting the calling or billing logic.
 
-**Flow:** Twilio Verify OTP to the pilgrim's registered number
-(reuses login number, no separate entry) → `verified_cli` flag set
-→ calling via Twilio Voice SDK (React Native, cross-platform) →
-backend TwiML sets `callerId` to the verified number for PSTN legs
-→ DamDam-to-DamDam calls route Client-to-Client, bypassing PSTN
-entirely (free) → call events via Twilio webhooks drive balance
-deduction (5.7).
+**Flow:** OTP to the pilgrim's registered number (reuses login
+number from §5.1, no separate entry) → `verified_cli` flag set →
+calling via Telnyx Programmable Voice (WebRTC + PSTN termination)
+→ backend sets the verified number as caller ID on PSTN legs →
+DamDam-to-DamDam calls route client-to-client, bypassing PSTN
+entirely (free) → Telnyx webhook events drive balance deduction
+(5.7).
 
-**Dependencies:** Twilio Verify, Twilio Voice (WebRTC + PSTN
-termination), Twilio TwiML application.
+**Dependencies:** Telnyx Programmable Voice (WebRTC + PSTN
+termination), Telnyx webhooks, OTP/CLI verification (§5.1).
 
-**Failure modes:** Token expiry mid-session → SDK auto-refreshes
-5 min before expiry; connectivity drop mid-call → graceful
-termination, billed only for connected seconds; Twilio outage →
-calling degrades with an in-app banner while check-in/SOS continue
-functioning independently.
+**Failure modes:** Token/credential expiry mid-session → SDK
+auto-refreshes 5 min before expiry; connectivity drop mid-call →
+graceful termination, billed only for connected seconds; Telnyx
+outage → calling degrades with an in-app banner while check-in/SOS
+continue functioning independently; no automatic failover to a
+second voice vendor at MVP — single-vendor risk is accepted
+deliberately, since voice is not safety-critical (SOS and check-in
+do not depend on the calling stack) and dual-vendor voice routing
+is materially more complex to build correctly within the 7-month
+timeline.
+
+**Future roadmap note (not MVP):** Once call volume justifies it,
+DamDam plans to migrate PSTN termination to a BYOC (Bring Your Own
+Carrier) architecture — Telnyx's SIP/API layer stays as the
+call-control and WebRTC layer, with PSTN termination routed over
+IDT Express's wholesale voice backbone for lower per-minute
+termination cost on the Nigeria/Saudi Arabia corridor. This is a
+**cost-optimization migration, not a reliability change** — Telnyx
+remains the primary carrier; IDT Express becomes a termination-cost
+layer underneath it once volume makes wholesale rates outperform
+Telnyx's bundled pricing. Tracked as a Phase 2+ infrastructure item
+(post-MVP) — not something the `VoiceProvider` abstraction needs to
+support on day one, but the abstraction is exactly what makes this
+migration low-risk when the time comes.
 
 ### 5.6 Check-in & SOS (Offline-First Safety Layer)
 **Maps to:** US-15, US-16, US-24
@@ -659,8 +734,11 @@ limit, higher-priority sync (immediate + every 10s vs. 30s), and
 three parallel notification channels rather than one.
 
 **Dependencies:** SQLite (on-device), Redis (server job queue),
-WhatsApp Business API, Resend, WebSocket/polling for dashboard
-updates.
+WhatsApp Business API (primary channel for family notifications),
+SMS via the configured primary OTP provider (§5.1 — secondary
+channel for family notifications, used only for check-in/SOS, not
+routine OTP traffic), Resend (email, HTO channel), WebSocket/
+polling for dashboard updates.
 
 **Failure modes:** Extended offline period → outbox processed in
 timestamp order on reconnect; app killed by OS (aggressive battery
@@ -669,12 +747,27 @@ process death, a periodic background job (WorkManager on Android,
 BGTaskScheduler on iOS) resumes sync independent of app process;
 notification dispatch failure → retried 3x, then admin-queued —
 the check-in/SOS record itself is never lost regardless of
-notification outcome.
+notification outcome; **WhatsApp Business API outage or send
+failure on a check-in or SOS notification → automatic SMS fallback
+to the family contact's number within 60 seconds**, since family
+notification on SOS is safety-critical and single-channel
+dependency here is not acceptable the way it may be for lower-stakes
+notifications; HTO-side notification (§5.8/US-19) is already
+multi-channel (push + email + WhatsApp) and does not need this
+change since email is already an independent fallback.
+
+**Configuration note:** The WhatsApp-primary / SMS-secondary
+channel order for family notifications is held as configuration
+(`FAMILY_NOTIFY_CHANNEL_PRIMARY` / `FAMILY_NOTIFY_CHANNEL_SECONDARY`),
+not hardcoded — consistent with the OTP, payment, and eSIM
+patterns — so the order, or the 60-second failover window, can be
+adjusted post-launch based on observed WhatsApp delivery
+reliability in-region without a logic rewrite.
 
 ### 5.7 Package Balance & Usage Tracking
 **Maps to:** US-17
 
-**Voice:** Twilio call-end webhook → duration → deduct from
+**Voice:** Telnyx call-end webhook → duration → deduct from
 `pstn_minutes_remaining`.
 
 **Data:** Most eSIM aggregators do not provide real-time usage
@@ -682,13 +775,13 @@ webhooks — MVP uses a 15-min polling job against the aggregator's
 usage endpoint per active profile. This is an honest limitation:
 "remaining data" is near-real-time, not live.
 
-**Dependencies:** Twilio webhooks, eSIM aggregator usage API
+**Dependencies:** Telnyx webhooks, eSIM aggregator usage API
 (polling), Postgres, Redis (cache).
 
 **Failure modes:** Polling failure → last known value shown with
 "last updated X min ago"; balance race condition at exactly zero →
-next call blocked at the TwiML application level, no negative
-balance allowed.
+next call blocked at the voice call-control application level, no
+negative balance allowed.
 
 ### 5.8 HTO Dashboard
 **Maps to:** US-18, US-19, US-20
@@ -751,7 +844,7 @@ existence in written form and are reconciled against it here.
 
 | Phase | Timing | What ships |
 |---|---|---|
-| 0 — Vendor agreements | July 2026 | eSIM aggregator API access (Airalo/eSIM Access), **voice vendor decision: quote both Twilio and Telnyx for the Nigeria/Saudi Arabia corridors specifically, decide based on real PSTN termination rates — see `api-spec.md` §7.5's vendor-status flag — since this is the single largest variable cost lever in the margin model**, Paystack merchant account (Registered Business tier per `corporate-structure.md` §13.2), entity structuring started |
+| 0 — Vendor agreements | July 2026 | eSIM aggregator API access (Monty Mobile primary, eSIM Access secondary, 1Global tertiary), **voice vendor: Telnyx selected as the primary PSTN/VoIP provider for the Nigeria/Saudi Arabia corridors, following the quote comparison against Twilio — see `api-spec.md` §7.5's vendor-status flag and `infrastructure.md` for the rate rationale**, Paystack merchant account (Registered Business tier per `corporate-structure.md` §13.2), entity structuring started |
 | 1 — Core checkout + eSIM + design foundation | Aug–Sep 2026 | Naira purchase flow, eSIM QR delivery, pre-departure guide — **plus the two prerequisites flagged in `testing-qa.md` §14.6: `design-system.md` produced via a dedicated design session, and the screenshot-generation CI step built** — both block any mobile screen PR merging, so they start immediately, not after the checkout flow is done |
 | 2 — VoIP + CLI | Oct–Nov 2026 | In-app calling with verified Nigerian caller ID — this is the demo that wins HTO pilots |
 | 3 — Safety layer + offline | Nov–Dec 2026 | SOS button, check-in, offline maps, HTO dashboard v1 — the offline-chaos test suite in `testing-qa.md` §14.4.1 must pass before this phase is considered done, not just before Phase 4 |
