@@ -56,6 +56,12 @@ def upgrade() -> None:
             sa.ForeignKey("admin_users.id", ondelete="SET NULL"),
             nullable=True,
         ),
+        sa.Column(
+            "approval_email_sent_at", sa.DateTime(timezone=True), nullable=True
+        ),
+        sa.Column(
+            "approval_whatsapp_sent_at", sa.DateTime(timezone=True), nullable=True
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index("ix_hto_operators_email", "hto_operators", ["email"], unique=True)

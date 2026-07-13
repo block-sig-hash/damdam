@@ -156,6 +156,8 @@ DeviceCompatibilityLog
 | approval_status | ENUM | DEFAULT 'pending' | `pending` \| `approved` \| `rejected` |
 | approved_at | TIMESTAMPTZ | NULLABLE | |
 | approved_by | UUID | FK → admin_users, NULLABLE | |
+| approval_email_sent_at | TIMESTAMPTZ | NULLABLE | Set after the approval email is delivered |
+| approval_whatsapp_sent_at | TIMESTAMPTZ | NULLABLE | Set after the approval WhatsApp message is delivered |
 
 ---
 
@@ -645,3 +647,14 @@ pilgrim refresh path.
 | revoked_at | TIMESTAMPTZ | NULLABLE | |
 
 **Indexes:** `token_hash` (unique), `hto_operator_id`, `expires_at`.
+
+---
+
+## 6.10 Amendment — HTO Approval Notification Delivery State
+
+US-04 sends approval notifications over email and WhatsApp. Because those are
+independent external calls, `hto_operators` records delivery of each channel
+separately. Approval is committed before notification dispatch, and a retry
+only sends channels whose timestamp is still null. This prevents a successful
+email followed by a failed WhatsApp call from rolling the operator back to
+`pending` or sending the email twice on retry.

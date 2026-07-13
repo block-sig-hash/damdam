@@ -201,22 +201,43 @@ class HTOService:
             raise HTOAuthError("operator_not_found")
         if operator.approval_status == HTOApprovalStatus.REJECTED:
             raise HTOAuthError("invalid_approval_transition")
-        if operator.approval_status == HTOApprovalStatus.APPROVED:
-            return operator
-        if not operator.email_verified:
-            raise HTOAuthError("email_not_verified")
-
-        operator.approval_status = HTOApprovalStatus.APPROVED
-        operator.approved_at = self.clock()
-        operator.approved_by = admin_id
-        session.add(operator)
-        try:
-            self.notifications.send_approval(
-                operator.email, operator.phone_number, operator.operator_name
-            )
+        if operator.approval_status == HTOApprovalStatus.PENDING:
+            if not operator.email_verified:
+                raise HTOAuthError("email_not_verified")
+            operator.approval_status = HTOApprovalStatus.APPROVED
+            operator.approved_at = self.clock()
+            operator.approved_by = admin_id
+            session.add(operator)
             session.commit()
-        except NotificationError as exc:
-            session.rollback()
-            raise HTOAuthError("notification_unavailable") from exc
-        session.refresh(operator)
+            session.refresh(operator)
+
+        notification_failed = False
+        if operator.approval_email_sent_at is None:
+            try:
+                self.notifications.send_approval_email(
+                    operator.email, operator.operator_name
+                )
+            except NotificationError:
+                notification_failed = True
+            else:
+                operator.approval_email_sent_at = self.clock()
+                session.add(operator)
+                session.commit()
+                session.refresh(operator)
+
+        if operator.approval_whatsapp_sent_at is None:
+            try:
+                self.notifications.send_approval_whatsapp(
+                    operator.phone_number, operator.operator_name
+                )
+            except NotificationError:
+                notification_failed = True
+            else:
+                operator.approval_whatsapp_sent_at = self.clock()
+                session.add(operator)
+                session.commit()
+                session.refresh(operator)
+
+        if notification_failed:
+            raise HTOAuthError("notification_unavailable")
         return operator

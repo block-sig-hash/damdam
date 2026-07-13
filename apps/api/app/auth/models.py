@@ -177,6 +177,12 @@ class HTOOperator(SQLModel, table=True):
             ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
         ),
     )
+    approval_email_sent_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    approval_whatsapp_sent_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),

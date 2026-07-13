@@ -19,13 +19,14 @@ from app.auth.schemas import (
     HTORegistrationRequest,
     HTOVerifyEmailRequest,
 )
-from app.notifications.service import EmailSender, WhatsAppSender
+from app.notifications.service import EmailSender, NotificationError, WhatsAppSender
 
 
 class FakeEmailSender(EmailSender):
     def __init__(self) -> None:
         self.verifications: list[tuple[str, str, str]] = []
         self.approvals: list[tuple[str, str]] = []
+        self.fail_approval = False
 
     def send_verification(
         self, email: str, operator_name: str, verification_url: str
@@ -33,14 +34,19 @@ class FakeEmailSender(EmailSender):
         self.verifications.append((email, operator_name, verification_url))
 
     def send_approval(self, email: str, operator_name: str) -> None:
+        if self.fail_approval:
+            raise NotificationError("email unavailable")
         self.approvals.append((email, operator_name))
 
 
 class FakeWhatsAppSender(WhatsAppSender):
     def __init__(self) -> None:
         self.approvals: list[tuple[str, str]] = []
+        self.fail_approval = False
 
     def send_approval(self, phone_number: str, operator_name: str) -> None:
+        if self.fail_approval:
+            raise NotificationError("whatsapp unavailable")
         self.approvals.append((phone_number, operator_name))
 
 
@@ -235,6 +241,12 @@ def test_verified_account_remains_pending_until_admin_approval(
     assert email_sender.approvals == [("amina@example.com", "Amina Yusuf")]
     assert whatsapp_sender.approvals == [("+2348012345678", "Amina Yusuf")]
 
+    with session_factory() as session:
+        operator = session.get(HTOOperator, operator_id)
+        assert operator is not None
+        assert operator.approval_email_sent_at is not None
+        assert operator.approval_whatsapp_sent_at is not None
+
     login = login_hto(
         HTOLoginRequest(
             email=registration_payload["email"],
@@ -250,6 +262,60 @@ def test_verified_account_remains_pending_until_admin_approval(
         audience="hto_dashboard",
         options={"verify_exp": False},
     )["sub"] == str(operator_id)
+
+
+def test_partial_notification_failure_keeps_approval_and_retries_missing_channel(
+    hto_api,
+    session_factory,
+    email_sender,
+    whatsapp_sender,
+    registration_payload,
+) -> None:
+    """AC-04.5: one delivered notification cannot be undone by another failing."""
+    request = SimpleNamespace(app=hto_api)
+    token = register_and_token(hto_api, email_sender, registration_payload)
+    verify_hto_email(HTOVerifyEmailRequest(token=token), request)
+
+    with session_factory() as session:
+        operator = session.exec(select(HTOOperator)).one()
+        admin = AdminUser(
+            id=uuid4(),
+            email="admin@damdam.app",
+            password_hash="not-used-in-this-test",
+        )
+        session.add(admin)
+        session.commit()
+        operator_id = operator.id
+        admin_id = admin.id
+
+    whatsapp_sender.fail_approval = True
+    with (
+        session_factory() as session,
+        pytest.raises(HTOAuthError, match="notification_unavailable"),
+    ):
+        hto_api.state.hto_service.approve(session, operator_id, admin_id)
+
+    with session_factory() as session:
+        operator = session.get(HTOOperator, operator_id)
+        assert operator is not None
+        assert operator.approval_status == HTOApprovalStatus.APPROVED
+        assert operator.approval_email_sent_at is not None
+        assert operator.approval_whatsapp_sent_at is None
+    assert email_sender.approvals == [("amina@example.com", "Amina Yusuf")]
+    assert whatsapp_sender.approvals == []
+
+    whatsapp_sender.fail_approval = False
+    with session_factory() as session:
+        approved = hto_api.state.hto_service.approve(session, operator_id, admin_id)
+        assert approved.approval_status == HTOApprovalStatus.APPROVED
+
+    with session_factory() as session:
+        operator = session.get(HTOOperator, operator_id)
+        assert operator is not None
+        assert operator.approval_email_sent_at is not None
+        assert operator.approval_whatsapp_sent_at is not None
+    assert email_sender.approvals == [("amina@example.com", "Amina Yusuf")]
+    assert whatsapp_sender.approvals == [("+2348012345678", "Amina Yusuf")]
 
 
 def test_duplicate_email_and_invalid_admin_access_are_rejected(

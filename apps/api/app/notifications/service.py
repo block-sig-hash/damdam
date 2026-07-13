@@ -27,8 +27,10 @@ class NotificationService:
     ) -> None:
         self.email.send_verification(email, operator_name, verification_url)
 
-    def send_approval(
-        self, email: str, phone_number: str, operator_name: str
-    ) -> None:
+    def send_approval_email(self, email: str, operator_name: str) -> None:
         self.email.send_approval(email, operator_name)
+
+    def send_approval_whatsapp(
+        self, phone_number: str, operator_name: str
+    ) -> None:
         self.whatsapp.send_approval(phone_number, operator_name)
