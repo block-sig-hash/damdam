@@ -14,3 +14,13 @@ openapi-generated.json
 .env.*
 !.env.example
 *:Zone.Identifier
+
+# Node / React Native
+node_modules/
+coverage/
+*.jsbundle
+apps/mobile/ios/Pods/
+apps/mobile/ios/build/
+apps/mobile/android/.gradle/
+apps/mobile/android/app/build/
+apps/mobile/android/build/
