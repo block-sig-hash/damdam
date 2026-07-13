@@ -19,7 +19,8 @@ User (pilgrim)
   ├── has many → CheckIn
   ├── has many → SosAlert
   ├── has many → CallLog
-  └── belongs to → ManifestPilgrim (nullable, if HTO-sourced)
+  ├── belongs to → ManifestPilgrim (nullable, if HTO-sourced)
+  └── has many → RefreshToken
 
 HtoOperator
   ├── has many → Manifest
@@ -113,6 +114,18 @@ DeviceCompatibilityLog
 | user_id | UUID | FK → users, UNIQUE | One per user |
 | twilio_verification_sid | VARCHAR(64) | NOT NULL | |
 | verified_at | TIMESTAMPTZ | NOT NULL | |
+
+### `refresh_tokens`
+
+| Field | Type | Constraints | Notes |
+|---|---|---|---|
+| id | UUID | PK | JWT `jti` |
+| user_id | UUID | FK → users, NOT NULL | |
+| token_hash | VARCHAR(64) | UNIQUE, NOT NULL | SHA-256; plaintext is never stored |
+| expires_at | TIMESTAMPTZ | NOT NULL | |
+| revoked_at | TIMESTAMPTZ | NULLABLE | Set when rotated or explicitly revoked |
+
+**Indexes:** `token_hash` (unique), `user_id`, `expires_at`
 
 ---
 
@@ -592,3 +605,18 @@ unavailable at the moment of checkout.
 in `api-spec.md` §7.3 needs to change from Paystack-specific field
 names to a generic `processor`/`checkout_url` shape — see that
 section's amendment note.
+
+---
+
+## 6.8 Amendment — Hashed Refresh-Token Sessions
+
+The initial `users` schema named JWT refresh tokens as sensitive
+authentication material in `security.md` §10.4 but omitted the table
+needed to store and revoke them. `refresh_tokens` closes that gap for
+US-01: only a SHA-256 digest is persisted, tokens are rotated on use,
+and a revoked or expired token cannot establish a new session.
+
+This is deliberately a separate one-to-many table rather than fields
+on `users`, so one pilgrim can have independent iOS/Android sessions
+and one compromised device can be revoked without signing out every
+device.

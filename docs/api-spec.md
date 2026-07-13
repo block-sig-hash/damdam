@@ -26,12 +26,15 @@ POST   /auth/otp/request
   Body: { phone_number: string }
   200: { message: "OTP sent" }
   429: { error: "rate_limited", retry_after: int }
+  409: { error: "account_exists" }
+  503: { error: "otp_unavailable" }
 
 POST   /auth/otp/verify
   Body: { phone_number: string, otp: string, platform: "ios"|"android" }
   200: { access_token, refresh_token, user: {..}, is_new_user: bool }
   400: { error: "invalid_otp" | "otp_expired" }
   423: { error: "locked", retry_after: int }
+  503: { error: "otp_unavailable" }
 
 POST   /auth/pin/set
   Auth required
@@ -362,6 +365,13 @@ POST   /webhooks/whatsapp/status
   Meta-signed
   Delivery status callbacks for outbound WhatsApp messages —
   feeds sos_notifications.status (data-model.md §6.2)
+
+POST   /webhooks/otp/termii
+  Termii-signed delivery report (`X-Termii-Signature`, HMAC-SHA512)
+  Marks the correlated OTP delivery as confirmed. Returns 200 for
+  valid reports, including non-delivered terminal states; invalid
+  signatures return 401. This is an internal provider callback and
+  does not expose a vendor-specific shape to app clients.
 ```
 
 ---
@@ -408,8 +418,6 @@ GET    /admin/device-compatibility-log
 | All other authenticated endpoints | 100 req/min per user |
 | Public endpoints (`/pricing/tiers`) | 60 req/min per IP |
 
----
-
 ## 7.12 Error Response Shape
 
 Standard across all endpoints:
@@ -449,3 +457,17 @@ Explicitly not in the admin UI for MVP: user search/lookup, manual
 package editing, refund processing, analytics dashboards. Anything
 outside these four screens is a direct database action for MVP,
 acceptable given expected pilot volume.
+
+---
+
+## 7.14 Amendment — US-01 OTP Delivery Failover Contract
+
+US-01's provider failover requires a delivery-confirmation input,
+not merely confirmation that Termii accepted the send request. The
+Termii delivery-report webhook above is therefore part of the OTP
+provider abstraction: its `message_id` is correlated to short-lived
+Redis challenge state and never stored on the pilgrim account.
+
+`POST /auth/otp/request` now documents the already-required
+`account_exists` result (AC-01.7) and the total-provider-outage result
+from PRD §5.1. Neither response leaks which provider was attempted.
