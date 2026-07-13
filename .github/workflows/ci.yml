@@ -10,6 +10,23 @@ jobs:
   lint-and-test-api:
     name: API — Lint, type-check, test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: damdam_test
+          POSTGRES_PASSWORD: damdam_test
+          POSTGRES_DB: damdam_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U damdam_test -d damdam_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://damdam_test:damdam_test@localhost:5432/damdam_test
+      TEST_DATABASE_URL: postgresql+psycopg://damdam_test:damdam_test@localhost:5432/damdam_test
     defaults:
       run:
         working-directory: apps/api
@@ -24,6 +41,8 @@ jobs:
         run: ruff check .
       - name: Type-check (mypy)
         run: mypy app
+      - name: Apply database migrations
+        run: alembic upgrade head
       - name: Test (pytest)
         run: pytest --cov=app
       - name: Export OpenAPI spec and check for drift
@@ -43,13 +62,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
+        if: ${{ hashFiles('apps/dashboard/package.json') != '' }}
         with:
           node-version: "20"
           cache: "npm"
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run type-check
-      - run: npm run test
+      - if: ${{ hashFiles('apps/dashboard/package.json') != '' }}
+        run: npm ci
+      - if: ${{ hashFiles('apps/dashboard/package.json') != '' }}
+        run: npm run lint
+      - if: ${{ hashFiles('apps/dashboard/package.json') != '' }}
+        run: npm run type-check
+      - if: ${{ hashFiles('apps/dashboard/package.json') != '' }}
+        run: npm run test
 
   lint-and-test-mobile:
     name: Mobile — Lint, type-check, test
@@ -60,13 +84,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
+        if: ${{ hashFiles('apps/mobile/package.json') != '' }}
         with:
           node-version: "20"
           cache: "npm"
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run type-check
-      - run: npm run test
+      - if: ${{ hashFiles('apps/mobile/package.json') != '' }}
+        run: npm ci
+      - if: ${{ hashFiles('apps/mobile/package.json') != '' }}
+        run: npm run lint
+      - if: ${{ hashFiles('apps/mobile/package.json') != '' }}
+        run: npm run type-check
+      - if: ${{ hashFiles('apps/mobile/package.json') != '' }}
+        run: npm run test
 
   build-check:
     name: Docker build check (multi-arch)

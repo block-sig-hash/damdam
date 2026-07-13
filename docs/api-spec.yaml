@@ -1,0 +1,266 @@
+openapi: 3.1.0
+info:
+  title: DamDam API
+  version: 0.1.0
+paths:
+  /health:
+    get:
+      tags:
+      - system
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                type: object
+                title: Response Health Health Get
+  /v1/auth/otp/request:
+    post:
+      tags:
+      - authentication
+      summary: Request Otp
+      operationId: request_otp_v1_auth_otp_request_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTPRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/otp/verify:
+    post:
+      tags:
+      - authentication
+      summary: Verify Otp
+      operationId: verify_otp_v1_auth_otp_verify_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTPVerifyRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/token/refresh:
+    post:
+      tags:
+      - authentication
+      summary: Refresh Token
+      operationId: refresh_token_v1_auth_token_refresh_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/webhooks/otp/termii:
+    post:
+      tags:
+      - webhooks
+      summary: Termii Delivery Report
+      operationId: termii_delivery_report_v1_webhooks_otp_termii_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: boolean
+                type: object
+                title: Response Termii Delivery Report V1 Webhooks Otp Termii Post
+components:
+  schemas:
+    AuthResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        refresh_token:
+          type: string
+          title: Refresh Token
+        user:
+          $ref: '#/components/schemas/UserResponse'
+        is_new_user:
+          type: boolean
+          title: Is New User
+      type: object
+      required:
+      - access_token
+      - refresh_token
+      - user
+      - is_new_user
+      title: AuthResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    MessageResponse:
+      properties:
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - message
+      title: MessageResponse
+    OTPRequest:
+      properties:
+        phone_number:
+          type: string
+          title: Phone Number
+      type: object
+      required:
+      - phone_number
+      title: OTPRequest
+    OTPVerifyRequest:
+      properties:
+        phone_number:
+          type: string
+          title: Phone Number
+        otp:
+          type: string
+          title: Otp
+        platform:
+          $ref: '#/components/schemas/Platform'
+      type: object
+      required:
+      - phone_number
+      - otp
+      - platform
+      title: OTPVerifyRequest
+    Platform:
+      type: string
+      enum:
+      - ios
+      - android
+      title: Platform
+    RefreshRequest:
+      properties:
+        refresh_token:
+          type: string
+          title: Refresh Token
+      type: object
+      required:
+      - refresh_token
+      title: RefreshRequest
+    TokenResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        refresh_token:
+          type: string
+          title: Refresh Token
+      type: object
+      required:
+      - access_token
+      - refresh_token
+      title: TokenResponse
+    UserResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        phone_number:
+          type: string
+          title: Phone Number
+        first_name:
+          type: string
+          title: First Name
+        last_name:
+          type: string
+          title: Last Name
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        verified_cli:
+          type: boolean
+          title: Verified Cli
+        platform:
+          type: string
+          title: Platform
+        status:
+          type: string
+          title: Status
+      type: object
+      required:
+      - id
+      - phone_number
+      - first_name
+      - last_name
+      - email
+      - verified_cli
+      - platform
+      - status
+      title: UserResponse
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
