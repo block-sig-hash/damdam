@@ -103,3 +103,21 @@ class TokenService:
         pair = self.issue(session, user, now)
         session.commit()
         return pair
+
+    def decode_access(self, token: str, now: datetime) -> UUID:
+        try:
+            claims = jwt.decode(
+                token,
+                self.settings.jwt_secret,
+                algorithms=["HS256"],
+                audience="pilgrim",
+                options={"verify_exp": False},
+            )
+            if claims.get("type") != "access":
+                raise InvalidRefreshTokenError
+            expires_at = datetime.fromtimestamp(float(claims["exp"]), tz=timezone.utc)
+            if expires_at <= now:
+                raise InvalidRefreshTokenError
+            return UUID(claims["sub"])
+        except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
+            raise InvalidRefreshTokenError from exc

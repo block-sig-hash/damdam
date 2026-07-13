@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from redis import Redis
 
+from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
 from app.config import Settings, get_settings
 from app.container import build_otp_service, default_dependencies
@@ -52,6 +53,7 @@ def create_app(
         providers,
         clock,
     )
+    api.state.pin_service = PINService(clock)
 
     @api.exception_handler(OTPError)
     async def otp_error_handler(request: Request, exc: OTPError) -> JSONResponse:
@@ -62,10 +64,15 @@ def create_app(
             "rate_limited": 429,
             "locked": 423,
             "account_exists": 409,
+            "account_not_found": 404,
             "otp_unavailable": 503,
             "invalid_refresh_token": 401,
             "invalid_webhook_signature": 401,
             "invalid_webhook_payload": 400,
+            "pin_too_weak": 400,
+            "invalid_pin": 400,
+            "pin_not_set": 400,
+            "invalid_access_token": 401,
         }
         messages = {
             "invalid_otp": "The verification code is incorrect.",
@@ -73,10 +80,15 @@ def create_app(
             "rate_limited": "Please wait before requesting another code.",
             "locked": "Too many attempts. Please wait before trying again.",
             "account_exists": "This number already has an account. Please log in.",
+            "account_not_found": "No account exists for this phone number.",
             "otp_unavailable": "Verification is temporarily unavailable.",
             "invalid_refresh_token": "The refresh token is invalid or expired.",
             "invalid_webhook_signature": "Webhook signature is invalid.",
             "invalid_webhook_payload": "Webhook payload is invalid.",
+            "pin_too_weak": "Choose a non-repeated, non-sequential 4-digit PIN.",
+            "invalid_pin": "The PIN is incorrect.",
+            "pin_not_set": "Set a PIN before trying to unlock the app.",
+            "invalid_access_token": "The access token is invalid or expired.",
         }
         details: dict[str, Any] = {}
         if exc.retry_after is not None:
@@ -95,12 +107,24 @@ def create_app(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         del request
+        errors = exc.errors()
+        if any(error["type"] == "pin_too_weak" for error in errors):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "pin_too_weak",
+                    "message": (
+                        "Choose a non-repeated, non-sequential 4-digit PIN."
+                    ),
+                    "details": {},
+                },
+            )
         return JSONResponse(
             status_code=422,
             content={
                 "error": "validation_error",
                 "message": "The request contains invalid fields.",
-                "details": {"errors": exc.errors()},
+                "details": {"errors": errors},
             },
         )
 

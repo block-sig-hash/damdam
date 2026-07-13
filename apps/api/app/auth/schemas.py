@@ -1,7 +1,9 @@
 import re
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic_core import PydanticCustomError
 
 from app.auth.models import Platform
 
@@ -16,6 +18,16 @@ def validate_nigerian_phone(value: str) -> str:
 
 def to_e164(value: str) -> str:
     return "+234" + value[1:]
+
+
+def is_strong_pin(value: str) -> bool:
+    if re.fullmatch(r"\d{4}", value) is None or len(set(value)) == 1:
+        return False
+    digits = [int(digit) for digit in value]
+    differences = [
+        right - left for left, right in zip(digits, digits[1:], strict=False)
+    ]
+    return differences not in ([1, 1, 1], [-1, -1, -1])
 
 
 class OTPRequest(BaseModel):
@@ -40,8 +52,30 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class PINPayload(BaseModel):
+    pin: str
+
+    @field_validator("pin")
+    @classmethod
+    def validate_pin(cls, value: str) -> str:
+        if not is_strong_pin(value):
+            raise PydanticCustomError(
+                "pin_too_weak",
+                "Choose a non-repeated, non-sequential 4-digit PIN",
+            )
+        return value
+
+
+class PINRecoveryRequest(OTPRequest):
+    pass
+
+
 class MessageResponse(BaseModel):
     message: str
+
+
+class PINVerifyResponse(BaseModel):
+    unlocked: Literal[True] = True
 
 
 class UserResponse(BaseModel):

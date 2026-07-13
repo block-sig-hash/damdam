@@ -56,6 +56,7 @@ class OTPError(Exception):
 @dataclass
 class Challenge:
     id: str
+    purpose: str
     phone_number: str
     created_at: str
     expires_at: str
@@ -107,8 +108,8 @@ class OTPService:
         return f"otp:delivery:{provider}:{reference}"
 
     @staticmethod
-    def _rate_key(phone_number: str) -> str:
-        return f"otp:requests:{phone_number}"
+    def _rate_key(phone_number: str, scope: str) -> str:
+        return f"otp:requests:{scope}:{phone_number}"
 
     def _load(self, phone_number: str) -> Challenge | None:
         value = self.redis.get(self._challenge_key(phone_number))
@@ -132,9 +133,9 @@ class OTPService:
             ex=self.settings.otp_ttl_seconds,
         )
 
-    def _check_request_limit(self, phone_number: str) -> None:
+    def _check_request_limit(self, phone_number: str, scope: str) -> None:
         now = self.clock().timestamp()
-        key = self._rate_key(phone_number)
+        key = self._rate_key(phone_number, scope)
         cutoff = now - 3600
         self.redis.zremrangebyscore(key, "-inf", cutoff)
         most_recent = self.redis.zrevrange(key, 0, 0, withscores=True)
@@ -153,12 +154,17 @@ class OTPService:
         self.redis.zadd(key, {member: now})
         self.redis.expire(key, 3600)
 
-    def request(self, session: Session, phone_number: str) -> None:
+    def request(
+        self, session: Session, phone_number: str, allow_existing: bool = False
+    ) -> None:
         e164 = to_e164(phone_number)
         existing = session.exec(select(User).where(User.phone_number == e164)).first()
-        if existing is not None:
+        if existing is not None and not allow_existing:
             raise OTPError("account_exists")
-        self._check_request_limit(phone_number)
+        if existing is None and allow_existing:
+            raise OTPError("account_not_found")
+        rate_scope = "recovery" if allow_existing else "signup"
+        self._check_request_limit(phone_number, rate_scope)
 
         primary_name = self.settings.otp_provider_primary
         secondary_name = self.settings.otp_provider_secondary
@@ -170,14 +176,14 @@ class OTPService:
             except OTPProviderError as exc:
                 raise OTPError("otp_unavailable") from exc
             challenge = self._new_challenge(
-                phone_number, secondary_name, dispatch, primary_name
+                phone_number, rate_scope, secondary_name, dispatch, primary_name
             )
             challenge.primary_delivered = True
             self._save(challenge)
             return
 
         challenge = self._new_challenge(
-            phone_number, primary_name, dispatch, secondary_name
+            phone_number, rate_scope, primary_name, dispatch, secondary_name
         )
         self._save(challenge)
         self._remember_delivery(challenge, dispatch)
@@ -190,6 +196,7 @@ class OTPService:
     def _new_challenge(
         self,
         phone_number: str,
+        purpose: str,
         primary_name: str,
         dispatch: OTPDispatch,
         secondary_name: str,
@@ -197,6 +204,7 @@ class OTPService:
         now = self.clock()
         return Challenge(
             id=str(uuid4()),
+            purpose=purpose,
             phone_number=phone_number,
             created_at=now.isoformat(),
             expires_at=(
@@ -254,11 +262,18 @@ class OTPService:
         return True
 
     def verify(
-        self, session: Session, phone_number: str, code: str, platform: Platform
+        self,
+        session: Session,
+        phone_number: str,
+        code: str,
+        platform: Platform,
+        purpose: str = "signup",
     ) -> AuthResult:
         challenge = self._load(phone_number)
         if challenge is None:
             raise OTPError("otp_expired")
+        if challenge.purpose != purpose:
+            raise OTPError("invalid_otp")
         now = self.clock()
         if now >= datetime.fromisoformat(challenge.expires_at):
             raise OTPError("otp_expired")
