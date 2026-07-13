@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AuthResponse, OtpApiError, Platform, requestOtp, verifyOtp } from '../../api/authClient';
 import { useCountdownSeconds } from '../../hooks/useCountdownSeconds';
 import { useElapsedSeconds } from '../../hooks/useElapsedSeconds';
@@ -52,13 +52,29 @@ export function useOtpVerification({
   const lockoutSecondsRemaining = useCountdownSeconds(lockoutTotalSeconds);
   const resendBlockedSecondsRemaining = useCountdownSeconds(resendBlockedTotalSeconds);
 
+  // useCountdownSeconds' `remaining` state lags `lockoutTotalSeconds` by one
+  // render (its useState initializer only applies on first mount; the
+  // effect that resyncs it to a new prop value runs after commit). Without
+  // this latch, the render where lockoutTotalSeconds first becomes >0 but
+  // lockoutSecondsRemaining is still its previous 0 would immediately
+  // "expire" a lockout that hasn't started counting down yet.
+  const hasObservedLockoutCountdown = useRef(false);
+
   useEffect(() => {
-    if (status === 'locked' && lockoutTotalSeconds > 0 && lockoutSecondsRemaining === 0) {
+    if (status !== 'locked') {
+      return;
+    }
+    if (lockoutSecondsRemaining > 0) {
+      hasObservedLockoutCountdown.current = true;
+      return;
+    }
+    if (hasObservedLockoutCountdown.current) {
+      hasObservedLockoutCountdown.current = false;
       setStatus('awaiting_code');
       setErrorMessage(null);
       setLockoutTotalSeconds(0);
     }
-  }, [status, lockoutSecondsRemaining, lockoutTotalSeconds]);
+  }, [status, lockoutSecondsRemaining]);
 
   const setCode = useCallback((value: string) => {
     setErrorMessage(null);
