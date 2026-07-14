@@ -886,8 +886,123 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /v1/activation/{activation_code}:
+    get:
+      tags:
+      - pilgrim-activation
+      summary: Preview Activation
+      operationId: preview_activation_v1_activation__activation_code__get
+      parameters:
+      - name: activation_code
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Activation Code
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivationPreviewResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/activation/redeem:
+    post:
+      tags:
+      - pilgrim-activation
+      summary: Redeem Activation
+      operationId: redeem_activation_v1_me_activation_redeem_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivationRedeemRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivationRedeemResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
 components:
   schemas:
+    ActivationPreviewResponse:
+      properties:
+        valid:
+          type: boolean
+          title: Valid
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        organization_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Organization Name
+        pricing_tier_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Pricing Tier Name
+      type: object
+      required:
+      - valid
+      - reason
+      - organization_name
+      - pricing_tier_name
+      title: ActivationPreviewResponse
+    ActivationRedeemRequest:
+      properties:
+        activation_code:
+          type: string
+          title: Activation Code
+      type: object
+      required:
+      - activation_code
+      title: ActivationRedeemRequest
+    ActivationRedeemResponse:
+      properties:
+        package_id:
+          type: string
+          format: uuid
+          title: Package Id
+        pricing_tier_name:
+          type: string
+          title: Pricing Tier Name
+        data_gb_total:
+          type: integer
+          title: Data Gb Total
+        pstn_minutes_total:
+          type: integer
+          title: Pstn Minutes Total
+        status:
+          type: string
+          title: Status
+      type: object
+      required:
+      - package_id
+      - pricing_tier_name
+      - data_gb_total
+      - pstn_minutes_total
+      - status
+      title: ActivationRedeemResponse
     AdminManifestOrderListResponse:
       properties:
         orders:

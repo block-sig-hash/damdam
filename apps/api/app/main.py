@@ -9,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis import Redis
 
+from app.activation.routes import router as activation_router
+from app.activation.service import ActivationError, ActivationService
 from app.admin.routes import router as admin_router
 from app.auth.hto import HTOAuthError, HTOService
 from app.auth.pin import PINService
@@ -100,6 +102,7 @@ def create_app(
     api.state.family_contact_service = FamilyContactService(
         notification_service, clock
     )
+    api.state.activation_service = ActivationService(clock)
 
     @api.exception_handler(OTPError)
     async def otp_error_handler(request: Request, exc: OTPError) -> JSONResponse:
@@ -334,6 +337,32 @@ def create_app(
             content={"error": exc.code, "message": messages[exc.code], "details": {}},
         )
 
+    @api.exception_handler(ActivationError)
+    async def activation_error_handler(
+        request: Request, exc: ActivationError
+    ) -> JSONResponse:
+        del request
+        statuses = {
+            "activation_code_invalid": 404,
+            "activation_code_already_used": 409,
+            "activation_code_expired": 410,
+            "activation_code_phone_mismatch": 403,
+        }
+        messages = {
+            "activation_code_invalid": "This activation code is invalid.",
+            "activation_code_already_used": (
+                "This activation code has already been used."
+            ),
+            "activation_code_expired": "This activation code has expired.",
+            "activation_code_phone_mismatch": (
+                "This activation code was issued to a different phone number."
+            ),
+        }
+        return JSONResponse(
+            status_code=statuses[exc.code],
+            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+        )
+
     @api.get("/health", tags=["system"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -344,6 +373,7 @@ def create_app(
     api.include_router(pricing_router, prefix="/v1")
     api.include_router(otp_webhook_router, prefix="/v1")
     api.include_router(profile_router, prefix="/v1")
+    api.include_router(activation_router, prefix="/v1")
     return api
 
 

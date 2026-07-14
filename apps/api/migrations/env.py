@@ -6,6 +6,7 @@ from sqlmodel import SQLModel
 
 from app.auth import models  # noqa: F401
 from app.config import get_settings
+from app.packages import models as packages_models  # noqa: F401
 from app.profile import models as profile_models  # noqa: F401
 
 config = context.config

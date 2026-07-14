@@ -116,6 +116,24 @@ PATCH  /me/family-contact
   404: { error: "family_contact_not_found" }
   503: { error: "notification_unavailable" }
 
+GET    /activation/{activation_code}
+  No auth required (pre-login preview, shown before OTP/PIN)
+  200: { valid: bool, reason: "activation_code_already_used"|
+          "activation_code_expired"|null, organization_name,
+          pricing_tier_name }
+  404: { error: "activation_code_invalid" }
+
+POST   /me/activation/redeem
+  Auth required — works identically for a pilgrim who just
+  completed OTP/PIN (AC-07.4) or one already signed in (AC-07.5)
+  Body: { activation_code: string }
+  200: { package_id, pricing_tier_name, data_gb_total,
+          pstn_minutes_total, status: "active" }
+  403: { error: "activation_code_phone_mismatch" }
+  404: { error: "activation_code_invalid" }
+  409: { error: "activation_code_already_used" }
+  410: { error: "activation_code_expired" }
+
 POST   /me/verify-cli
   Auth required
   200: { message: "Verification OTP sent to registered number" }
@@ -610,3 +628,44 @@ PATCHing the same number retries the missing notification. Changing the number
 resets the flag and notifies the new contact, while name-only edits do not send
 duplicate messages. A second POST returns `family_contact_exists`; clients use
 PATCH for AC-03.3 updates.
+
+---
+
+## 7.19 Amendment — US-07 Pilgrim Activation Contract
+
+`GET /activation/{activation_code}` is deliberately unauthenticated — Flow B
+in `frontend-mobile.md` §8.2 opens straight to the Activation Code Entry
+screen from a deep link, before the pilgrim has signed in at all, and needs
+enough to reassure them (their HTO's name, the tier) without waiting on
+OTP/PIN first. It never returns pilgrim-identifying fields (name, phone,
+passport) — only what an HTO operator and tier name reveal, which is no more
+sensitive than what the WhatsApp message itself already said (AC-07.2). An
+unknown code 404s; a known-but-already-used-or-expired code still 200s with
+`valid: false` and a `reason`, so the client can show a specific message
+("already used" vs. a hard error) rather than treating every non-2xx the same
+way.
+
+`POST /me/activation/redeem` is the single endpoint behind both AC-07.4 and
+AC-07.5 — the backend does not distinguish "new" from "existing" pilgrim.
+Both are just an authenticated pilgrim with a code: a new pilgrim gets there
+by completing OTP + PIN first (the account now exists, the access token is
+already issued), an existing pilgrim gets there already signed in. "OTP → PIN
+→ package auto-attached" (AC-07.4) describes client-side sequencing, not a
+different server contract — the mobile client calls redeem once it has both
+a token and the code, regardless of which path produced the token.
+
+Redemption enforces that the authenticated pilgrim's phone number matches the
+`manifest_pilgrims` row the code was issued for (both E.164) — a code
+delivered to one WhatsApp number should not be redeemable by a different
+account, even if that account somehow obtains the code string. This isn't a
+documented acceptance criterion but follows directly from AC-07.1's delivery
+model; see `data-model.md` §6.15.
+
+There is no endpoint for *generating* an activation code here — that's
+`POST /admin/manifest-orders/{order_id}/confirm-payment`'s job (§7.10,
+`prd.md` §5.2's "provisioning" step, `data-model.md` §6.14), which sets
+`activation_code`/`activation_code_expires_at` per pilgrim once payment is
+confirmed. This endpoint only redeems what that flow already produced —
+`ActivationService.redeem` reads the tier via
+`manifest_pilgrims.manifest_order_id → manifest_orders.pricing_tier_id`, not
+a denormalized copy on `manifest_pilgrims` itself.
