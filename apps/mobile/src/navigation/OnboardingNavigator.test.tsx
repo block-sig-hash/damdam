@@ -1,12 +1,24 @@
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { previewActivationCode, redeemActivationCode } from '../api/activationClient';
-import { requestOtp, verifyOtp } from '../api/authClient';
+import {
+  OtpApiError,
+  requestOtp,
+  requestPinRecovery,
+  verifyOtp,
+  verifyPinRecovery,
+} from '../api/authClient';
 import { OnboardingNavigator } from './OnboardingNavigator';
 
 jest.mock('../api/authClient', () => {
   const actual = jest.requireActual('../api/authClient');
-  return { ...actual, requestOtp: jest.fn(), verifyOtp: jest.fn() };
+  return {
+    ...actual,
+    requestOtp: jest.fn(),
+    verifyOtp: jest.fn(),
+    requestPinRecovery: jest.fn(),
+    verifyPinRecovery: jest.fn(),
+  };
 });
 jest.mock('../api/activationClient', () => {
   const actual = jest.requireActual('../api/activationClient');
@@ -19,6 +31,12 @@ jest.mock('../api/activationClient', () => {
 
 const mockRequestOtp = requestOtp as jest.MockedFunction<typeof requestOtp>;
 const mockVerifyOtp = verifyOtp as jest.MockedFunction<typeof verifyOtp>;
+const mockRequestPinRecovery = requestPinRecovery as jest.MockedFunction<
+  typeof requestPinRecovery
+>;
+const mockVerifyPinRecovery = verifyPinRecovery as jest.MockedFunction<
+  typeof verifyPinRecovery
+>;
 const mockPreview = previewActivationCode as jest.MockedFunction<
   typeof previewActivationCode
 >;
@@ -29,6 +47,8 @@ const mockRedeem = redeemActivationCode as jest.MockedFunction<
 beforeEach(() => {
   mockRequestOtp.mockReset();
   mockVerifyOtp.mockReset();
+  mockRequestPinRecovery.mockReset();
+  mockVerifyPinRecovery.mockReset();
   mockPreview.mockReset();
   mockRedeem.mockReset();
 });
@@ -104,5 +124,65 @@ describe('OnboardingNavigator', () => {
       fireEvent.press(screen.getByTestId('activation-success-continue'));
     });
     expect(screen.getByText('Package active')).toBeTruthy();
+  });
+
+  it('routes an existing account to re-authentication, carrying the activation code through (AC-01.7/AC-07.5)', async () => {
+    mockPreview.mockResolvedValue({
+      valid: true,
+      reason: null,
+      organization_name: 'Barakah Hajj Services',
+      pricing_tier_name: 'Standard',
+    });
+    mockRequestOtp.mockRejectedValue(
+      new OtpApiError('account_exists', 'This number already has an account. Please log in.'),
+    );
+    mockRequestPinRecovery.mockResolvedValue({ message: 'OTP sent' });
+    mockVerifyPinRecovery.mockResolvedValue({
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+      is_new_user: false,
+      user: {
+        id: 'user-1',
+        phone_number: '+2348012345678',
+        first_name: '',
+        last_name: '',
+        email: null,
+        verified_cli: true,
+        platform: 'android',
+        status: 'active',
+      },
+    });
+    mockRedeem.mockResolvedValue({
+      package_id: 'package-1',
+      pricing_tier_name: 'Standard',
+      data_gb_total: 10,
+      pstn_minutes_total: 60,
+      status: 'active',
+    });
+
+    await act(async () => {
+      render(<OnboardingNavigator initialActivationCode="ABCD1234" />);
+    });
+    expect(await screen.findByTestId('activation-preview-card')).toBeTruthy();
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('activation-code-continue'));
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('phone-entry-input'), '08012345678');
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('phone-entry-submit'));
+    });
+
+    // account_exists routes to ReturningPilgrimScreen instead of OTP
+    // Verification — same 6-digit input, different backend flow.
+    expect(mockRequestPinRecovery).toHaveBeenCalledWith('08012345678');
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('otp-code-input'), '123456');
+    });
+
+    expect(mockVerifyPinRecovery).toHaveBeenCalledWith('08012345678', '123456', expect.any(String));
+    expect(await screen.findByTestId('activation-success')).toBeTruthy();
+    expect(mockRedeem).toHaveBeenCalledWith('access-token', 'ABCD1234');
   });
 });
