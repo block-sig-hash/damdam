@@ -59,6 +59,13 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # TEMPORARY: every real run of this workflow has exhausted
+          # its turn budget regardless of PR size (see the PR #50
+          # review discussion) with no per-turn visibility into why.
+          # Flipping this on to capture one real turn-by-turn trace
+          # before making a structural fix — flip back to false once
+          # diagnosed, this isn't meant to stay on permanently.
+          show_full_output: true
           # Sonnet by default for cost control, per AGENTS.md's
           # "default to Sonnet, escalate to Opus only when it
           # earns it" guidance — override manually for a specific
