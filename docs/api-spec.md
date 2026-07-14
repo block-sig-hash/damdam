@@ -160,6 +160,9 @@ GET    /pricing/tiers
   200: { tiers: [{ id, name, ngn_price, data_gb, pstn_minutes,
           is_group_tier, min_group_size?, max_group_size?,
           per_person_ngn_rate? }] }
+  `ngn_price` is the current admin-set `pricing_tiers.ngn_price`
+  value. The read path performs no FX lookup or client-specific
+  price calculation (prd.md §5.9, data-model.md §6.16).
 
 POST   /packages/purchase
   Auth required
