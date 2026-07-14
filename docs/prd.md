@@ -249,8 +249,8 @@ with clear descriptions so that I can choose the right one.
   the total price recalculating live as size changes (per
   data-model.md §6.4)
 - AC-08.5: "What's included" expandable section
-- AC-08.6: Prices calculated daily from the USD reference price
-  at the cached NFEM rate
+- AC-08.6: Prices reflect whatever Naira value is currently set
+  by an admin (§5.9/US-26) — no live per-request FX calculation
 
 **US-09** [P0] — As a Pilgrim, I want to pay in Naira via card,
 bank transfer, or USSD so that I do not need a foreign currency
@@ -491,14 +491,40 @@ package provisioning.
 - AC-25.4: Duplicate attempts logged for admin review, no visible
   user-facing error
 
-**US-26** [P1] — As the System, I want to update Naira prices
-daily using the NFEM rate without manual intervention.
-- AC-26.1: Daily 09:00 WAT scheduled job fetches current rate
-- AC-26.2: Prices recalculated and cached
-- AC-26.3: Client always reads from the daily cache
-- AC-26.4: Fetch failure → previous rate retained, admin alerted
-- AC-26.5: >5% day-over-day change → held for admin review before
-  going live
+**US-26** [P1] — As an Admin, I want to manually update Naira
+package prices from the dashboard so that pricing can be adjusted
+when the exchange rate moves, without a live FX API dependency or
+a daily automated job.
+- AC-26.1: Admin screen shows the current Naira price per tier,
+  editable
+- AC-26.2: Updated price takes effect immediately for new
+  purchases; in-progress checkouts already underway are unaffected
+- AC-26.3: Price change requires confirmation showing the %
+  change from the current price — a lightweight version of the
+  original guardrail, surfaced to the admin rather than blocking
+  automatically
+- AC-26.4: Every price change is logged (admin, timestamp, old
+  value, new value) for audit purposes
+- AC-26.5: No live FX API dependency, no scheduled job — this is
+  a fully manual, on-demand action
+
+**Scope note:** This story originally specified a fully automated
+daily FX-indexed pricing engine (a 09:00 WAT cron job hitting a
+currency data API, a 5% day-over-day guardrail, live NFEM
+tracking). That was scaled down deliberately — it's P1, and the
+Naira has been comparatively stable through 2026 under CBN's
+reformed NFEM framework (roughly 1-2% monthly movement in recent
+months), making a standing external API dependency and cron
+infrastructure disproportionate to the actual risk right now. The
+underlying reason this exists at all is real and unchanged —
+DamDam's costs are USD-denominated (Telnyx, Termii/Twilio, the
+eSIM aggregators) while revenue is fixed-Naira, and HTOs may sell
+packages months before the actual Hajj travel and vendor billing —
+so pricing still needs a way to move with the exchange rate. It
+just doesn't need to move automatically every single day to do
+that job. If the Naira becomes meaningfully more volatile later,
+revisit automating this — the manual version doesn't foreclose
+that, it just isn't building it before it's needed.
 
 ---
 
@@ -812,25 +838,34 @@ at least one nearly always reaches them; large-manifest report
 generation → background job with a ready notification if it would
 exceed a reasonable request timeout.
 
-### 5.9 Dynamic Naira Pricing
+### 5.9 Naira Pricing (Admin-Managed)
 **Maps to:** US-26
 
-Daily FX-indexed price calculation, decoupling package pricing
-from manual updates.
+Manual, admin-triggered price updates per tier — decouples package
+pricing from a live FX API dependency and a daily automated job,
+scaled down from an earlier fully-automated design (see US-26's
+scope note in §4.10).
 
-**Flow:** 09:00 WAT cron fetches USD/NGN from a currency data API
-→ computes Naira price per tier from the canonical USD reference
-→ 5% day-over-day guardrail (holds + alerts admin if exceeded) →
-writes to `daily_price_cache`.
+**Flow:** Admin opens the pricing screen on the dashboard, sees the
+current Naira price per tier, edits a value, sees the % change
+from the current price, confirms → new price takes effect
+immediately for new checkouts → change logged (admin, timestamp,
+old/new value) for audit.
 
-**Dependencies:** A currency/FX data API (candidates:
-exchangerate-api.com, currencyapi.com — neither is an official
-NFEM source; the pricing model already treats NFEM as a baseline
-approximation, not a promise of exact parity).
+**Dependencies:** None beyond the existing admin dashboard and
+database — no external FX API, no scheduled job infrastructure.
+Admin is expected to reference an external rate source (e.g. the
+CBN/NFEM published rate) themselves when deciding on a new price;
+DamDam doesn't fetch or display a live rate in-app for this
+decision at this scope.
 
-**Failure modes:** API unreachable → previous cached rate
-persists, admin alerted; outlier rate → guardrail prevents it
-reaching users automatically.
+**Failure modes:** None specific to this flow beyond standard
+admin-action error handling — there's no external dependency left
+to fail. The tradeoff versus the original design: pricing only
+updates when an admin actually acts, so a fast-moving FX event
+between manual updates isn't caught automatically. Acceptable
+given current Naira stability (see scope note); revisit if that
+changes.
 
 ---
 

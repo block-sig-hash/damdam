@@ -9,7 +9,6 @@ from sqlmodel import select
 
 from app.auth.models import (
     AdminUser,
-    DailyPriceCache,
     HTOApprovalStatus,
     Manifest,
     ManifestOrder,
@@ -20,6 +19,7 @@ from app.auth.models import (
     Organization,
     OrganizationType,
     PricingTier,
+    PricingTierPriceChange,
 )
 from app.main import create_app
 from app.manifests.invoices import InvoiceStorage
@@ -211,13 +211,14 @@ def create_manifest_data(
     return manifest, rows
 
 
-def create_pricing(session_factory, today) -> tuple[PricingTier, PricingTier]:
+def create_pricing(session_factory) -> tuple[PricingTier, PricingTier]:
     basic = PricingTier(
         name="Basic",
         usd_reference_price=Decimal("100.00"),
         data_gb=5,
         pstn_minutes=30,
         wholesale_usd_price=Decimal("80.00"),
+        ngn_price=Decimal("160000.00"),
     )
     family = PricingTier(
         name="Family",
@@ -228,26 +229,10 @@ def create_pricing(session_factory, today) -> tuple[PricingTier, PricingTier]:
         min_group_size=2,
         max_group_size=8,
         wholesale_usd_price=Decimal("110.00"),
+        ngn_price=Decimal("240000.00"),
     )
     with session_factory() as session:
         session.add_all([basic, family])
-        session.flush()
-        session.add_all(
-            [
-                DailyPriceCache(
-                    pricing_tier_id=basic.id,
-                    date=today,
-                    ngn_price=Decimal("160000.00"),
-                    fx_rate_used=Decimal("1600.0000"),
-                ),
-                DailyPriceCache(
-                    pricing_tier_id=family.id,
-                    date=today,
-                    ngn_price=Decimal("240000.00"),
-                    fx_rate_used=Decimal("1600.0000"),
-                ),
-            ]
-        )
         session.commit()
         session.refresh(basic)
         session.refresh(family)
@@ -267,7 +252,7 @@ def test_family_and_individual_orders_preserve_unordered_pool_and_prices(
     storage, _, email, _ = order_dependencies
     operator = create_operator(session_factory, "orders@example.com")
     manifest, rows = create_manifest_data(session_factory, operator.id)
-    basic, family = create_pricing(session_factory, clock().date())
+    basic, family = create_pricing(session_factory)
     headers = operator_headers(settings, clock, operator.id)
     client = TestClient(order_api)
 
@@ -378,7 +363,7 @@ def test_family_group_rules_and_cross_tenant_isolation(
     owner = create_operator(session_factory, "owner-groups@example.com")
     attacker = create_operator(session_factory, "attacker-groups@example.com")
     manifest, rows = create_manifest_data(session_factory, owner.id, 3)
-    basic, family = create_pricing(session_factory, clock().date())
+    basic, family = create_pricing(session_factory)
     owner_headers = operator_headers(settings, clock, owner.id)
     attacker_headers = operator_headers(settings, clock, attacker.id)
     client = TestClient(order_api)
@@ -494,7 +479,7 @@ def test_invoice_email_failure_retries_without_duplicate_order(
     _, _, email, _ = order_dependencies
     operator = create_operator(session_factory, "retry@example.com")
     manifest, rows = create_manifest_data(session_factory, operator.id, 1)
-    basic, _ = create_pricing(session_factory, clock().date())
+    basic, _ = create_pricing(session_factory)
     headers = operator_headers(settings, clock, operator.id)
     client = TestClient(order_api)
     payload = {
@@ -534,7 +519,7 @@ def test_admin_confirmation_is_idempotent_and_gates_activation_dispatch(
     _, provisioning, _, whatsapp = order_dependencies
     operator = create_operator(session_factory, "payment@example.com")
     manifest, rows = create_manifest_data(session_factory, operator.id, 2)
-    basic, _ = create_pricing(session_factory, clock().date())
+    basic, _ = create_pricing(session_factory)
     client = TestClient(order_api)
     placed = client.post(
         f"/v1/hto/manifests/{manifest.id}/order",
@@ -613,7 +598,7 @@ def test_admin_confirmation_recovers_when_queue_is_temporarily_unavailable(
     _, provisioning, _, _ = order_dependencies
     operator = create_operator(session_factory, "queue-retry@example.com")
     manifest, rows = create_manifest_data(session_factory, operator.id, 1)
-    basic, _ = create_pricing(session_factory, clock().date())
+    basic, _ = create_pricing(session_factory)
     client = TestClient(order_api)
     placed = client.post(
         f"/v1/hto/manifests/{manifest.id}/order",
@@ -664,7 +649,7 @@ def test_provisioning_retries_only_undelivered_activation_links(
     _, _, _, whatsapp = order_dependencies
     operator = create_operator(session_factory, "activation-retry@example.com")
     manifest, rows = create_manifest_data(session_factory, operator.id, 2)
-    basic, _ = create_pricing(session_factory, clock().date())
+    basic, _ = create_pricing(session_factory)
     client = TestClient(order_api)
     placed = client.post(
         f"/v1/hto/manifests/{manifest.id}/order",
@@ -696,3 +681,87 @@ def test_provisioning_retries_only_undelivered_activation_links(
         rows[0].phone_number,
         rows[1].phone_number,
     ]
+
+
+def test_admin_lists_and_updates_pricing_tier_price(
+    order_api,
+    session_factory,
+    settings,
+    clock,
+) -> None:
+    """AC-26.1/2/3/4: admin can view, update, and audit Naira tier prices."""
+    basic, _ = create_pricing(session_factory)
+    admin = AdminUser(email="admin-pricing@example.com", password_hash="unused")
+    with session_factory() as session:
+        session.add(admin)
+        session.commit()
+        session.refresh(admin)
+        admin_id = admin.id
+    headers = admin_headers(settings, clock, admin_id)
+    client = TestClient(order_api)
+
+    listed = client.get("/v1/admin/pricing-tiers", headers=headers)
+    assert listed.status_code == 200
+    tiers_by_name = {tier["name"]: tier for tier in listed.json()["tiers"]}
+    assert tiers_by_name["Basic"]["ngn_price"] == 160000.00
+
+    updated = client.patch(
+        f"/v1/admin/pricing-tiers/{basic.id}",
+        headers=headers,
+        json={"ngn_price": 176000.00},
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["old_ngn_price"] == 160000.00
+    assert body["new_ngn_price"] == 176000.00
+    assert body["percent_change"] == pytest.approx(10.0)
+
+    with session_factory() as session:
+        change = session.exec(select(PricingTierPriceChange)).one()
+        assert change.pricing_tier_id == basic.id
+        assert change.admin_id == admin_id
+        assert change.old_ngn_price == Decimal("160000.00")
+        assert change.new_ngn_price == Decimal("176000.00")
+
+    # AC-26.2: the new price takes effect immediately for subsequent reads.
+    refreshed = client.get("/v1/admin/pricing-tiers", headers=headers)
+    assert {
+        tier["name"]: tier["ngn_price"] for tier in refreshed.json()["tiers"]
+    }["Basic"] == 176000.00
+
+
+def test_admin_pricing_update_rejects_unknown_tier_invalid_price_and_auth(
+    order_api, session_factory, settings, clock
+) -> None:
+    basic, _ = create_pricing(session_factory)
+    admin = AdminUser(email="admin-pricing-2@example.com", password_hash="unused")
+    with session_factory() as session:
+        session.add(admin)
+        session.commit()
+        session.refresh(admin)
+        admin_id = admin.id
+    headers = admin_headers(settings, clock, admin_id)
+    client = TestClient(order_api)
+
+    assert client.get("/v1/admin/pricing-tiers").status_code == 401
+    assert (
+        client.patch(
+            f"/v1/admin/pricing-tiers/{basic.id}",
+            json={"ngn_price": 1000.0},
+        ).status_code
+        == 401
+    )
+
+    missing = client.patch(
+        f"/v1/admin/pricing-tiers/{uuid4()}",
+        headers=headers,
+        json={"ngn_price": 1000.0},
+    )
+    assert missing.status_code == 404
+
+    invalid = client.patch(
+        f"/v1/admin/pricing-tiers/{basic.id}",
+        headers=headers,
+        json={"ngn_price": 0},
+    )
+    assert invalid.status_code == 422

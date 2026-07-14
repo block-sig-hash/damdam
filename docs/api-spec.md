@@ -485,6 +485,19 @@ POST   /admin/manifest-orders/{id}/confirm-payment
   Idempotently records manual payment and triggers the background
   provisioning job (data-model.md §6.14)
 
+GET    /admin/pricing-tiers
+  Admin auth required
+  200: { tiers: [{ id, name, ngn_price, is_group_tier }] }
+
+PATCH  /admin/pricing-tiers/{id}
+  Admin auth required
+  Body: { ngn_price: number }  (> 0)
+  200: { id, name, old_ngn_price, new_ngn_price, percent_change,
+          changed_at }
+  Writes a `pricing_tier_price_changes` audit row (admin, old
+  value, new value, timestamp — AC-26.4); the new price is live
+  immediately for subsequent reads (prd.md §5.9/US-26)
+
 GET    /admin/sos-notifications/failed
   200: { notifications: [{ id, pilgrim_name, channel,
           failure_reason, sos_timestamp, retry_count }] }
@@ -527,9 +540,9 @@ Standard across all endpoints:
 
 ## 7.13 Admin UI Scope
 
-The admin endpoints above are surfaced through 4 bare-bones
+The admin endpoints above are surfaced through 5 bare-bones
 screens in the shared HTO/Admin Next.js dashboard (not a raw API
-tool) — see frontend-dashboard.md §9.1, Screens 13–17:
+tool) — see frontend-dashboard.md §9.1, Screens 13–18:
 
 1. **HTO Operator Approvals** — `/admin/hto-operators/*`
 2. **Manifest Payment Confirmation** — `/admin/manifest-orders/*`
@@ -540,6 +553,9 @@ tool) — see frontend-dashboard.md §9.1, Screens 13–17:
    many failed rows at once)
 4. **Device Compatibility Log** — `/admin/device-compatibility-log`
    (read-only, now filterable by platform)
+5. **Naira Pricing Management** — `/admin/pricing-tiers/*`
+   (manual, on-demand price updates per prd.md §5.9/US-26 — no
+   live FX API dependency, no scheduled job)
 
 Auth: `admin_users` table with role-based route guards in Next.js
 middleware, same JWT-scope pattern (`aud: admin`) as the HTO

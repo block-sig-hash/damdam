@@ -12,7 +12,6 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
-    UniqueConstraint,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlmodel import Field, SQLModel
@@ -373,15 +372,11 @@ class PricingTier(SQLModel, table=True):
         sa_column=Column(Numeric(10, 2), nullable=False)
     )
     active: bool = Field(default=True)
+    ngn_price: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
 
 
-class DailyPriceCache(SQLModel, table=True):
-    __tablename__ = "daily_price_cache"
-    __table_args__ = (
-        UniqueConstraint(
-            "pricing_tier_id", "date", name="uq_daily_price_cache_tier_date"
-        ),
-    )
+class PricingTierPriceChange(SQLModel, table=True):
+    __tablename__ = "pricing_tier_price_changes"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     pricing_tier_id: UUID = Field(
@@ -391,9 +386,15 @@ class DailyPriceCache(SQLModel, table=True):
             index=True,
         )
     )
-    date: Date = Field(index=True)
-    ngn_price: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
-    fx_rate_used: Decimal = Field(sa_column=Column(Numeric(10, 4), nullable=False))
+    admin_id: UUID = Field(
+        sa_column=Column(ForeignKey("admin_users.id"), nullable=False)
+    )
+    old_ngn_price: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
+    new_ngn_price: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
+    changed_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
 
 
 class ManifestOrder(SQLModel, table=True):

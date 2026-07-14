@@ -425,6 +425,56 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/pricing-tiers:
+    get:
+      tags:
+      - admin
+      summary: List Admin Pricing Tiers
+      operationId: list_admin_pricing_tiers_v1_admin_pricing_tiers_get
+      security:
+      - HTTPBearer: []
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPricingTierListResponse'
+  /v1/admin/pricing-tiers/{tier_id}:
+    patch:
+      tags:
+      - admin
+      summary: Update Admin Pricing Tier
+      operationId: update_admin_pricing_tier_v1_admin_pricing_tiers__tier_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: tier_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Tier Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricingTierUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingTierUpdateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/hto/manifests:
     get:
       tags:
@@ -1050,6 +1100,39 @@ components:
       - invoice_url
       - days_pending
       title: AdminManifestOrderSummary
+    AdminPricingTierListResponse:
+      properties:
+        tiers:
+          items:
+            $ref: '#/components/schemas/AdminPricingTierResponse'
+          type: array
+          title: Tiers
+      type: object
+      required:
+      - tiers
+      title: AdminPricingTierListResponse
+    AdminPricingTierResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        ngn_price:
+          type: number
+          title: Ngn Price
+        is_group_tier:
+          type: boolean
+          title: Is Group Tier
+      type: object
+      required:
+      - id
+      - name
+      - ngn_price
+      - is_group_tier
+      title: AdminPricingTierResponse
     AuthResponse:
       properties:
         access_token:
@@ -1740,6 +1823,47 @@ components:
       - min_group_size
       - max_group_size
       title: PricingTierResponse
+    PricingTierUpdateRequest:
+      properties:
+        ngn_price:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Ngn Price
+      type: object
+      required:
+      - ngn_price
+      title: PricingTierUpdateRequest
+    PricingTierUpdateResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        old_ngn_price:
+          type: number
+          title: Old Ngn Price
+        new_ngn_price:
+          type: number
+          title: New Ngn Price
+        percent_change:
+          type: number
+          title: Percent Change
+        changed_at:
+          type: string
+          format: date-time
+          title: Changed At
+      type: object
+      required:
+      - id
+      - name
+      - old_ngn_price
+      - new_ngn_price
+      - percent_change
+      - changed_at
+      title: PricingTierUpdateResponse
     RefreshRequest:
       properties:
         refresh_token:

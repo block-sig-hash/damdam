@@ -541,18 +541,22 @@ EOF
 # ---------------------------------------------------------------------------
 # US-26
 create_issue \
-"US-26 [P1]: Daily NFEM-indexed Naira pricing" \
+"US-26 [P1]: Manual admin-triggered Naira pricing" \
 "$(cat <<'EOF'
-**As the** System, **I want to** update Naira prices daily using the NFEM rate without manual intervention.
+**As an** Admin, **I want to** manually update Naira package prices from the dashboard **so that** pricing can be adjusted when the exchange rate moves, without a live FX API dependency or a daily automated job.
 
 Reference: docs/prd.md §4.10, §5.9
 
 ### Acceptance Criteria
-- [ ] AC-26.1: Daily 09:00 WAT scheduled job fetches current rate
-- [ ] AC-26.2: Prices recalculated and cached
-- [ ] AC-26.3: Client always reads from the daily cache
-- [ ] AC-26.4: Fetch failure → previous rate retained, admin alerted
-- [ ] AC-26.5: >5% day-over-day change → held for admin review before going live
+- [ ] AC-26.1: Admin screen shows the current Naira price per tier, editable
+- [ ] AC-26.2: Updated price takes effect immediately for new purchases; in-progress checkouts already underway are unaffected
+- [ ] AC-26.3: Price change requires confirmation showing the % change from the current price — a lightweight version of the original guardrail, surfaced to the admin rather than blocking automatically
+- [ ] AC-26.4: Every price change is logged (admin, timestamp, old value, new value) for audit purposes
+- [ ] AC-26.5: No live FX API dependency, no scheduled job — this is a fully manual, on-demand action
+
+### Scope note
+
+This story originally specified a fully automated daily NFEM-indexed pricing job. It has been scaled down to manual admin-triggered repricing: the Naira has been comparatively stable under the CBN's reformed NFEM framework (~1-2% monthly movement), and package costs are USD-denominated against fixed-Naira revenue, so a live FX dependency and scheduled job are not worth building for pre-launch volatility. Revisit automating this (daily job, rate-change guardrail, admin alerting) if the Naira becomes meaningfully more volatile later.
 EOF
 )" \
 "priority-P1,type-feature,area-payments"

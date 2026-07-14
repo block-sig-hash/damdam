@@ -29,6 +29,7 @@ def test_package_is_owned_by_and_cascades_with_user() -> None:
             data_gb=10,
             pstn_minutes=60,
             wholesale_usd_price=10,
+            ngn_price=24000,
         )
         session.add(tier)
         session.commit()
