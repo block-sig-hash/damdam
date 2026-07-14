@@ -13,6 +13,7 @@ from app.auth.schemas import (
     HTOApprovalResponse,
     HTOOperatorListResponse,
     HTOOperatorResponse,
+    HTORejectionRequest,
 )
 from app.manifests.orders import ManifestOrderService
 from app.manifests.schemas import (
@@ -96,6 +97,22 @@ def approve_hto_operator(
 ) -> HTOApprovalResponse:
     with request.app.state.session_factory() as session:
         organization = _service(request).approve(session, operator_id, admin.id)
+    return HTOApprovalResponse(approval_status=organization.approval_status)
+
+
+@router.post(
+    "/hto-operators/{operator_id}/reject", response_model=HTOApprovalResponse
+)
+def reject_hto_operator(
+    operator_id: UUID,
+    payload: HTORejectionRequest,
+    request: Request,
+    admin: Annotated[AdminUser, Depends(current_admin)],
+) -> HTOApprovalResponse:
+    with request.app.state.session_factory() as session:
+        organization = _service(request).reject(
+            session, operator_id, admin.id, payload.reason
+        )
     return HTOApprovalResponse(approval_status=organization.approval_status)
 
 

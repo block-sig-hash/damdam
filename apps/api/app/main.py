@@ -213,7 +213,7 @@ def create_app(
             "invalid_admin_token": "A valid administrator session is required.",
             "operator_not_found": "The operator account was not found.",
             "invalid_approval_transition": (
-                "The account cannot be approved from its current state."
+                "The account cannot be updated from its current approval state."
             ),
             "notification_unavailable": (
                 "Notification delivery is temporarily unavailable."

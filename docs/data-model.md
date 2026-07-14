@@ -194,6 +194,9 @@ one, rather than hardcoding a single vendor's identifier field.
 | approved_by | UUID | FK → admin_users, NULLABLE | |
 | approval_email_sent_at | TIMESTAMPTZ | NULLABLE | Set after the approval email is delivered |
 | approval_whatsapp_sent_at | TIMESTAMPTZ | NULLABLE | Set after the approval WhatsApp message is delivered |
+| rejected_at | TIMESTAMPTZ | NULLABLE | See §6.17 |
+| rejected_by | UUID | FK → admin_users, NULLABLE | See §6.17 |
+| rejection_reason | VARCHAR(500) | NULLABLE | See §6.17 |
 
 ---
 
@@ -902,3 +905,31 @@ No new admin-review gate is introduced: a price update takes effect
 immediately (AC-26.2), matching the "manual, on-demand action" framing in
 the scope note — the confirmation step (AC-26.3, the %-change display) is a
 dashboard-side guardrail before the API call, not a second approval stage.
+
+---
+
+## 6.17 Amendment — US-04 Admin Rejection of HTO Operators
+
+`api-spec.md` §7.10 documented `POST /admin/hto-operators/{id}/reject`
+since PR #32, but no route, service method, or schema field ever backed
+it — `approve()` was real, `reject()` was not, and `organizations` had no
+column to hold a rejection reason. The admin approvals dashboard screen
+needs a working reject action, so this amendment builds it for real
+rather than against the pre-existing (aspirational) doc.
+
+`rejected_at`/`rejected_by` mirror `approved_at`/`approved_by` exactly
+(same nullable-FK-with-SET-NULL pattern, §6.11) for the same reason: an
+audit timestamp/actor pair per terminal state. `rejection_reason` is a
+plain nullable `VARCHAR(500)`, not a separate audit table like
+`pricing_tier_price_changes` (§6.16) — rejection is a one-time terminal
+transition per operator (there is no "reject again with a new reason"
+scenario the way a price can change repeatedly), so a column on the row
+itself is sufficient; there is nothing to accumulate a history of.
+
+`HTOService.reject()` mirrors `approve()`'s transition guard symmetrically:
+`approve()` refuses to touch an already-`REJECTED` organization,
+`reject()` refuses to touch an already-`APPROVED` one — both raise the
+existing `invalid_approval_transition` error, so no new error code was
+needed. Unlike `approve()`, `reject()` sends no notification (no AC
+requires one, and `prd.md` §4.2's AC-04.5 only covers the approval path);
+it commits the terminal state and returns.

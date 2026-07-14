@@ -310,3 +310,45 @@ export async function updateAdminPricingTierPrice(
     }),
   );
 }
+
+export type HTOApprovalStatus = "pending" | "approved" | "rejected";
+
+export type AdminHTOOperator = {
+  id: string;
+  business_name: string;
+  operator_name: string;
+  email: string;
+  phone_number: string;
+  nahcon_licence_number: string;
+  email_verified: boolean;
+  approval_status: HTOApprovalStatus;
+  created_at: string;
+};
+
+export async function getAdminHTOOperators(
+  status: HTOApprovalStatus = "pending",
+): Promise<AdminHTOOperator[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/hto-operators?status=${status}`, {
+    headers: adminHeaders(),
+  });
+  return (await parseResponse<{ operators: AdminHTOOperator[] }>(response)).operators;
+}
+
+export async function approveHTOOperator(operatorId: string): Promise<void> {
+  await parseResponse(
+    await fetch(`${API_BASE_URL}/admin/hto-operators/${operatorId}/approve`, {
+      method: "POST",
+      headers: adminHeaders(),
+    }),
+  );
+}
+
+export async function rejectHTOOperator(operatorId: string, reason: string): Promise<void> {
+  await parseResponse(
+    await fetch(`${API_BASE_URL}/admin/hto-operators/${operatorId}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...adminHeaders() },
+      body: JSON.stringify({ reason }),
+    }),
+  );
+}
