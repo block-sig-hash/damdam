@@ -65,7 +65,7 @@ jobs:
           # hard review by commenting "@claude use opus" if needed.
           claude_args: >-
             --model claude-sonnet-5
-            --max-turns 8
+            --max-turns 24
           prompt: |
             Review this PR against docs/testing-qa.md and the
             linked user story's acceptance criteria in docs/prd.md.
