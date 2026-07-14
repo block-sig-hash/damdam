@@ -348,6 +348,59 @@ paths:
                   type: boolean
                 type: object
                 title: Response Termii Delivery Report V1 Webhooks Otp Termii Post
+  /v1/me/family-contact:
+    post:
+      tags:
+      - pilgrim-profile
+      summary: Create Family Contact
+      operationId: create_family_contact_v1_me_family_contact_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FamilyContactCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FamilyContactResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+    patch:
+      tags:
+      - pilgrim-profile
+      summary: Update Family Contact
+      operationId: update_family_contact_v1_me_family_contact_patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FamilyContactUpdate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FamilyContactResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
 components:
   schemas:
     AuthResponse:
@@ -370,6 +423,60 @@ components:
       - user
       - is_new_user
       title: AuthResponse
+    FamilyContactCreate:
+      properties:
+        phone_number:
+          type: string
+          title: Phone Number
+        name:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Name
+      type: object
+      required:
+      - phone_number
+      title: FamilyContactCreate
+    FamilyContactResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        phone_number:
+          type: string
+          title: Phone Number
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        notified_of_nomination:
+          type: boolean
+          title: Notified Of Nomination
+      type: object
+      required:
+      - id
+      - phone_number
+      - name
+      - notified_of_nomination
+      title: FamilyContactResponse
+    FamilyContactUpdate:
+      properties:
+        phone_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone Number
+        name:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Name
+      type: object
+      title: FamilyContactUpdate
     HTOApprovalResponse:
       properties:
         approval_status:

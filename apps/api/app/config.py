@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     whatsapp_phone_number_id: str = ""
     whatsapp_api_version: str = "v23.0"
     whatsapp_approval_template: str = "hto_account_approved"
+    whatsapp_family_nomination_template: str = "family_contact_nominated"
 
     @model_validator(mode="after")
     def providers_must_differ(self) -> "Settings":

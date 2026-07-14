@@ -58,23 +58,27 @@ class MetaWhatsAppSender:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    def send_approval(self, phone_number: str, operator_name: str) -> None:
+    def _send_template(
+        self,
+        phone_number: str,
+        template_name: str,
+        parameters: list[dict[str, str]] | None = None,
+    ) -> None:
         if not self.settings.whatsapp_access_token:
             raise NotificationError("WhatsApp is not configured")
+        template: dict[str, Any] = {
+            "name": template_name,
+            "language": {"code": "en"},
+        }
+        if parameters:
+            template["components"] = [
+                {"type": "body", "parameters": parameters}
+            ]
         payload: dict[str, Any] = {
             "messaging_product": "whatsapp",
             "to": phone_number.removeprefix("+"),
             "type": "template",
-            "template": {
-                "name": self.settings.whatsapp_approval_template,
-                "language": {"code": "en"},
-                "components": [
-                    {
-                        "type": "body",
-                        "parameters": [{"type": "text", "text": operator_name}],
-                    }
-                ],
-            },
+            "template": template,
         }
         url = (
             f"https://graph.facebook.com/{self.settings.whatsapp_api_version}/"
@@ -92,3 +96,16 @@ class MetaWhatsAppSender:
             response.raise_for_status()
         except httpx.HTTPError as exc:
             raise NotificationError("WhatsApp delivery failed") from exc
+
+    def send_approval(self, phone_number: str, operator_name: str) -> None:
+        self._send_template(
+            phone_number,
+            self.settings.whatsapp_approval_template,
+            [{"type": "text", "text": operator_name}],
+        )
+
+    def send_family_nomination(self, phone_number: str) -> None:
+        self._send_template(
+            phone_number,
+            self.settings.whatsapp_family_nomination_template,
+        )

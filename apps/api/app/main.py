@@ -23,6 +23,8 @@ from app.notifications.service import EmailSender, WhatsAppSender
 from app.otp.providers.base import OTPProvider
 from app.otp.routes import router as otp_webhook_router
 from app.otp.service import FailoverScheduler, OTPError, RedisClient, utc_now
+from app.profile.family_contacts import FamilyContactError, FamilyContactService
+from app.profile.routes import router as profile_router
 
 
 def create_app(
@@ -71,12 +73,14 @@ def create_app(
         clock,
     )
     api.state.pin_service = PINService(clock)
+    notification_service = build_notification_service(
+        resolved_settings, email_sender, whatsapp_sender
+    )
     api.state.hto_service = HTOService(
-        resolved_settings,
-        build_notification_service(
-            resolved_settings, email_sender, whatsapp_sender
-        ),
-        clock,
+        resolved_settings, notification_service, clock
+    )
+    api.state.family_contact_service = FamilyContactService(
+        notification_service, clock
     )
 
     @api.exception_handler(OTPError)
@@ -143,12 +147,20 @@ def create_app(
                     "details": {},
                 },
             )
+        serializable_errors = []
+        for error in errors:
+            serialized = dict(error)
+            if "ctx" in serialized:
+                serialized["ctx"] = {
+                    key: str(value) for key, value in serialized["ctx"].items()
+                }
+            serializable_errors.append(serialized)
         return JSONResponse(
             status_code=422,
             content={
                 "error": "validation_error",
                 "message": "The request contains invalid fields.",
-                "details": {"errors": errors},
+                "details": {"errors": serializable_errors},
             },
         )
 
@@ -190,6 +202,30 @@ def create_app(
             content={"error": exc.code, "message": messages[exc.code], "details": {}},
         )
 
+    @api.exception_handler(FamilyContactError)
+    async def family_contact_error_handler(
+        request: Request, exc: FamilyContactError
+    ) -> JSONResponse:
+        del request
+        statuses = {
+            "family_contact_exists": 409,
+            "family_contact_not_found": 404,
+            "notification_unavailable": 503,
+        }
+        messages = {
+            "family_contact_exists": (
+                "A family contact already exists. Update it instead."
+            ),
+            "family_contact_not_found": "No family contact has been nominated.",
+            "notification_unavailable": (
+                "The nomination was saved, but WhatsApp is temporarily unavailable."
+            ),
+        }
+        return JSONResponse(
+            status_code=statuses[exc.code],
+            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+        )
+
     @api.get("/health", tags=["system"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -197,6 +233,7 @@ def create_app(
     api.include_router(auth_router, prefix="/v1")
     api.include_router(admin_router, prefix="/v1")
     api.include_router(otp_webhook_router, prefix="/v1")
+    api.include_router(profile_router, prefix="/v1")
     return api
 
 
