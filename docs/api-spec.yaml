@@ -466,8 +466,6 @@ paths:
       - admin
       summary: List Admin Pricing Tiers
       operationId: list_admin_pricing_tiers_v1_admin_pricing_tiers_get
-      security:
-      - HTTPBearer: []
       responses:
         '200':
           description: Successful Response
@@ -475,6 +473,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminPricingTierListResponse'
+      security:
+      - HTTPBearer: []
   /v1/admin/pricing-tiers/{tier_id}:
     patch:
       tags:
@@ -1024,6 +1024,19 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /v1/pricing/tiers:
+    get:
+      tags:
+      - pricing
+      summary: List Retail Pricing Tiers
+      operationId: list_retail_pricing_tiers_v1_pricing_tiers_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetailPricingTierListResponse'
 components:
   schemas:
     ActivationPreviewResponse:
@@ -1919,6 +1932,62 @@ components:
       required:
       - refresh_token
       title: RefreshRequest
+    RetailPricingTierListResponse:
+      properties:
+        tiers:
+          items:
+            $ref: '#/components/schemas/RetailPricingTierResponse'
+          type: array
+          title: Tiers
+      type: object
+      required:
+      - tiers
+      title: RetailPricingTierListResponse
+    RetailPricingTierResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        ngn_price:
+          type: number
+          title: Ngn Price
+        data_gb:
+          type: integer
+          title: Data Gb
+        pstn_minutes:
+          type: integer
+          title: Pstn Minutes
+        is_group_tier:
+          type: boolean
+          title: Is Group Tier
+        min_group_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Min Group Size
+        max_group_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Group Size
+        per_person_ngn_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Per Person Ngn Rate
+      type: object
+      required:
+      - id
+      - name
+      - ngn_price
+      - data_gb
+      - pstn_minutes
+      - is_group_tier
+      title: RetailPricingTierResponse
     TokenResponse:
       properties:
         access_token:

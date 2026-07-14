@@ -32,6 +32,8 @@ from app.notifications.service import EmailSender, WhatsAppSender
 from app.otp.providers.base import OTPProvider
 from app.otp.routes import router as otp_webhook_router
 from app.otp.service import FailoverScheduler, OTPError, RedisClient, utc_now
+from app.pricing.routes import router as retail_pricing_router
+from app.pricing.service import RetailPricingService
 from app.profile.family_contacts import FamilyContactError, FamilyContactService
 from app.profile.routes import router as profile_router
 
@@ -103,6 +105,7 @@ def create_app(
         notification_service, clock
     )
     api.state.activation_service = ActivationService(clock)
+    api.state.retail_pricing_service = RetailPricingService()
 
     @api.exception_handler(OTPError)
     async def otp_error_handler(request: Request, exc: OTPError) -> JSONResponse:
@@ -374,6 +377,7 @@ def create_app(
     api.include_router(otp_webhook_router, prefix="/v1")
     api.include_router(profile_router, prefix="/v1")
     api.include_router(activation_router, prefix="/v1")
+    api.include_router(retail_pricing_router, prefix="/v1")
     return api
 
 
