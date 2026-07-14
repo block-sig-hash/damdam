@@ -80,7 +80,16 @@ jobs:
         run: |
           PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
           echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
-          DIFF_PATH="${RUNNER_TEMP}/pr-${PR_NUMBER}.diff"
+          # Must live inside the checked-out workspace, not $RUNNER_TEMP:
+          # Claude's Read tool in this sandbox is only pre-approved for
+          # paths under the workspace it was invoked in — a first attempt
+          # at $RUNNER_TEMP (a sibling directory) hit the exact same
+          # unrecoverable "requested permissions... haven't granted it
+          # yet" wall as the gh/compound-command rejections above, and
+          # burned the run down to a 3-turn no-op. .git/ is inside the
+          # workspace but outside the visible working tree, so this
+          # doesn't show up as a stray untracked file in git status.
+          DIFF_PATH="${GITHUB_WORKSPACE}/.git/pr-${PR_NUMBER}-review.diff"
           gh pr diff "${PR_NUMBER}" --repo "${{ github.repository }}" > "${DIFF_PATH}"
           echo "diff_path=${DIFF_PATH}" >> "$GITHUB_OUTPUT"
 
