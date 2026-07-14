@@ -1,9 +1,19 @@
+from datetime import datetime, timezone
 from typing import Annotated, cast
+from uuid import UUID
 
+import jwt
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.auth.models import User, UserStatus
+from app.auth.hto import HTOAuthError
+from app.auth.models import (
+    HTOApprovalStatus,
+    Organization,
+    OrganizationType,
+    User,
+    UserStatus,
+)
 from app.auth.pin import PINError, PINService
 from app.auth.tokens import InvalidRefreshTokenError, TokenService
 from app.db import SessionFactory
@@ -33,3 +43,42 @@ def get_current_user(
             raise PINError("invalid_access_token")
         session.expunge(user)
         return user
+
+
+def get_current_organization(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+) -> Organization:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTOAuthError("invalid_operator_token")
+    try:
+        claims = jwt.decode(
+            credentials.credentials,
+            request.app.state.settings.jwt_secret,
+            algorithms=["HS256"],
+            audience="hto_dashboard",
+            options={"verify_exp": False},
+        )
+        if claims.get("type") != "access":
+            raise HTOAuthError("invalid_operator_token")
+        expires_at = datetime.fromtimestamp(float(claims["exp"]), tz=timezone.utc)
+        if expires_at <= request.app.state.clock():
+            raise HTOAuthError("invalid_operator_token")
+        organization_id = UUID(claims["sub"])
+    except HTOAuthError:
+        raise
+    except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
+        raise HTOAuthError("invalid_operator_token") from exc
+
+    factory = cast(SessionFactory, request.app.state.session_factory)
+    with factory() as session:
+        organization = session.get(Organization, organization_id)
+        if (
+            organization is None
+            or organization.org_type != OrganizationType.HTO_OPERATOR
+            or not organization.email_verified
+            or organization.approval_status != HTOApprovalStatus.APPROVED
+        ):
+            raise HTOAuthError("invalid_operator_token")
+        session.expunge(organization)
+        return organization

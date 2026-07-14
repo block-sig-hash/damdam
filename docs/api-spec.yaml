@@ -332,6 +332,111 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests:
+    get:
+      tags:
+      - HTO manifests
+      summary: List Manifests
+      operationId: list_manifests_v1_hto_manifests_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestListResponse'
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - HTO manifests
+      summary: Create Manifest
+      operationId: create_manifest_v1_hto_manifests_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManifestCreateRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestCreateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/hto/manifests/{manifest_id}/upload:
+    post:
+      tags:
+      - HTO manifests
+      summary: Upload Manifest
+      operationId: upload_manifest_v1_hto_manifests__manifest_id__upload_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestUploadResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/confirm:
+    post:
+      tags:
+      - HTO manifests
+      summary: Confirm Manifest
+      operationId: confirm_manifest_v1_hto_manifests__manifest_id__confirm_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestConfirmResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/webhooks/otp/termii:
     post:
       tags:
@@ -423,6 +528,16 @@ components:
       - user
       - is_new_user
       title: AuthResponse
+    Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post:
+      properties:
+        file:
+          type: string
+          format: binary
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post
     FamilyContactCreate:
       properties:
         phone_number:
@@ -632,6 +747,180 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    ManifestConfirmResponse:
+      properties:
+        status:
+          type: string
+          const: validated
+          title: Status
+          default: validated
+        pilgrim_count:
+          type: integer
+          title: Pilgrim Count
+      type: object
+      required:
+      - pilgrim_count
+      title: ManifestConfirmResponse
+    ManifestCreateRequest:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 255
+          - type: 'null'
+          title: Name
+      type: object
+      title: ManifestCreateRequest
+    ManifestCreateResponse:
+      properties:
+        manifest_id:
+          type: string
+          format: uuid
+          title: Manifest Id
+        status:
+          type: string
+          const: draft
+          title: Status
+          default: draft
+      type: object
+      required:
+      - manifest_id
+      title: ManifestCreateResponse
+    ManifestIssue:
+      properties:
+        row_number:
+          type: integer
+          title: Row Number
+        reason:
+          type: string
+          title: Reason
+      type: object
+      required:
+      - row_number
+      - reason
+      title: ManifestIssue
+    ManifestListResponse:
+      properties:
+        manifests:
+          items:
+            $ref: '#/components/schemas/ManifestSummary'
+          type: array
+          title: Manifests
+      type: object
+      required:
+      - manifests
+      title: ManifestListResponse
+    ManifestPreviewRow:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        row_number:
+          type: integer
+          title: Row Number
+        first_name:
+          type: string
+          title: First Name
+        last_name:
+          type: string
+          title: Last Name
+        phone_number:
+          type: string
+          title: Phone Number
+        passport_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Passport Number
+        seat_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Seat Number
+        validation_status:
+          type: string
+          enum:
+          - valid
+          - duplicate_warning
+          title: Validation Status
+        warning:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Warning
+      type: object
+      required:
+      - id
+      - row_number
+      - first_name
+      - last_name
+      - phone_number
+      - passport_number
+      - seat_number
+      - validation_status
+      title: ManifestPreviewRow
+    ManifestStatus:
+      type: string
+      enum:
+      - draft
+      - validated
+      - partially_ordered
+      - provisioned
+      title: ManifestStatus
+    ManifestSummary:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        status:
+          $ref: '#/components/schemas/ManifestStatus'
+        valid_rows:
+          type: integer
+          title: Valid Rows
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - name
+      - status
+      - valid_rows
+      - created_at
+      title: ManifestSummary
+    ManifestUploadResponse:
+      properties:
+        total_rows:
+          type: integer
+          title: Total Rows
+        valid_rows:
+          type: integer
+          title: Valid Rows
+        invalid_rows:
+          items:
+            $ref: '#/components/schemas/ManifestIssue'
+          type: array
+          title: Invalid Rows
+        preview:
+          items:
+            $ref: '#/components/schemas/ManifestPreviewRow'
+          type: array
+          title: Preview
+      type: object
+      required:
+      - total_rows
+      - valid_rows
+      - invalid_rows
+      - preview
+      title: ManifestUploadResponse
     MessageResponse:
       properties:
         message:

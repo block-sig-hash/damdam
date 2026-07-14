@@ -19,6 +19,8 @@ from app.container import (
     default_dependencies,
 )
 from app.db import SessionFactory
+from app.manifests.routes import router as manifest_router
+from app.manifests.service import ManifestError, ManifestService
 from app.notifications.service import EmailSender, WhatsAppSender
 from app.otp.providers.base import OTPProvider
 from app.otp.routes import router as otp_webhook_router
@@ -64,6 +66,7 @@ def create_app(
         allow_headers=["*"],
     )
     api.state.settings = resolved_settings
+    api.state.clock = clock
     api.state.session_factory = session_factory
     api.state.otp_service = build_otp_service(
         resolved_settings,
@@ -76,6 +79,7 @@ def create_app(
     notification_service = build_notification_service(
         resolved_settings, email_sender, whatsapp_sender
     )
+    api.state.manifest_service = ManifestService()
     api.state.hto_service = HTOService(
         resolved_settings, notification_service, clock
     )
@@ -178,6 +182,7 @@ def create_app(
             "operator_not_found": 404,
             "invalid_approval_transition": 409,
             "notification_unavailable": 503,
+            "invalid_operator_token": 401,
         }
         messages = {
             "email_already_registered": "This email already has an account.",
@@ -196,6 +201,37 @@ def create_app(
             "notification_unavailable": (
                 "Notification delivery is temporarily unavailable."
             ),
+            "invalid_operator_token": "A valid HTO operator session is required.",
+        }
+        return JSONResponse(
+            status_code=statuses[exc.code],
+            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+        )
+
+    @api.exception_handler(ManifestError)
+    async def manifest_error_handler(
+        request: Request, exc: ManifestError
+    ) -> JSONResponse:
+        del request
+        statuses = {
+            "csv_required": 415,
+            "malformed_csv": 400,
+            "missing_required_columns": 400,
+            "row_limit_exceeded": 400,
+            "manifest_not_found": 404,
+            "manifest_already_confirmed": 409,
+            "no_valid_rows": 400,
+        }
+        messages = {
+            "csv_required": "Upload a CSV file.",
+            "malformed_csv": "The CSV file could not be parsed.",
+            "missing_required_columns": (
+                "The CSV must include first_name, last_name, and phone_number."
+            ),
+            "row_limit_exceeded": "A manifest can contain at most 500 rows.",
+            "manifest_not_found": "The manifest was not found.",
+            "manifest_already_confirmed": "This manifest has already been confirmed.",
+            "no_valid_rows": "The manifest has no valid rows to confirm.",
         }
         return JSONResponse(
             status_code=statuses[exc.code],
@@ -232,6 +268,7 @@ def create_app(
 
     api.include_router(auth_router, prefix="/v1")
     api.include_router(admin_router, prefix="/v1")
+    api.include_router(manifest_router, prefix="/v1")
     api.include_router(otp_webhook_router, prefix="/v1")
     api.include_router(profile_router, prefix="/v1")
     return api

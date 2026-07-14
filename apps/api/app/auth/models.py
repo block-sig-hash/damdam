@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, String
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy import Enum as SAEnum
 from sqlmodel import Field, SQLModel
 
@@ -36,6 +36,19 @@ class OrganizationType(str, Enum):
     HTO_OPERATOR = "hto_operator"
     ENTERPRISE = "enterprise"
     GOVERNMENT = "government"
+
+
+class ManifestStatus(str, Enum):
+    DRAFT = "draft"
+    VALIDATED = "validated"
+    PARTIALLY_ORDERED = "partially_ordered"
+    PROVISIONED = "provisioned"
+
+
+class ManifestValidationStatus(str, Enum):
+    VALID = "valid"
+    INVALID = "invalid"
+    DUPLICATE_WARNING = "duplicate_warning"
 
 
 class AdminRole(str, Enum):
@@ -226,3 +239,80 @@ class OrganizationRefreshToken(SQLModel, table=True):
     revoked_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+
+
+class Manifest(SQLModel, table=True):
+    __tablename__ = "manifests"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    organization_id: UUID = Field(
+        sa_column=Column(
+            ForeignKey("organizations.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    name: str | None = Field(default=None, max_length=255)
+    status: ManifestStatus = Field(
+        default=ManifestStatus.DRAFT,
+        sa_column=Column(
+            SAEnum(
+                ManifestStatus,
+                name="manifest_status",
+                values_callable=lambda choices: [choice.value for choice in choices],
+            ),
+            nullable=False,
+        ),
+    )
+    total_rows: int = Field(default=0)
+    valid_rows: int = Field(default=0)
+    uploaded_file_url: str | None = Field(default=None, max_length=500)
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class ManifestPilgrim(SQLModel, table=True):
+    __tablename__ = "manifest_pilgrims"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    manifest_id: UUID = Field(
+        sa_column=Column(
+            ForeignKey("manifests.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    first_name: str = Field(max_length=100)
+    last_name: str = Field(max_length=100)
+    phone_number: str = Field(max_length=14, index=True)
+    passport_number: str | None = Field(default=None, max_length=50)
+    seat_number: str | None = Field(default=None, max_length=10)
+    row_number: int = Field(sa_column=Column(Integer, nullable=False))
+    validation_status: ManifestValidationStatus = Field(
+        sa_column=Column(
+            SAEnum(
+                ManifestValidationStatus,
+                name="manifest_validation_status",
+                values_callable=lambda choices: [choice.value for choice in choices],
+            ),
+            nullable=False,
+        )
+    )
+    validation_error: str | None = Field(default=None, max_length=255)
+    family_group_id: UUID | None = Field(default=None)
+    manifest_order_id: UUID | None = Field(default=None, index=True)
+    user_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+    )
+    activation_code: str | None = Field(
+        default=None,
+        sa_column=Column(String(8), unique=True, nullable=True, index=True),
+    )
+    activation_code_used: bool = Field(default=False)
+    activation_code_expires_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    esim_incompatible_flag: bool = Field(default=False)
