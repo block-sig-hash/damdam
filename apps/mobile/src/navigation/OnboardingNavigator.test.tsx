@@ -8,6 +8,7 @@ import {
   verifyOtp,
   verifyPinRecovery,
 } from '../api/authClient';
+import { setPin } from '../api/pinClient';
 import { OnboardingNavigator } from './OnboardingNavigator';
 
 jest.mock('../api/authClient', () => {
@@ -28,6 +29,13 @@ jest.mock('../api/activationClient', () => {
     redeemActivationCode: jest.fn(),
   };
 });
+jest.mock('../api/pinClient', () => {
+  const actual = jest.requireActual('../api/pinClient');
+  return {
+    ...actual,
+    setPin: jest.fn(),
+  };
+});
 
 const mockRequestOtp = requestOtp as jest.MockedFunction<typeof requestOtp>;
 const mockVerifyOtp = verifyOtp as jest.MockedFunction<typeof verifyOtp>;
@@ -43,6 +51,7 @@ const mockPreview = previewActivationCode as jest.MockedFunction<
 const mockRedeem = redeemActivationCode as jest.MockedFunction<
   typeof redeemActivationCode
 >;
+const mockSetPin = setPin as jest.MockedFunction<typeof setPin>;
 
 beforeEach(() => {
   mockRequestOtp.mockReset();
@@ -51,6 +60,7 @@ beforeEach(() => {
   mockVerifyPinRecovery.mockReset();
   mockPreview.mockReset();
   mockRedeem.mockReset();
+  mockSetPin.mockReset();
 });
 
 describe('OnboardingNavigator', () => {
@@ -123,7 +133,20 @@ describe('OnboardingNavigator', () => {
     await act(async () => {
       fireEvent.press(screen.getByTestId('activation-success-continue'));
     });
-    expect(screen.getByText('Package active')).toBeTruthy();
+
+    // Activation success now leads into PIN Setup (US-02), not
+    // straight to a placeholder — same PIN Setup screen Flow A uses.
+    expect(screen.getByTestId('pin-setup-input')).toBeTruthy();
+    mockSetPin.mockResolvedValue({ message: 'PIN set' });
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('pin-setup-input'), '4682');
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('pin-setup-input'), '4682');
+    });
+
+    expect(mockSetPin).toHaveBeenCalledWith('access-token', '4682');
+    expect(await screen.findByText('PIN set')).toBeTruthy();
   });
 
   it('routes an existing account to re-authentication, carrying the activation code through (AC-01.7/AC-07.5)', async () => {
