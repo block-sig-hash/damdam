@@ -42,7 +42,13 @@ describe("admin HTO operator approvals", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(fetchMock.mock.calls[1][0]).toContain("/admin/hto-operators/operator-1/approve");
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("Barakah Hajj Services"));
-    expect(screen.queryByText("Barakah Hajj Services")).not.toBeInTheDocument();
+    // fetchMock having been called twice only means the approve request
+    // was sent, not that its response has resolved and the resulting
+    // setOperators(...) state update has re-rendered yet — wait for the
+    // actual DOM consequence, not just the intermediate call count.
+    await waitFor(() =>
+      expect(screen.queryByText("Barakah Hajj Services")).not.toBeInTheDocument(),
+    );
   });
 
   it("rejects a pending operator with a required reason", async () => {
@@ -68,7 +74,9 @@ describe("admin HTO operator approvals", () => {
     expect(JSON.parse(String(rejectCall[1].body))).toEqual({
       reason: "Licence number could not be verified",
     });
-    expect(screen.queryByText("Barakah Hajj Services")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText("Barakah Hajj Services")).not.toBeInTheDocument(),
+    );
   });
 
   it("does not submit a rejection without a reason", async () => {

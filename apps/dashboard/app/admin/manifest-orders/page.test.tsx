@@ -38,6 +38,10 @@ describe("admin manifest payment confirmation", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("cannot be undone"));
-    expect(screen.queryByText("Barakah Hajj")).not.toBeInTheDocument();
+    // fetchMock having been called twice only means the confirm request
+    // was sent, not that its response has resolved and the resulting
+    // setOrders(...) state update has re-rendered yet — wait for the
+    // actual DOM consequence, not just the intermediate call count.
+    await waitFor(() => expect(screen.queryByText("Barakah Hajj")).not.toBeInTheDocument());
   });
 });
