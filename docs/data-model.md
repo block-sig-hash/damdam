@@ -805,3 +805,36 @@ linked pilgrim row is the purchased package entitlement. A concrete `packages`
 row requires `user_id`, so it is materialized when the pilgrim redeems the code
 and the manifest row is linked to an account; payment confirmation never creates
 a placeholder user merely to satisfy that foreign key.
+
+---
+
+## 6.15 Amendment — US-07 Redemption Materializes `packages`
+
+`packages` was already specced in §6.2 but had no real table or migration
+until US-07 — the only prior consumer of `pricing_tiers` (US-06, §6.14) never
+needed to create a `packages` row itself, since a package requires `user_id`
+and no `users` row is guaranteed to exist at order-placement or provisioning
+time. This migration builds `packages` exactly as already documented in
+§6.2, scoped to what redemption needs: it does not add `GET /pricing/tiers`
+(US-08) or checkout (US-09) — neither is exercised by an HTO-manifest-sourced
+package, since the pilgrim's HTO already paid via §6.14's invoice flow, not
+through the app's own retail checkout.
+
+**Tier lookup goes through the real order, not a shortcut.** An earlier draft
+of this amendment added an interim `manifest_pilgrims.pricing_tier_id` column
+because, at the time, `manifest_orders` didn't exist yet. It now does (§6.14),
+with a real `manifest_pilgrims.manifest_order_id` foreign key, so
+`ActivationService.redeem` sizes the `packages` row from
+`pilgrim.manifest_order_id → manifest_orders.pricing_tier_id` directly — no
+denormalized copy of the tier on `manifest_pilgrims` at all.
+
+**Redemption is phone-locked.** `ActivationService.redeem` requires the
+authenticated pilgrim's `users.phone_number` to match the target
+`manifest_pilgrims.phone_number` exactly (both E.164). The activation code is
+delivered by WhatsApp to that specific number (AC-07.1), so this closes an
+otherwise-open door: without it, anyone who obtained a valid code (not just
+the intended pilgrim) could redeem it under their own account. A single-use
+code plus a conditional atomic `UPDATE ... WHERE activation_code_used =
+false` (not a plain read-then-write) also closes the race between two
+concurrent redemption attempts for the same code — the same pattern §6.14's
+provisioning worker uses for its own per-pilgrim WhatsApp delivery checkpoint.

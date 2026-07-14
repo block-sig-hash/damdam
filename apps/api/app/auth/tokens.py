@@ -111,7 +111,16 @@ class TokenService:
                 self.settings.jwt_secret,
                 algorithms=["HS256"],
                 audience="pilgrim",
-                options={"verify_exp": False},
+                # exp is checked manually below against the injected
+                # clock, not wall-clock time, so tests (and any future
+                # clock-skewed deployment) can validate expiry
+                # deterministically. iat must be disabled for the same
+                # reason: PyJWT's default iat check compares the
+                # token's iat against real wall-clock time regardless
+                # of what `now` this call receives, which rejects a
+                # token minted at a mocked-forward clock as "not yet
+                # valid" even though it's entirely self-consistent.
+                options={"verify_exp": False, "verify_iat": False},
             )
             if claims.get("type") != "access":
                 raise InvalidRefreshTokenError
