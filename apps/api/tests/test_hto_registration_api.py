@@ -432,3 +432,55 @@ def test_admin_rejection_records_reason_and_blocks_login(
         pytest.raises(HTOAuthError, match="invalid_approval_transition"),
     ):
         hto_api.state.hto_service.reject(session, operator_id, admin_id, "too late")
+
+
+def test_second_rejection_errors_instead_of_discarding_new_reason(
+    hto_api,
+    session_factory,
+    email_sender,
+    registration_payload,
+) -> None:
+    """A second reject() call must not silently drop a different admin's
+    reason behind a misleadingly successful response — it should error
+    the same way rejecting an already-approved operator does."""
+    request = SimpleNamespace(app=hto_api)
+    token = register_and_token(hto_api, email_sender, registration_payload)
+    verify_hto_email(HTOVerifyEmailRequest(token=token), request)
+
+    with session_factory() as session:
+        organization = session.exec(select(Organization)).one()
+        first_admin = AdminUser(
+            id=uuid4(), email="first-admin@damdam.app", password_hash="unused"
+        )
+        second_admin = AdminUser(
+            id=uuid4(), email="second-admin@damdam.app", password_hash="unused"
+        )
+        session.add(first_admin)
+        session.add(second_admin)
+        session.commit()
+        operator_id = organization.id
+        first_admin_id = first_admin.id
+        second_admin_id = second_admin.id
+
+    with session_factory() as session:
+        rejected = hto_api.state.hto_service.reject(
+            session, operator_id, first_admin_id, "First reason: licence invalid"
+        )
+        assert rejected.approval_status == HTOApprovalStatus.REJECTED
+
+    with (
+        session_factory() as session,
+        pytest.raises(HTOAuthError, match="invalid_approval_transition"),
+    ):
+        hto_api.state.hto_service.reject(
+            session, operator_id, second_admin_id, "Second reason: duplicate account"
+        )
+
+    # The first rejection's reason/actor must be exactly what's on
+    # record — the second (failed) call must not have touched it.
+    with session_factory() as session:
+        organization = session.get(Organization, operator_id)
+        assert organization is not None
+        assert organization.approval_status == HTOApprovalStatus.REJECTED
+        assert organization.rejected_by == first_admin_id
+        assert organization.rejection_reason == "First reason: licence invalid"
