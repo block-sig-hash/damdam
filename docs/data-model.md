@@ -855,8 +855,25 @@ down to a manual, admin-triggered flow (`prd.md` §5.9/§4.10 — see the scope
 note there for the full reasoning: Naira has been comparatively stable under
 the CBN's reformed NFEM framework, and a live FX dependency is not worth
 building for ~1-2% monthly movement pre-launch). `daily_price_cache` was
-real and migrated (US-06, §6.14) but never written to in production — no
-cron ever ran — so dropping it removes dead schema, not live data.
+real and migrated (US-06, §6.14); no production or staging environment
+exists yet for it to have been written to there, but local/test databases
+can hold real rows in it (seeded by tests or manual exercising of US-06),
+so the migration cannot assume the table — or `pricing_tiers` itself — is
+empty.
+
+`pricing_tiers.ngn_price` is therefore added nullable first, backfilled
+from each tier's most recent `daily_price_cache` row (a correlated
+`UPDATE ... FROM (SELECT DISTINCT ON (pricing_tier_id) ...)`), and only
+then set `NOT NULL` — so a database with pre-existing tiers keeps their
+last-known price instead of the migration failing (or worse, guessing a
+default) against unset data. A tier with no `daily_price_cache` history at
+all has no principled backfill value; the `NOT NULL` step fails loudly on
+purpose in that case rather than defaulting a real money field to zero or
+a placeholder. Downgrading recreates `daily_price_cache` as an empty
+table (schema only, not a data round-trip), so a downgrade-then-upgrade
+sequence relies on this same backfill and will itself hit that failure —
+expected, since the downgrade is what discarded the history to backfill
+from, not a flaw in the upgrade path against real pre-existing data.
 
 `pricing_tiers` gains a single `ngn_price` column: the current retail Naira
 price, admin-editable, replacing the "look up today's dated row" pattern
