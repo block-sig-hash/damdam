@@ -61,9 +61,13 @@ class FamilyContactService:
         if contact is None:
             raise FamilyContactError("family_contact_not_found")
 
-        phone_was_supplied = "phone_number" in payload.model_fields_set
-        if phone_was_supplied and payload.phone_number is not None:
-            phone_number = to_e164(payload.phone_number)
+        phone_number_input = (
+            payload.phone_number
+            if "phone_number" in payload.model_fields_set
+            else None
+        )
+        if phone_number_input is not None:
+            phone_number = to_e164(phone_number_input)
             if phone_number != contact.phone_number:
                 contact.phone_number = phone_number
                 contact.notified_of_nomination = False
@@ -74,7 +78,7 @@ class FamilyContactService:
         session.commit()
         session.refresh(contact)
 
-        if phone_was_supplied and not contact.notified_of_nomination:
+        if phone_number_input is not None and not contact.notified_of_nomination:
             self._notify(session, contact)
         return contact
 

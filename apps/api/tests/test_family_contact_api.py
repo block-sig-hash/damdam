@@ -229,6 +229,43 @@ def test_failed_notification_is_retryable_without_losing_nomination(
     assert whatsapp_sender.nominations == ["+2349012345678"]
 
 
+def test_empty_update_body_returns_validation_error(
+    family_api, whatsapp_sender
+) -> None:
+    """Regression: an empty PATCH body must 422 cleanly, not crash on
+    serializing the model_validator's raised ValueError context."""
+    client = authenticated_client(family_api)
+    client.post("/v1/me/family-contact", json={"phone_number": CONTACT_PHONE})
+
+    response = client.patch("/v1/me/family-contact", json={})
+
+    assert response.status_code == 422
+    assert whatsapp_sender.nominations == ["+2349012345678"]
+
+
+def test_explicit_null_phone_does_not_retry_notification(
+    family_api, session_factory, whatsapp_sender
+) -> None:
+    """Regression: sending phone_number: null must not be treated as a
+    resupplied number and must not re-trigger a notification retry."""
+    client = authenticated_client(family_api)
+    whatsapp_sender.fail_nomination = True
+    client.post("/v1/me/family-contact", json={"phone_number": CONTACT_PHONE})
+    whatsapp_sender.fail_nomination = False
+
+    response = client.patch(
+        "/v1/me/family-contact", json={"phone_number": None, "name": "Hauwa"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["notified_of_nomination"] is False
+    assert whatsapp_sender.nominations == []
+    with session_factory() as session:
+        contact = session.exec(select(FamilyContact)).one()
+        assert contact.phone_number == "+2349012345678"
+        assert contact.notified_of_nomination is False
+
+
 def test_family_contact_endpoints_require_pilgrim_authentication(family_api) -> None:
     """AC-03.4: family-contact ownership derives from the pilgrim session."""
     client = TestClient(family_api)
