@@ -208,6 +208,7 @@ one, rather than hardcoding a single vendor's identifier field.
 | total_rows | INTEGER | DEFAULT 0 | |
 | valid_rows | INTEGER | DEFAULT 0 | |
 | uploaded_file_url | VARCHAR(500) | NULLABLE | R2 object URL, original CSV |
+| created_at | TIMESTAMPTZ | NOT NULL | Upload batch creation time |
 
 ---
 
@@ -226,7 +227,7 @@ one, rather than hardcoding a single vendor's identifier field.
 | validation_status | ENUM | NOT NULL | `valid` \| `invalid` \| `duplicate_warning` |
 | validation_error | VARCHAR(255) | NULLABLE | |
 | family_group_id | UUID | NULLABLE | Groups rows for a shared Family package (§6.4) |
-| manifest_order_id | UUID | FK → manifest_orders, NULLABLE | Set once included in a placed order (§6.5) |
+| manifest_order_id | UUID | NULLABLE | Set once included in a placed order; FK added when `manifest_orders` is introduced by US-06 (§6.5) |
 | user_id | UUID | FK → users, NULLABLE | Set once pilgrim activates |
 | activation_code | VARCHAR(8) | UNIQUE, NULLABLE | Generated post-payment |
 | activation_code_used | BOOLEAN | DEFAULT FALSE | |
@@ -734,3 +735,20 @@ state, not family-contact consent: it remains false when WhatsApp is
 unavailable and returns to false whenever the nominated number changes. This
 allows a retry to target only an undelivered nomination without duplicating a
 message already accepted by Meta.
+
+---
+
+## 6.13 Amendment — US-05 Manifest Staging
+
+US-05 introduces `manifests` and `manifest_pilgrims` against the generic
+`organizations` owner key. Upload validation stages every CSV row while the
+manifest is `draft`, including invalid rows and duplicate warnings, so the
+operator can review an exact row-numbered preview. Confirmation removes invalid
+staging rows and advances the batch to `validated`; duplicate-warning rows are
+retained because warnings do not block acceptance.
+
+`manifest_order_id` is created as a nullable UUID in this migration so the
+US-05 model already exposes the multi-order ownership slot. Its foreign key is
+deliberately added by US-06 in the same migration that creates
+`manifest_orders`, avoiding a forward reference to a table that does not yet
+exist while preserving the §6.5 design.

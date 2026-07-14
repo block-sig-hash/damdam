@@ -285,13 +285,24 @@ POST   /hto/manifests
 
 POST   /hto/manifests/{id}/upload
   HTO auth required
-  Body: multipart CSV file
+  Body: multipart CSV file (`file`), UTF-8, maximum 500 data rows
+  Required headers: first_name, last_name, phone_number
+  Optional headers: passport_number, seat_number
   200: { total_rows, valid_rows, invalid_rows: [{ row_number,
-          reason }], preview: [{..valid rows}] }
+          reason }], preview: [{ id, row_number, first_name,
+          last_name, phone_number, passport_number?, seat_number?,
+          validation_status: "valid"|"duplicate_warning", warning? }] }
+  Duplicate phone numbers remain in preview with duplicate_warning;
+  malformed rows remain staged only until confirmation.
+  400: malformed_csv | missing_required_columns | row_limit_exceeded
+  415: csv_required
 
 POST   /hto/manifests/{id}/confirm
   HTO auth required
+  Removes invalid staged rows and retains valid/duplicate-warning rows.
   200: { status: "validated", pilgrim_count: int }
+  400: no_valid_rows
+  409: manifest_already_confirmed
 
 POST   /hto/manifests/{id}/group
   HTO auth required
