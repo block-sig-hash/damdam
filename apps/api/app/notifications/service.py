@@ -12,6 +12,8 @@ class EmailSender(Protocol):
 class WhatsAppSender(Protocol):
     def send_approval(self, phone_number: str, operator_name: str) -> None: ...
 
+    def send_family_nomination(self, phone_number: str) -> None: ...
+
 
 class NotificationError(Exception):
     pass
@@ -34,3 +36,6 @@ class NotificationService:
         self, phone_number: str, operator_name: str
     ) -> None:
         self.whatsapp.send_approval(phone_number, operator_name)
+
+    def send_family_nomination(self, phone_number: str) -> None:
+        self.whatsapp.send_family_nomination(phone_number)

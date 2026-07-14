@@ -105,12 +105,16 @@ PATCH  /me
 POST   /me/family-contact
   Auth required
   Body: { phone_number: string, name?: string }
-  201: { id, phone_number, notified_of_nomination: bool }
+  201: { id, phone_number, name, notified_of_nomination: bool }
+  409: { error: "family_contact_exists" }
+  503: { error: "notification_unavailable" }
 
 PATCH  /me/family-contact
   Auth required
   Body: { phone_number?: string, name?: string }
   200: { ...updated contact }
+  404: { error: "family_contact_not_found" }
+  503: { error: "notification_unavailable" }
 
 POST   /me/verify-cli
   Auth required
@@ -548,3 +552,21 @@ This is deliberately not a public contract change. The existing `/auth/hto/*`
 and `/admin/hto-operators/*` paths, request and response field names, status
 codes, JWT audience, and error codes remain unchanged so current dashboard
 clients and all US-04 acceptance criteria continue to work without migration.
+
+---
+
+## 7.18 Amendment — US-03 Family Contact Nomination Delivery
+
+`POST /me/family-contact` and `PATCH /me/family-contact` accept the same local
+Nigerian mobile-number format as pilgrim signup, persist it in E.164 form, and
+derive ownership exclusively from the authenticated pilgrim access token.
+There is no family-contact confirmation or authentication flow.
+
+The Meta WhatsApp template is dispatched through the internal notification
+abstraction after the nomination is committed. Successful delivery sets
+`notified_of_nomination = true`. If Meta is unavailable, the API returns
+`notification_unavailable` while retaining the contact with the flag false;
+PATCHing the same number retries the missing notification. Changing the number
+resets the flag and notifies the new contact, while name-only edits do not send
+duplicate messages. A second POST returns `family_contact_exists`; clients use
+PATCH for AC-03.3 updates.

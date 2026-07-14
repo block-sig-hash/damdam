@@ -172,7 +172,7 @@ one, rather than hardcoding a single vendor's identifier field.
 | user_id | UUID | FK → users, UNIQUE | One per pilgrim for MVP |
 | phone_number | VARCHAR(14) | NOT NULL | E.164 |
 | name | VARCHAR(100) | NULLABLE | |
-| notified_of_nomination | BOOLEAN | DEFAULT FALSE | |
+| notified_of_nomination | BOOLEAN | DEFAULT FALSE | True only after Meta accepts the nomination template |
 
 ---
 
@@ -722,3 +722,15 @@ The same migration renames `hto_refresh_tokens` to
 renames the existing approval enum and database constraints. The public US-04
 HTO API retains its current field names and behavior; this amendment changes
 only internal persistence and ownership terminology.
+
+---
+
+## 6.12 Amendment — Family Nomination Delivery State
+
+US-03 uses the existing one-to-one `family_contacts` design. The unique
+`user_id` index enforces one contact per pilgrim, and updates mutate that row
+rather than replacing it. `notified_of_nomination` is operational delivery
+state, not family-contact consent: it remains false when WhatsApp is
+unavailable and returns to false whenever the nominated number changes. This
+allows a retry to target only an undelivered nomination without duplicating a
+message already accepted by Meta.
