@@ -98,7 +98,12 @@ Splash
   → Deep link opens app → Activation Code Entry
     → [not registered] → Phone Entry → OTP → PIN Setup
       → Family Contact → Departure Date
-    → [already registered] → PIN Unlock
+    → [already registered, valid local session] → PIN Unlock
+    → [already registered, no valid local session — new device,
+      or session older than 30 days, AC-23.4] → Returning Pilgrim
+      (OTP-based re-authentication; not PIN entry — PIN is a
+      local-only unlock gate per AC-23.5, there is no phone+PIN
+      login endpoint, so this reuses US-02's OTP recovery pair)
   → Activation Success (package already attached, skip
     Package Selection and Paystack entirely)
   → eSIM Setup Intro

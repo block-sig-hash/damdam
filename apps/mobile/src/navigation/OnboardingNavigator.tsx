@@ -5,12 +5,13 @@ import { ActivationSuccessScreen } from '../screens/ActivationSuccess/Activation
 import { OTPVerificationScreen } from '../screens/OTPVerification/OTPVerificationScreen';
 import { PhoneEntryScreen } from '../screens/PhoneEntry/PhoneEntryScreen';
 import { PlaceholderScreen } from '../screens/Placeholder/PlaceholderScreen';
+import { ReturningPilgrimScreen } from '../screens/ReturningPilgrim/ReturningPilgrimScreen';
 
 type OnboardingStep =
   | { name: 'activation-entry' }
   | { name: 'phone'; activationCode?: string }
   | { name: 'otp'; phoneNumber: string; activationCode?: string }
-  | { name: 'existing-account'; phoneNumber: string }
+  | { name: 'existing-account'; phoneNumber: string; activationCode?: string }
   | { name: 'verified'; result: AuthResponse; activationCode?: string }
   | { name: 'activated' };
 
@@ -52,7 +53,9 @@ export function OnboardingNavigator({
           onOtpSent={(phoneNumber) =>
             setStep({ name: 'otp', phoneNumber, activationCode: step.activationCode })
           }
-          onAccountExists={(phoneNumber) => setStep({ name: 'existing-account', phoneNumber })}
+          onAccountExists={(phoneNumber) =>
+            setStep({ name: 'existing-account', phoneNumber, activationCode: step.activationCode })
+          }
         />
       );
     case 'otp':
@@ -65,19 +68,28 @@ export function OnboardingNavigator({
         />
       );
     case 'existing-account':
+      // AC-01.7 / AC-07.5 / AC-23.4: no valid local session for this
+      // phone number (new device, or the 30-day session expired) —
+      // ReturningPilgrimScreen re-authenticates via OTP-based
+      // recovery (there's no phone+PIN login endpoint; PIN is a
+      // local-only unlock gate per AC-23.5) and rejoins the same
+      // 'verified' handling a fresh signup uses, activation code and
+      // all.
       return (
-        <PlaceholderScreen
-          title="Welcome back"
-          note="This number already has an account. Log in with your PIN — coming in US-02."
+        <ReturningPilgrimScreen
+          phoneNumber={step.phoneNumber}
+          onVerified={(result) =>
+            setStep({ name: 'verified', result, activationCode: step.activationCode })
+          }
         />
       );
     case 'verified':
-      // AC-07.4: OTP → PIN → package auto-attached via code. PIN
-      // Setup isn't built yet (tracked separately, US-02's mobile
-      // screen), so a pilgrim who arrived with an activation code
-      // redeems it here rather than waiting on a screen that doesn't
-      // exist; one that arrived without a code sees the pre-existing
-      // "coming in US-02" placeholder unchanged.
+      // AC-07.4/AC-07.5: OTP or recovery → package auto-attached via
+      // code. PIN Setup isn't built yet (tracked separately, US-02's
+      // mobile screen), so a pilgrim who arrived with an activation
+      // code redeems it here rather than waiting on a screen that
+      // doesn't exist; one that arrived without a code sees the
+      // pre-existing "coming in US-02" placeholder unchanged.
       if (step.activationCode) {
         return (
           <ActivationSuccessScreen

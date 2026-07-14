@@ -9,6 +9,7 @@ export type Platform = 'ios' | 'android';
 
 export type OtpErrorCode =
   | 'account_exists'
+  | 'account_not_found'
   | 'rate_limited'
   | 'otp_unavailable'
   | 'invalid_otp'
@@ -55,6 +56,7 @@ interface ErrorPayload {
 
 const KNOWN_CODES: OtpErrorCode[] = [
   'account_exists',
+  'account_not_found',
   'rate_limited',
   'otp_unavailable',
   'invalid_otp',
@@ -104,4 +106,24 @@ export function verifyOtp(
   platform: Platform,
 ): Promise<AuthResponse> {
   return post('/auth/otp/verify', { phone_number: phoneNumber, otp, platform });
+}
+
+/**
+ * AC-23.4 "full re-authentication" for a phone number that already has
+ * an account and no valid local session — there is no phone+PIN login
+ * endpoint (PIN is a local-only unlock gate per AC-23.5, never a
+ * network credential), so re-establishing a session reuses the same
+ * OTP-based recovery pair US-02 built for "forgot my PIN," per
+ * docs/api-spec.md §7.1's documented contract for these routes.
+ */
+export function requestPinRecovery(phoneNumber: string): Promise<{ message: string }> {
+  return post('/auth/pin/recovery/request', { phone_number: phoneNumber });
+}
+
+export function verifyPinRecovery(
+  phoneNumber: string,
+  otp: string,
+  platform: Platform,
+): Promise<AuthResponse> {
+  return post('/auth/pin/recovery/verify', { phone_number: phoneNumber, otp, platform });
 }

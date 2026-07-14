@@ -1,4 +1,10 @@
-import { OtpApiError, requestOtp, verifyOtp } from './authClient';
+import {
+  OtpApiError,
+  requestOtp,
+  requestPinRecovery,
+  verifyOtp,
+  verifyPinRecovery,
+} from './authClient';
 
 function mockFetchOnce(status: number, body: unknown, ok = status >= 200 && status < 300) {
   (global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -107,5 +113,78 @@ describe('verifyOtp', () => {
     await expect(verifyOtp('08012345678', '000000', 'android')).rejects.toMatchObject({
       code: 'otp_expired',
     });
+  });
+});
+
+describe('requestPinRecovery', () => {
+  it('posts the phone number to the recovery endpoint (AC-23.4)', async () => {
+    mockFetchOnce(200, { message: 'OTP sent' });
+
+    const result = await requestPinRecovery('08012345678');
+
+    expect(result).toEqual({ message: 'OTP sent' });
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/auth/pin/recovery/request'),
+      expect.objectContaining({
+        body: JSON.stringify({ phone_number: '08012345678' }),
+      }),
+    );
+  });
+
+  it('maps a 404 to an account_not_found error', async () => {
+    mockFetchOnce(404, {
+      error: 'account_not_found',
+      message: 'No account exists for this phone number.',
+    });
+
+    await expect(requestPinRecovery('08012345678')).rejects.toMatchObject({
+      code: 'account_not_found',
+    });
+  });
+});
+
+describe('verifyPinRecovery', () => {
+  it('posts phone number, otp, and platform and returns the auth response', async () => {
+    const authResponse = {
+      access_token: 'a',
+      refresh_token: 'b',
+      is_new_user: false,
+      user: {
+        id: '1',
+        phone_number: '+2348012345678',
+        first_name: '',
+        last_name: '',
+        email: null,
+        verified_cli: true,
+        platform: 'android',
+        status: 'active',
+      },
+    };
+    mockFetchOnce(200, authResponse);
+
+    const result = await verifyPinRecovery('08012345678', '123456', 'android');
+
+    expect(result).toEqual(authResponse);
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/auth/pin/recovery/verify'),
+      expect.objectContaining({
+        body: JSON.stringify({ phone_number: '08012345678', otp: '123456', platform: 'android' }),
+      }),
+    );
+  });
+
+  it('maps a 423 to a locked error with retryAfter', async () => {
+    mockFetchOnce(423, {
+      error: 'locked',
+      message: 'Too many attempts. Please wait before trying again.',
+      details: { retry_after: 60 },
+    });
+
+    const error = await verifyPinRecovery('08012345678', '000000', 'android').catch(
+      (err) => err,
+    );
+
+    expect(error.code).toBe('locked');
+    expect(error.retryAfter).toBe(60);
   });
 });
