@@ -73,8 +73,9 @@
                        └────────────────────────┘
 
    External services (not hosted by DamDam):
-   Paystack │ Twilio │ eSIM Access/Monty Mobile │
-   WhatsApp Business API │ Resend │ Apple/Google push services
+   Paystack/Flutterwave │ Termii/Twilio │ Telnyx │
+   Monty Mobile/eSIM Access/1Global │ WhatsApp Business API │
+   Resend │ Apple/Google push services
 ```
 
 **React Native mobile app (iOS + Android):** distributed via
@@ -299,9 +300,9 @@ real-world consequence.
   **Google Play service account JSON**) stored in GitHub's
   encrypted repository secrets, scoped to protected-branch deploy
   workflows only
-- Rotation policy: Twilio and Paystack API keys rotated every 90
-  days as baseline hygiene; immediate rotation on any suspected
-  exposure
+- Rotation policy: Termii, Twilio, Telnyx, Paystack, and
+  Flutterwave API keys rotated every 90 days as baseline hygiene;
+  immediate rotation on any suspected exposure
 - No secrets baked into Docker image layers — environment
   variables at runtime only
 
@@ -367,10 +368,12 @@ carries real safety weight.
 | **Fixed infrastructure subtotal** | **~$0–5/month** — Postgres self-hosted on the already-free OCI instance means no managed-DB line item at all |
 | Apple Developer Program | **$99/year (~$8.25/month amortised)** — new line item from dual-platform decision |
 | Google Play Developer account | $25 one-time (not recurring) |
-| Twilio (usage-based) | Variable — scales with call volume and Verify OTP sends |
+| Termii (usage-based) | Variable — scales with OTP send volume (primary provider) |
+| Twilio (usage-based) | Variable — scales with secondary-provider OTP failover volume and Telnyx-independent Verify usage; expected low relative to Termii given it's a fallback |
+| Telnyx (usage-based) | Variable — scales with call volume (voice/PSTN termination) |
 | Paystack (transaction fees) | Variable — 1.5% + ₦100 per transaction, passed through in the pricing model |
 | Flutterwave (transaction fees) | Variable, comparable fee structure to Paystack — automatic fallback only (`data-model.md` §6.7), so actual cost impact is near-zero in normal operation; budgeted here for completeness, not because meaningful volume is expected to route through it |
-| eSIM Access + Monty Mobile (usage-based, dual-supplier per `data-model.md` §6.6) | Variable — scales with eSIM issuance volume |
+| Monty Mobile + eSIM Access + 1Global (usage-based, three-way redundancy per `data-model.md` §6.6) | Variable — scales with eSIM issuance volume |
 | WhatsApp Business API | Variable — per-conversation pricing after free tier |
 | Expo EAS Build | Free tier: 30 builds/month on the shared queue — likely sufficient at MVP build frequency; EAS Production plan (~$99/month) only needed if build volume or priority-queue speed becomes a bottleneck — start free, upgrade if it's actually limiting |
 
@@ -400,9 +403,9 @@ project structure, direct native code access), with EAS Build used
 only as the cloud compiler that removes the local-Mac requirement.**
 This is narrower than an earlier draft's recommendation, and
 deliberately so — DamDam's core features (eSIM `EuiccManager`
-access per `prd.md` §5.4, the Twilio Voice SDK per `prd.md` §5.5,
+access per `prd.md` §5.4, the Telnyx Voice SDK per `prd.md` §5.5,
 CallKit/ConnectionService per `frontend-mobile.md` §8.3) are all
-native-module-heavy, and Twilio doesn't publish an official Expo
+native-module-heavy, and Telnyx doesn't publish an official Expo
 config plugin. Since these aren't edge features but the actual
 product, bare RN's direct native code access is simpler than
 translating every native change through Expo's config-plugin

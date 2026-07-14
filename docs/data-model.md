@@ -106,13 +106,48 @@ DeviceCompatibilityLog
 
 ---
 
+### `emergency_content`
+
+**Design note:** Backs US-12 (scoped down from full offline maps
+to just emergency contacts/phrases — see `prd.md` §4.4's scope
+note). Keyed by `destination_country` (matching `users.
+destination_country`) so a future country expansion is "add a
+row," not a code change — same principle as the OTP/eSIM/payment
+vendor tables, just for content instead of vendors. Deliberately
+minimal: plain text, no images, no map tiles, no file storage —
+this is intentionally the cheapest possible version of the
+multi-country abstraction, since the feature itself was cut down
+to the cheapest possible scope.
+
+| Field | Type | Constraints | Notes |
+|---|---|---|---|
+| destination_country | VARCHAR(2) | PK | ISO code; `SA` is the only populated row for MVP |
+| support_whatsapp_number | VARCHAR(20) | NOT NULL | DamDam's own support number, not destination-specific, but stored per-row for simplicity (avoids a separate global-config lookup) |
+| local_emergency_numbers | JSONB | NOT NULL | e.g. `{"police": "999", "ambulance": "997"}` — structure, not free text, so the app can label each number correctly |
+| phrasebook | JSONB | NOT NULL | Array of `{phrase_key, translated_text, language_code}` — e.g. `help`, `thank_you`, `where_is`, `i_dont_understand`, `i_need_a_doctor` |
+| updated_at | TIMESTAMPTZ | NOT NULL | Content-review timestamp, not a user-facing field |
+
+**Note on the HTO operator's number:** shown alongside this
+content on the SOS screen (AC-16.4) but is NOT stored here — it's
+pulled live from the pilgrim's actual assigned `organizations` row
+(via their manifest/order), since it's specific to each pilgrim's
+HTO, not the destination country.
+
+---
+
 ### `caller_id_verifications`
+
+**Design note:** Kept provider-agnostic to match the OTP failover
+in §5.1 — the CLI-verification OTP may succeed via either the
+primary or secondary OTP provider, and this table records which
+one, rather than hardcoding a single vendor's identifier field.
 
 | Field | Type | Constraints | Notes |
 |---|---|---|---|
 | id | UUID | PK | |
 | user_id | UUID | FK → users, UNIQUE | One per user |
-| twilio_verification_sid | VARCHAR(64) | NOT NULL | |
+| otp_provider | ENUM | NOT NULL | `termii` \| `twilio` — whichever provider actually delivered this verification |
+| provider_reference | VARCHAR(64) | NOT NULL | Opaque verification ID/SID from whichever provider succeeded |
 | verified_at | TIMESTAMPTZ | NOT NULL | |
 
 ### `refresh_tokens`
@@ -152,7 +187,7 @@ DeviceCompatibilityLog
 | email | VARCHAR(255) | UNIQUE, NOT NULL | |
 | password_hash | VARCHAR(255) | NOT NULL | bcrypt |
 | phone_number | VARCHAR(14) | NOT NULL | |
-| nahcon_licence_number | VARCHAR(50) | NULLABLE | Required only when `org_type = hto_operator`; must otherwise be null |
+| nahcon_licence_number | VARCHAR(50) | NULLABLE | Required only when `org_type = hto_operator`; must otherwise be null (`ck_organizations_hto_licence` check constraint) |
 | email_verified | BOOLEAN | DEFAULT FALSE | |
 | approval_status | ENUM | DEFAULT 'pending' | `pending` \| `approved` \| `rejected` |
 | approved_at | TIMESTAMPTZ | NULLABLE | |
@@ -297,7 +332,7 @@ processor_reference IS NOT NULL`)
 |---|---|---|---|
 | id | UUID | PK | |
 | package_id | UUID | FK → packages, UNIQUE | |
-| aggregator | ENUM | NOT NULL | `airalo` \| `esim_access` \| `monty` — see §6.6 amendment for why a second/third supplier is a deliberate redundancy decision, not just vendor-shopping |
+| aggregator | ENUM | NOT NULL | `monty_mobile` \| `esim_access` \| `1global` — see §6.6 for the final primary/secondary/tertiary ranking and why a three-way redundancy decision, not just vendor-shopping |
 | iccid | VARCHAR(22) | NOT NULL | |
 | activation_code_lpa | VARCHAR(255) | NOT NULL | LPA string |
 | qr_code_url | VARCHAR(500) | NOT NULL | R2 object URL |
@@ -516,48 +551,54 @@ frontend-dashboard.md §9.3 (Screen 9) for the UI flow this implies.
 
 ---
 
-## 6.6 Amendment — Monty Mobile as a Dual eSIM Supplier
+## 6.6 Amendment — Three-Way eSIM Aggregator Redundancy
 
 **This was decided very early in this project's planning, before
 this doc suite existed, and never made it into the committed
 spec** — `esim_profiles.aggregator` originally listed only `airalo`
-and `esim_access`, missing Monty Mobile entirely despite it having
-been identified as the Gulf-specialist redundancy vendor from the
-start. Fixed here, following the same amendment pattern as §6.4/§6.5.
+and `esim_access`, missing the eventual redundancy vendors
+entirely. Fixed here, following the same amendment pattern as
+§6.4/§6.5, and now updated again to reflect the final, resolved
+ranking (superseding an intermediate eSIM-Access-primary state this
+section described in an earlier draft).
 
-**Why a second/third supplier, not just cost-shopping:** the real
-justification is redundancy during a concentrated, high-stakes
+**Why a second and third supplier, not just cost-shopping:** the
+real justification is redundancy during a concentrated, high-stakes
 surge, not marginal price competition. During actual Hajj week,
 thousands of pilgrims may attempt eSIM activation within a
 compressed window (arrival at Jeddah, a specific prayer time, a
-scheduled group movement). If the single eSIM aggregator has a
+scheduled group movement). If a single eSIM aggregator has a
 provisioning outage, an API degradation, or a capacity shortage
 during that exact window, there's no fallback — every pilgrim
-depending on that provider is affected simultaneously. Monty
-Mobile is a credible second supplier specifically because it
-operates its own SM-DP+ provisioning infrastructure (not a
-reseller sitting on top of someone else's), has genuine Gulf/
-Middle East market positioning, and explicitly markets Hajj/Umrah
-coverage on its own product pages — this isn't a speculative
-addition, it's a provider already oriented toward this exact
-market.
+depending on that provider is affected simultaneously.
+
+**Final ranking: Monty Mobile (primary), eSIM Access (secondary),
+1Global (tertiary).** Vendor order is held as configuration
+(`ESIM_VENDOR_PRIMARY` / `ESIM_VENDOR_SECONDARY` /
+`ESIM_VENDOR_TERTIARY`), not hardcoded, since relative pricing,
+coverage, and reliability across the Nigeria/Saudi Arabia corridor
+are expected to shift as real usage data comes in. Issuance is
+attempted against the primary vendor; on a real issuance failure
+(not merely slow — an error response or timeout), the system
+automatically cascades to the secondary, then the tertiary, before
+falling to retry-with-backoff-then-admin-queue (see `prd.md` §5.4).
+Airalo was evaluated during earlier planning but is not one of the
+three committed vendors.
 
 **What this does NOT mean:** this is not "pick whichever is
-cheapest per request" load-balancing from day one. For MVP, eSIM
-Access remains primary (existing integration, per `prd.md` §5.4's
-existing dependency list) with Monty onboarded as a qualified,
-tested secondary — not dynamically selected per-request until
-there's real operational confidence in both providers' reliability
-and provisioning latency under load. Dynamic best-price/best-
-performance selection by destination is a reasonable Phase 2+
-optimization once both integrations are proven, not an MVP
-requirement.
+cheapest per request" load-balancing from day one. The three
+vendors are ranked, not dynamically selected per-request, until
+there's real operational confidence in all three providers'
+reliability and provisioning latency under load. Dynamic best-
+price/best-performance selection by destination is a reasonable
+Phase 2+ optimization once all three integrations are proven, not
+an MVP requirement.
 
 **Schema implication beyond the enum change:** no other structural
 change is needed — `esim_profiles.aggregator` already existed
-specifically to support multiple providers per package, so adding
-`monty` as a third value is additive, not a breaking change to
-any existing row.
+specifically to support multiple providers per package, so the
+enum values are additive, not a breaking change to any existing
+row.
 
 ---
 

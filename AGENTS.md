@@ -101,21 +101,24 @@ docker compose up
 - Never weaken the offline-first write-before-network pattern
   (`prd.md` §5.6) to "simplify" a feature
 - **All third-party vendor integrations go through an internal
-  abstraction layer — `VoiceService` (Twilio/Telnyx underneath),
-  `ESIMService` (eSIM Access/Monty Mobile underneath), and
-  `PaymentService` (Paystack/Flutterwave underneath) — never called
-  directly from route handlers.** The API layer is already
-  vendor-agnostic (`api-spec.md` §7.3/§7.4/§7.5 don't leak vendor-
-  specific shapes into the contract), and `data-model.md`'s
+  abstraction layer — `OTPService` (Termii primary/Twilio Verify
+  secondary underneath, per `prd.md` §5.1), `VoiceService`/
+  `VoiceProvider` (Telnyx underneath, with an IDT Express BYOC
+  migration planned post-MVP per `prd.md` §5.5), `ESIMService`
+  (Monty Mobile/eSIM Access/1Global underneath, three-way cascading
+  failover), and `PaymentService` (Paystack/Flutterwave underneath)
+  — never called directly from route handlers.** The API layer is
+  already vendor-agnostic (`api-spec.md` §7.1/§7.4/§7.5 don't leak
+  vendor-specific shapes into the contract), and `data-model.md`'s
   `aggregator` and `processor` enums already anticipate multiple
   providers per package/transaction (§6.6, §6.7). This convention
   makes switching or adding a vendor (Telnyx-to-IDT BYOC, a new
   eSIM aggregator, a payment processor fallback) a configuration
   change inside one service, not a rewrite across the codebase —
-  this matters concretely here since the voice vendor decision is
-  still provisional (`api-spec.md` §7.5), eSIM already runs
-  dual-supplier (`data-model.md` §6.6), and payments now has an
-  automatic Paystack/Flutterwave fallback (`data-model.md` §6.7).
+  this matters concretely here since all four vendor decisions
+  (OTP, voice, eSIM, payments) are now resolved but held as
+  configuration rather than hardcoded, precisely so a future change
+  doesn't require this kind of rewrite.
 
 ## Cost-optimization policy (Claude usage)
 

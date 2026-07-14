@@ -202,35 +202,36 @@ POST   /packages/{id}/esim/mark-activated
 
 ## 7.5 Voice / Calling
 
-**⚠ Vendor status: provisional, not final.** The endpoints below
-are written against Twilio's specific API shapes (TwiML
-applications, Access Tokens, Twilio Verify) because that's what was
-available to spec against first — not because Twilio has won a
-final vendor decision. `prd.md` §6's Phase 0 explicitly calls for
-quoting both Twilio and Telnyx for the Nigeria/Saudi Arabia
-corridors specifically, since PSTN termination is the single
-largest variable cost in the margin model and Telnyx's carrier-
-owned network structurally tends to be cheaper on exactly this kind
-of route. If Telnyx wins that comparison, this section needs a real
-amendment (Telnyx uses a Call Control API, not TwiML — a different
-shape, not a find-and-replace), not a silent vendor-name swap. Treat
-the endpoints below as the *pattern* to follow, not a Twilio lock-in.
+**Vendor decided: Telnyx.** The original draft of this section was
+written against Twilio's specific API shapes as a placeholder,
+explicitly flagged as provisional pending the Phase 0 quote
+comparison (`prd.md` §6) between Twilio and Telnyx. That comparison
+resolved in Telnyx's favor. As flagged in the original draft, this
+is a real amendment, not a find-and-replace — Telnyx's Call Control
+API is webhook-and-REST-command driven (the app issues explicit
+commands like dial/answer/hangup via API calls in response to
+webhook events), structurally different from Twilio's TwiML
+pattern (where the webhook handler returns XML markup Twilio then
+executes). The endpoints below reflect that shape at the contract
+level; confirm exact Telnyx payload field names against Telnyx's
+current API docs at implementation time, the same way Codex
+confirmed exact field shapes against Termii's and Twilio's official
+docs when implementing US-01.
 
 ```
 POST   /voice/token
   Auth required
-  200: { token: string, identity: string, expires_at }
-  Short-lived Twilio Access Token for the Voice SDK
+  200: { token: string, sip_username: string, expires_at }
+  Short-lived Telnyx WebRTC credential for the client SDK
   (cross-platform — same endpoint serves iOS and Android)
 
-POST   /webhooks/twilio/voice
-  Twilio-signed webhook, not user-facing
-  TwiML response, sets callerId from verified_cli lookup
-
-POST   /webhooks/twilio/call-status
-  Twilio-signed webhook
-  Body: Twilio call status payload
-  200: (writes call_log, triggers balance deduction)
+POST   /webhooks/telnyx/call-events
+  Telnyx-signed webhook (Call Control API), not user-facing
+  Body: Telnyx Call Control event payload (call initiated,
+  answered, hangup, etc.)
+  200: sets callerId from verified_cli lookup on the outbound leg;
+  on a hangup event, writes call_log (data-model.md §6) and
+  triggers balance deduction (§5.7)
 
 GET    /me/calls
   Auth required
@@ -376,8 +377,7 @@ POST   /webhooks/flutterwave
   where processor = 'flutterwave' (data-model.md §6.7's automatic
   fallback path)
 
-POST   /webhooks/twilio/voice        (see §7.5)
-POST   /webhooks/twilio/call-status  (see §7.5)
+POST   /webhooks/telnyx/call-events  (see §7.5)
 
 POST   /webhooks/whatsapp/status
   Meta-signed
