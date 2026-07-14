@@ -1,17 +1,25 @@
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { setPin } from '../../api/pinClient';
+import { savePinLocally } from '../../utils/pinLocalStore';
 import { PinSetupScreen } from './PinSetupScreen';
 
 jest.mock('../../api/pinClient', () => {
   const actual = jest.requireActual('../../api/pinClient');
   return { ...actual, setPin: jest.fn() };
 });
+jest.mock('../../utils/pinLocalStore', () => ({
+  ...jest.requireActual('../../utils/pinLocalStore'),
+  savePinLocally: jest.fn(),
+}));
 
 const mockSetPin = setPin as jest.MockedFunction<typeof setPin>;
+const mockSaveLocally = savePinLocally as jest.MockedFunction<typeof savePinLocally>;
 
 beforeEach(() => {
   mockSetPin.mockReset();
+  mockSaveLocally.mockReset();
+  mockSaveLocally.mockResolvedValue(undefined);
 });
 
 describe('PinSetupScreen', () => {

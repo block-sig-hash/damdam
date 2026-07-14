@@ -9,6 +9,7 @@ import {
   verifyPinRecovery,
 } from '../api/authClient';
 import { setPin } from '../api/pinClient';
+import { savePinLocally } from '../utils/pinLocalStore';
 import { OnboardingNavigator } from './OnboardingNavigator';
 
 jest.mock('../api/authClient', () => {
@@ -36,6 +37,10 @@ jest.mock('../api/pinClient', () => {
     setPin: jest.fn(),
   };
 });
+jest.mock('../utils/pinLocalStore', () => ({
+  ...jest.requireActual('../utils/pinLocalStore'),
+  savePinLocally: jest.fn(),
+}));
 
 const mockRequestOtp = requestOtp as jest.MockedFunction<typeof requestOtp>;
 const mockVerifyOtp = verifyOtp as jest.MockedFunction<typeof verifyOtp>;
@@ -52,6 +57,7 @@ const mockRedeem = redeemActivationCode as jest.MockedFunction<
   typeof redeemActivationCode
 >;
 const mockSetPin = setPin as jest.MockedFunction<typeof setPin>;
+const mockSaveLocally = savePinLocally as jest.MockedFunction<typeof savePinLocally>;
 
 beforeEach(() => {
   mockRequestOtp.mockReset();
@@ -61,6 +67,8 @@ beforeEach(() => {
   mockPreview.mockReset();
   mockRedeem.mockReset();
   mockSetPin.mockReset();
+  mockSaveLocally.mockReset();
+  mockSaveLocally.mockResolvedValue(undefined);
 });
 
 describe('OnboardingNavigator', () => {

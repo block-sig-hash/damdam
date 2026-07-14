@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { PinApiError, setPin as setPinRequest } from '../../api/pinClient';
 import { isStrongPin } from '../../utils/pin';
+import { savePinLocally } from '../../utils/pinLocalStore';
 
 export const PIN_LENGTH = 4;
 
@@ -21,10 +22,11 @@ export interface UsePinSetupResult {
 
 /**
  * US-02 / prd.md §4.1 — AC-02.1 (4-digit, non-sequential, non-repeated),
- * AC-02.2 (masked, entered twice to confirm). PIN unlock (AC-02.3) and
- * lockout/recovery (AC-02.4) belong to PIN Unlock (Screen 31, not built
- * yet) — this screen only ever calls POST /auth/pin/set once, right
- * after OTP verification.
+ * AC-02.2 (masked, entered twice to confirm). PIN Unlock (AC-02.3/
+ * AC-02.4, Screen 31) reads what this hook writes to Keychain via
+ * savePinLocally — the server's bcrypt pin_hash is never transmitted
+ * back to the client (prd.md §5.1), so PIN Unlock's local, no-network
+ * validation has nothing else to compare against.
  */
 export function usePinSetup({ accessToken, onPinSet }: UsePinSetupArgs): UsePinSetupResult {
   const [firstEntry, setFirstEntry] = useState('');
@@ -66,6 +68,16 @@ export function usePinSetup({ accessToken, onPinSet }: UsePinSetupArgs): UsePinS
     setStage('submitting');
     try {
       await setPinRequest(accessToken, value);
+      try {
+        // Best-effort: the account-level PIN is already set server-side
+        // at this point, so a Keychain failure here shouldn't re-run
+        // that request or block onboarding — it only means PIN Unlock
+        // will find nothing to validate against until this succeeds
+        // (falls back to OTP recovery, same as any other new device).
+        await savePinLocally(value);
+      } catch {
+        // Swallowed intentionally — see comment above.
+      }
       onPinSet();
     } catch (err) {
       if (err instanceof PinApiError) {

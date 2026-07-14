@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "react": "19.2.7",
-    "react-native": "0.86.0"
+    "react-native": "0.86.0",
+    "react-native-keychain": "10.0.0"
   },
   "devDependencies": {
     "@react-native/babel-preset": "0.86.0",

@@ -371,6 +371,42 @@ SOS.
 
 ---
 
+### Screen: PIN Unlock (Screen 31, app-open gate)
+
+**Purpose:** AC-02.3/AC-23.3 — re-entering the PIN after the app has
+been backgrounded, validated entirely on-device (no network call).
+The server's bcrypt `pin_hash` is never transmitted back to the
+client (`prd.md` §5.1), so this compares against a separate,
+locally-stored credential written to platform secure storage
+(Android Keystore / iOS Keychain, `frontend-mobile.md` §8.7) at the
+moment PIN Setup succeeds — see `data-model.md`/mobile client note
+in that screen's implementation.
+
+**Interactive elements:**
+- 4-digit masked entry, same `OtpCodeInput` box pattern PIN Setup
+  uses (`design-system.md` §4)
+- AC-02.4/AC-23.5: 5 failed attempts locks entry for 30 minutes,
+  countdown shown inline; "Forgot your PIN? Verify via OTP" is
+  offered immediately (not only after lockout), reusing the
+  existing OTP-recovery screen (Returning Pilgrim,
+  `useReturningPilgrimLogin`) rather than a separate flow —
+  recovery requires network access (it's an OTP round-trip), which
+  doesn't conflict with the *routine* unlock path's offline
+  requirement
+- A device with no locally-stored PIN (never completed PIN Setup on
+  this device, or a returning pilgrim's new-device login per
+  AC-23.4) routes straight to OTP recovery instead of showing a PIN
+  box with no possible correct answer
+
+**Not built as part of this screen:** the session-persistence
+layer that decides *when* to show this screen (AC-23.1 secure
+token storage, AC-23.2 30-day session, background-timer detection)
+— those remain open under issue #24/US-23. This screen is a
+self-contained, testable unit ready to be wired into that
+navigator once it exists.
+
+---
+
 ## 8.4 Navigation Structure
 
 **Bottom tab bar (persistent once a package exists):** Home | Call
