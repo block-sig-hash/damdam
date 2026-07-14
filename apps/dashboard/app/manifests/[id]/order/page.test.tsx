@@ -57,6 +57,7 @@ describe("HTO manifest orders", () => {
     render(<ManifestOrderPage />);
 
     const orderSection = (await screen.findByText("2. Select pilgrims")).closest("section")!;
+    await waitFor(() => expect(within(orderSection).getAllByRole("checkbox")).toHaveLength(2));
     const boxes = within(orderSection).getAllByRole("checkbox");
     fireEvent.click(boxes[0]);
     fireEvent.click(boxes[1]);
@@ -88,6 +89,7 @@ describe("HTO manifest orders", () => {
     render(<ManifestOrderPage />);
 
     const orderSection = (await screen.findByText("2. Select pilgrims")).closest("section")!;
+    await waitFor(() => expect(within(orderSection).getAllByRole("checkbox")).toHaveLength(2));
     fireEvent.click(within(orderSection).getAllByRole("checkbox")[0]);
     await waitFor(() => expect(within(orderSection).getAllByRole("checkbox").every((box) => (box as HTMLInputElement).checked)).toBe(true));
     expect(screen.getByText("₦176,000 per pilgrim")).toBeInTheDocument();
