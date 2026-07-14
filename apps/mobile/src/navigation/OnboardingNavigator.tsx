@@ -14,7 +14,7 @@ type OnboardingStep =
   | { name: 'otp'; phoneNumber: string; activationCode?: string }
   | { name: 'existing-account'; phoneNumber: string; activationCode?: string }
   | { name: 'verified'; result: AuthResponse; activationCode?: string }
-  | { name: 'activated'; accessToken: string }
+  | { name: 'activated'; accessToken: string; isNewUser: boolean }
   | { name: 'onboarded' };
 
 interface OnboardingNavigatorProps {
@@ -90,17 +90,30 @@ export function OnboardingNavigator({
       // code. A pilgrim who arrived with an activation code redeems
       // it immediately (before PIN Setup) so this rather-early screen
       // isn't waiting on anything; one that arrived without a code
-      // goes straight into PIN Setup, US-02's next onboarding step.
+      // goes straight into PIN Setup — but only for a genuinely new
+      // pilgrim. 'verified' is reached by both the 'otp' path (always
+      // a new signup, since 'phone' routes an existing number to
+      // 'existing-account' instead) and the 'existing-account' path
+      // (ReturningPilgrimScreen, always a returning pilgrim who
+      // already has a PIN) — is_new_user is what actually
+      // distinguishes them here, not which step led to 'verified'.
       if (step.activationCode) {
         return (
           <ActivationSuccessScreen
             accessToken={step.result.access_token}
             activationCode={step.activationCode}
             onContinue={() =>
-              setStep({ name: 'activated', accessToken: step.result.access_token })
+              setStep({
+                name: 'activated',
+                accessToken: step.result.access_token,
+                isNewUser: step.result.is_new_user,
+              })
             }
           />
         );
+      }
+      if (!step.result.is_new_user) {
+        return <PlaceholderScreen title="Welcome back" note="Home — coming in a later story." />;
       }
       return (
         <PinSetupScreen
@@ -109,6 +122,13 @@ export function OnboardingNavigator({
         />
       );
     case 'activated':
+      // Same is_new_user branch as 'verified' above: a returning
+      // pilgrim redeeming a fresh activation code (e.g. a new
+      // package on a device they'd already onboarded from) already
+      // has a PIN and must not be routed back through PIN Setup.
+      if (!step.isNewUser) {
+        return <PlaceholderScreen title="Package active" note="Home — coming in a later story." />;
+      }
       return (
         <PinSetupScreen
           accessToken={step.accessToken}
