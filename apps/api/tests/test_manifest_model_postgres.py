@@ -38,6 +38,7 @@ def test_manifest_rows_are_owned_by_and_cascade_with_organization() -> None:
         session.add(manifest)
         session.commit()
         session.refresh(manifest)
+        manifest_id = manifest.id
         session.add(
             ManifestPilgrim(
                 manifest_id=manifest.id,
@@ -55,5 +56,9 @@ def test_manifest_rows_are_owned_by_and_cascade_with_organization() -> None:
         )
         session.commit()
 
-        assert session.exec(select(Manifest)).all() == []
-        assert session.exec(select(ManifestPilgrim)).all() == []
+        assert session.get(Manifest, manifest_id) is None
+        assert session.exec(
+            select(ManifestPilgrim).where(
+                ManifestPilgrim.manifest_id == manifest_id
+            )
+        ).all() == []

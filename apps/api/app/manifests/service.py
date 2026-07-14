@@ -25,8 +25,9 @@ REQUIRED_COLUMNS = {"first_name", "last_name", "phone_number"}
 
 
 class ManifestError(Exception):
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, details: dict[str, object] | None = None) -> None:
         self.code = code
+        self.details = details or {}
         super().__init__(code)
 
 

@@ -227,11 +227,12 @@ one, rather than hardcoding a single vendor's identifier field.
 | validation_status | ENUM | NOT NULL | `valid` \| `invalid` \| `duplicate_warning` |
 | validation_error | VARCHAR(255) | NULLABLE | |
 | family_group_id | UUID | NULLABLE | Groups rows for a shared Family package (§6.4) |
-| manifest_order_id | UUID | NULLABLE | Set once included in a placed order; FK added when `manifest_orders` is introduced by US-06 (§6.5) |
+| manifest_order_id | UUID | FK → manifest_orders, NULLABLE | Set once included in a placed order; deletion is restricted (§6.5) |
 | user_id | UUID | FK → users, NULLABLE | Set once pilgrim activates |
 | activation_code | VARCHAR(8) | UNIQUE, NULLABLE | Generated post-payment |
 | activation_code_used | BOOLEAN | DEFAULT FALSE | |
 | activation_code_expires_at | TIMESTAMPTZ | NULLABLE | 30 days from generation |
+| activation_link_sent_at | TIMESTAMPTZ | NULLABLE | Delivery checkpoint for retry-safe WhatsApp activation (§6.14) |
 | esim_incompatible_flag | BOOLEAN | DEFAULT FALSE | Set post-activation from device check |
 
 **Indexes:** `manifest_id`, `phone_number`, `activation_code`
@@ -250,9 +251,13 @@ one, rather than hardcoding a single vendor's identifier field.
 | wholesale_price_ngn | DECIMAL(12,2) | NOT NULL | Per-pilgrim rate at time of order |
 | total_ngn | DECIMAL(12,2) | NOT NULL | |
 | status | ENUM | DEFAULT 'awaiting_payment' | `awaiting_payment` \| `paid` \| `provisioning` \| `provisioned` |
-| invoice_url | VARCHAR(500) | NULLABLE | R2 object URL |
+| invoice_url | VARCHAR(500) | NULLABLE | Authenticated API download URL |
+| invoice_object_key | VARCHAR(500) | NULLABLE | Internal key in the configured S3-compatible or filesystem store |
+| invoice_email_sent_at | TIMESTAMPTZ | NULLABLE | Delivery checkpoint for retry-safe invoice email |
 | payment_confirmed_at | TIMESTAMPTZ | NULLABLE | |
 | payment_confirmed_by | UUID | FK → admin_users, NULLABLE | Manual confirmation for MVP |
+| provisioning_enqueued_at | TIMESTAMPTZ | NULLABLE | Background-job dispatch checkpoint |
+| created_at | TIMESTAMPTZ | NOT NULL | Used for pending-payment age and admin review ordering |
 
 ---
 
@@ -752,3 +757,51 @@ US-05 model already exposes the multi-order ownership slot. Its foreign key is
 deliberately added by US-06 in the same migration that creates
 `manifest_orders`, avoiding a forward reference to a table that does not yet
 exist while preserving the §6.5 design.
+
+---
+
+## 6.14 Amendment — US-06 Bulk Manifest Purchasing
+
+US-06 creates `pricing_tiers`, `daily_price_cache`, and `manifest_orders`, then
+adds the deferred `manifest_pilgrims.manifest_order_id` foreign key described in
+§6.13. The foreign key uses `ON DELETE RESTRICT` so an invoiced pilgrim cannot be
+silently returned to the unordered pool by deleting an order.
+Because US-05 reserved the nullable UUID before its target table existed, the
+migration clears any pre-US-06 non-null staging value before adding the foreign
+key; its downgrade also clears those references before removing the order table.
+
+HTO wholesale prices are snapshotted in naira when an order is placed. The
+current daily retail price supplies the exchange-rate-adjusted base, while the
+tier's canonical retail/wholesale ratio supplies the channel discount:
+
+```text
+wholesale_price_ngn = daily_price_cache.ngn_price
+                      × pricing_tiers.wholesale_usd_price
+                      ÷ pricing_tiers.usd_reference_price
+total_ngn = wholesale_price_ngn × pilgrim_count
+```
+
+The stored prices never change after order creation. Family orders select one
+complete pre-grouped set within the tier's 2–8 bounds; non-group tiers accept
+only ungrouped pilgrims. The nullable order key and non-unique manifest key
+preserve the multi-order pool defined in §6.5.
+
+Invoice PDFs are stored behind an authenticated API download and attached to
+the operator email. `invoice_email_sent_at` makes a retry after an email outage
+resume the existing order instead of creating or mailing a duplicate; the
+order UUID also supplies a stable idempotency key to the email provider.
+
+Manual admin confirmation advances `awaiting_payment → provisioning` before a
+background job is dispatched. `provisioning_enqueued_at` makes repeated
+confirmation idempotent; an unmarked provisioning order remains visible in the
+pending admin queue so dispatch can be retried after a queue outage. The worker
+generates 30-day activation codes only after confirmation and records
+`activation_link_sent_at` per pilgrim, allowing partial WhatsApp failures to
+resume without resending successful deliveries. It marks the order
+`provisioned` only after every selected pilgrim has a delivered activation link.
+
+At this pre-activation stage, the selected `manifest_order` tier plus each
+linked pilgrim row is the purchased package entitlement. A concrete `packages`
+row requires `user_id`, so it is materialized when the pilgrim redeems the code
+and the manifest row is linked to an account; payment confirmation never creates
+a placeholder user merely to satisfy that foreign key.

@@ -98,6 +98,27 @@ th, td { padding: 10px; border-bottom: 1px solid #dce6df; text-align: left; }
 .action-row button { width: auto; }
 .secondary-button { color: #17623e; background: #e5f0e8; }
 a { color: #17623e; font-weight: 700; }
+.primary-link { display: inline-block; margin-top: 12px; }
+.order-section { margin-top: 32px; padding-top: 24px; border-top: 1px solid #dce6df; }
+.check-grid, .tier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 18px 0; }
+.check-row, .tier-card { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid #dce6df; border-radius: 8px; font-weight: 400; }
+.check-row input, .tier-card input { width: auto; margin-top: 3px; }
+.check-row span, .tier-card { display: grid; gap: 4px; }
+.check-row small, .tier-card small { color: #66736a; }
+.family-group, .order-row, .admin-order { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 16px; border: 1px solid #dce6df; border-radius: 8px; }
+.family-group > span { flex: 1 1 320px; }
+.link-button { display: inline; width: auto; padding: 6px 10px; color: #17623e; background: transparent; }
+.danger-link { color: #a32222; }
+.price-summary, .success-panel { display: grid; gap: 8px; margin: 18px 0; padding: 18px; border-radius: 8px; background: #edf6ef; }
+.status-badge { padding: 5px 9px; border-radius: 999px; background: #f5e8b8; text-transform: capitalize; }
+.status-provisioned { background: #cdebd7; }
+.search-row { display: flex; align-items: end; gap: 12px; margin: 24px 0; }
+.search-row label { flex: 1; }
+.search-row button { width: auto; }
+.admin-order-list { display: grid; gap: 14px; }
+.admin-order.overdue { border-color: #d68b1e; background: #fffaf0; }
+.admin-order > div { display: grid; gap: 4px; min-width: 200px; }
+.admin-order button { width: auto; }
 
 @media (max-width: 640px) {
   .auth-card { padding: 28px 22px; }

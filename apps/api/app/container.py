@@ -1,10 +1,12 @@
 from collections.abc import Callable, Mapping
 from datetime import datetime
+from uuid import UUID
 
 from redis import Redis
 
 from app.config import Settings
 from app.db import SessionFactory, create_session_factory
+from app.manifests.orders import ProvisioningScheduler
 from app.notifications.providers import MetaWhatsAppSender, ResendEmailSender
 from app.notifications.service import EmailSender, NotificationService, WhatsAppSender
 from app.otp.providers import OTPProvider, TermiiProvider, TwilioVerifyProvider
@@ -22,6 +24,13 @@ class CeleryFailoverScheduler:
             args=[phone_number, challenge_id],
             countdown=countdown,
         )
+
+
+class CeleryProvisioningScheduler(ProvisioningScheduler):
+    def schedule(self, order_id: UUID) -> None:
+        from app.worker import celery_app
+
+        celery_app.send_task("app.manifests.provision", args=[str(order_id)])
 
 
 def build_otp_service(

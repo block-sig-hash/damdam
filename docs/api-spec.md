@@ -311,6 +311,20 @@ POST   /hto/manifests/{id}/group
   for a Family-tier purchase (data-model.md §6.4)
   200: { family_group_id: uuid }
 
+PUT    /hto/manifests/{id}/group/{group_id}
+  HTO auth required
+  Body and response: same as POST; replaces the complete unordered group
+
+DELETE /hto/manifests/{id}/group/{group_id}
+  HTO auth required
+  204: removes the grouping while leaving pilgrims unordered
+
+GET    /hto/pricing-tiers
+  HTO auth required
+  200: { tiers: [{ id, name, retail_price_ngn, wholesale_price_ngn,
+          estimated_margin_ngn, is_group_tier, min_group_size?,
+          max_group_size? }] }
+
 POST   /hto/manifests/{id}/order
   HTO auth required
   Body: { pricing_tier_id: string, manifest_pilgrim_ids: [uuid] }
@@ -319,11 +333,19 @@ POST   /hto/manifests/{id}/order
   (data-model.md §6.5). manifest_pilgrim_ids must all currently
   have manifest_order_id = NULL.
   200: { manifest_order_id, total_ngn, invoice_url }
-  400: { error: "pilgrims_already_ordered", pilgrim_ids: [uuid] }
+  400: invalid_pilgrim_selection | family_group_required |
+       complete_family_group_required | individual_pilgrims_required
+  409: { error: "pilgrims_already_ordered",
+         details: { pilgrim_ids: [uuid] } }
 
 GET    /hto/manifests/{id}/order/{order_id}
   HTO auth required
-  200: { status, total_ngn, invoice_url, payment_confirmed_at? }
+  200: { id, tier_name, pilgrim_count, wholesale_price_ngn,
+         total_ngn, status, invoice_url, payment_confirmed_at? }
+
+GET    /hto/manifests/{id}/order/{order_id}/invoice
+  HTO auth required; ownership is checked against both manifest and order
+  200: application/pdf
 
 GET    /hto/manifests/{id}/orders
   HTO auth required
@@ -430,13 +452,20 @@ POST   /admin/hto-operators/{id}/reject
   200: { approval_status: "rejected" }
 
 GET    /admin/manifest-orders
+  Admin auth required
   Query: ?status=awaiting_payment&search=
   200: { orders: [{ id, hto_business_name, manifest_name,
-          total_ngn, invoice_url, days_pending }] }
+          pilgrim_count, total_ngn, invoice_url, days_pending }] }
+
+GET    /admin/manifest-orders/{id}/invoice
+  Admin auth required
+  200: application/pdf
 
 POST   /admin/manifest-orders/{id}/confirm-payment
+  Admin auth required
   200: { status: "provisioning" }
-  Triggers the background provisioning job (data-model.md §6.5)
+  Idempotently records manual payment and triggers the background
+  provisioning job (data-model.md §6.14)
 
 GET    /admin/sos-notifications/failed
   200: { notifications: [{ id, pilgrim_name, channel,

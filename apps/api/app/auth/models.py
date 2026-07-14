@@ -1,8 +1,19 @@
-from datetime import date, datetime, timezone
+from datetime import date as Date
+from datetime import datetime, timezone
+from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlmodel import Field, SQLModel
 
@@ -51,6 +62,13 @@ class ManifestValidationStatus(str, Enum):
     DUPLICATE_WARNING = "duplicate_warning"
 
 
+class ManifestOrderStatus(str, Enum):
+    AWAITING_PAYMENT = "awaiting_payment"
+    PAID = "paid"
+    PROVISIONING = "provisioning"
+    PROVISIONED = "provisioned"
+
+
 class AdminRole(str, Enum):
     ADMIN = "admin"
 
@@ -82,7 +100,7 @@ class User(SQLModel, table=True):
         ),
     )
     verified_cli: bool = Field(default=False)
-    departure_date: date | None = Field(default=None, index=True)
+    departure_date: Date | None = Field(default=None, index=True)
     destination_country: str = Field(default="SA", max_length=2)
     platform: Platform = Field(
         sa_column=Column(
@@ -302,7 +320,14 @@ class ManifestPilgrim(SQLModel, table=True):
     )
     validation_error: str | None = Field(default=None, max_length=255)
     family_group_id: UUID | None = Field(default=None)
-    manifest_order_id: UUID | None = Field(default=None, index=True)
+    manifest_order_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            ForeignKey("manifest_orders.id", ondelete="RESTRICT"),
+            nullable=True,
+            index=True,
+        ),
+    )
     user_id: UUID | None = Field(
         default=None,
         sa_column=Column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
@@ -315,4 +340,121 @@ class ManifestPilgrim(SQLModel, table=True):
     activation_code_expires_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+    activation_link_sent_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
     esim_incompatible_flag: bool = Field(default=False)
+
+
+class PricingTier(SQLModel, table=True):
+    __tablename__ = "pricing_tiers"
+    __table_args__ = (
+        CheckConstraint(
+            "(is_group_tier AND min_group_size IS NOT NULL "
+            "AND max_group_size IS NOT NULL "
+            "AND min_group_size >= 2 AND max_group_size >= min_group_size) "
+            "OR (NOT is_group_tier AND min_group_size IS NULL "
+            "AND max_group_size IS NULL)",
+            name="ck_pricing_tiers_group_bounds",
+        ),
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    name: str = Field(max_length=50)
+    usd_reference_price: Decimal = Field(
+        sa_column=Column(Numeric(10, 2), nullable=False)
+    )
+    data_gb: int
+    pstn_minutes: int
+    is_group_tier: bool = Field(default=False)
+    min_group_size: int | None = Field(default=None)
+    max_group_size: int | None = Field(default=None)
+    wholesale_usd_price: Decimal = Field(
+        sa_column=Column(Numeric(10, 2), nullable=False)
+    )
+    active: bool = Field(default=True)
+
+
+class DailyPriceCache(SQLModel, table=True):
+    __tablename__ = "daily_price_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "pricing_tier_id", "date", name="uq_daily_price_cache_tier_date"
+        ),
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    pricing_tier_id: UUID = Field(
+        sa_column=Column(
+            ForeignKey("pricing_tiers.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    date: Date = Field(index=True)
+    ngn_price: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
+    fx_rate_used: Decimal = Field(sa_column=Column(Numeric(10, 4), nullable=False))
+
+
+class ManifestOrder(SQLModel, table=True):
+    __tablename__ = "manifest_orders"
+    __table_args__ = (
+        CheckConstraint("pilgrim_count > 0", name="ck_manifest_orders_count"),
+        CheckConstraint(
+            "wholesale_price_ngn > 0 AND total_ngn > 0",
+            name="ck_manifest_orders_amounts",
+        ),
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    manifest_id: UUID = Field(
+        sa_column=Column(
+            ForeignKey("manifests.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    pricing_tier_id: UUID = Field(
+        sa_column=Column(
+            ForeignKey("pricing_tiers.id", ondelete="RESTRICT"),
+            nullable=False,
+            index=True,
+        )
+    )
+    pilgrim_count: int
+    wholesale_price_ngn: Decimal = Field(
+        sa_column=Column(Numeric(12, 2), nullable=False)
+    )
+    total_ngn: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
+    status: ManifestOrderStatus = Field(
+        default=ManifestOrderStatus.AWAITING_PAYMENT,
+        sa_column=Column(
+            SAEnum(
+                ManifestOrderStatus,
+                name="manifest_order_status",
+                values_callable=lambda choices: [choice.value for choice in choices],
+            ),
+            nullable=False,
+        ),
+    )
+    invoice_url: str | None = Field(default=None, max_length=500)
+    invoice_object_key: str | None = Field(default=None, max_length=500)
+    invoice_email_sent_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    payment_confirmed_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    payment_confirmed_by: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
+        ),
+    )
+    provisioning_enqueued_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )

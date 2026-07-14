@@ -61,6 +61,12 @@ export default function ManifestUploadPage() {
           <p className="eyebrow">Manifest confirmed</p>
           <h1>{confirmedCount} pilgrims accepted</h1>
           <p>The valid rows are ready for package selection.</p>
+          <a
+            className="primary-link"
+            href={`/manifests/${manifestId}/order`}
+          >
+            Continue to grouping and package order
+          </a>
         </section>
       </main>
     );

@@ -3,15 +3,20 @@ from typing import Annotated, cast
 from uuid import UUID
 
 import jwt
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.auth.hto import HTOAuthError, HTOService
-from app.auth.models import AdminUser, HTOApprovalStatus
+from app.auth.models import AdminUser, HTOApprovalStatus, ManifestOrderStatus
 from app.auth.schemas import (
     HTOApprovalResponse,
     HTOOperatorListResponse,
     HTOOperatorResponse,
+)
+from app.manifests.orders import ManifestOrderService
+from app.manifests.schemas import (
+    AdminManifestOrderListResponse,
+    PaymentConfirmationResponse,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -20,6 +25,10 @@ bearer = HTTPBearer(auto_error=False)
 
 def _service(request: Request) -> HTOService:
     return cast(HTOService, request.app.state.hto_service)
+
+
+def _order_service(request: Request) -> ManifestOrderService:
+    return cast(ManifestOrderService, request.app.state.manifest_order_service)
 
 
 def current_admin(
@@ -83,3 +92,48 @@ def approve_hto_operator(
     with request.app.state.session_factory() as session:
         organization = _service(request).approve(session, operator_id, admin.id)
     return HTOApprovalResponse(approval_status=organization.approval_status)
+
+
+@router.get("/manifest-orders", response_model=AdminManifestOrderListResponse)
+def list_manifest_orders(
+    request: Request,
+    admin: Annotated[AdminUser, Depends(current_admin)],
+    status: ManifestOrderStatus = ManifestOrderStatus.AWAITING_PAYMENT,
+    search: str | None = None,
+) -> AdminManifestOrderListResponse:
+    del admin
+    with request.app.state.session_factory() as session:
+        orders = _order_service(request).list_admin_orders(session, status, search)
+    return AdminManifestOrderListResponse(orders=orders)
+
+
+@router.get("/manifest-orders/{order_id}/invoice")
+def download_manifest_invoice(
+    order_id: UUID,
+    request: Request,
+    admin: Annotated[AdminUser, Depends(current_admin)],
+) -> Response:
+    del admin
+    with request.app.state.session_factory() as session:
+        pdf = _order_service(request).get_admin_invoice(session, order_id)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="damdam-invoice-{order_id}.pdf"'
+        },
+    )
+
+
+@router.post(
+    "/manifest-orders/{order_id}/confirm-payment",
+    response_model=PaymentConfirmationResponse,
+)
+def confirm_manifest_order_payment(
+    order_id: UUID,
+    request: Request,
+    admin: Annotated[AdminUser, Depends(current_admin)],
+) -> PaymentConfirmationResponse:
+    with request.app.state.session_factory() as session:
+        order = _order_service(request).confirm_payment(session, order_id, admin)
+    return PaymentConfirmationResponse(status=order.status)
