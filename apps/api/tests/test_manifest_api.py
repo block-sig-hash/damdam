@@ -173,6 +173,64 @@ def test_upload_rejects_non_csv_missing_columns_and_more_than_500_rows(
     assert too_many.json()["error"] == "row_limit_exceeded"
 
 
+def test_upload_rejects_malformed_csv_shapes(
+    api, session_factory, settings, clock
+) -> None:
+    """Regression: encoding/structural CSV problems a semi-literate HTO
+    operator (prd.md §3.2) is plausible to hit are rejected as
+    malformed_csv rather than silently mis-parsed or crashing."""
+    organization = approved_organization(session_factory, "malformed@example.com")
+    headers = auth_headers(settings, clock, organization.id)
+    client = TestClient(api)
+
+    def upload(contents: str | bytes) -> object:
+        manifest_id = create_manifest(client, headers)
+        return client.post(
+            f"/v1/hto/manifests/{manifest_id}/upload",
+            headers=headers,
+            files={"file": ("pilgrims.csv", contents, "text/csv")},
+        )
+
+    empty = upload("")
+    assert empty.status_code == 400
+    assert empty.json()["error"] == "malformed_csv"
+
+    null_byte = upload(b"first_name,last_name,phone_number\n\x00,B,08012345678\n")
+    assert null_byte.status_code == 400
+    assert null_byte.json()["error"] == "malformed_csv"
+
+    duplicate_headers = upload(
+        "first_name,first_name,last_name,phone_number\nA,X,B,08012345678\n"
+    )
+    assert duplicate_headers.status_code == 400
+    assert duplicate_headers.json()["error"] == "malformed_csv"
+
+    ragged_row = upload(
+        "first_name,last_name,phone_number\nA,B,08012345678,extra\n"
+    )
+    assert ragged_row.status_code == 200
+    assert ragged_row.json()["invalid_rows"] == [
+        {"row_number": 2, "reason": "Row has more values than the header"}
+    ]
+
+    over_length = upload(
+        "first_name,last_name,phone_number,passport_number,seat_number\n"
+        + f"{'A' * 101},B,08012345678,{'P' * 51},{'1' * 11}\n"
+    )
+    assert over_length.status_code == 200
+    body = over_length.json()
+    assert body["invalid_rows"] == [
+        {
+            "row_number": 2,
+            "reason": (
+                "first_name must be at most 100 characters; "
+                "passport_number must be at most 50 characters; "
+                "seat_number must be at most 10 characters"
+            ),
+        }
+    ]
+
+
 def test_manifest_endpoints_enforce_authentication_and_tenant_ownership(
     api, session_factory, settings, clock
 ) -> None:

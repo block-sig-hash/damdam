@@ -37,7 +37,9 @@ class ManifestPreviewRow(BaseModel):
     phone_number: str
     passport_number: str | None
     seat_number: str | None
-    validation_status: ManifestValidationStatus
+    validation_status: Literal[
+        ManifestValidationStatus.VALID, ManifestValidationStatus.DUPLICATE_WARNING
+    ]
     warning: str | None = None
 
 
