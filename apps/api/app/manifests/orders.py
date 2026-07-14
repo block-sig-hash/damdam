@@ -14,7 +14,6 @@ from sqlmodel import Session, col, select
 
 from app.auth.models import (
     AdminUser,
-    DailyPriceCache,
     Manifest,
     ManifestOrder,
     ManifestOrderStatus,
@@ -23,6 +22,7 @@ from app.auth.models import (
     ManifestValidationStatus,
     Organization,
     PricingTier,
+    PricingTierPriceChange,
 )
 from app.config import Settings
 from app.manifests.invoices import (
@@ -79,23 +79,55 @@ class ManifestOrderService:
         ).all()
         result: list[PricingTierResponse] = []
         for tier in tiers:
-            cache = self._latest_price(session, tier.id)
-            if cache is None:
-                continue
-            wholesale = self._wholesale_price(tier, cache)
+            retail = self._latest_price(tier)
+            wholesale = self._wholesale_price(tier, retail)
             result.append(
                 PricingTierResponse(
                     id=tier.id,
                     name=tier.name,
-                    retail_price_ngn=float(cache.ngn_price),
+                    retail_price_ngn=float(retail),
                     wholesale_price_ngn=float(wholesale),
-                    estimated_margin_ngn=float(cache.ngn_price - wholesale),
+                    estimated_margin_ngn=float(retail - wholesale),
                     is_group_tier=tier.is_group_tier,
                     min_group_size=tier.min_group_size,
                     max_group_size=tier.max_group_size,
                 )
             )
         return result
+
+    def list_admin_pricing_tiers(self, session: Session) -> list[PricingTier]:
+        return list(
+            session.exec(
+                select(PricingTier)
+                .where(col(PricingTier.active).is_(True))
+                .order_by(col(PricingTier.name))
+            ).all()
+        )
+
+    def update_tier_price(
+        self,
+        session: Session,
+        tier_id: UUID,
+        new_ngn_price: Decimal,
+        admin: AdminUser,
+    ) -> tuple[PricingTier, PricingTierPriceChange]:
+        tier = session.get(PricingTier, tier_id)
+        if tier is None:
+            raise ManifestError("pricing_tier_not_found")
+        change = PricingTierPriceChange(
+            pricing_tier_id=tier.id,
+            admin_id=admin.id,
+            old_ngn_price=tier.ngn_price,
+            new_ngn_price=new_ngn_price,
+            changed_at=self.clock(),
+        )
+        tier.ngn_price = new_ngn_price
+        session.add(tier)
+        session.add(change)
+        session.commit()
+        session.refresh(tier)
+        session.refresh(change)
+        return tier, change
 
     def list_unordered(
         self, session: Session, organization_id: UUID, manifest_id: UUID
@@ -254,10 +286,8 @@ class ManifestOrderService:
             )
 
         self._validate_order_selection(session, manifest_id, tier, rows)
-        price_cache = self._latest_price(session, tier.id)
-        if price_cache is None:
-            raise ManifestError("pricing_unavailable")
-        wholesale = self._wholesale_price(tier, price_cache)
+        retail = self._latest_price(tier)
+        wholesale = self._wholesale_price(tier, retail)
         order = ManifestOrder(
             id=uuid4(),
             manifest_id=manifest.id,
@@ -617,26 +647,16 @@ class ManifestOrderService:
         elif group_ids != {None}:
             raise ManifestError("individual_pilgrims_required")
 
-    def _latest_price(
-        self, session: Session, tier_id: UUID
-    ) -> DailyPriceCache | None:
-        return session.exec(
-            select(DailyPriceCache)
-            .where(
-                DailyPriceCache.pricing_tier_id == tier_id,
-                DailyPriceCache.date <= self.clock().date(),
-            )
-            .order_by(col(DailyPriceCache.date).desc())
-        ).first()
+    @staticmethod
+    def _latest_price(tier: PricingTier) -> Decimal:
+        return tier.ngn_price
 
     @staticmethod
-    def _wholesale_price(
-        tier: PricingTier, cache: DailyPriceCache
-    ) -> Decimal:
+    def _wholesale_price(tier: PricingTier, retail_price_ngn: Decimal) -> Decimal:
         if tier.usd_reference_price <= 0:
             raise ManifestError("pricing_unavailable")
         return (
-            cache.ngn_price
+            retail_price_ngn
             * tier.wholesale_usd_price
             / tier.usd_reference_price
         ).quantize(MONEY, rounding=ROUND_HALF_UP)

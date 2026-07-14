@@ -31,6 +31,7 @@ and component library.
 15. Manifest Payment Confirmation
 16. Failed Notification Queue
 17. Device Compatibility Log
+18. Naira Pricing Management
 
 ---
 
@@ -265,6 +266,26 @@ name, channel, failure reason, SOS timestamp, retry count.
 
 ---
 
+### Screen: Admin — Naira Pricing Management (Screen 18)
+
+**Data displayed:** Table of active pricing tiers — tier name,
+current Naira price, group-tier flag (`prd.md` §5.9/US-26).
+
+**Interactive elements:**
+- "Edit" per row opens an inline/modal price field
+- Submitting the new price shows a confirmation dialog with the %
+  change from the current price (AC-26.3) — a lightweight,
+  admin-facing version of the automated guardrail the original
+  FX-cron design would have enforced — before calling `PATCH
+  /admin/pricing-tiers/{tier_id}`
+- On confirm, the new price is live immediately for new purchases;
+  orders already in progress are unaffected (AC-26.2)
+- No FX rate input or scheduling control — this screen is
+  intentionally just "current price, editable," not a pricing
+  calculator
+
+---
+
 ## 9.4 Navigation Structure
 
 **HTO operator sidebar:** Home | Manifests | SOS Alerts | Reports
@@ -274,7 +295,7 @@ name, channel, failure reason, SOS timestamp, retry count.
 separate navigation from the HTO view — not a toggle within the
 same nav, reducing risk of an admin accidentally operating in the
 wrong context): Approvals | Payment Confirmation | Notification
-Queue | Device Compatibility
+Queue | Device Compatibility | Naira Pricing
 
 **Role separation enforcement:** Middleware-level route guards
 mean an HTO operator cannot navigate to `/admin/*` routes even by

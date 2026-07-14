@@ -275,20 +275,22 @@ one, rather than hardcoding a single vendor's identifier field.
 | max_group_size | INTEGER | NULLABLE | e.g. 8, only set if is_group_tier |
 | wholesale_usd_price | DECIMAL(10,2) | NOT NULL | HTO channel price (per-person for Family) |
 | active | BOOLEAN | DEFAULT TRUE | |
+| ngn_price | DECIMAL(12,2) | NOT NULL | Current retail Naira price, per-unit (per-person for Family); admin-editable — see §6.16 |
 
 ---
 
-### `daily_price_cache`
+### `pricing_tier_price_changes`
 
 | Field | Type | Constraints | Notes |
 |---|---|---|---|
 | id | UUID | PK | |
-| pricing_tier_id | UUID | FK → pricing_tiers | |
-| date | DATE | NOT NULL | |
-| ngn_price | DECIMAL(12,2) | NOT NULL | Per-unit (per-person for Family) |
-| fx_rate_used | DECIMAL(10,4) | NOT NULL | Audit trail |
+| pricing_tier_id | UUID | FK → pricing_tiers, ON DELETE CASCADE | |
+| admin_id | UUID | FK → admin_users, NOT NULL | |
+| old_ngn_price | DECIMAL(12,2) | NOT NULL | |
+| new_ngn_price | DECIMAL(12,2) | NOT NULL | |
+| changed_at | TIMESTAMPTZ | NOT NULL | |
 
-**Indexes:** UNIQUE (`pricing_tier_id`, `date`)
+**Indexes:** `pricing_tier_id` — see §6.16
 
 ---
 
@@ -781,6 +783,9 @@ wholesale_price_ngn = daily_price_cache.ngn_price
 total_ngn = wholesale_price_ngn × pilgrim_count
 ```
 
+(§6.16 replaces `daily_price_cache.ngn_price` with `pricing_tiers.ngn_price`
+as the retail source in this formula; the ratio itself is unchanged.)
+
 The stored prices never change after order creation. Family orders select one
 complete pre-grouped set within the tier's 2–8 bounds; non-group tiers accept
 only ungrouped pilgrims. The nullable order key and non-unique manifest key
@@ -838,3 +843,62 @@ code plus a conditional atomic `UPDATE ... WHERE activation_code_used =
 false` (not a plain read-then-write) also closes the race between two
 concurrent redemption attempts for the same code — the same pattern §6.14's
 provisioning worker uses for its own per-pilgrim WhatsApp delivery checkpoint.
+
+---
+
+## 6.16 Amendment — US-26 Scaled Down to Manual Naira Pricing
+
+US-26 was originally specced as a daily NFEM-indexed FX-cron job writing into
+`daily_price_cache` (one dated row per tier per day, with `fx_rate_used` as
+its audit trail). Before any of that automation was built, US-26 was scoped
+down to a manual, admin-triggered flow (`prd.md` §5.9/§4.10 — see the scope
+note there for the full reasoning: Naira has been comparatively stable under
+the CBN's reformed NFEM framework, and a live FX dependency is not worth
+building for ~1-2% monthly movement pre-launch). `daily_price_cache` was
+real and migrated (US-06, §6.14); no production or staging environment
+exists yet for it to have been written to there, but local/test databases
+can hold real rows in it (seeded by tests or manual exercising of US-06),
+so the migration cannot assume the table — or `pricing_tiers` itself — is
+empty.
+
+`pricing_tiers.ngn_price` is therefore added nullable first, backfilled
+from each tier's most recent `daily_price_cache` row (a correlated
+`UPDATE ... FROM (SELECT DISTINCT ON (pricing_tier_id) ...)`), and only
+then set `NOT NULL` — so a database with pre-existing tiers keeps their
+last-known price instead of the migration failing (or worse, guessing a
+default) against unset data. A tier with no `daily_price_cache` history at
+all has no principled backfill value; the `NOT NULL` step fails loudly on
+purpose in that case rather than defaulting a real money field to zero or
+a placeholder. Downgrading recreates `daily_price_cache` as an empty
+table (schema only, not a data round-trip), so a downgrade-then-upgrade
+sequence relies on this same backfill and will itself hit that failure —
+expected, since the downgrade is what discarded the history to backfill
+from, not a flaw in the upgrade path against real pre-existing data.
+
+`pricing_tiers` gains a single `ngn_price` column: the current retail Naira
+price, admin-editable, replacing the "look up today's dated row" pattern
+with a plain in-place value. `_wholesale_price()`'s ratio formula (§6.14) is
+unchanged; only where it reads the retail price from changes, per the note
+on that formula above. Because every tier now always has exactly one price
+by construction (a NOT NULL column, not a query that can return zero rows),
+`ManifestOrderService`'s `pricing_unavailable` error path for a missing
+price lookup becomes structurally unreachable and was removed from
+`list_pricing()` and `place_order()`; `pricing_unavailable` itself is kept
+for `_wholesale_price()`'s unrelated `usd_reference_price <= 0` guard and
+for `_group_tier()` finding no active group tier, both still-live failure
+modes.
+
+`pricing_tier_price_changes` replaces `daily_price_cache` as the audit
+trail (AC-26.4): one row per admin-initiated price change, capturing the
+admin, old value, new value, and timestamp — an append-only log rather than
+a dated snapshot table, since there is no longer a daily write to snapshot.
+`admin_id` is a plain (RESTRICT) NOT NULL foreign key to `admin_users`,
+unlike `organizations.approved_by`'s nullable/SET NULL pattern (§6.11) —
+an audit row's actor is load-bearing here (AC-26.4 requires knowing *who*
+changed a price), whereas `approved_by` is informational, so this table
+favors always recording a real admin over tolerating admin-account deletion.
+
+No new admin-review gate is introduced: a price update takes effect
+immediately (AC-26.2), matching the "manual, on-demand action" framing in
+the scope note — the confirmation step (AC-26.3, the %-change display) is a
+dashboard-side guardrail before the API call, not a second approval stage.

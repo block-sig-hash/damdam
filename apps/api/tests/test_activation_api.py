@@ -62,6 +62,7 @@ def seed_activation_code(
             data_gb=10,
             pstn_minutes=60,
             wholesale_usd_price=10,
+            ngn_price=24000,
         )
         session.add(tier)
         session.commit()

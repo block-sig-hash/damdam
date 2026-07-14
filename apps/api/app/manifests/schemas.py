@@ -106,6 +106,30 @@ class PricingTierListResponse(BaseModel):
     tiers: list[PricingTierResponse]
 
 
+class AdminPricingTierResponse(BaseModel):
+    id: UUID
+    name: str
+    ngn_price: float
+    is_group_tier: bool
+
+
+class AdminPricingTierListResponse(BaseModel):
+    tiers: list[AdminPricingTierResponse]
+
+
+class PricingTierUpdateRequest(BaseModel):
+    ngn_price: float = Field(gt=0)
+
+
+class PricingTierUpdateResponse(BaseModel):
+    id: UUID
+    name: str
+    old_ngn_price: float
+    new_ngn_price: float
+    percent_change: float
+    changed_at: datetime
+
+
 class ManifestOrderRequest(BaseModel):
     pricing_tier_id: UUID
     manifest_pilgrim_ids: list[UUID] = Field(min_length=1)

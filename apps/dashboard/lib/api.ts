@@ -274,3 +274,39 @@ export async function confirmManifestPayment(orderId: string): Promise<void> {
 export async function openAdminInvoice(orderId: string): Promise<void> {
   await openPDF(`/admin/manifest-orders/${orderId}/invoice`, adminHeaders());
 }
+
+export type AdminPricingTier = {
+  id: string;
+  name: string;
+  ngn_price: number;
+  is_group_tier: boolean;
+};
+
+export type PricingTierUpdateResult = {
+  id: string;
+  name: string;
+  old_ngn_price: number;
+  new_ngn_price: number;
+  percent_change: number;
+  changed_at: string;
+};
+
+export async function getAdminPricingTiers(): Promise<AdminPricingTier[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/pricing-tiers`, {
+    headers: adminHeaders(),
+  });
+  return (await parseResponse<{ tiers: AdminPricingTier[] }>(response)).tiers;
+}
+
+export async function updateAdminPricingTierPrice(
+  tierId: string,
+  ngnPrice: number,
+): Promise<PricingTierUpdateResult> {
+  return parseResponse(
+    await fetch(`${API_BASE_URL}/admin/pricing-tiers/${tierId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...adminHeaders() },
+      body: JSON.stringify({ ngn_price: ngnPrice }),
+    }),
+  );
+}
