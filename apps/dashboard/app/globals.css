@@ -111,7 +111,8 @@ a { color: #17623e; font-weight: 700; }
 .danger-link { color: #a32222; }
 .price-summary, .success-panel { display: grid; gap: 8px; margin: 18px 0; padding: 18px; border-radius: 8px; background: #edf6ef; }
 .status-badge { padding: 5px 9px; border-radius: 999px; background: #f5e8b8; text-transform: capitalize; }
-.status-provisioned { background: #cdebd7; }
+.status-provisioned, .status-approved { background: #cdebd7; }
+.status-rejected { background: #f7dcd8; }
 .search-row { display: flex; align-items: end; gap: 12px; margin: 24px 0; }
 .search-row label { flex: 1; }
 .search-row button { width: auto; }

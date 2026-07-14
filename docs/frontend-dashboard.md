@@ -235,6 +235,24 @@ manifest/batch context.
 
 ---
 
+### Screen: Admin — HTO Operator Approvals (Screen 14)
+
+**Data displayed:** Table of HTO operator registrations, filterable
+by approval status (pending/approved/rejected, default pending) —
+business name, operator name, email, phone, NAHCON licence number,
+email-verified status.
+
+**Interactive elements:**
+- Status filter (pending/approved/rejected)
+- "Approve" per pending row → confirmation dialog before firing
+  (triggers the email + WhatsApp approval notifications, AC-04.5)
+- "Reject" per pending row → inline reason field (required) plus a
+  confirmation dialog before firing — the reason is stored
+  (`organizations.rejection_reason`, `data-model.md` §6.17) but no
+  AC requires notifying the operator of rejection, unlike approval
+
+---
+
 ### Screen: Admin — Manifest Payment Confirmation (Screen 15)
 
 **Data displayed:** Table of orders in `awaiting_payment` — HTO

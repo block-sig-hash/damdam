@@ -262,3 +262,24 @@ class HTOService:
         if notification_failed:
             raise HTOAuthError("notification_unavailable")
         return organization
+
+    def reject(
+        self, session: Session, organization_id: UUID, admin_id: UUID, reason: str
+    ) -> Organization:
+        organization = session.get(Organization, organization_id)
+        if (
+            organization is None
+            or organization.org_type != OrganizationType.HTO_OPERATOR
+        ):
+            raise HTOAuthError("operator_not_found")
+        if organization.approval_status == HTOApprovalStatus.APPROVED:
+            raise HTOAuthError("invalid_approval_transition")
+        if organization.approval_status == HTOApprovalStatus.PENDING:
+            organization.approval_status = HTOApprovalStatus.REJECTED
+            organization.rejected_at = self.clock()
+            organization.rejected_by = admin_id
+            organization.rejection_reason = reason
+            session.add(organization)
+            session.commit()
+            session.refresh(organization)
+        return organization

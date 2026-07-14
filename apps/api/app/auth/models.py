@@ -236,6 +236,18 @@ class Organization(SQLModel, table=True):
     approval_whatsapp_sent_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+    rejected_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    rejected_by: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
+        ),
+    )
+    rejection_reason: str | None = Field(
+        default=None, sa_column=Column(String(500), nullable=True)
+    )
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),

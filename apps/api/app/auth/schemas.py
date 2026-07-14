@@ -170,3 +170,15 @@ class HTOOperatorListResponse(BaseModel):
 
 class HTOApprovalResponse(BaseModel):
     approval_status: HTOApprovalStatus
+
+
+class HTORejectionRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def strip_reason(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("Field cannot be blank")
+        return stripped

@@ -332,6 +332,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/hto-operators/{operator_id}/reject:
+    post:
+      tags:
+      - admin
+      summary: Reject Hto Operator
+      operationId: reject_hto_operator_v1_admin_hto_operators__operator_id__reject_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: operator_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Operator Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HTORejectionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTOApprovalResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/admin/manifest-orders:
     get:
       tags:
@@ -1382,6 +1417,17 @@ components:
       - phone_number
       - nahcon_licence_number
       title: HTORegistrationRequest
+    HTORejectionRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+      type: object
+      required:
+      - reason
+      title: HTORejectionRequest
     HTOVerifyEmailRequest:
       properties:
         token:

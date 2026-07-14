@@ -10,7 +10,12 @@ from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError
 from sqlmodel import select
 
-from app.admin.routes import approve_hto_operator, current_admin, list_hto_operators
+from app.admin.routes import (
+    approve_hto_operator,
+    current_admin,
+    list_hto_operators,
+    reject_hto_operator,
+)
 from app.auth.hto import HTOAuthError
 from app.auth.models import (
     AdminUser,
@@ -22,6 +27,7 @@ from app.auth.routes import login_hto, register_hto, verify_hto_email
 from app.auth.schemas import (
     HTOLoginRequest,
     HTORegistrationRequest,
+    HTORejectionRequest,
     HTOVerifyEmailRequest,
 )
 from app.notifications.service import EmailSender, NotificationError, WhatsAppSender
@@ -341,3 +347,88 @@ def test_duplicate_email_and_invalid_admin_access_are_rejected(
 
     with pytest.raises(HTOAuthError, match="invalid_admin_token"):
         current_admin(request, None)
+
+
+def test_admin_rejection_records_reason_and_blocks_login(
+    hto_api,
+    session_factory,
+    email_sender,
+    registration_payload,
+    settings,
+    clock,
+) -> None:
+    """Rejection stores who/why and permanently blocks that operator's login."""
+    request = SimpleNamespace(app=hto_api)
+    token = register_and_token(hto_api, email_sender, registration_payload)
+    verify_hto_email(HTOVerifyEmailRequest(token=token), request)
+
+    with session_factory() as session:
+        organization = session.exec(select(Organization)).one()
+        admin = AdminUser(
+            id=uuid4(),
+            email="admin@damdam.app",
+            password_hash="not-used-in-this-test",
+        )
+        session.add(admin)
+        session.commit()
+        admin_id = admin.id
+        operator_id = organization.id
+
+    admin_token = jwt.encode(
+        {
+            "sub": str(admin_id),
+            "aud": "admin",
+            "type": "access",
+            "iat": clock(),
+            "exp": clock() + timedelta(minutes=15),
+        },
+        settings.jwt_secret,
+        algorithm="HS256",
+    )
+    authenticated_admin = current_admin(
+        request, HTTPAuthorizationCredentials(scheme="Bearer", credentials=admin_token)
+    )
+
+    rejected = reject_hto_operator(
+        operator_id,
+        HTORejectionRequest(reason="NAHCON licence number could not be verified"),
+        request,
+        authenticated_admin,
+    )
+    assert rejected.model_dump(mode="json") == {"approval_status": "rejected"}
+
+    with session_factory() as session:
+        organization = session.get(Organization, operator_id)
+        assert organization is not None
+        assert organization.approval_status == HTOApprovalStatus.REJECTED
+        assert organization.rejected_by == admin_id
+        assert organization.rejected_at is not None
+        assert (
+            organization.rejection_reason
+            == "NAHCON licence number could not be verified"
+        )
+
+    with pytest.raises(HTOAuthError, match="rejected"):
+        login_hto(
+            HTOLoginRequest(
+                email=registration_payload["email"],
+                password=registration_payload["password"],
+            ),
+            request,
+        )
+
+    # Rejecting an already-approved operator is an invalid transition —
+    # flip the fixture to APPROVED directly to exercise reject()'s own
+    # transition guard in isolation from approve()'s symmetric one.
+    with session_factory() as session:
+        organization = session.get(Organization, operator_id)
+        assert organization is not None
+        organization.approval_status = HTOApprovalStatus.APPROVED
+        session.add(organization)
+        session.commit()
+
+    with (
+        session_factory() as session,
+        pytest.raises(HTOAuthError, match="invalid_approval_transition"),
+    ):
+        hto_api.state.hto_service.reject(session, operator_id, admin_id, "too late")
