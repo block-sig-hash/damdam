@@ -174,7 +174,7 @@ not the call recipient (Lagos)**:
   recipient is typically just a phone ringing on the PSTN with no
   app-side optimization possible.
 - The hop into Nigeria's telecom network is handled by the voice
-  termination/SIP trunk provider (Twilio, per `prd.md` §5.5),
+  termination/SIP trunk provider (Telnyx, per `prd.md` §5.5),
   whose own carrier network already optimizes that route — the
   relay server's location barely affects it.
 - Jeddah and Lagos are both landing points on the **2Africa
@@ -396,27 +396,33 @@ well. As the user base broadens, payments need the same
 **Two distinct paths exist here, at different levels of commitment
 — worth keeping separate, not treating as one decision.**
 
-### 12.9.1 Nearer-term, lower-risk: BYOC wholesale trunk underneath Telnyx (or Twilio)
+### 12.9.1 Nearer-term, lower-risk: BYOC wholesale trunk underneath Telnyx
 
 **Not needed at MVP, but a real, much smaller step than full
 self-hosting** — once call volume is real enough that wholesale
-termination pricing would meaningfully beat the chosen CPaaS
-vendor's own rates. This keeps the entire application-facing layer
-(APIs, webhooks, SIP number management, programmable voice,
-Twilio/Telnyx Verify for CLI) exactly as already speced in
-`api-spec.md` §7.5 — only the underlying PSTN termination path
-changes, via Bring Your Own Carrier (BYOC), which both Twilio and
-Telnyx support natively. This is a configuration/commercial change
-more than an engineering one, and it's the recommended first step
-if termination costs become a real optimization target — well
-before considering the full FreeSWITCH path below.
+termination pricing would meaningfully beat Telnyx's own rates.
+This keeps the entire application-facing layer (APIs, webhooks,
+SIP number management, programmable voice via Telnyx, OTP/CLI
+verification via Termii/Twilio per `prd.md` §5.1) exactly as
+already speced in `api-spec.md` §7.5 — only the underlying PSTN
+termination path changes, via Bring Your Own Carrier (BYOC), which
+Telnyx supports natively. This is a configuration/commercial
+change more than an engineering one, and it's the recommended
+first step if termination costs become a real optimization target
+— well before considering the full FreeSWITCH path below. This is
+the same plan referenced in `prd.md` §5.5's future roadmap note.
 
 **Realistic BYOC wholesale partner for this step: IDT Express**,
 specifically because it's self-service/SMB-accessible (per the
 table below) and already positions itself as a BYOC backend
 *underneath* Twilio and Plivo — meaning this integration path is
 something the vendor has already built for, not something DamDam
-would be first to attempt.
+would be first to attempt. (IDT's own positioning references
+Twilio/Plivo specifically since those are the CPaaS platforms it
+already integrates BYOC support for — this describes IDT's market
+positioning, not a DamDam vendor choice; DamDam's own primary
+platform is Telnyx, and IDT's Telnyx-side BYOC support is expected
+to work the same way.)
 
 ### 12.9.2 Further out, higher commitment: full self-hosted FreeSWITCH
 
@@ -425,8 +431,7 @@ flagged here so it's documented rather than lost as conversation —
 not a recommendation to act on before real call volume justifies
 the ops burden, and a meaningfully bigger step than §12.9.1 above.
 
-**The idea:** once Twilio's (or Telnyx's — see `api-spec.md` §7.5's
-provisional vendor flag) per-minute usage-based pricing at real
+**The idea:** once Telnyx's per-minute usage-based pricing at real
 scale exceeds what self-hosting a telephony switch plus a wholesale
 SIP trunk relationship would cost — beyond what BYOC alone captures
 — self-hosting the application layer itself becomes worth
@@ -450,7 +455,7 @@ pursued:
 
 | Provider | Accessibility tier | Notes |
 |---|---|---|
-| DIDLogic | Self-service, SMB-accessible | Owns its own network (ASN AS13006, 12 PoPs), 130+ country DID coverage — but a customer review specifically flagged weak Gulf/Saudi Arabia coverage, and its account-tier model includes non-waivable minimum monthly commitments (a real contractual risk pattern for uncertain-volume usage). Also lacks a mobile SDK layer entirely — using it means building the WebRTC/SIP integration yourself, not getting one from the vendor (relevant to §12.9.2 only; irrelevant to §12.9.1, which keeps Twilio/Telnyx's SDK layer regardless). |
+| DIDLogic | Self-service, SMB-accessible | Owns its own network (ASN AS13006, 12 PoPs), 130+ country DID coverage — but a customer review specifically flagged weak Gulf/Saudi Arabia coverage, and its account-tier model includes non-waivable minimum monthly commitments (a real contractual risk pattern for uncertain-volume usage). Also lacks a mobile SDK layer entirely — using it means building the WebRTC/SIP integration yourself, not getting one from the vendor (relevant to §12.9.2 only; irrelevant to §12.9.1, which keeps Telnyx's SDK layer regardless). |
 | IDT Express | Self-service, SMB-accessible | Explicitly built for this tier — self-serve portal, SMB-oriented, STIR/SHAKEN A-level attestation support, and notably already offers itself as a BYOC backend *underneath* Twilio and Plivo specifically. The most realistic candidate for **both** paths above given its accessibility and existing CPaaS-integration positioning. |
 | BICS | Enterprise/carrier-to-carrier only | Proximus subsidiary, historically operator-to-operator sales, not self-service. Reachable indirectly via IDT Express's "BICS Easy Connect" product rather than a direct relationship at DamDam's likely scale. |
 | Tata Communications | Enterprise/carrier-to-carrier only | One of the largest global wholesale voice carriers; explicitly positioned around managed services and strategic sourcing with account-managed enterprise relationships. **Not a symmetric "secondary" option alongside IDT Express** — an external analysis of this section proposed IDT and Tata as parallel primary/secondary wholesale carriers, but that glosses over a real accessibility gap: IDT is reachable via self-service signup today, Tata requires an enterprise sales process and likely substantial minimum commitments that aren't realistic at DamDam's current stage. Treat as a later-stage option only, not a near-term redundant pairing with IDT. |

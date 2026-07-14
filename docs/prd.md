@@ -300,17 +300,29 @@ internet access after landing.
   notification on success
 - AC-11.6: Download status visible to the HTO operator
 
-**US-12** [P1] — As a Pilgrim, I want to cache offline maps of the
-Haram, Mina, and Arafat before departure so that I can navigate
-with zero connectivity.
-- AC-12.1: "Download before you travel" screen, clearly labelled
-- AC-12.2: Covers Masjid al-Haram, Mina, Arafat, Madinah
-- AC-12.3: Includes emergency contacts, key Arabic phrases,
-  package details
-- AC-12.4: Pack ≤ 50MB
-- AC-12.5: Progress bar shown
-- AC-12.6: Fully functional offline once downloaded
-- AC-12.7: Shows "downloaded on [date]"
+**US-12** [P1] — As a Pilgrim, I want to see emergency contacts
+and key phrases before I depart so I have them without needing
+internet, even without a map.
+- AC-12.1: Emergency essentials shown on the same pre-departure
+  screen as eSIM QR/download (§5.4)
+- AC-12.2: Includes the HTO operator's number, DamDam support
+  WhatsApp, and a short set of key Arabic phrases (help, thank
+  you, where is, I don't understand, I need a doctor)
+- AC-12.3: Content is bundled directly in the app, not downloaded
+  separately — always available offline, zero data cost, no
+  download step, no map SDK or content-pack table needed
+- AC-12.4: The same content is also reachable from the SOS screen
+  for quick reference during an actual emergency, not just
+  pre-departure
+
+**Scope note:** This story originally covered full offline maps
+(Haram/Mina/Arafat POIs, a ≤50MB downloadable pack, in-app
+navigation). That was cut deliberately — it's P1, not a stated MVP
+goal (G1–G6), and largely redundant once a pilgrim's eSIM data is
+active, since their phone's own Maps app already covers wayfinding
+better than anything DamDam would build. What's kept is the
+narrow slice a phone's OS maps can't provide: emergency contacts
+and phrases that work with zero connectivity and zero setup.
 
 ### 4.5 Arrival and eSIM Activation
 
@@ -847,7 +859,7 @@ existence in written form and are reconciled against it here.
 | 0 — Vendor agreements | July 2026 | eSIM aggregator API access (Monty Mobile primary, eSIM Access secondary, 1Global tertiary), **voice vendor: Telnyx selected as the primary PSTN/VoIP provider for the Nigeria/Saudi Arabia corridors, following the quote comparison against Twilio — see `api-spec.md` §7.5's vendor-status flag and `infrastructure.md` for the rate rationale**, Paystack merchant account (Registered Business tier per `corporate-structure.md` §13.2), entity structuring started |
 | 1 — Core checkout + eSIM + design foundation | Aug–Sep 2026 | Naira purchase flow, eSIM QR delivery, pre-departure guide — **plus the two prerequisites flagged in `testing-qa.md` §14.6: `design-system.md` produced via a dedicated design session, and the screenshot-generation CI step built** — both block any mobile screen PR merging, so they start immediately, not after the checkout flow is done |
 | 2 — VoIP + CLI | Oct–Nov 2026 | In-app calling with verified Nigerian caller ID — this is the demo that wins HTO pilots |
-| 3 — Safety layer + offline | Nov–Dec 2026 | SOS button, check-in, offline maps, HTO dashboard v1 — the offline-chaos test suite in `testing-qa.md` §14.4.1 must pass before this phase is considered done, not just before Phase 4 |
+| 3 — Safety layer + offline | Nov–Dec 2026 | SOS button, check-in, pre-departure emergency info (US-12, scoped down from full offline maps — see §4.4), HTO dashboard v1 — the offline-chaos test suite in `testing-qa.md` §14.4.1 must pass before this phase is considered done, not just before Phase 4 |
 | 4 — HTO pilot onboarding | Jan–Feb 2027 | Live with 2–3 HTO partners, real users, fix what breaks — device matrix testing (`testing-qa.md` §14.3) and HTO usability testing (`testing-qa.md` §14.5) complete before this phase starts, per the milestones table |
 | Hajj launch | May 2027 | First paying pilgrim cohort — load/chaos exercise and incident-response tabletop (`testing-qa.md` §14.4.2) complete beforehand |
 

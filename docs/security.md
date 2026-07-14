@@ -118,14 +118,16 @@ even one endpoint leaks one HTO's pilgrim list to another.
 by design, needs confirmation against actual Nigerian regulatory
 expectations, not assumed sufficient by this draft.**
 
-Given the CLI verification flow (Twilio Verify OTP against the
-pilgrim's registered number, prd.md §5.5):
+Given the CLI verification flow (OTP against the pilgrim's
+registered number via the configured OTP provider — Termii
+primary, Twilio Verify secondary — reused from the login flow,
+prd.md §5.1/§5.5):
 
 - The verification event (`caller_id_verifications` table) stores
-  only the Twilio verification SID and timestamp — no OTP code is
-  ever persisted after verification completes (Twilio handles
-  generation/validation entirely; DamDam never sees the code
-  itself)
+  only the reporting provider name, its opaque verification
+  reference, and a timestamp — no OTP code is ever persisted after
+  verification completes (the provider handles generation/
+  validation entirely; DamDam never sees the code itself)
 - This is a deliberately thin data footprint — DamDam is not
   collecting or storing government ID documents for CLI
   verification, since Nigeria's NCC framework for legitimate CLI
@@ -143,10 +145,12 @@ pilgrim's registered number, prd.md §5.5):
 
 | Processor | Data shared | DPA status needed |
 |---|---|---|
-| Twilio | Phone numbers, call metadata, verification events | Twilio's standard DPA — review and countersign |
+| Termii | Phone numbers, OTP delivery metadata (primary OTP provider) | Confirm explicit DPA availability |
+| Twilio | Phone numbers, OTP delivery metadata (secondary/failover OTP provider only — no longer the voice vendor, see `prd.md` §5.5) | Twilio's standard DPA — review and countersign |
+| Telnyx | Phone numbers, call metadata, verification events (voice/PSTN vendor) | Confirm explicit DPA availability |
 | Paystack | Payment amounts, transaction references, email (optional) — **not** full card numbers (Paystack is PCI-DSS compliant, card data never transits DamDam's servers) | Confirm explicit DPA availability |
 | Flutterwave | Same data profile as Paystack — automatic fallback processor only (`data-model.md` §6.7), not a routine second collection channel, but a real processor relationship requiring the same DPA diligence regardless of how rarely it's actually invoked | Confirm explicit DPA availability |
-| Airalo / eSIM Access | No PII required for eSIM issuance for MVP (profiles aren't identity-tied at the aggregator level) — confirm this holds for the specific chosen aggregator, since some destinations require passport data for regulatory reasons | DPA needed if any PII does flow |
+| Monty Mobile / eSIM Access / 1Global | No PII required for eSIM issuance for MVP (profiles aren't identity-tied at the aggregator level) — confirm this holds for the specific vendor actually serving a given profile (any of the three, per the cascading failover in `data-model.md` §6.6), since some destinations require passport data for regulatory reasons | DPA needed if any PII does flow, for each of the three |
 | Meta (WhatsApp Business API) | Phone numbers (pilgrim, family contact, HTO operator), message content (check-in/SOS notifications) | Meta's Business Data Processing Terms — accepted through Business API onboarding |
 | Cloudflare | Traffic metadata, R2-stored files (CSV manifests, QR images) | Cloudflare DPA, standard |
 | Oracle Cloud Infrastructure (OCI) | Full database contents (self-hosted Postgres, per `infrastructure.md` §11.2/§11.3 — Supabase was considered and dropped, so OCI is now the sole infrastructure holder of all pilgrim PII, not just the application layer) | OCI's standard cloud services agreement; confirm it includes adequate data processing terms for NDPA purposes given OCI now holds significantly more sensitive data than when it was "just" the compute host |
