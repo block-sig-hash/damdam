@@ -19,8 +19,24 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.add_column(
         "pricing_tiers",
-        sa.Column("ngn_price", sa.Numeric(12, 2), nullable=False),
+        sa.Column("ngn_price", sa.Numeric(12, 2), nullable=True),
     )
+    # Backfill from each tier's most recent daily_price_cache row before that
+    # table is dropped below, so existing tiers keep their last-known price
+    # instead of the column going NOT NULL against unset data.
+    op.execute(
+        """
+        UPDATE pricing_tiers AS pt
+        SET ngn_price = latest.ngn_price
+        FROM (
+            SELECT DISTINCT ON (pricing_tier_id) pricing_tier_id, ngn_price
+            FROM daily_price_cache
+            ORDER BY pricing_tier_id, date DESC
+        ) AS latest
+        WHERE pt.id = latest.pricing_tier_id
+        """
+    )
+    op.alter_column("pricing_tiers", "ngn_price", nullable=False)
 
     op.create_table(
         "pricing_tier_price_changes",
