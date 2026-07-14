@@ -839,7 +839,11 @@ components:
           - type: 'null'
           title: Seat Number
         validation_status:
-          $ref: '#/components/schemas/ManifestValidationStatus'
+          type: string
+          enum:
+          - valid
+          - duplicate_warning
+          title: Validation Status
         warning:
           anyOf:
           - type: string
@@ -917,13 +921,6 @@ components:
       - invalid_rows
       - preview
       title: ManifestUploadResponse
-    ManifestValidationStatus:
-      type: string
-      enum:
-      - valid
-      - invalid
-      - duplicate_warning
-      title: ManifestValidationStatus
     MessageResponse:
       properties:
         message:
