@@ -11,6 +11,11 @@ from app.notifications.providers import MetaWhatsAppSender, ResendEmailSender
 from app.notifications.service import EmailSender, NotificationService, WhatsAppSender
 from app.otp.providers import OTPProvider, TermiiProvider, TwilioVerifyProvider
 from app.otp.service import FailoverScheduler, OTPService, RedisClient, utc_now
+from app.payments.providers import (
+    FlutterwaveProvider,
+    PaymentProvider,
+    PaystackProvider,
+)
 
 
 class CeleryFailoverScheduler:
@@ -72,3 +77,10 @@ def build_notification_service(
         email_sender or ResendEmailSender(settings),
         whatsapp_sender or MetaWhatsAppSender(settings),
     )
+
+
+def build_payment_providers(settings: Settings) -> dict[str, PaymentProvider]:
+    return {
+        "paystack": PaystackProvider(settings),
+        "flutterwave": FlutterwaveProvider(settings),
+    }

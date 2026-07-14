@@ -18,6 +18,10 @@ class EmailSender(Protocol):
         pdf: bytes,
     ) -> None: ...
 
+    def send_receipt(
+        self, email: str, tier_name: str, amount_ngn: Decimal, reference: str
+    ) -> None: ...
+
 
 class WhatsAppSender(Protocol):
     def send_approval(self, phone_number: str, operator_name: str) -> None: ...
@@ -26,6 +30,10 @@ class WhatsAppSender(Protocol):
 
     def send_activation(
         self, phone_number: str, pilgrim_name: str, tier_name: str, url: str
+    ) -> None: ...
+
+    def send_receipt(
+        self, phone_number: str, tier_name: str, amount_ngn: Decimal, reference: str
     ) -> None: ...
 
 
@@ -70,3 +78,13 @@ class NotificationService:
         self, phone_number: str, pilgrim_name: str, tier_name: str, url: str
     ) -> None:
         self.whatsapp.send_activation(phone_number, pilgrim_name, tier_name, url)
+
+    def send_receipt_email(
+        self, email: str, tier_name: str, amount_ngn: Decimal, reference: str
+    ) -> None:
+        self.email.send_receipt(email, tier_name, amount_ngn, reference)
+
+    def send_receipt_whatsapp(
+        self, phone_number: str, tier_name: str, amount_ngn: Decimal, reference: str
+    ) -> None:
+        self.whatsapp.send_receipt(phone_number, tier_name, amount_ngn, reference)

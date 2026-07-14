@@ -2,6 +2,7 @@ import json
 from dataclasses import dataclass
 from decimal import Decimal
 from types import SimpleNamespace
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 from sqlmodel import select
@@ -10,7 +11,13 @@ from app.auth.models import PricingTier
 from app.auth.routes import request_otp, verify_otp
 from app.auth.schemas import OTPRequest, OTPVerifyRequest
 from app.main import create_app
-from app.packages.models import Package, PackageStatus, Transaction, TransactionStatus
+from app.packages.models import (
+    Package,
+    PackageStatus,
+    PaymentProcessor,
+    Transaction,
+    TransactionStatus,
+)
 from app.payments.providers import (
     PaymentCheckout,
     PaymentInitialization,
@@ -96,7 +103,11 @@ def _authenticated_client(api: object, phone_number: str = "08012345678") -> Tes
         OTPVerifyRequest(phone_number=phone_number, otp="123456", platform="android"),
         request,
     )
-    return TestClient(api, headers={"Authorization": f"Bearer {auth.access_token}"})
+    return TestClient(
+        api,
+        headers={"Authorization": f"Bearer {auth.access_token}"},
+        raise_server_exceptions=False,
+    )
 
 
 def _payment_api(
@@ -162,7 +173,7 @@ def test_checkout_uses_configured_primary_and_current_stored_price(
     )
     assert flutterwave.initializations == []
     with session_factory() as session:
-        package = session.get(Package, response.json()["package_id"])
+        package = session.get(Package, UUID(response.json()["package_id"]))
         transaction = session.exec(select(Transaction)).one()
         assert package is not None and package.status == PackageStatus.PENDING
         assert transaction.status == TransactionStatus.PENDING
@@ -200,7 +211,10 @@ def test_checkout_falls_back_only_when_configured_primary_initialization_fails(
     assert response.json()["processor"] == secondary.name
     assert len(primary.initializations) == len(secondary.initializations) == 1
     assert secondary.initializations[0].amount_ngn == Decimal("300000.00")
-    assert response.json()["processor_reference"] == primary.initializations[0].reference
+    assert (
+        response.json()["processor_reference"]
+        == primary.initializations[0].reference
+    )
 
 
 def test_processor_order_comes_from_config_not_provider_names(
@@ -273,6 +287,124 @@ def test_family_group_size_is_validated_server_side(
     assert all(not provider.initializations for provider in payment_providers.values())
 
 
+def test_both_initializers_failing_returns_retryable_reason_without_rows(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-09.4: a dual outage is explicit and does not create a phantom purchase."""
+    payment_providers = {
+        "paystack": FakePaymentProvider("paystack", True),
+        "flutterwave": FakePaymentProvider("flutterwave", True),
+    }
+    api, _, _ = _payment_api(
+        settings,
+        redis_client,
+        providers,
+        scheduler,
+        session_factory,
+        clock,
+        payment_providers,
+    )
+    with session_factory() as session:
+        tier = _tier()
+        session.add(tier)
+        session.commit()
+        session.refresh(tier)
+        tier_id = str(tier.id)
+
+    response = _authenticated_client(api).post(
+        "/v1/packages/purchase", json={"pricing_tier_id": tier_id}
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error"] == "payment_unavailable"
+    with session_factory() as session:
+        assert session.exec(select(Package)).all() == []
+        assert session.exec(select(Transaction)).all() == []
+
+
+def test_webhook_rejects_invalid_signature_without_mutating_purchase(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-09.7: unsigned callbacks cannot activate a package."""
+    payment_providers = {
+        "paystack": FakePaymentProvider("paystack"),
+        "flutterwave": FakePaymentProvider("flutterwave"),
+    }
+    api, _, _ = _payment_api(
+        settings,
+        redis_client,
+        providers,
+        scheduler,
+        session_factory,
+        clock,
+        payment_providers,
+    )
+    client = _authenticated_client(api)
+    with session_factory() as session:
+        tier = _tier()
+        session.add(tier)
+        session.commit()
+        session.refresh(tier)
+        tier_id = str(tier.id)
+    purchase = client.post(
+        "/v1/packages/purchase", json={"pricing_tier_id": tier_id}
+    ).json()
+
+    response = TestClient(api).post(
+        "/v1/webhooks/paystack",
+        content=json.dumps(
+            {
+                "status": "success",
+                "reference": purchase["processor_reference"],
+                "amount_ngn": 145000,
+                "payment_method": "card",
+            }
+        ),
+        headers={"x-test-signature": "wrong"},
+    )
+
+    assert response.status_code == 401
+    with session_factory() as session:
+        transaction = session.exec(select(Transaction)).one()
+        assert transaction.status == TransactionStatus.PENDING
+
+
+def test_package_status_is_private_to_its_pilgrim(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """Retail package polling cannot disclose another pilgrim's purchase."""
+    payment_providers = {
+        "paystack": FakePaymentProvider("paystack"),
+        "flutterwave": FakePaymentProvider("flutterwave"),
+    }
+    api, _, _ = _payment_api(
+        settings,
+        redis_client,
+        providers,
+        scheduler,
+        session_factory,
+        clock,
+        payment_providers,
+    )
+    with session_factory() as session:
+        tier = _tier()
+        session.add(tier)
+        session.commit()
+        session.refresh(tier)
+        tier_id = str(tier.id)
+    owner = _authenticated_client(api)
+    other = _authenticated_client(api, "08100000000")
+    purchase = owner.post(
+        "/v1/packages/purchase", json={"pricing_tier_id": tier_id}
+    ).json()
+
+    response = other.get(f"/v1/packages/{purchase['package_id']}/status")
+
+    assert response.status_code == 404
+    assert response.json()["error"] == "package_not_found"
+
+
+
 def test_duplicate_paystack_webhook_activates_and_sends_receipt_once(
     settings, redis_client, providers, scheduler, session_factory, clock
 ) -> None:
@@ -292,8 +424,6 @@ def test_duplicate_paystack_webhook_activates_and_sends_receipt_once(
     )
     client = _authenticated_client(api)
     with session_factory() as session:
-        user = session.exec(select(Package).where(False)).first()  # keep type inference local
-        del user
         tier = _tier()
         session.add(tier)
         session.commit()
@@ -326,7 +456,7 @@ def test_duplicate_paystack_webhook_activates_and_sends_receipt_once(
     assert status.status_code == 200
     assert status.json()["status"] == "active"
     with session_factory() as session:
-        package = session.get(Package, purchase["package_id"])
+        package = session.get(Package, UUID(purchase["package_id"]))
         transaction = session.exec(select(Transaction)).one()
         assert package is not None
         assert package.data_gb_remaining == Decimal("10.00")
@@ -385,3 +515,57 @@ def test_flutterwave_webhook_uses_same_idempotency_path_after_failover(
     ]
     assert len(whatsapp.receipts) == 1
 
+
+def test_first_signed_webhook_wins_even_after_ambiguous_primary_timeout(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-09.7: one shared reference closes the cross-processor timeout race."""
+    payment_providers = {
+        "paystack": FakePaymentProvider("paystack", True),
+        "flutterwave": FakePaymentProvider("flutterwave"),
+    }
+    api, _, _ = _payment_api(
+        settings,
+        redis_client,
+        providers,
+        scheduler,
+        session_factory,
+        clock,
+        payment_providers,
+    )
+    client = _authenticated_client(api)
+    with session_factory() as session:
+        tier = _tier()
+        session.add(tier)
+        session.commit()
+        session.refresh(tier)
+        tier_id = str(tier.id)
+    purchase = client.post(
+        "/v1/packages/purchase", json={"pricing_tier_id": tier_id}
+    ).json()
+    event = json.dumps(
+        {
+            "status": "success",
+            "reference": purchase["processor_reference"],
+            "amount_ngn": 145000,
+            "payment_method": "card",
+        }
+    )
+
+    primary = TestClient(api).post(
+        "/v1/webhooks/paystack",
+        content=event,
+        headers={"x-test-signature": "valid-paystack"},
+    )
+    secondary = TestClient(api).post(
+        "/v1/webhooks/flutterwave",
+        content=event,
+        headers={"x-test-signature": "valid-flutterwave"},
+    )
+
+    assert primary.json() == {"processed": True}
+    assert secondary.json() == {"processed": False}
+    with session_factory() as session:
+        transaction = session.exec(select(Transaction)).one()
+        assert transaction.processor == PaymentProcessor.PAYSTACK
+        assert transaction.status == TransactionStatus.SUCCESS

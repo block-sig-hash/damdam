@@ -16,15 +16,20 @@ jest.mock('../../api/paymentClient', () => ({
   getPackageStatus: jest.fn(),
 }));
 jest.mock('react-native-webview', () => {
-  const React = require('react');
+  const ReactModule = require('react');
   const { Pressable, Text, View } = require('react-native');
   return {
-    WebView: ({ source, onError }: { source: { uri: string }; onError: () => void }) => (
-      <View testID="payment-webview">
-        <Text>{source.uri}</Text>
-        <Pressable testID="webview-error" onPress={onError}><Text>fail</Text></Pressable>
-      </View>
-    ),
+    WebView: ({ source, onError }: { source: { uri: string }; onError: () => void }) =>
+      ReactModule.createElement(
+        View,
+        { testID: 'payment-webview' },
+        ReactModule.createElement(Text, null, source.uri),
+        ReactModule.createElement(
+          Pressable,
+          { testID: 'webview-error', onPress: onError },
+          ReactModule.createElement(Text, null, 'fail'),
+        ),
+      ),
   };
 }, { virtual: true });
 
@@ -48,7 +53,7 @@ describe('RetailPurchaseFlow', () => {
     mockStatus.mockResolvedValue({ status: 'pending', data_gb_remaining: 0, pstn_minutes_remaining: 0 });
 
     await render(<RetailPurchaseFlow accessToken="token" />);
-    fireEvent.press(await screen.findByTestId('tier-Standard'));
+    await act(async () => fireEvent.press(await screen.findByTestId('tier-Standard')));
 
     expect(await screen.findByTestId('payment-webview')).toBeTruthy();
     expect(screen.getByText('https://checkout.example/reference-1')).toBeTruthy();
@@ -66,7 +71,7 @@ describe('RetailPurchaseFlow', () => {
     mockStatus.mockResolvedValue({ status: 'active', data_gb_remaining: 10, pstn_minutes_remaining: 90 });
 
     await render(<RetailPurchaseFlow accessToken="token" />);
-    fireEvent.press(await screen.findByTestId('tier-Standard'));
+    await act(async () => fireEvent.press(await screen.findByTestId('tier-Standard')));
 
     expect(await screen.findByText('Payment successful')).toBeTruthy();
     expect(screen.getByText(/10 GB/)).toBeTruthy();
@@ -84,7 +89,7 @@ describe('RetailPurchaseFlow', () => {
     mockStatus.mockResolvedValue({ status: 'pending', data_gb_remaining: 0, pstn_minutes_remaining: 0 });
 
     await render(<RetailPurchaseFlow accessToken="token" />);
-    fireEvent.press(await screen.findByTestId('tier-Basic'));
+    await act(async () => fireEvent.press(await screen.findByTestId('tier-Basic')));
     expect(await screen.findByText('Payment could not be started.')).toBeTruthy();
 
     await act(async () => fireEvent.press(screen.getByTestId('payment-retry')));
@@ -103,10 +108,35 @@ describe('RetailPurchaseFlow', () => {
     mockStatus.mockResolvedValue({ status: 'pending', data_gb_remaining: 0, pstn_minutes_remaining: 0 });
 
     await render(<RetailPurchaseFlow accessToken="token" />);
-    fireEvent.press(await screen.findByTestId('tier-Starter'));
+    await act(async () => fireEvent.press(await screen.findByTestId('tier-Starter')));
     fireEvent.press(await screen.findByTestId('webview-error'));
 
     await waitFor(() => expect(screen.getByTestId('payment-retry')).toBeTruthy());
     expect(screen.getByText(/checkout page could not load/i)).toBeTruthy();
+  });
+
+  it('§5.3: polls every 10 seconds until a delayed webhook activates the package', async () => {
+    jest.useFakeTimers();
+    mockInitialize.mockResolvedValue({
+      package_id: 'package-1',
+      processor: 'paystack',
+      processor_reference: 'reference-1',
+      checkout_url: 'https://checkout.example/reference-1',
+    });
+    mockStatus
+      .mockResolvedValueOnce({ status: 'pending', data_gb_remaining: 0, pstn_minutes_remaining: 0 })
+      .mockResolvedValueOnce({ status: 'active', data_gb_remaining: 10, pstn_minutes_remaining: 90 });
+
+    await render(<RetailPurchaseFlow accessToken="token" />);
+    await act(async () => fireEvent.press(await screen.findByTestId('tier-Standard')));
+    expect(await screen.findByTestId('payment-webview')).toBeTruthy();
+
+    await act(async () => {
+      jest.advanceTimersByTime(10_000);
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText('Payment successful')).toBeTruthy();
+    expect(mockStatus).toHaveBeenCalledTimes(2);
   });
 });

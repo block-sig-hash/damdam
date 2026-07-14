@@ -76,7 +76,7 @@ Splash
   → Phone Entry → OTP → PIN Setup → Family Contact
   → Departure Date
   → Home (no package)
-  → Package Selection → [Family? → Group Size] → Paystack
+  → Package Selection → [Family? → Group Size] → secure checkout
   → Purchase Success
   → eSIM Setup Intro
     → [compatible?] → QR/Download → Offline Pack
@@ -175,7 +175,7 @@ feature bullets. Standard has a "Recommended" badge. Family shows
 "From ₦X" with a group-size selector triggered on tap.
 
 **Interactive elements:**
-- Tier card tap → non-Family: proceeds directly to Paystack.
+- Tier card tap → non-Family: proceeds directly to secure checkout.
   Family: opens Group Size Selector modal first.
 - "What's included" expandable accordion
 
@@ -195,8 +195,33 @@ as size changes (data-model.md §6.4).
 
 **Interactive elements:**
 - Stepper +/− or direct numeric entry
-- "Continue" → Paystack with `group_size` in the purchase payload
+- "Continue" → secure checkout with `group_size` in the purchase payload
 - Dismiss (X) → returns to Package Selection
+
+### Screen: Payment Checkout (Screen 10)
+
+**Data displayed:** A processor-neutral heading and the supported Naira rails
+(card, bank transfer, USSD, OPay and PalmPay), followed by the backend-provided
+`checkout_url` in an inline web view. Paystack/Flutterwave branding may appear
+inside their hosted page, but DamDam never renders a processor selector or
+processor-specific app controls.
+
+**Interactive elements:** Hosted payment controls inside the web view. Package
+status polling begins immediately and repeats every 10 seconds for at most five
+minutes, so a delayed redirect cannot hide a webhook-confirmed purchase.
+
+**States:** Preparing checkout; hosted checkout; processor-declared failure or
+web-view load failure with the reason and "Try again"; delayed confirmation
+with contact-support guidance after five minutes; webhook-confirmed success
+routing immediately to Purchase Success.
+
+### Screen: Purchase Success (Screen 11)
+
+**Data displayed:** Success confirmation, activated data/minutes balances, and
+a receipt-delivery note. This state is shown only after the API reports the
+package `active`, never from a hosted-page redirect alone.
+
+**Interactive elements:** "Continue" advances to the eSIM setup path.
 
 ---
 
