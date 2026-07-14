@@ -62,7 +62,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
 function operatorHeaders(): HeadersInit {
   const token = window.localStorage.getItem("hto_access_token");
   if (!token) {
-    throw new Error("Sign in to upload a manifest.");
+    throw new Error("Sign in to continue.");
   }
   return { Authorization: `Bearer ${token}` };
 }
@@ -116,4 +116,161 @@ export async function confirmManifest(manifestId: string): Promise<number> {
   );
   const result = await parseResponse<{ pilgrim_count: number }>(response);
   return result.pilgrim_count;
+}
+
+export type UnorderedPilgrim = {
+  id: string;
+  name: string;
+  phone_number: string;
+  family_group_id: string | null;
+};
+
+export type PricingTier = {
+  id: string;
+  name: string;
+  retail_price_ngn: number;
+  wholesale_price_ngn: number;
+  estimated_margin_ngn: number;
+  is_group_tier: boolean;
+  min_group_size: number | null;
+  max_group_size: number | null;
+};
+
+export type ManifestOrder = {
+  id: string;
+  tier_name: string;
+  pilgrim_count: number;
+  total_ngn: number;
+  status: "awaiting_payment" | "paid" | "provisioning" | "provisioned";
+};
+
+export async function getUnorderedPilgrims(
+  manifestId: string,
+): Promise<UnorderedPilgrim[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/hto/manifests/${manifestId}/unordered-pilgrims`,
+    { headers: operatorHeaders() },
+  );
+  return (await parseResponse<{ pilgrims: UnorderedPilgrim[] }>(response)).pilgrims;
+}
+
+export async function getPricingTiers(): Promise<PricingTier[]> {
+  const response = await fetch(`${API_BASE_URL}/hto/pricing-tiers`, {
+    headers: operatorHeaders(),
+  });
+  return (await parseResponse<{ tiers: PricingTier[] }>(response)).tiers;
+}
+
+export async function createFamilyGroup(
+  manifestId: string,
+  pilgrimIds: string[],
+): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/hto/manifests/${manifestId}/group`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...operatorHeaders() },
+    body: JSON.stringify({ manifest_pilgrim_ids: pilgrimIds, group_size: pilgrimIds.length }),
+  });
+  return (await parseResponse<{ family_group_id: string }>(response)).family_group_id;
+}
+
+export async function updateFamilyGroup(
+  manifestId: string,
+  groupId: string,
+  pilgrimIds: string[],
+): Promise<void> {
+  await parseResponse(
+    await fetch(`${API_BASE_URL}/hto/manifests/${manifestId}/group/${groupId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...operatorHeaders() },
+      body: JSON.stringify({ manifest_pilgrim_ids: pilgrimIds, group_size: pilgrimIds.length }),
+    }),
+  );
+}
+
+export async function deleteFamilyGroup(
+  manifestId: string,
+  groupId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/hto/manifests/${manifestId}/group/${groupId}`,
+    { method: "DELETE", headers: operatorHeaders() },
+  );
+  if (!response.ok) await parseResponse(response);
+}
+
+export async function placeManifestOrder(
+  manifestId: string,
+  pricingTierId: string,
+  pilgrimIds: string[],
+): Promise<{ manifest_order_id: string; total_ngn: number; invoice_url: string }> {
+  return parseResponse(
+    await fetch(`${API_BASE_URL}/hto/manifests/${manifestId}/order`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...operatorHeaders() },
+      body: JSON.stringify({
+        pricing_tier_id: pricingTierId,
+        manifest_pilgrim_ids: pilgrimIds,
+      }),
+    }),
+  );
+}
+
+export async function getManifestOrders(manifestId: string): Promise<ManifestOrder[]> {
+  const response = await fetch(`${API_BASE_URL}/hto/manifests/${manifestId}/orders`, {
+    headers: operatorHeaders(),
+  });
+  return (await parseResponse<{ orders: ManifestOrder[] }>(response)).orders;
+}
+
+async function openPDF(path: string, headers: HeadersInit) {
+  const response = await fetch(`${API_BASE_URL}${path}`, { headers });
+  if (!response.ok) await parseResponse(response);
+  const url = URL.createObjectURL(await response.blob());
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function openManifestInvoice(manifestId: string, orderId: string) {
+  await openPDF(
+    `/hto/manifests/${manifestId}/order/${orderId}/invoice`,
+    operatorHeaders(),
+  );
+}
+
+function adminHeaders(): HeadersInit {
+  const token = window.localStorage.getItem("admin_access_token");
+  if (!token) throw new Error("An administrator session is required.");
+  return { Authorization: `Bearer ${token}` };
+}
+
+export type AdminManifestOrder = {
+  id: string;
+  hto_business_name: string;
+  manifest_name: string | null;
+  pilgrim_count: number;
+  total_ngn: number;
+  invoice_url: string;
+  days_pending: number;
+};
+
+export async function getPendingManifestOrders(search = ""): Promise<AdminManifestOrder[]> {
+  const query = new URLSearchParams({ status: "awaiting_payment" });
+  if (search) query.set("search", search);
+  const response = await fetch(`${API_BASE_URL}/admin/manifest-orders?${query}`, {
+    headers: adminHeaders(),
+  });
+  return (await parseResponse<{ orders: AdminManifestOrder[] }>(response)).orders;
+}
+
+export async function confirmManifestPayment(orderId: string): Promise<void> {
+  await parseResponse(
+    await fetch(`${API_BASE_URL}/admin/manifest-orders/${orderId}/confirm-payment`, {
+      method: "POST",
+      headers: adminHeaders(),
+    }),
+  );
+}
+
+export async function openAdminInvoice(orderId: string): Promise<void> {
+  await openPDF(`/admin/manifest-orders/${orderId}/invoice`, adminHeaders());
 }

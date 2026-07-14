@@ -4,7 +4,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.auth.models import ManifestStatus, ManifestValidationStatus
+from app.auth.models import (
+    ManifestOrderStatus,
+    ManifestStatus,
+    ManifestValidationStatus,
+)
 
 
 class ManifestCreateRequest(BaseModel):
@@ -65,3 +69,90 @@ class ManifestSummary(BaseModel):
 
 class ManifestListResponse(BaseModel):
     manifests: list[ManifestSummary]
+
+
+class FamilyGroupRequest(BaseModel):
+    manifest_pilgrim_ids: list[UUID] = Field(min_length=2)
+    group_size: int = Field(ge=2, le=500)
+
+
+class FamilyGroupResponse(BaseModel):
+    family_group_id: UUID
+
+
+class UnorderedPilgrim(BaseModel):
+    id: UUID
+    name: str
+    phone_number: str
+    family_group_id: UUID | None
+
+
+class UnorderedPilgrimListResponse(BaseModel):
+    pilgrims: list[UnorderedPilgrim]
+
+
+class PricingTierResponse(BaseModel):
+    id: UUID
+    name: str
+    retail_price_ngn: float
+    wholesale_price_ngn: float
+    estimated_margin_ngn: float
+    is_group_tier: bool
+    min_group_size: int | None
+    max_group_size: int | None
+
+
+class PricingTierListResponse(BaseModel):
+    tiers: list[PricingTierResponse]
+
+
+class ManifestOrderRequest(BaseModel):
+    pricing_tier_id: UUID
+    manifest_pilgrim_ids: list[UUID] = Field(min_length=1)
+
+
+class ManifestOrderResponse(BaseModel):
+    manifest_order_id: UUID
+    total_ngn: float
+    invoice_url: str
+
+
+class ManifestOrderDetailResponse(BaseModel):
+    id: UUID
+    tier_name: str
+    pilgrim_count: int
+    wholesale_price_ngn: float
+    total_ngn: float
+    status: ManifestOrderStatus
+    invoice_url: str
+    payment_confirmed_at: datetime | None
+
+
+class ManifestOrderSummary(BaseModel):
+    id: UUID
+    tier_name: str
+    pilgrim_count: int
+    total_ngn: float
+    status: ManifestOrderStatus
+
+
+class ManifestOrderListResponse(BaseModel):
+    orders: list[ManifestOrderSummary]
+
+
+class AdminManifestOrderSummary(BaseModel):
+    id: UUID
+    hto_business_name: str
+    manifest_name: str | None
+    pilgrim_count: int
+    total_ngn: float
+    invoice_url: str
+    days_pending: int
+
+
+class AdminManifestOrderListResponse(BaseModel):
+    orders: list[AdminManifestOrderSummary]
+
+
+class PaymentConfirmationResponse(BaseModel):
+    status: ManifestOrderStatus

@@ -83,6 +83,9 @@ describe("HTO manifest upload", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm and proceed" }));
     expect(await screen.findByText("2 pilgrims accepted")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Continue to grouping/ }),
+    ).toHaveAttribute("href", "/manifests/manifest-1/order");
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
   });
 

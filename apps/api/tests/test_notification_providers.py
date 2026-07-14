@@ -1,12 +1,49 @@
+from decimal import Decimal
 from typing import Any
 
 from app.config import Settings
-from app.notifications.providers import MetaWhatsAppSender
+from app.notifications.providers import MetaWhatsAppSender, ResendEmailSender
 
 
 class FakeResponse:
     def raise_for_status(self) -> None:
         return None
+
+
+def test_resend_invoice_uses_stable_idempotency_key_and_pdf_attachment(
+    monkeypatch,
+) -> None:
+    """AC-06.4: an invoice retry cannot create a second Resend email."""
+    requests: list[dict[str, Any]] = []
+
+    def fake_post(*args, **kwargs):
+        requests.append({"args": args, "kwargs": kwargs})
+        return FakeResponse()
+
+    monkeypatch.setattr("app.notifications.providers.httpx.post", fake_post)
+    settings = Settings(
+        jwt_secret="test-secret-at-least-32-characters-long",
+        resend_api_key="resend-token",
+    )
+
+    ResendEmailSender(settings).send_invoice(
+        "operator@example.com",
+        "Amina",
+        "order-123",
+        Decimal("128000.00"),
+        b"%PDF-test",
+    )
+
+    request = requests[0]["kwargs"]
+    assert request["headers"]["Idempotency-Key"] == (
+        "damdam-manifest-order-order-123-invoice-v1"
+    )
+    assert request["json"]["attachments"] == [
+        {
+            "content": "JVBERi10ZXN0",
+            "filename": "damdam-invoice-order-123.pdf",
+        }
+    ]
 
 
 def test_meta_family_nomination_uses_configured_template(monkeypatch) -> None:

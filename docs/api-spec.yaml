@@ -332,6 +332,99 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/manifest-orders:
+    get:
+      tags:
+      - admin
+      summary: List Manifest Orders
+      operationId: list_manifest_orders_v1_admin_manifest_orders_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ManifestOrderStatus'
+          default: awaiting_payment
+      - name: search
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Search
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminManifestOrderListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/manifest-orders/{order_id}/invoice:
+    get:
+      tags:
+      - admin
+      summary: Download Manifest Invoice
+      operationId: download_manifest_invoice_v1_admin_manifest_orders__order_id__invoice_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/manifest-orders/{order_id}/confirm-payment:
+    post:
+      tags:
+      - admin
+      summary: Confirm Manifest Order Payment
+      operationId: confirm_manifest_order_payment_v1_admin_manifest_orders__order_id__confirm_payment_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentConfirmationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/hto/manifests:
     get:
       tags:
@@ -437,6 +530,293 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/unordered-pilgrims:
+    get:
+      tags:
+      - HTO manifests
+      summary: List Unordered Pilgrims
+      operationId: list_unordered_pilgrims_v1_hto_manifests__manifest_id__unordered_pilgrims_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnorderedPilgrimListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/group:
+    post:
+      tags:
+      - HTO manifests
+      summary: Create Family Group
+      operationId: create_family_group_v1_hto_manifests__manifest_id__group_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FamilyGroupRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FamilyGroupResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/group/{group_id}:
+    put:
+      tags:
+      - HTO manifests
+      summary: Update Family Group
+      operationId: update_family_group_v1_hto_manifests__manifest_id__group__group_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Group Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FamilyGroupRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FamilyGroupResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - HTO manifests
+      summary: Delete Family Group
+      operationId: delete_family_group_v1_hto_manifests__manifest_id__group__group_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Group Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/order:
+    post:
+      tags:
+      - HTO manifests
+      summary: Place Manifest Order
+      operationId: place_manifest_order_v1_hto_manifests__manifest_id__order_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManifestOrderRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestOrderResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/orders:
+    get:
+      tags:
+      - HTO manifests
+      summary: List Manifest Orders
+      operationId: list_manifest_orders_v1_hto_manifests__manifest_id__orders_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestOrderListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/order/{order_id}:
+    get:
+      tags:
+      - HTO manifests
+      summary: Get Manifest Order
+      operationId: get_manifest_order_v1_hto_manifests__manifest_id__order__order_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestOrderDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/order/{order_id}/invoice:
+    get:
+      tags:
+      - HTO manifests
+      summary: Download Manifest Invoice
+      operationId: download_manifest_invoice_v1_hto_manifests__manifest_id__order__order_id__invoice_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/pricing-tiers:
+    get:
+      tags:
+      - HTO manifests
+      summary: List Pricing Tiers
+      operationId: list_pricing_tiers_v1_hto_pricing_tiers_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingTierListResponse'
+      security:
+      - HTTPBearer: []
   /v1/webhooks/otp/termii:
     post:
       tags:
@@ -508,6 +888,53 @@ paths:
       - HTTPBearer: []
 components:
   schemas:
+    AdminManifestOrderListResponse:
+      properties:
+        orders:
+          items:
+            $ref: '#/components/schemas/AdminManifestOrderSummary'
+          type: array
+          title: Orders
+      type: object
+      required:
+      - orders
+      title: AdminManifestOrderListResponse
+    AdminManifestOrderSummary:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        hto_business_name:
+          type: string
+          title: Hto Business Name
+        manifest_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Manifest Name
+        pilgrim_count:
+          type: integer
+          title: Pilgrim Count
+        total_ngn:
+          type: number
+          title: Total Ngn
+        invoice_url:
+          type: string
+          title: Invoice Url
+        days_pending:
+          type: integer
+          title: Days Pending
+      type: object
+      required:
+      - id
+      - hto_business_name
+      - manifest_name
+      - pilgrim_count
+      - total_ngn
+      - invoice_url
+      - days_pending
+      title: AdminManifestOrderSummary
     AuthResponse:
       properties:
         access_token:
@@ -592,6 +1019,35 @@ components:
           title: Name
       type: object
       title: FamilyContactUpdate
+    FamilyGroupRequest:
+      properties:
+        manifest_pilgrim_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          minItems: 2
+          title: Manifest Pilgrim Ids
+        group_size:
+          type: integer
+          maximum: 500.0
+          minimum: 2.0
+          title: Group Size
+      type: object
+      required:
+      - manifest_pilgrim_ids
+      - group_size
+      title: FamilyGroupRequest
+    FamilyGroupResponse:
+      properties:
+        family_group_id:
+          type: string
+          format: uuid
+          title: Family Group Id
+      type: object
+      required:
+      - family_group_id
+      title: FamilyGroupResponse
     HTOApprovalResponse:
       properties:
         approval_status:
@@ -810,6 +1266,126 @@ components:
       required:
       - manifests
       title: ManifestListResponse
+    ManifestOrderDetailResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        tier_name:
+          type: string
+          title: Tier Name
+        pilgrim_count:
+          type: integer
+          title: Pilgrim Count
+        wholesale_price_ngn:
+          type: number
+          title: Wholesale Price Ngn
+        total_ngn:
+          type: number
+          title: Total Ngn
+        status:
+          $ref: '#/components/schemas/ManifestOrderStatus'
+        invoice_url:
+          type: string
+          title: Invoice Url
+        payment_confirmed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Payment Confirmed At
+      type: object
+      required:
+      - id
+      - tier_name
+      - pilgrim_count
+      - wholesale_price_ngn
+      - total_ngn
+      - status
+      - invoice_url
+      - payment_confirmed_at
+      title: ManifestOrderDetailResponse
+    ManifestOrderListResponse:
+      properties:
+        orders:
+          items:
+            $ref: '#/components/schemas/ManifestOrderSummary'
+          type: array
+          title: Orders
+      type: object
+      required:
+      - orders
+      title: ManifestOrderListResponse
+    ManifestOrderRequest:
+      properties:
+        pricing_tier_id:
+          type: string
+          format: uuid
+          title: Pricing Tier Id
+        manifest_pilgrim_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          minItems: 1
+          title: Manifest Pilgrim Ids
+      type: object
+      required:
+      - pricing_tier_id
+      - manifest_pilgrim_ids
+      title: ManifestOrderRequest
+    ManifestOrderResponse:
+      properties:
+        manifest_order_id:
+          type: string
+          format: uuid
+          title: Manifest Order Id
+        total_ngn:
+          type: number
+          title: Total Ngn
+        invoice_url:
+          type: string
+          title: Invoice Url
+      type: object
+      required:
+      - manifest_order_id
+      - total_ngn
+      - invoice_url
+      title: ManifestOrderResponse
+    ManifestOrderStatus:
+      type: string
+      enum:
+      - awaiting_payment
+      - paid
+      - provisioning
+      - provisioned
+      title: ManifestOrderStatus
+    ManifestOrderSummary:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        tier_name:
+          type: string
+          title: Tier Name
+        pilgrim_count:
+          type: integer
+          title: Pilgrim Count
+        total_ngn:
+          type: number
+          title: Total Ngn
+        status:
+          $ref: '#/components/schemas/ManifestOrderStatus'
+      type: object
+      required:
+      - id
+      - tier_name
+      - pilgrim_count
+      - total_ngn
+      - status
+      title: ManifestOrderSummary
     ManifestPreviewRow:
       properties:
         id:
@@ -982,12 +1558,73 @@ components:
           default: true
       type: object
       title: PINVerifyResponse
+    PaymentConfirmationResponse:
+      properties:
+        status:
+          $ref: '#/components/schemas/ManifestOrderStatus'
+      type: object
+      required:
+      - status
+      title: PaymentConfirmationResponse
     Platform:
       type: string
       enum:
       - ios
       - android
       title: Platform
+    PricingTierListResponse:
+      properties:
+        tiers:
+          items:
+            $ref: '#/components/schemas/PricingTierResponse'
+          type: array
+          title: Tiers
+      type: object
+      required:
+      - tiers
+      title: PricingTierListResponse
+    PricingTierResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        retail_price_ngn:
+          type: number
+          title: Retail Price Ngn
+        wholesale_price_ngn:
+          type: number
+          title: Wholesale Price Ngn
+        estimated_margin_ngn:
+          type: number
+          title: Estimated Margin Ngn
+        is_group_tier:
+          type: boolean
+          title: Is Group Tier
+        min_group_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Min Group Size
+        max_group_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Group Size
+      type: object
+      required:
+      - id
+      - name
+      - retail_price_ngn
+      - wholesale_price_ngn
+      - estimated_margin_ngn
+      - is_group_tier
+      - min_group_size
+      - max_group_size
+      title: PricingTierResponse
     RefreshRequest:
       properties:
         refresh_token:
@@ -1010,6 +1647,42 @@ components:
       - access_token
       - refresh_token
       title: TokenResponse
+    UnorderedPilgrim:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        phone_number:
+          type: string
+          title: Phone Number
+        family_group_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Family Group Id
+      type: object
+      required:
+      - id
+      - name
+      - phone_number
+      - family_group_id
+      title: UnorderedPilgrim
+    UnorderedPilgrimListResponse:
+      properties:
+        pilgrims:
+          items:
+            $ref: '#/components/schemas/UnorderedPilgrim'
+          type: array
+          title: Pilgrims
+      type: object
+      required:
+      - pilgrims
+      title: UnorderedPilgrimListResponse
     UserResponse:
       properties:
         id:

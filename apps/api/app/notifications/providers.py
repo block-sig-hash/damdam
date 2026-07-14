@@ -1,3 +1,5 @@
+import base64
+from decimal import Decimal
 from html import escape
 from typing import Any
 
@@ -11,18 +13,33 @@ class ResendEmailSender:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    def _send(self, to: str, subject: str, html: str) -> None:
+    def _send(
+        self,
+        to: str,
+        subject: str,
+        html: str,
+        attachments: list[dict[str, str]] | None = None,
+        idempotency_key: str | None = None,
+    ) -> None:
         if not self.settings.resend_api_key:
             raise NotificationError("Resend is not configured")
         try:
             response = httpx.post(
                 "https://api.resend.com/emails",
-                headers={"Authorization": f"Bearer {self.settings.resend_api_key}"},
+                headers={
+                    "Authorization": f"Bearer {self.settings.resend_api_key}",
+                    **(
+                        {"Idempotency-Key": idempotency_key}
+                        if idempotency_key
+                        else {}
+                    ),
+                },
                 json={
                     "from": self.settings.resend_from_email,
                     "to": [to],
                     "subject": subject,
                     "html": html,
+                    **({"attachments": attachments} if attachments else {}),
                 },
                 timeout=self.settings.notification_timeout_seconds,
             )
@@ -51,6 +68,33 @@ class ResendEmailSender:
             email,
             "Your DamDam operator account is approved",
             f"<p>Hello {safe_name}, your DamDam operator account is approved.</p>",
+        )
+
+    def send_invoice(
+        self,
+        email: str,
+        operator_name: str,
+        order_id: str,
+        total_ngn: Decimal,
+        pdf: bytes,
+    ) -> None:
+        safe_name = escape(operator_name)
+        safe_order = escape(order_id)
+        self._send(
+            email,
+            f"DamDam invoice {safe_order}",
+            (
+                f"<p>Hello {safe_name},</p>"
+                f"<p>Your HTO order invoice for NGN {total_ngn:,.2f} is attached. "
+                f"Use {safe_order} as the bank-transfer reference.</p>"
+            ),
+            [
+                {
+                    "content": base64.b64encode(pdf).decode(),
+                    "filename": f"damdam-invoice-{order_id}.pdf",
+                }
+            ],
+            idempotency_key=f"damdam-manifest-order-{order_id}-invoice-v1",
         )
 
 
@@ -108,4 +152,17 @@ class MetaWhatsAppSender:
         self._send_template(
             phone_number,
             self.settings.whatsapp_family_nomination_template,
+        )
+
+    def send_activation(
+        self, phone_number: str, pilgrim_name: str, tier_name: str, url: str
+    ) -> None:
+        self._send_template(
+            phone_number,
+            self.settings.whatsapp_activation_template,
+            [
+                {"type": "text", "text": pilgrim_name},
+                {"type": "text", "text": tier_name},
+                {"type": "text", "text": url},
+            ],
         )

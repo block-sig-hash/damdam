@@ -46,6 +46,34 @@ class Settings(BaseSettings):
     whatsapp_api_version: str = "v23.0"
     whatsapp_approval_template: str = "hto_account_approved"
     whatsapp_family_nomination_template: str = "family_contact_nominated"
+    whatsapp_activation_template: str = "hto_package_activation"
+    activation_base_url: str = "https://damdam.app/activate"
+
+    invoice_storage_backend: Literal["filesystem", "s3"] = "filesystem"
+    invoice_storage_path: str = "/tmp/damdam-invoices"
+    invoice_s3_endpoint_url: str = ""
+    invoice_s3_access_key_id: str = ""
+    invoice_s3_secret_access_key: str = ""
+    invoice_s3_bucket: str = ""
+    invoice_s3_region: str = "auto"
+    invoice_bank_name: str = "Configure bank name"
+    invoice_account_name: str = "DamDam Nigeria"
+    invoice_account_number: str = "Configure account number"
+
+    @model_validator(mode="after")
+    def s3_invoice_storage_must_be_configured(self) -> "Settings":
+        if self.invoice_storage_backend == "s3" and not all(
+            (
+                self.invoice_s3_endpoint_url,
+                self.invoice_s3_access_key_id,
+                self.invoice_s3_secret_access_key,
+                self.invoice_s3_bucket,
+            )
+        ):
+            raise ValueError(
+                "S3 invoice storage requires endpoint, credentials, and bucket"
+            )
+        return self
 
     @model_validator(mode="after")
     def providers_must_differ(self) -> "Settings":

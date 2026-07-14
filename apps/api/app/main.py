@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any, cast
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,11 +15,15 @@ from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
 from app.config import Settings, get_settings
 from app.container import (
+    CeleryProvisioningScheduler,
     build_notification_service,
     build_otp_service,
     default_dependencies,
 )
 from app.db import SessionFactory
+from app.manifests.invoices import InvoiceStorage, build_invoice_storage
+from app.manifests.orders import ManifestOrderService, ProvisioningScheduler
+from app.manifests.routes import pricing_router
 from app.manifests.routes import router as manifest_router
 from app.manifests.service import ManifestError, ManifestService
 from app.notifications.service import EmailSender, WhatsAppSender
@@ -38,6 +43,8 @@ def create_app(
     clock: Callable[[], datetime] = utc_now,
     email_sender: EmailSender | None = None,
     whatsapp_sender: WhatsAppSender | None = None,
+    invoice_storage: InvoiceStorage | None = None,
+    provisioning_scheduler: ProvisioningScheduler | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     supplied = (redis_client, providers, scheduler, session_factory)
@@ -80,6 +87,13 @@ def create_app(
         resolved_settings, email_sender, whatsapp_sender
     )
     api.state.manifest_service = ManifestService()
+    api.state.manifest_order_service = ManifestOrderService(
+        resolved_settings,
+        notification_service,
+        invoice_storage or build_invoice_storage(resolved_settings),
+        provisioning_scheduler or CeleryProvisioningScheduler(),
+        clock,
+    )
     api.state.hto_service = HTOService(
         resolved_settings, notification_service, clock
     )
@@ -221,6 +235,25 @@ def create_app(
             "manifest_not_found": 404,
             "manifest_already_confirmed": 409,
             "no_valid_rows": 400,
+            "manifest_not_confirmed": 409,
+            "pricing_tier_not_found": 404,
+            "pricing_unavailable": 503,
+            "invalid_pilgrim_selection": 400,
+            "pilgrims_already_grouped": 409,
+            "family_group_not_found": 404,
+            "invalid_family_group_size": 400,
+            "family_group_required": 400,
+            "complete_family_group_required": 400,
+            "individual_pilgrims_required": 400,
+            "pilgrims_already_ordered": 409,
+            "manifest_order_not_found": 404,
+            "invoice_unavailable": 503,
+            "invoice_email_unavailable": 503,
+            "invalid_payment_transition": 409,
+            "provisioning_unavailable": 503,
+            "payment_not_confirmed": 409,
+            "activation_code_unavailable": 503,
+            "activation_delivery_incomplete": 503,
         }
         messages = {
             "csv_required": "Upload a CSV file.",
@@ -232,10 +265,49 @@ def create_app(
             "manifest_not_found": "The manifest was not found.",
             "manifest_already_confirmed": "This manifest has already been confirmed.",
             "no_valid_rows": "The manifest has no valid rows to confirm.",
+            "manifest_not_confirmed": "Confirm the manifest before placing orders.",
+            "pricing_tier_not_found": "The selected pricing tier is unavailable.",
+            "pricing_unavailable": "Current package pricing is unavailable.",
+            "invalid_pilgrim_selection": "Select valid pilgrims from this manifest.",
+            "pilgrims_already_grouped": (
+                "One or more pilgrims already belong to a family group."
+            ),
+            "family_group_not_found": "The family group was not found.",
+            "invalid_family_group_size": (
+                "The family group size is outside the tier limits."
+            ),
+            "family_group_required": "Select one complete Family group for this tier.",
+            "complete_family_group_required": (
+                "Every member of the Family group must be selected."
+            ),
+            "individual_pilgrims_required": "Grouped pilgrims require the Family tier.",
+            "pilgrims_already_ordered": (
+                "One or more pilgrims are already included in an order."
+            ),
+            "manifest_order_not_found": "The manifest order was not found.",
+            "invoice_unavailable": "Invoice generation is temporarily unavailable.",
+            "invoice_email_unavailable": (
+                "The order was saved, but invoice email delivery is unavailable."
+            ),
+            "invalid_payment_transition": (
+                "This order cannot be confirmed from its current state."
+            ),
+            "provisioning_unavailable": (
+                "Payment was recorded, but provisioning could not be queued."
+            ),
+            "payment_not_confirmed": "Payment must be confirmed before provisioning.",
+            "activation_code_unavailable": "An activation code could not be generated.",
+            "activation_delivery_incomplete": (
+                "One or more activation links could not be delivered."
+            ),
         }
         return JSONResponse(
             status_code=statuses[exc.code],
-            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+            content={
+                "error": exc.code,
+                "message": messages[exc.code],
+                "details": jsonable_encoder(exc.details),
+            },
         )
 
     @api.exception_handler(FamilyContactError)
@@ -269,6 +341,7 @@ def create_app(
     api.include_router(auth_router, prefix="/v1")
     api.include_router(admin_router, prefix="/v1")
     api.include_router(manifest_router, prefix="/v1")
+    api.include_router(pricing_router, prefix="/v1")
     api.include_router(otp_webhook_router, prefix="/v1")
     api.include_router(profile_router, prefix="/v1")
     return api
