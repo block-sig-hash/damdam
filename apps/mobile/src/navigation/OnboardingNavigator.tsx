@@ -4,6 +4,7 @@ import { ActivationCodeEntryScreen } from '../screens/ActivationCodeEntry/Activa
 import { ActivationSuccessScreen } from '../screens/ActivationSuccess/ActivationSuccessScreen';
 import { OTPVerificationScreen } from '../screens/OTPVerification/OTPVerificationScreen';
 import { PhoneEntryScreen } from '../screens/PhoneEntry/PhoneEntryScreen';
+import { PinSetupScreen } from '../screens/PinSetup/PinSetupScreen';
 import { PlaceholderScreen } from '../screens/Placeholder/PlaceholderScreen';
 import { ReturningPilgrimScreen } from '../screens/ReturningPilgrim/ReturningPilgrimScreen';
 
@@ -13,7 +14,8 @@ type OnboardingStep =
   | { name: 'otp'; phoneNumber: string; activationCode?: string }
   | { name: 'existing-account'; phoneNumber: string; activationCode?: string }
   | { name: 'verified'; result: AuthResponse; activationCode?: string }
-  | { name: 'activated' };
+  | { name: 'activated'; accessToken: string; isNewUser: boolean }
+  | { name: 'onboarded' };
 
 interface OnboardingNavigatorProps {
   /**
@@ -27,10 +29,10 @@ interface OnboardingNavigatorProps {
 /**
  * A minimal, dependency-free stack for the screens this task covers.
  * Deliberately not @react-navigation yet — there's no benefit to the
- * extra dependency surface until PIN Setup, Family Contact, and
- * Departure Date exist alongside these to actually need routing
- * between siblings, back-stacks, and deep links. Swap this for the
- * real navigator when those screens land.
+ * extra dependency surface until Family Contact and Departure Date
+ * exist alongside these to actually need routing between siblings,
+ * back-stacks, and deep links. Swap this for the real navigator when
+ * those screens land.
  */
 export function OnboardingNavigator({
   initialActivationCode,
@@ -85,31 +87,59 @@ export function OnboardingNavigator({
       );
     case 'verified':
       // AC-07.4/AC-07.5: OTP or recovery → package auto-attached via
-      // code. PIN Setup isn't built yet (tracked separately, US-02's
-      // mobile screen), so a pilgrim who arrived with an activation
-      // code redeems it here rather than waiting on a screen that
-      // doesn't exist; one that arrived without a code sees the
-      // pre-existing "coming in US-02" placeholder unchanged.
+      // code. A pilgrim who arrived with an activation code redeems
+      // it immediately (before PIN Setup) so this rather-early screen
+      // isn't waiting on anything; one that arrived without a code
+      // goes straight into PIN Setup — but only for a genuinely new
+      // pilgrim. 'verified' is reached by both the 'otp' path (always
+      // a new signup, since 'phone' routes an existing number to
+      // 'existing-account' instead) and the 'existing-account' path
+      // (ReturningPilgrimScreen, always a returning pilgrim who
+      // already has a PIN) — is_new_user is what actually
+      // distinguishes them here, not which step led to 'verified'.
       if (step.activationCode) {
         return (
           <ActivationSuccessScreen
             accessToken={step.result.access_token}
             activationCode={step.activationCode}
-            onContinue={() => setStep({ name: 'activated' })}
+            onContinue={() =>
+              setStep({
+                name: 'activated',
+                accessToken: step.result.access_token,
+                isNewUser: step.result.is_new_user,
+              })
+            }
           />
         );
       }
+      if (!step.result.is_new_user) {
+        return <PlaceholderScreen title="Welcome back" note="Home — coming in a later story." />;
+      }
       return (
-        <PlaceholderScreen
-          title={step.result.is_new_user ? "You're verified" : 'Welcome back'}
-          note="Next: set up your PIN — coming in US-02."
+        <PinSetupScreen
+          accessToken={step.result.access_token}
+          onPinSet={() => setStep({ name: 'onboarded' })}
         />
       );
     case 'activated':
+      // Same is_new_user branch as 'verified' above: a returning
+      // pilgrim redeeming a fresh activation code (e.g. a new
+      // package on a device they'd already onboarded from) already
+      // has a PIN and must not be routed back through PIN Setup.
+      if (!step.isNewUser) {
+        return <PlaceholderScreen title="Package active" note="Home — coming in a later story." />;
+      }
+      return (
+        <PinSetupScreen
+          accessToken={step.accessToken}
+          onPinSet={() => setStep({ name: 'onboarded' })}
+        />
+      );
+    case 'onboarded':
       return (
         <PlaceholderScreen
-          title="Package active"
-          note="Next: PIN setup, family contact, and departure date — coming in later stories."
+          title="PIN set"
+          note="Next: family contact and departure date — coming in later stories."
         />
       );
   }

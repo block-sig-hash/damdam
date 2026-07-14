@@ -9,9 +9,9 @@ interface PlaceholderScreenProps {
 
 /**
  * Navigation target for a screen not yet built. Used only for
- * onboarding steps that come after Phone Entry / OTP Verification
- * (PIN Setup — US-02, PIN Unlock — US-02) so this pair of screens is
- * reviewable end-to-end without pretending those stories are done.
+ * onboarding steps that come after PIN Setup (Family Contact,
+ * Departure Date) so PIN Setup is reviewable end-to-end without
+ * pretending those later stories are done.
  */
 export function PlaceholderScreen({ title, note }: PlaceholderScreenProps): React.JSX.Element {
   return (

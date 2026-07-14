@@ -8,6 +8,7 @@ import {
   verifyOtp,
   verifyPinRecovery,
 } from '../api/authClient';
+import { setPin } from '../api/pinClient';
 import { OnboardingNavigator } from './OnboardingNavigator';
 
 jest.mock('../api/authClient', () => {
@@ -28,6 +29,13 @@ jest.mock('../api/activationClient', () => {
     redeemActivationCode: jest.fn(),
   };
 });
+jest.mock('../api/pinClient', () => {
+  const actual = jest.requireActual('../api/pinClient');
+  return {
+    ...actual,
+    setPin: jest.fn(),
+  };
+});
 
 const mockRequestOtp = requestOtp as jest.MockedFunction<typeof requestOtp>;
 const mockVerifyOtp = verifyOtp as jest.MockedFunction<typeof verifyOtp>;
@@ -43,6 +51,7 @@ const mockPreview = previewActivationCode as jest.MockedFunction<
 const mockRedeem = redeemActivationCode as jest.MockedFunction<
   typeof redeemActivationCode
 >;
+const mockSetPin = setPin as jest.MockedFunction<typeof setPin>;
 
 beforeEach(() => {
   mockRequestOtp.mockReset();
@@ -51,6 +60,7 @@ beforeEach(() => {
   mockVerifyPinRecovery.mockReset();
   mockPreview.mockReset();
   mockRedeem.mockReset();
+  mockSetPin.mockReset();
 });
 
 describe('OnboardingNavigator', () => {
@@ -123,7 +133,20 @@ describe('OnboardingNavigator', () => {
     await act(async () => {
       fireEvent.press(screen.getByTestId('activation-success-continue'));
     });
-    expect(screen.getByText('Package active')).toBeTruthy();
+
+    // Activation success now leads into PIN Setup (US-02), not
+    // straight to a placeholder — same PIN Setup screen Flow A uses.
+    expect(screen.getByTestId('pin-setup-input')).toBeTruthy();
+    mockSetPin.mockResolvedValue({ message: 'PIN set' });
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('pin-setup-input'), '4682');
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('pin-setup-input'), '4682');
+    });
+
+    expect(mockSetPin).toHaveBeenCalledWith('access-token', '4682');
+    expect(await screen.findByText('PIN set')).toBeTruthy();
   });
 
   it('routes an existing account to re-authentication, carrying the activation code through (AC-01.7/AC-07.5)', async () => {
@@ -184,5 +207,86 @@ describe('OnboardingNavigator', () => {
     expect(mockVerifyPinRecovery).toHaveBeenCalledWith('08012345678', '123456', expect.any(String));
     expect(await screen.findByTestId('activation-success')).toBeTruthy();
     expect(mockRedeem).toHaveBeenCalledWith('access-token', 'ABCD1234');
+
+    // A returning pilgrim already has a PIN — activation success must
+    // not route them back through PIN Setup.
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('activation-success-continue'));
+    });
+    expect(screen.queryByTestId('pin-setup-input')).toBeNull();
+    expect(mockSetPin).not.toHaveBeenCalled();
+  });
+
+  it('skips PIN Setup entirely for a returning pilgrim with no activation code (AC-02.3)', async () => {
+    mockRequestOtp.mockRejectedValue(
+      new OtpApiError('account_exists', 'This number already has an account. Please log in.'),
+    );
+    mockRequestPinRecovery.mockResolvedValue({ message: 'OTP sent' });
+    mockVerifyPinRecovery.mockResolvedValue({
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+      is_new_user: false,
+      user: {
+        id: 'user-1',
+        phone_number: '+2348012345678',
+        first_name: '',
+        last_name: '',
+        email: null,
+        verified_cli: true,
+        platform: 'android',
+        status: 'active',
+      },
+    });
+
+    await render(<OnboardingNavigator />);
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('phone-entry-input'), '08012345678');
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('phone-entry-submit'));
+    });
+    expect(mockRequestPinRecovery).toHaveBeenCalledWith('08012345678');
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('otp-code-input'), '123456');
+    });
+
+    // Lands straight on the (placeholder) Home destination, never on
+    // PIN Setup — this pilgrim already has a PIN from their original
+    // signup, so re-authenticating must not ask them to set a new one.
+    expect(await screen.findByText('Welcome back')).toBeTruthy();
+    expect(screen.queryByTestId('pin-setup-input')).toBeNull();
+    expect(mockSetPin).not.toHaveBeenCalled();
+  });
+
+  it('sends a brand-new pilgrim through PIN Setup with no activation code (Flow A, AC-02.1)', async () => {
+    mockRequestOtp.mockResolvedValue({ message: 'OTP sent' });
+    mockVerifyOtp.mockResolvedValue({
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+      is_new_user: true,
+      user: {
+        id: 'user-1',
+        phone_number: '+2348012345678',
+        first_name: '',
+        last_name: '',
+        email: null,
+        verified_cli: false,
+        platform: 'android',
+        status: 'active',
+      },
+    });
+
+    await render(<OnboardingNavigator />);
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('phone-entry-input'), '08012345678');
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('phone-entry-submit'));
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('otp-code-input'), '123456');
+    });
+
+    expect(screen.getByTestId('pin-setup-input')).toBeTruthy();
   });
 });

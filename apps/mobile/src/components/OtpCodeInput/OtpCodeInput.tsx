@@ -11,6 +11,9 @@ interface OtpCodeInputProps {
   onSubmit?: () => void;
   errored?: boolean;
   testID?: string;
+  /** AC-02.2: PIN entry is masked. OTP entry stays plain-digit. */
+  masked?: boolean;
+  accessibilityLabel?: string;
 }
 
 /**
@@ -29,6 +32,8 @@ export function OtpCodeInput({
   onSubmit,
   errored = false,
   testID = 'otp-code-input',
+  masked = false,
+  accessibilityLabel = 'Verification code',
 }: OtpCodeInputProps): React.JSX.Element {
   const inputRef = useRef<TextInput>(null);
 
@@ -50,7 +55,7 @@ export function OtpCodeInput({
               errored && styles.boxErrored,
             ]}
           >
-            <Text style={styles.digit}>{digit}</Text>
+            <Text style={styles.digit}>{digit ? (masked ? '•' : digit) : ''}</Text>
           </View>
         );
       })}
@@ -64,10 +69,11 @@ export function OtpCodeInput({
         maxLength={length}
         editable={editable}
         autoFocus={autoFocus}
-        accessibilityLabel="Verification code"
+        secureTextEntry={masked}
+        accessibilityLabel={accessibilityLabel}
         style={styles.hiddenInput}
         importantForAutofill="yes"
-        textContentType="oneTimeCode"
+        textContentType={masked ? 'password' : 'oneTimeCode'}
         caretHidden
       />
     </Pressable>
