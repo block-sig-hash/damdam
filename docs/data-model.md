@@ -305,7 +305,7 @@ one, rather than hardcoding a single vendor's identifier field.
 | user_id | UUID | FK → users | |
 | pricing_tier_id | UUID | FK → pricing_tiers | |
 | source | ENUM | NOT NULL | `retail` \| `hto_manifest` |
-| status | ENUM | DEFAULT 'active' | `active` \| `expired` \| `cancelled` |
+| status | ENUM | DEFAULT 'active' | `pending` (retail checkout only) \| `active` \| `expired` \| `cancelled` |
 | group_size | INTEGER | DEFAULT 1 | Number of pilgrims covered by this purchase (§6.4) |
 | data_gb_total | INTEGER | NOT NULL | Snapshot at purchase time |
 | data_gb_remaining | DECIMAL(6,2) | NOT NULL | |
@@ -331,6 +331,7 @@ one, rather than hardcoding a single vendor's identifier field.
 | payment_method | ENUM | NULLABLE | `card` \| `bank_transfer` \| `ussd` \| `invoice` |
 | status | ENUM | NOT NULL | `pending` \| `success` \| `failed` |
 | webhook_payload | JSONB | NULLABLE | Raw processor payload (Paystack or Flutterwave), audit trail |
+| receipt_sent_at | TIMESTAMPTZ | NULLABLE | Set after all applicable receipt channels succeed; permits safe retry after a notification outage |
 
 **Indexes:** `processor_reference` (unique, partial index `WHERE
 processor_reference IS NOT NULL`)
@@ -933,3 +934,32 @@ existing `invalid_approval_transition` error, so no new error code was
 needed. Unlike `approve()`, `reject()` sends no notification (no AC
 requires one, and `prd.md` §4.2's AC-04.5 only covers the approval path);
 it commits the terminal state and returns.
+
+---
+
+## 6.18 Amendment — US-09 Retail Payment Materialization
+
+US-09 makes the previously specified `transactions` table real in migration
+`0010_us09_retail_payments`. The table uses one globally unique, partial
+`processor_reference` index (`WHERE processor_reference IS NOT NULL`) across
+both Paystack and Flutterwave. A processor name is therefore audit/routing
+metadata, not part of the idempotency key: the first matching success webhook
+can transition `pending → success`, and every duplicate becomes a no-op even
+when callbacks are retried concurrently.
+
+Retail checkout must return a durable `package_id` before the payment web view
+opens, while balances cannot be active before a signed success webhook. The
+`package_status` enum therefore gains `pending`, used only for a Path-A retail
+package between successful checkout initialization and webhook confirmation.
+The package snapshots the selected tier and group size immediately, starts with
+zero remaining balances, and is atomically changed to `active` with its full
+snapshot balances by the same transaction-status transition that wins the
+idempotency race. HTO-manifest redemption remains unchanged and creates an
+`active` package directly because its invoice was already confirmed upstream.
+
+`transactions.receipt_sent_at` is a delivery checkpoint rather than a new
+payment state. Activation commits before receipt delivery so a Resend or Meta
+outage can never roll back a paid package. If delivery fails, a later duplicate
+webhook remains a payment no-op but retries only the missing receipt checkpoint;
+successful email delivery also uses the processor reference as Resend's
+idempotency key.

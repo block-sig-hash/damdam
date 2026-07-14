@@ -170,6 +170,8 @@ POST   /packages/purchase
   200: { package_id, processor: "paystack"|"flutterwave",
           processor_reference, checkout_url }
   400: { error: "invalid_group_size" }
+  404: { error: "pricing_tier_not_found" }
+  503: { error: "payment_unavailable" }
   Note: `processor` and `checkout_url` are generic — Paystack is
   used unless its checkout initialization call fails, in which
   case the backend falls back to Flutterwave automatically before
@@ -183,6 +185,8 @@ GET    /packages/{id}/status
           data_gb_remaining, pstn_minutes_remaining }
   Used by the checkout success-screen polling fallback (§5.3
   failure mode in prd.md)
+  Ownership is enforced against the authenticated pilgrim; another
+  user's package returns 404.
 
 GET    /me/packages
   Auth required
@@ -426,14 +430,22 @@ POST   /webhooks/paystack
   Handles: charge.success
   Idempotent on transaction.processor_reference (prd.md §5.3;
   data-model.md §6.7 — field renamed from paystack_reference)
+  200: { processed: true|false } (`false` for duplicates and
+       non-success events, so processor retries stop cleanly)
+  401: { error: "invalid_webhook_signature" }
 
 POST   /webhooks/flutterwave
   Flutterwave-signed (verif-hash header verification)
   Handles: charge.completed
   Same idempotency pattern as the Paystack webhook above, on
-  transaction.processor_reference — only fires for transactions
-  where processor = 'flutterwave' (data-model.md §6.7's automatic
-  fallback path)
+  transaction.processor_reference. Normally this follows a
+  Flutterwave fallback checkout; if the primary timed out after
+  accepting the same generated reference, the first valid signed
+  success webhook from either processor wins and records the actual
+  processor without provisioning twice.
+  Same response/error contract as Paystack. Both routes activate
+  the pending package synchronously before returning, then dispatch
+  the receipt with a durable retry checkpoint (data-model.md §6.18).
 
 POST   /webhooks/telnyx/call-events  (see §7.5)
 

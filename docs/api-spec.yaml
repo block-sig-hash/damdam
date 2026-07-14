@@ -1037,6 +1037,88 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RetailPricingTierListResponse'
+  /v1/packages/purchase:
+    post:
+      tags:
+      - payments
+      summary: Purchase
+      operationId: purchase_v1_packages_purchase_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/packages/{package_id}/status:
+    get:
+      tags:
+      - payments
+      summary: Package Status
+      operationId: package_status_v1_packages__package_id__status_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackageStatusResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/webhooks/{processor}:
+    post:
+      tags:
+      - payments
+      summary: Webhook
+      operationId: webhook_v1_webhooks__processor__post
+      parameters:
+      - name: processor
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Processor
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     ActivationPreviewResponse:
@@ -1815,6 +1897,27 @@ components:
           default: true
       type: object
       title: PINVerifyResponse
+    PackageStatusResponse:
+      properties:
+        status:
+          type: string
+          enum:
+          - pending
+          - active
+          - expired
+          title: Status
+        data_gb_remaining:
+          type: number
+          title: Data Gb Remaining
+        pstn_minutes_remaining:
+          type: number
+          title: Pstn Minutes Remaining
+      type: object
+      required:
+      - status
+      - data_gb_remaining
+      - pstn_minutes_remaining
+      title: PackageStatusResponse
     PaymentConfirmationResponse:
       properties:
         status:
@@ -1923,6 +2026,46 @@ components:
       - percent_change
       - changed_at
       title: PricingTierUpdateResponse
+    PurchaseRequest:
+      properties:
+        pricing_tier_id:
+          type: string
+          format: uuid
+          title: Pricing Tier Id
+        group_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Group Size
+      type: object
+      required:
+      - pricing_tier_id
+      title: PurchaseRequest
+    PurchaseResponse:
+      properties:
+        package_id:
+          type: string
+          format: uuid
+          title: Package Id
+        processor:
+          type: string
+          enum:
+          - paystack
+          - flutterwave
+          title: Processor
+        processor_reference:
+          type: string
+          title: Processor Reference
+        checkout_url:
+          type: string
+          title: Checkout Url
+      type: object
+      required:
+      - package_id
+      - processor
+      - processor_reference
+      - checkout_url
+      title: PurchaseResponse
     RefreshRequest:
       properties:
         refresh_token:
@@ -2098,6 +2241,15 @@ components:
       - msg
       - type
       title: ValidationError
+    WebhookResponse:
+      properties:
+        processed:
+          type: boolean
+          title: Processed
+      type: object
+      required:
+      - processed
+      title: WebhookResponse
   securitySchemes:
     HTTPBearer:
       type: http

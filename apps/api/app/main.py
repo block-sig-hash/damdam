@@ -20,6 +20,7 @@ from app.container import (
     CeleryProvisioningScheduler,
     build_notification_service,
     build_otp_service,
+    build_payment_providers,
     default_dependencies,
 )
 from app.db import SessionFactory
@@ -32,6 +33,9 @@ from app.notifications.service import EmailSender, WhatsAppSender
 from app.otp.providers.base import OTPProvider
 from app.otp.routes import router as otp_webhook_router
 from app.otp.service import FailoverScheduler, OTPError, RedisClient, utc_now
+from app.payments.providers import PaymentProvider
+from app.payments.routes import router as payment_router
+from app.payments.service import PaymentError, PaymentService
 from app.pricing.routes import router as retail_pricing_router
 from app.pricing.service import RetailPricingService
 from app.profile.family_contacts import FamilyContactError, FamilyContactService
@@ -49,6 +53,7 @@ def create_app(
     whatsapp_sender: WhatsAppSender | None = None,
     invoice_storage: InvoiceStorage | None = None,
     provisioning_scheduler: ProvisioningScheduler | None = None,
+    payment_providers: Mapping[str, PaymentProvider] | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     supplied = (redis_client, providers, scheduler, session_factory)
@@ -106,6 +111,12 @@ def create_app(
     )
     api.state.activation_service = ActivationService(clock)
     api.state.retail_pricing_service = RetailPricingService()
+    api.state.payment_service = PaymentService(
+        resolved_settings,
+        payment_providers or build_payment_providers(resolved_settings),
+        notification_service,
+        clock,
+    )
 
     @api.exception_handler(OTPError)
     async def otp_error_handler(request: Request, exc: OTPError) -> JSONResponse:
@@ -366,6 +377,36 @@ def create_app(
             content={"error": exc.code, "message": messages[exc.code], "details": {}},
         )
 
+    @api.exception_handler(PaymentError)
+    async def payment_error_handler(
+        request: Request, exc: PaymentError
+    ) -> JSONResponse:
+        del request
+        statuses = {
+            "pricing_tier_not_found": 404,
+            "invalid_group_size": 400,
+            "payment_unavailable": 503,
+            "invalid_processor": 404,
+            "invalid_webhook_signature": 401,
+            "invalid_webhook_payload": 400,
+            "package_not_found": 404,
+        }
+        messages = {
+            "pricing_tier_not_found": "The selected pricing tier is unavailable.",
+            "invalid_group_size": "Choose a valid group size for this package.",
+            "payment_unavailable": (
+                "Both payment services are unavailable. Please try again."
+            ),
+            "invalid_processor": "The payment processor is not supported.",
+            "invalid_webhook_signature": "Webhook signature is invalid.",
+            "invalid_webhook_payload": "Webhook payload is invalid.",
+            "package_not_found": "The package was not found.",
+        }
+        return JSONResponse(
+            status_code=statuses[exc.code],
+            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+        )
+
     @api.get("/health", tags=["system"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -378,6 +419,7 @@ def create_app(
     api.include_router(profile_router, prefix="/v1")
     api.include_router(activation_router, prefix="/v1")
     api.include_router(retail_pricing_router, prefix="/v1")
+    api.include_router(payment_router, prefix="/v1")
     return api
 
 

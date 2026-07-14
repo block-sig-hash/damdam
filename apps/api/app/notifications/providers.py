@@ -97,6 +97,22 @@ class ResendEmailSender:
             idempotency_key=f"damdam-manifest-order-{order_id}-invoice-v1",
         )
 
+    def send_receipt(
+        self, email: str, tier_name: str, amount_ngn: Decimal, reference: str
+    ) -> None:
+        safe_tier = escape(tier_name)
+        safe_reference = escape(reference)
+        self._send(
+            email,
+            "Your DamDam payment receipt",
+            (
+                f"<p>Payment received for your {safe_tier} package.</p>"
+                f"<p>Amount: NGN {amount_ngn:,.2f}<br>"
+                f"Reference: {safe_reference}</p>"
+            ),
+            idempotency_key=f"damdam-retail-receipt-{reference}",
+        )
+
 
 class MetaWhatsAppSender:
     def __init__(self, settings: Settings) -> None:
@@ -164,5 +180,18 @@ class MetaWhatsAppSender:
                 {"type": "text", "text": pilgrim_name},
                 {"type": "text", "text": tier_name},
                 {"type": "text", "text": url},
+            ],
+        )
+
+    def send_receipt(
+        self, phone_number: str, tier_name: str, amount_ngn: Decimal, reference: str
+    ) -> None:
+        self._send_template(
+            phone_number,
+            self.settings.whatsapp_receipt_template,
+            [
+                {"type": "text", "text": tier_name},
+                {"type": "text", "text": f"NGN {amount_ngn:,.2f}"},
+                {"type": "text", "text": reference},
             ],
         )

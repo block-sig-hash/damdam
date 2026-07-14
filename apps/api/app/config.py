@@ -47,7 +47,18 @@ class Settings(BaseSettings):
     whatsapp_approval_template: str = "hto_account_approved"
     whatsapp_family_nomination_template: str = "family_contact_nominated"
     whatsapp_activation_template: str = "hto_package_activation"
+    whatsapp_receipt_template: str = "retail_payment_receipt"
     activation_base_url: str = "https://damdam.app/activate"
+
+    payment_processor_primary: Literal["paystack", "flutterwave"] = "paystack"
+    payment_processor_secondary: Literal["paystack", "flutterwave"] = "flutterwave"
+    payment_request_timeout_seconds: int = 15
+    payment_callback_url: str = "https://damdam.app/payment/callback"
+    paystack_base_url: str = "https://api.paystack.co"
+    paystack_secret_key: str = ""
+    flutterwave_base_url: str = "https://api.flutterwave.com"
+    flutterwave_secret_key: str = ""
+    flutterwave_webhook_hash: str = ""
 
     invoice_storage_backend: Literal["filesystem", "s3"] = "filesystem"
     invoice_storage_path: str = "/tmp/damdam-invoices"
@@ -79,6 +90,12 @@ class Settings(BaseSettings):
     def providers_must_differ(self) -> "Settings":
         if self.otp_provider_primary == self.otp_provider_secondary:
             raise ValueError("OTP primary and secondary providers must differ")
+        return self
+
+    @model_validator(mode="after")
+    def payment_processors_must_differ(self) -> "Settings":
+        if self.payment_processor_primary == self.payment_processor_secondary:
+            raise ValueError("Payment primary and secondary processors must differ")
         return self
 
 

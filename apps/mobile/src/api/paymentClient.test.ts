@@ -1,0 +1,52 @@
+import { getPackageStatus, initializePurchase } from './paymentClient';
+
+const fetchMock = jest.fn();
+global.fetch = fetchMock;
+
+beforeEach(() => fetchMock.mockReset());
+
+describe('paymentClient', () => {
+  it('AC-09.1: initializes a processor-neutral checkout with the selected group size', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        package_id: 'package-1',
+        processor: 'flutterwave',
+        processor_reference: 'reference-1',
+        checkout_url: 'https://checkout.example/reference-1',
+      }),
+    });
+
+    const checkout = await initializePurchase('token', 'family', 4);
+
+    expect(checkout.checkout_url).toContain('https://checkout.example');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/packages/purchase'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+        body: JSON.stringify({ pricing_tier_id: 'family', group_size: 4 }),
+      }),
+    );
+  });
+
+  it('AC-09.3/4: exposes package status and server failure reasons', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ message: 'Both payment services are unavailable.' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'active', data_gb_remaining: 10, pstn_minutes_remaining: 90 }),
+      });
+
+    await expect(initializePurchase('token', 'standard')).rejects.toThrow(
+      'Both payment services are unavailable.',
+    );
+    await expect(getPackageStatus('token', 'package-1')).resolves.toEqual(
+      expect.objectContaining({ status: 'active' }),
+    );
+  });
+});
+
