@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { PinApiError, setPin } from '../../api/pinClient';
+import { savePinLocally } from '../../utils/pinLocalStore';
 import { usePinSetup } from './usePinSetup';
 
 jest.mock('../../api/pinClient', () => {
@@ -9,11 +10,17 @@ jest.mock('../../api/pinClient', () => {
     setPin: jest.fn(),
   };
 });
+jest.mock('../../utils/pinLocalStore', () => ({
+  ...jest.requireActual('../../utils/pinLocalStore'),
+  savePinLocally: jest.fn(),
+}));
 
 const mockSetPin = setPin as jest.MockedFunction<typeof setPin>;
+const mockSaveLocally = savePinLocally as jest.MockedFunction<typeof savePinLocally>;
 
 beforeEach(() => {
   mockSetPin.mockReset();
+  mockSaveLocally.mockReset();
 });
 
 async function mount(onPinSet: jest.Mock) {
@@ -56,8 +63,9 @@ describe('usePinSetup', () => {
     expect(mockSetPin).not.toHaveBeenCalled();
   });
 
-  it('sets the PIN and calls onPinSet when the confirmation matches (AC-02.2)', async () => {
+  it('sets the PIN, saves it locally for PIN Unlock, and calls onPinSet on match (AC-02.2)', async () => {
     mockSetPin.mockResolvedValue({ message: 'PIN set' });
+    mockSaveLocally.mockResolvedValue(undefined);
     const onPinSet = jest.fn();
     const { result } = await mount(onPinSet);
 
@@ -75,7 +83,32 @@ describe('usePinSetup', () => {
     });
 
     expect(mockSetPin).toHaveBeenCalledWith('access-token', '4682');
+    expect(mockSaveLocally).toHaveBeenCalledWith('4682');
     expect(onPinSet).toHaveBeenCalled();
+  });
+
+  it('still completes onboarding if the local Keychain save fails (best-effort)', async () => {
+    mockSetPin.mockResolvedValue({ message: 'PIN set' });
+    mockSaveLocally.mockRejectedValue(new Error('Keychain unavailable'));
+    const onPinSet = jest.fn();
+    const { result } = await mount(onPinSet);
+
+    await act(async () => {
+      result.current.setValue('4682');
+    });
+    await act(async () => {
+      await result.current.submit();
+    });
+    await act(async () => {
+      result.current.setValue('4682');
+    });
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(mockSaveLocally).toHaveBeenCalledWith('4682');
+    expect(onPinSet).toHaveBeenCalled();
+    expect(result.current.errorMessage).toBeNull();
   });
 
   it('restarts at the enter stage with an error when the confirmation does not match (AC-02.2)', async () => {
