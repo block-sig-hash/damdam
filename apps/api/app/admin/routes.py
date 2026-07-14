@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Annotated, cast
 from uuid import UUID
 
@@ -16,7 +17,11 @@ from app.auth.schemas import (
 from app.manifests.orders import ManifestOrderService
 from app.manifests.schemas import (
     AdminManifestOrderListResponse,
+    AdminPricingTierListResponse,
+    AdminPricingTierResponse,
     PaymentConfirmationResponse,
+    PricingTierUpdateRequest,
+    PricingTierUpdateResponse,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -137,3 +142,54 @@ def confirm_manifest_order_payment(
     with request.app.state.session_factory() as session:
         order = _order_service(request).confirm_payment(session, order_id, admin)
     return PaymentConfirmationResponse(status=order.status)
+
+
+@router.get("/pricing-tiers", response_model=AdminPricingTierListResponse)
+def list_admin_pricing_tiers(
+    request: Request,
+    admin: Annotated[AdminUser, Depends(current_admin)],
+) -> AdminPricingTierListResponse:
+    del admin
+    with request.app.state.session_factory() as session:
+        tiers = _order_service(request).list_admin_pricing_tiers(session)
+    return AdminPricingTierListResponse(
+        tiers=[
+            AdminPricingTierResponse(
+                id=tier.id,
+                name=tier.name,
+                ngn_price=float(tier.ngn_price),
+                is_group_tier=tier.is_group_tier,
+            )
+            for tier in tiers
+        ]
+    )
+
+
+@router.patch(
+    "/pricing-tiers/{tier_id}",
+    response_model=PricingTierUpdateResponse,
+)
+def update_admin_pricing_tier(
+    tier_id: UUID,
+    payload: PricingTierUpdateRequest,
+    request: Request,
+    admin: Annotated[AdminUser, Depends(current_admin)],
+) -> PricingTierUpdateResponse:
+    with request.app.state.session_factory() as session:
+        tier, change = _order_service(request).update_tier_price(
+            session, tier_id, Decimal(str(payload.ngn_price)), admin
+        )
+    percent_change = (
+        float((change.new_ngn_price - change.old_ngn_price) / change.old_ngn_price)
+        * 100
+        if change.old_ngn_price
+        else 0.0
+    )
+    return PricingTierUpdateResponse(
+        id=tier.id,
+        name=tier.name,
+        old_ngn_price=float(change.old_ngn_price),
+        new_ngn_price=float(change.new_ngn_price),
+        percent_change=percent_change,
+        changed_at=change.changed_at,
+    )

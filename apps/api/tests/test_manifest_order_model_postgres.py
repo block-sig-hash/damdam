@@ -1,5 +1,4 @@
 import os
-from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
@@ -8,7 +7,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.auth.models import (
-    DailyPriceCache,
     Manifest,
     ManifestOrder,
     ManifestPilgrim,
@@ -54,17 +52,10 @@ def test_manifest_supports_multiple_orders_and_restricts_ordered_pilgrim() -> No
             data_gb=5,
             pstn_minutes=30,
             wholesale_usd_price=Decimal("80.00"),
+            ngn_price=Decimal("160000.00"),
         )
         session.add_all([manifest, tier])
         session.flush()
-        session.add(
-            DailyPriceCache(
-                pricing_tier_id=tier.id,
-                date=date(2026, 7, 14),
-                ngn_price=Decimal("160000.00"),
-                fx_rate_used=Decimal("1600.0000"),
-            )
-        )
         first_order = ManifestOrder(
             manifest_id=manifest.id,
             pricing_tier_id=tier.id,
@@ -138,6 +129,7 @@ def test_manifest_order_rejects_non_positive_amounts() -> None:
             data_gb=1,
             pstn_minutes=0,
             wholesale_usd_price=Decimal("80.00"),
+            ngn_price=Decimal("80000.00"),
         )
         session.add_all([manifest, tier])
         session.flush()
