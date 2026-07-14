@@ -71,6 +71,25 @@ that quietly stops mattering to anyone until a screen ships looking
 wrong. Building that CI step is a prerequisite for this row to be
 real, not optional polish.
 
+**Migration testing gap:** the API coverage row above excludes
+migrations, and CI's "Apply database migrations" step
+(`infrastructure.md` §11.4) always runs against a freshly-provisioned,
+empty Postgres service container — it has no persistent volume and no
+seeded data, so it can never catch a migration that only fails against
+a table that already has rows (a `NOT NULL` column added with no
+backfill, a new constraint an existing row would violate, a shape
+change that assumes emptiness). CI passing is therefore not sufficient
+evidence a migration is safe for any environment other than a fresh
+one. PR #41 is the concrete example: `0008_us26_manual_pricing`'s
+initial version passed CI cleanly but failed with a `NotNullViolation`
+the first time it was run against a database that already had
+`pricing_tiers` rows. Any migration that adds a `NOT NULL` column, a
+new constraint, or otherwise changes shape on a table that could
+plausibly already have rows in some real environment (local dev, a
+teammate's seeded database, staging once it exists) should be manually
+tested against seeded data before merging, not just against CI's empty
+database.
+
 **Explicit test-to-AC mapping requirement:** every PR implementing
 a user story should include, in the test file itself (as comments
 or test names), a reference to which `AC-XX.X` each test proves.
