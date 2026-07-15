@@ -154,6 +154,22 @@ Line-heights are set at 1.4–1.53× across body sizes (above the
 1.4× WCAG 1.4.8 guidance), a deliberate margin given the
 demographic rather than the minimum-compliant value.
 
+**Bilingual / RTL content (first introduced in US-12):** Inter is
+bundled as a local Latin-only asset (§2, above) with no Arabic
+glyphs, and the app has no font-swap infrastructure. Rather than
+build one for a single Arabic phrasebook, any Arabic-script text
+**does not** set `fontFamily: 'Inter'` — it inherits the platform
+system font (San Francisco / Roboto), both of which cover Arabic
+natively, and sets `writingDirection: 'rtl'` + `textAlign: 'right'`
+explicitly rather than relying on Unicode bidi auto-detection,
+since a short standalone phrase (not embedded in a longer LTR
+paragraph) is exactly the case auto-detection handles least
+reliably. Size/weight tokens from the table above still apply —
+this is a font-family and direction exception only, not a
+separate type scale. If Arabic content grows beyond a short
+phrase list, revisit bundling an Arabic-covering face rather than
+continuing to special-case system fonts per instance.
+
 ---
 
 ### 3. Spacing & layout scale
