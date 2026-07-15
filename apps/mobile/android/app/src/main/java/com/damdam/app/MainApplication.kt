@@ -12,12 +12,7 @@ class MainApplication : Application(), ReactApplication {
   override val reactHost: ReactHost by lazy {
     getDefaultReactHost(
       context = applicationContext,
-      packageList =
-        PackageList(this).packages.apply {
-          // EsimCompatibilityPackage is local app code, not an
-          // npm dependency, so autolinking can't discover it.
-          add(EsimCompatibilityPackage())
-        },
+      packageList = PackageList(this).packages,
     )
   }
 

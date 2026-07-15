@@ -262,11 +262,17 @@ Support to get help."* Two buttons: "Continue" (proceeds to QR
 display) and "Support" (WhatsApp deep link, pre-filled order
 reference).
 
-**Behavioural note:** Fires `POST /me/device-compatibility` on
-whichever action the user takes (Continue or Support), including
-`platform`, `device_model`, `os_version` — not fired on modal
-display alone. A neutral dismiss (back gesture) defaults to
-logging as "Continue," since the modal has no true neutral exit.
+**Behavioural note:** Fires `POST /me/device-compatibility`
+(`platform`, `device_model`, `os_version`) on detection — i.e. as
+soon as the check on Screen 15 comes back unsupported, before this
+modal is even shown, same as the compatible path. This is
+deliberate: AC-10.7's HTO follow-up flag has to be set for every
+genuinely incompatible pilgrim, including one who backgrounds or
+force-quits the app after seeing the warning without tapping
+Continue or Support — deferring the log to that action would leave
+exactly that pilgrim (the one who didn't engage further) unflagged.
+Continue/Support/back-gesture only mark the warning as shown
+(AC-10.6, so it isn't repeated) — they do not log a second time.
 
 ---
 

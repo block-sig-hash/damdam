@@ -164,6 +164,75 @@ def test_incompatible_device_flags_the_linked_manifest_pilgrim(
         assert pilgrim.esim_incompatible_flag is True
 
 
+def test_incompatible_device_flags_lowest_id_pilgrim_deterministically(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """Regression test for the log_check ordering fix (PR #62 review):
+    a user linked to more than one ManifestPilgrim row (e.g. re-added
+    on a different manifest) must deterministically flag the
+    lowest-id row, not whichever `.first()` happened to return.
+    The higher-id row is inserted first here specifically so an
+    unordered `.first()` would pick the wrong one — this test fails
+    without the `.order_by(ManifestPilgrim.id)` fix.
+    """
+    api = _payload(settings, redis_client, providers, scheduler, session_factory, clock)
+    client, user_id = _authenticated_client(api, "08099998888")
+
+    organization = create_operator(session_factory, "hto-ordering@example.com")
+    high_id = UUID("ffffffff-ffff-ffff-ffff-ffffffffffff")
+    low_id = UUID("00000000-0000-0000-0000-000000000001")
+    with session_factory() as session:
+        manifest = Manifest(
+            organization_id=organization.id,
+            name="Flight NAF203",
+            status=ManifestStatus.VALIDATED,
+        )
+        session.add(manifest)
+        session.flush()
+        # Inserted in this order (high id first) so an unordered
+        # `.first()` would return the wrong row.
+        pilgrim_high = ManifestPilgrim(
+            id=high_id,
+            manifest_id=manifest.id,
+            first_name="Amina",
+            last_name="Yusuf-Later",
+            phone_number="08099998888",
+            row_number=5,
+            validation_status=ManifestValidationStatus.VALID,
+            user_id=user_id,
+        )
+        pilgrim_low = ManifestPilgrim(
+            id=low_id,
+            manifest_id=manifest.id,
+            first_name="Amina",
+            last_name="Yusuf-Original",
+            phone_number="08099998888",
+            row_number=2,
+            validation_status=ManifestValidationStatus.VALID,
+            user_id=user_id,
+        )
+        session.add(pilgrim_high)
+        session.commit()
+        session.add(pilgrim_low)
+        session.commit()
+
+    response = client.post(
+        "/v1/me/device-compatibility",
+        json={
+            "platform": "android",
+            "device_model": "Tecno Spark 10",
+            "esim_supported": False,
+        },
+    )
+
+    assert response.status_code == 201
+    with session_factory() as session:
+        flagged_low = session.get(ManifestPilgrim, low_id)
+        flagged_high = session.get(ManifestPilgrim, high_id)
+        assert flagged_low is not None and flagged_low.esim_incompatible_flag is True
+        assert flagged_high is not None and flagged_high.esim_incompatible_flag is False
+
+
 def test_incompatible_device_for_retail_pilgrim_does_not_error(
     settings, redis_client, providers, scheduler, session_factory, clock
 ) -> None:
@@ -273,3 +342,54 @@ def test_hto_pilgrims_list_shows_follow_up_flag_and_is_tenant_scoped(
     assert pilgrims["Bello Aliyu"]["esim_status"] == "not_checked"
     assert pilgrims["Bello Aliyu"]["activation_status"] == "not_activated"
     assert pilgrims["Bello Aliyu"]["tier"] is None
+
+
+def test_hto_pilgrims_list_filters_by_manifest_id(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """The one documented query param (api-spec.md §7.8) actually filters —
+    two manifests under the *same* organization, so this isolates the
+    manifest_id filter from tenant scoping (already covered above)."""
+    api = _payload(settings, redis_client, providers, scheduler, session_factory, clock)
+    owner = create_operator(session_factory, "hto-filter@example.com")
+
+    with session_factory() as session:
+        manifest_a = Manifest(
+            organization_id=owner.id,
+            name="Flight NAF203",
+            status=ManifestStatus.VALIDATED,
+        )
+        manifest_b = Manifest(
+            organization_id=owner.id,
+            name="Flight NAF900",
+            status=ManifestStatus.VALIDATED,
+        )
+        session.add_all([manifest_a, manifest_b])
+        session.flush()
+
+        pilgrim_a = ManifestPilgrim(
+            manifest_id=manifest_a.id,
+            first_name="Amina",
+            last_name="Yusuf",
+            phone_number="08077778888",
+            row_number=1,
+            validation_status=ManifestValidationStatus.VALID,
+        )
+        pilgrim_b = ManifestPilgrim(
+            manifest_id=manifest_b.id,
+            first_name="Bello",
+            last_name="Aliyu",
+            phone_number="08088889999",
+            row_number=1,
+            validation_status=ManifestValidationStatus.VALID,
+        )
+        session.add_all([pilgrim_a, pilgrim_b])
+        session.commit()
+        manifest_a_id = manifest_a.id
+
+    client = TestClient(api, headers=operator_headers(settings, clock, owner.id))
+    response = client.get(f"/v1/hto/pilgrims?manifest_id={manifest_a_id}")
+
+    assert response.status_code == 200
+    pilgrims = {p["name"] for p in response.json()["pilgrims"]}
+    assert pilgrims == {"Amina Yusuf"}

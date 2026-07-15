@@ -1,11 +1,19 @@
-import { NativeModules, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
+import SimCardsManagerModule from 'react-native-sim-cards-manager';
 import { checkEsimCompatibility } from './esimCompatibility';
 
 jest.mock('react-native-device-info', () => ({
   getModel: jest.fn(),
   getSystemVersion: jest.fn(),
   getDeviceId: jest.fn(),
+}));
+
+jest.mock('react-native-sim-cards-manager', () => ({
+  __esModule: true,
+  default: {
+    isEsimSupported: jest.fn(),
+  },
 }));
 
 const mockGetModel = DeviceInfo.getModel as jest.MockedFunction<typeof DeviceInfo.getModel>;
@@ -15,12 +23,15 @@ const mockGetSystemVersion = DeviceInfo.getSystemVersion as jest.MockedFunction<
 const mockGetDeviceId = DeviceInfo.getDeviceId as jest.MockedFunction<
   typeof DeviceInfo.getDeviceId
 >;
+const mockIsEsimSupported = SimCardsManagerModule.isEsimSupported as jest.MockedFunction<
+  typeof SimCardsManagerModule.isEsimSupported
+>;
 
 beforeEach(() => {
   mockGetModel.mockReset().mockReturnValue('Test Device');
   mockGetSystemVersion.mockReset().mockReturnValue('16.0');
   mockGetDeviceId.mockReset().mockReturnValue('');
-  delete (NativeModules as Record<string, unknown>).EsimCompatibility;
+  mockIsEsimSupported.mockReset().mockRejectedValue(new Error('not mocked for this test'));
 });
 
 describe('checkEsimCompatibility — iOS (AC-10.1, device-model allowlist)', () => {
@@ -62,15 +73,13 @@ describe('checkEsimCompatibility — iOS (AC-10.1, device-model allowlist)', () 
   });
 });
 
-describe('checkEsimCompatibility — Android (AC-10.1, EuiccManager bridge)', () => {
+describe('checkEsimCompatibility — Android (AC-10.1, react-native-sim-cards-manager bridge)', () => {
   beforeEach(() => {
     Platform.OS = 'android';
   });
 
-  it('reports supported when the native module resolves true', async () => {
-    (NativeModules as Record<string, unknown>).EsimCompatibility = {
-      hasEuicc: jest.fn().mockResolvedValue(true),
-    };
+  it('reports supported when isEsimSupported resolves true', async () => {
+    mockIsEsimSupported.mockResolvedValue(true);
 
     const result = await checkEsimCompatibility();
 
@@ -82,23 +91,23 @@ describe('checkEsimCompatibility — Android (AC-10.1, EuiccManager bridge)', ()
     });
   });
 
-  it('reports unsupported when the native module resolves false', async () => {
-    (NativeModules as Record<string, unknown>).EsimCompatibility = {
-      hasEuicc: jest.fn().mockResolvedValue(false),
-    };
+  it('reports unsupported when isEsimSupported resolves false', async () => {
+    mockIsEsimSupported.mockResolvedValue(false);
 
     expect((await checkEsimCompatibility()).supported).toBe(false);
   });
 
-  it('reports unsupported (not a crash) when the native module rejects', async () => {
-    (NativeModules as Record<string, unknown>).EsimCompatibility = {
-      hasEuicc: jest.fn().mockRejectedValue(new Error('bridge unavailable')),
-    };
+  it('reports unsupported (not a crash) when isEsimSupported rejects', async () => {
+    mockIsEsimSupported.mockRejectedValue(new Error('bridge unavailable'));
 
     expect((await checkEsimCompatibility()).supported).toBe(false);
   });
 
-  it('reports unsupported (not a crash) when the native module is missing entirely', async () => {
+  it('reports unsupported (not a crash) when the native module is not linked', async () => {
+    mockIsEsimSupported.mockRejectedValue(
+      new Error("The package 'react-native-sim-cards-manager' doesn't seem to be linked."),
+    );
+
     expect((await checkEsimCompatibility()).supported).toBe(false);
   });
 });

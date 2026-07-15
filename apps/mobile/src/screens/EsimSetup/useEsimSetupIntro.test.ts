@@ -52,7 +52,7 @@ describe('useEsimSetupIntro', () => {
     expect(mockHasSeen).not.toHaveBeenCalled();
   });
 
-  it('AC-10.3: incompatible + not yet seen reaches the warning stage without logging yet', async () => {
+  it('AC-10.3/10.7: incompatible + not yet seen logs on detection (before any user action) and reaches the warning stage', async () => {
     mockCheck.mockResolvedValue({
       platform: 'ios',
       deviceModel: 'iPhone X',
@@ -66,7 +66,16 @@ describe('useEsimSetupIntro', () => {
     );
 
     await waitFor(() => expect(result.current.stage).toBe('warning'));
-    expect(mockLog).not.toHaveBeenCalled();
+    // Logged immediately on detection, not deferred to Continue/Support —
+    // otherwise a pilgrim who abandons the app at the warning modal
+    // (backgrounds/force-quits) would never be flagged for AC-10.7's
+    // HTO follow-up.
+    expect(mockLog).toHaveBeenCalledWith('token', {
+      platform: 'ios',
+      device_model: 'iPhone X',
+      os_version: '16.0',
+      esim_supported: false,
+    });
   });
 
   it('AC-10.6: incompatible + already seen skips the modal and goes straight to qr-only', async () => {
@@ -86,7 +95,7 @@ describe('useEsimSetupIntro', () => {
     expect(mockLog).not.toHaveBeenCalled();
   });
 
-  it('AC-10.4: Continue marks the warning seen, logs, and proceeds to qr-only', async () => {
+  it('AC-10.4: Continue marks the warning seen and proceeds to qr-only, without logging a second time', async () => {
     mockCheck.mockResolvedValue({
       platform: 'ios',
       deviceModel: 'iPhone X',
@@ -99,18 +108,15 @@ describe('useEsimSetupIntro', () => {
       useEsimSetupIntro({ accessToken: 'token', packageId: 'package-1' }),
     );
     await waitFor(() => expect(result.current.stage).toBe('warning'));
+    expect(mockLog).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await result.current.handleWarningContinue();
     });
 
     expect(mockMarkSeen).toHaveBeenCalledTimes(1);
-    expect(mockLog).toHaveBeenCalledWith('token', {
-      platform: 'ios',
-      device_model: 'iPhone X',
-      os_version: '16.0',
-      esim_supported: false,
-    });
+    // Already logged on detection above — Continue must not log again.
+    expect(mockLog).toHaveBeenCalledTimes(1);
     expect(result.current.stage).toBe('qr-only');
   });
 
@@ -127,6 +133,7 @@ describe('useEsimSetupIntro', () => {
       useEsimSetupIntro({ accessToken: 'token', packageId: 'package-42' }),
     );
     await waitFor(() => expect(result.current.stage).toBe('warning'));
+    expect(mockLog).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await result.current.handleWarningSupport();
@@ -136,6 +143,8 @@ describe('useEsimSetupIntro', () => {
       expect.stringMatching(/^https:\/\/wa\.me\/\d+\?text=.*package-42/),
     );
     expect(mockMarkSeen).toHaveBeenCalledTimes(1);
+    // Already logged on detection above — Support must not log again.
+    expect(mockLog).toHaveBeenCalledTimes(1);
     expect(result.current.stage).toBe('qr-only');
   });
 });

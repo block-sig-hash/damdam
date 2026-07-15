@@ -1,5 +1,6 @@
-import { NativeModules, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
+import SimCardsManagerModule from 'react-native-sim-cards-manager';
 
 export interface EsimCompatibilityResult {
   platform: 'ios' | 'android';
@@ -31,12 +32,15 @@ function isSupportediOSDeviceId(deviceId: string): boolean {
   return Number(match[1]) >= IOS_ESIM_CAPABLE_GENERATION_FLOOR;
 }
 
+/**
+ * react-native-sim-cards-manager's isEsimSupported() wraps
+ * EuiccManager.isEnabled() on Android (API 28+) — same capability
+ * check the app needs for AC-10.1, via a maintained npm package
+ * rather than an app-local native module.
+ */
 async function checkAndroidEuicc(): Promise<boolean> {
   try {
-    const module = NativeModules.EsimCompatibility as
-      | { hasEuicc(): Promise<boolean> }
-      | undefined;
-    return (await module?.hasEuicc()) ?? false;
+    return await SimCardsManagerModule.isEsimSupported();
   } catch {
     return false;
   }

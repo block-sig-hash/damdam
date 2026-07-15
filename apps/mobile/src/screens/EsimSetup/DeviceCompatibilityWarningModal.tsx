@@ -15,8 +15,10 @@ interface DeviceCompatibilityWarningModalProps {
  * in-app modal per docs/design-system.md §7 ("never a native alert"),
  * not RN's Alert API. `onRequestClose` (Android back gesture / iOS
  * swipe-down) routes to onContinue: the modal has no true neutral
- * exit, and the spec explicitly says a neutral dismiss defaults to
- * logging as Continue.
+ * exit, so a dismiss is treated the same as tapping Continue for
+ * marking the warning "shown" (AC-10.6). The compatibility log
+ * itself already fired on detection, before this modal ever
+ * rendered — see useEsimSetupIntro.
  */
 export function DeviceCompatibilityWarningModal({
   visible,

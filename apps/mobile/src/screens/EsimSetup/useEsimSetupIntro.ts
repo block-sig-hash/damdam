@@ -32,7 +32,6 @@ export function useEsimSetupIntro({
   packageId,
 }: UseEsimSetupIntroArgs): UseEsimSetupIntroResult {
   const [stage, setStage] = useState<EsimSetupStage>('checking');
-  const [pendingLog, setPendingLog] = useState<DeviceCompatibilityPayload | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,8 +62,13 @@ export function useEsimSetupIntro({
         }
         return;
       }
+      // AC-10.7: logged on detection, not deferred to Continue/Support,
+      // so a pilgrim who abandons the app after seeing the warning
+      // (backgrounds/force-quits without tapping either button) still
+      // gets flagged for HTO follow-up — the population AC-10.7 exists
+      // to catch is exactly the one most likely to not act further.
+      logDeviceCompatibility(accessToken, payload).catch(() => {});
       if (!cancelled) {
-        setPendingLog(payload);
         setStage('warning');
       }
     })();
@@ -74,15 +78,12 @@ export function useEsimSetupIntro({
   }, [accessToken]);
 
   const resolveWarning = useCallback(async () => {
-    if (pendingLog) {
-      // AC-10.6/behavioural note: the log fires on the action taken
-      // (Continue/Support/back-gesture-as-Continue), not on the
-      // modal simply being shown.
-      await markEsimWarningSeen();
-      logDeviceCompatibility(accessToken, pendingLog).catch(() => {});
-    }
+    // The compatibility check (and its log/flag) already fired on
+    // detection, above — this only records that the warning has been
+    // shown, per AC-10.6, so it isn't repeated on a later visit.
+    await markEsimWarningSeen();
     setStage('qr-only');
-  }, [accessToken, pendingLog]);
+  }, []);
 
   const handleWarningContinue = useCallback(async () => {
     await resolveWarning();
