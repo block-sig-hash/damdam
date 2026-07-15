@@ -96,28 +96,17 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # TEMPORARY: left on through this fix's own convergence
+          # test so a failure is diagnosable too; flip to false in
+          # the follow-up commit once convergence is confirmed.
+          show_full_output: true
           # Sonnet by default for cost control, per AGENTS.md's
           # "default to Sonnet, escalate to Opus only when it
           # earns it" guidance — override manually for a specific
           # hard review by commenting "@claude use opus" if needed.
-          #
-          # max-turns history: 8 -> 24 -> 40. Both earlier raises
-          # were guesses with no evidence the extra room would be
-          # used well. This one isn't: with the diff now fed
-          # directly (see the step above) instead of discovered via
-          # gh/git exploration, two full show_full_output traces on
-          # real merged PRs (#47, 1259 additions/14 files; #50, 2554
-          # additions/26 files) showed zero wasted turns — every
-          # tool call was reading the diff, cross-referencing
-          # prd.md/testing-qa.md/security.md/design-system.md/data-
-          # model.md/api-spec.md, or inspecting specific touched
-          # files, exactly as the prompt asks — and still ran out at
-          # 24 turns mid-review on both. The bottleneck is genuinely
-          # review scope vs. budget now, not waste, so more budget
-          # is the right lever this time.
           claude_args: >-
             --model claude-sonnet-5
-            --max-turns 40
+            --max-turns 24
           prompt: |
             The full diff for this PR (#${{ steps.pr_context.outputs.pr_number }})
             has already been fetched and saved to
