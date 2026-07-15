@@ -56,6 +56,43 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Every real run of this workflow used to exhaust its turn
+      # budget regardless of PR size (9/9 turns at the old
+      # --max-turns 8, 25/25 at --max-turns 24, on PRs from 632 to
+      # 2554 additions — zero variance). A diagnostic run with
+      # show_full_output enabled showed why: Claude's Bash tool in
+      # this sandbox rejects any compound command (&&/; chains)
+      # outright, and separately rejects `gh` and `env` calls
+      # individually — with no interactive approver in unattended
+      # CI, those are unrecoverable, not retryable. Since the prompt
+      # never handed Claude the diff, its first move was always
+      # `gh pr view`/`gh pr diff`, which is guaranteed to fail here,
+      # after which it fell into open-ended git/file exploration for
+      # the rest of the budget and never converged past a trivial
+      # diff. Fetching the diff here — as a normal runner step, not
+      # a Claude tool call, so the approval gate doesn't apply — and
+      # handing it to Claude as a file removes both the guaranteed-
+      # wasted turns and the multi-turn "what even changed" phase.
+      - name: Fetch PR diff for review context
+        id: pr_context
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
+          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          # Must live inside the checked-out workspace, not $RUNNER_TEMP:
+          # Claude's Read tool in this sandbox is only pre-approved for
+          # paths under the workspace it was invoked in — a first attempt
+          # at $RUNNER_TEMP (a sibling directory) hit the exact same
+          # unrecoverable "requested permissions... haven't granted it
+          # yet" wall as the gh/compound-command rejections above, and
+          # burned the run down to a 3-turn no-op. .git/ is inside the
+          # workspace but outside the visible working tree, so this
+          # doesn't show up as a stray untracked file in git status.
+          DIFF_PATH="${GITHUB_WORKSPACE}/.git/pr-${PR_NUMBER}-review.diff"
+          gh pr diff "${PR_NUMBER}" --repo "${{ github.repository }}" > "${DIFF_PATH}"
+          echo "diff_path=${DIFF_PATH}" >> "$GITHUB_OUTPUT"
+
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -63,11 +100,74 @@ jobs:
           # "default to Sonnet, escalate to Opus only when it
           # earns it" guidance — override manually for a specific
           # hard review by commenting "@claude use opus" if needed.
+          #
+          # max-turns history: 8 -> 24 -> 40. Raising it alone never
+          # worked: num_turns landed at exactly limit+1 at all three
+          # values, across four different PRs from 632 to 2554
+          # additions, with zero variance every time — including a
+          # 40-turn retest of a 1259-addition PR that two prior
+          # show_full_output traces confirmed was spending every
+          # turn on genuine work (reading the diff, cross-referencing
+          # prd.md/testing-qa.md/security.md/design-system.md/data-
+          # model.md/api-spec.md, inspecting touched files), not
+          # waste. That rules out "just needs more room": the review
+          # has no stopping condition, so it fills whatever budget
+          # it's given regardless of size. The real fix is the
+          # explicit turn-budgeting instruction in the prompt below,
+          # forcing it to stop researching and post what it has by a
+          # fixed point instead of digging until cut off. max-turns
+          # is now a high safety ceiling, not the convergence
+          # mechanism — set generously (1024) so an occasional
+          # genuinely large/cross-cutting PR isn't hard-capped, while
+          # the prompt's own budget is what makes typical runs
+          # finish quickly and cheaply.
           claude_args: >-
             --model claude-sonnet-5
-            --max-turns 24
+            --max-turns 1024
+            --allowedTools "mcp__github__add_issue_comment"
           prompt: |
-            Review this PR against docs/testing-qa.md and the
+            The full diff for this PR (#${{ steps.pr_context.outputs.pr_number }})
+            has already been fetched and saved to
+            ${{ steps.pr_context.outputs.diff_path }} — read that file
+            first via the Read tool and treat it as the source of
+            truth for what changed. Do not re-derive the diff via
+            `git diff`/`git show`/`gh pr diff`/`gh pr view`: `gh` CLI
+            calls and compound Bash commands (anything chained with
+            `&&` or `;`) are not approved in this sandbox and will
+            always fail here, wasting turns better spent reviewing.
+            If you need a file's full content or history beyond what
+            the diff shows, use the Read tool directly on that path,
+            or a single-operation `git log`/`git blame` call — not a
+            chained command.
+
+            Your review is not delivered by returning it as your final
+            response. Before finishing, you MUST call
+            `mcp__github__add_issue_comment` exactly once to post a
+            substantive review comment on PR
+            #${{ steps.pr_context.outputs.pr_number }} in
+            `${{ github.repository }}`. The posted comment must summarize
+            what you verified and separate blocking findings from
+            non-blocking suggestions. If you find no issues, still post a
+            substantive checklist of the areas reviewed and explicitly say
+            that there are no blocking findings. Do not merely return the
+            review in your final response: that response is not published
+            to GitHub in this workflow's agent mode.
+
+            Budget your investigation: spend at most 15 tool calls
+            gathering context (reading the diff, cross-referencing
+            docs, inspecting touched files). After that, stop
+            researching and post your review with what you have —
+            call out anything you didn't get to as "not verified,
+            out of review budget" rather than continuing to dig for
+            completeness. Every review of this PR to date has run out
+            of turns before posting anything at all; a timely partial
+            review beats a thorough one that never gets posted. Do
+            not treat a large turn allowance as license to be
+            exhaustive — prioritize the acceptance criteria and the
+            blocking-risk categories below over full coverage of
+            every cross-referenced doc.
+
+            Review this diff against docs/testing-qa.md and the
             linked user story's acceptance criteria in docs/prd.md.
 
             If this PR touches apps/mobile/src/screens or
@@ -99,3 +199,6 @@ jobs:
             matching docs/api-spec.md or docs/data-model.md), and
             cross-tenant isolation gaps (docs/security.md §10.5)
             as blocking. Everything else as non-blocking suggestions.
+
+            Do not finish until the review has been posted with
+            `mcp__github__add_issue_comment` as required above.
