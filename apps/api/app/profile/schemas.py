@@ -2,6 +2,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.auth.models import Platform
 from app.auth.schemas import validate_nigerian_phone
 
 
@@ -35,6 +36,15 @@ class FamilyContactResponse(BaseModel):
     phone_number: str
     name: str | None
     notified_of_nomination: bool
+
+
+class DeviceTokenUpsert(BaseModel):
+    fcm_token: str = Field(min_length=20, max_length=4096)
+    platform: Platform
+
+
+class DeviceTokenResponse(BaseModel):
+    registered: bool = True
 
 
 class EmergencyContactResponse(BaseModel):

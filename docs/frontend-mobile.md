@@ -370,6 +370,13 @@ explicitly into the build timeline, ideally produced and tested on
 real physical devices from the target demographic's actual device
 mix rather than emulators.
 
+**US-13 implementation status:** The matching and generic-fallback UI shell is
+implemented for Tecno Camon/Spark, Infinix Hot/Note, itel, and Samsung Galaxy
+A-series. The Android family entries intentionally use labelled placeholder
+frames until the production screenshots are captured and verified on those
+physical devices; this content work remains a pre-ship requirement, not an
+engineering fallback silently presented as final artwork.
+
 ---
 
 ### Screen: Dial Pad (Screen 22)

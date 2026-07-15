@@ -25,6 +25,7 @@ export interface UserResponse {
   last_name: string;
   email: string | null;
   verified_cli: boolean;
+  departure_date?: string | null;
   platform: string;
   status: string;
 }

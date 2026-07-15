@@ -1,13 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SafeAreaView, StatusBar, StyleSheet } from 'react-native';
-import { OnboardingNavigator } from './src/navigation/OnboardingNavigator';
+import { AuthenticatedApp } from './src/navigation/AuthenticatedApp';
+import {
+  type AuthenticatedMobileSession,
+  OnboardingNavigator,
+} from './src/navigation/OnboardingNavigator';
 import { color } from './src/theme/tokens';
 
 function App(): React.JSX.Element {
+  const [session, setSession] = useState<AuthenticatedMobileSession>();
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={color.gray50} />
-      <OnboardingNavigator />
+      {session ? (
+        <AuthenticatedApp {...session} />
+      ) : (
+        <OnboardingNavigator onAuthenticated={setSession} />
+      )}
     </SafeAreaView>
   );
 }

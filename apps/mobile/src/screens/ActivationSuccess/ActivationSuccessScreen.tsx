@@ -4,11 +4,12 @@ import { Banner } from '../../components/Banner/Banner';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
 import { color, radius, space, typography } from '../../theme/tokens';
 import { useActivationRedeem } from './useActivationRedeem';
+import type { ActivationRedemption } from '../../api/activationClient';
 
 interface ActivationSuccessScreenProps {
   accessToken: string;
   activationCode: string;
-  onContinue: () => void;
+  onContinue: (redemption: ActivationRedemption) => void;
 }
 
 /**
@@ -81,7 +82,7 @@ export function ActivationSuccessScreen({
         <PrimaryButton
           testID="activation-success-continue"
           label="Continue"
-          onPress={onContinue}
+          onPress={() => result && onContinue(result)}
         />
       </View>
     </View>

@@ -297,4 +297,50 @@ describe('OnboardingNavigator', () => {
 
     expect(screen.getByTestId('pin-setup-input')).toBeTruthy();
   });
+
+  it('US-13 AC-13.7: passes the real departure_date from the auth response into the session', async () => {
+    mockRequestOtp.mockRejectedValue(
+      new OtpApiError('account_exists', 'This number already has an account. Please log in.'),
+    );
+    mockRequestPinRecovery.mockResolvedValue({ message: 'OTP sent' });
+    mockVerifyPinRecovery.mockResolvedValue({
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+      is_new_user: false,
+      user: {
+        id: 'user-1',
+        phone_number: '+2348012345678',
+        first_name: '',
+        last_name: '',
+        email: null,
+        verified_cli: true,
+        departure_date: '2026-08-01',
+        platform: 'android',
+        status: 'active',
+      },
+    });
+    const onAuthenticated = jest.fn();
+
+    await render(<OnboardingNavigator onAuthenticated={onAuthenticated} />);
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('phone-entry-input'), '08012345678');
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('phone-entry-submit'));
+    });
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('otp-code-input'), '123456');
+    });
+
+    // This is the exact line the US-13 wiring fix depends on
+    // (`step.result.user.departure_date ?? null`) — a typo or a
+    // dropped field here would silently break the AC-13.7 date
+    // banner with no other test catching it.
+    expect(onAuthenticated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessToken: 'access-token',
+        departureDate: '2026-08-01',
+      }),
+    );
+  });
 });

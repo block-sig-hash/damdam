@@ -4,9 +4,12 @@ from fastapi import APIRouter, Depends, Request
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
+from app.profile.device_tokens import DeviceTokenService
 from app.profile.emergency_contact import EmergencyContactService
 from app.profile.family_contacts import FamilyContactService
 from app.profile.schemas import (
+    DeviceTokenResponse,
+    DeviceTokenUpsert,
     EmergencyContactResponse,
     FamilyContactCreate,
     FamilyContactResponse,
@@ -20,10 +23,25 @@ def _service(request: Request) -> FamilyContactService:
     return cast(FamilyContactService, request.app.state.family_contact_service)
 
 
+def _device_token_service(request: Request) -> DeviceTokenService:
+    return cast(DeviceTokenService, request.app.state.device_token_service)
+
+
 def _emergency_contact_service(request: Request) -> EmergencyContactService:
     return cast(
         EmergencyContactService, request.app.state.emergency_contact_service
     )
+
+
+@router.put("/device-token", response_model=DeviceTokenResponse)
+def register_device_token(
+    payload: DeviceTokenUpsert,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+) -> DeviceTokenResponse:
+    with request.app.state.session_factory() as session:
+        _device_token_service(request).upsert(session, user.id, payload)
+    return DeviceTokenResponse()
 
 
 @router.post(

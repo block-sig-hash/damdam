@@ -269,10 +269,12 @@ def test_esim_endpoints_reject_another_users_package(
         session.commit()
     fetched = owner_client.get(f"/v1/packages/{package_id}/esim")
     marked = owner_client.post(f"/v1/packages/{package_id}/esim/mark-downloaded")
+    activated = owner_client.post(f"/v1/packages/{package_id}/esim/mark-activated")
 
-    assert fetched.status_code == marked.status_code == 404
+    assert fetched.status_code == marked.status_code == activated.status_code == 404
     assert fetched.json()["error"] == "package_not_found"
     assert marked.json()["error"] == "package_not_found"
+    assert activated.json()["error"] == "package_not_found"
     with session_factory() as session:
         stored = session.exec(select(EsimProfile)).one()
         assert stored.status == EsimProfileStatus.ISSUED

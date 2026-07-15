@@ -79,6 +79,21 @@ def mark_esim_downloaded(
 
 
 @router.post(
+    "/packages/{package_id}/esim/mark-activated",
+    response_model=EsimDownloadResponse,
+)
+def mark_esim_activated(
+    package_id: UUID,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+) -> EsimDownloadResponse:
+    service = cast(EsimProfileService, request.app.state.esim_profile_service)
+    with request.app.state.session_factory() as session:
+        profile = service.mark_activated(session, user, package_id)
+        return EsimDownloadResponse(status=profile.status.value)
+
+
+@router.post(
     "/me/device-compatibility",
     response_model=DeviceCompatibilityResponse,
     status_code=201,
