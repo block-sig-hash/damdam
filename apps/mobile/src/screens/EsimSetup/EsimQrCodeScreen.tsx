@@ -75,7 +75,9 @@ export function EsimQrCodeScreen({
 
       <View style={styles.statusRow}>
         <View style={[styles.statusPill, downloaded && styles.statusPillDone]}>
-          <Text style={styles.statusText}>{downloaded ? 'Downloaded' : 'Ready to download'}</Text>
+          <Text style={[styles.statusText, downloaded && styles.statusTextDone]}>
+            {downloaded ? 'Downloaded' : 'Ready to download'}
+          </Text>
         </View>
       </View>
 
@@ -167,8 +169,9 @@ const styles = StyleSheet.create({
     fontSize: typography.caption.fontSize,
     lineHeight: typography.caption.lineHeight,
     fontWeight: '600',
-    color: color.gray900,
+    color: color.info500,
   },
+  statusTextDone: { color: color.success700 },
   qrCard: {
     backgroundColor: color.white,
     borderRadius: radius.card,

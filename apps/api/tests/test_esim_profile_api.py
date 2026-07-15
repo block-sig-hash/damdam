@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
-from app.auth.models import PricingTier
+from app.auth.models import PricingTier, User
 from app.auth.routes import request_otp, verify_otp
 from app.auth.schemas import OTPRequest, OTPVerifyRequest
 from app.esim.models import (
@@ -220,6 +220,62 @@ def test_issue_is_idempotent_and_returns_existing_profile(
     assert len(notifications.success_calls) == 1
     with session_factory() as session:
         assert len(session.exec(select(EsimProfile)).all()) == 1
+
+
+def test_esim_endpoints_reject_another_users_package(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """Pilgrim eSIM operations must not expose or mutate another user's package."""
+    vendors = {
+        name: FakeEsimProvider(name)
+        for name in ("monty_mobile", "esim_access", "1global")
+    }
+    owner_client, owner_id, package_id, _ = _client_and_package(
+        settings,
+        redis_client,
+        providers,
+        scheduler,
+        session_factory,
+        clock,
+        vendors,
+        FakeEsimScheduler(),
+    )
+    with session_factory() as session:
+        other_user = User(phone_number="+2348055550001", platform="android")
+        session.add(other_user)
+        package = session.get(Package, package_id)
+        assert package is not None
+        package.user_id = other_user.id
+        session.commit()
+        other_user_id = other_user.id
+
+    issue = owner_client.post(f"/v1/packages/{package_id}/esim/issue")
+    assert issue.status_code == 404
+    assert issue.json()["error"] == "package_not_found"
+    assert all(vendor.calls == [] for vendor in vendors.values())
+
+    with session_factory() as session:
+        package = session.get(Package, package_id)
+        assert package is not None
+        package.user_id = owner_id
+        session.add(package)
+        session.commit()
+    assert owner_client.post(f"/v1/packages/{package_id}/esim/issue").status_code == 200
+    with session_factory() as session:
+        package = session.get(Package, package_id)
+        assert package is not None
+        package.user_id = other_user_id
+        session.add(package)
+        session.commit()
+    fetched = owner_client.get(f"/v1/packages/{package_id}/esim")
+    marked = owner_client.post(f"/v1/packages/{package_id}/esim/mark-downloaded")
+
+    assert fetched.status_code == marked.status_code == 404
+    assert fetched.json()["error"] == "package_not_found"
+    assert marked.json()["error"] == "package_not_found"
+    with session_factory() as session:
+        stored = session.exec(select(EsimProfile)).one()
+        assert stored.status == EsimProfileStatus.ISSUED
 
 
 def test_issue_follows_configured_vendor_order_not_hardcoded_order(
