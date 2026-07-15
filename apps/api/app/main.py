@@ -24,6 +24,8 @@ from app.container import (
     default_dependencies,
 )
 from app.db import SessionFactory
+from app.esim.routes import router as esim_router
+from app.esim.service import DeviceCompatibilityService, HtoPilgrimService
 from app.manifests.invoices import InvoiceStorage, build_invoice_storage
 from app.manifests.orders import ManifestOrderService, ProvisioningScheduler
 from app.manifests.routes import pricing_router
@@ -117,6 +119,8 @@ def create_app(
         notification_service,
         clock,
     )
+    api.state.device_compatibility_service = DeviceCompatibilityService(clock)
+    api.state.hto_pilgrim_service = HtoPilgrimService()
 
     @api.exception_handler(OTPError)
     async def otp_error_handler(request: Request, exc: OTPError) -> JSONResponse:
@@ -420,6 +424,7 @@ def create_app(
     api.include_router(activation_router, prefix="/v1")
     api.include_router(retail_pricing_router, prefix="/v1")
     api.include_router(payment_router, prefix="/v1")
+    api.include_router(esim_router, prefix="/v1")
     return api
 
 

@@ -1,0 +1,103 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Linking } from 'react-native';
+import { DeviceCompatibilityPayload, logDeviceCompatibility } from '../../api/esimClient';
+import { SUPPORT_WHATSAPP_NUMBER } from '../../config/env';
+import { checkEsimCompatibility } from '../../utils/esimCompatibility';
+import { hasSeenEsimWarning, markEsimWarningSeen } from '../../utils/esimWarningSeen';
+
+export type EsimSetupStage = 'checking' | 'compatible' | 'warning' | 'qr-only';
+
+interface UseEsimSetupIntroArgs {
+  accessToken: string;
+  packageId: string;
+}
+
+export interface UseEsimSetupIntroResult {
+  stage: EsimSetupStage;
+  /** AC-10.4: proceeds without blocking, whichever button was pressed. */
+  handleWarningContinue: () => Promise<void>;
+  /** AC-10.5: opens WhatsApp with a pre-filled order reference, then proceeds the same as Continue. */
+  handleWarningSupport: () => Promise<void>;
+}
+
+/**
+ * Screen 15 (eSIM Setup Intro) + Screen 16 (Device Compatibility
+ * Warning modal), docs/frontend-mobile.md. The actual QR/download
+ * screen this hands off to is US-11's scope, not built here — both
+ * the "compatible" and post-warning "qr-only" outcomes hand off via
+ * the same onProceed the screen calls, to whatever stands in for it.
+ */
+export function useEsimSetupIntro({
+  accessToken,
+  packageId,
+}: UseEsimSetupIntroArgs): UseEsimSetupIntroResult {
+  const [stage, setStage] = useState<EsimSetupStage>('checking');
+  const [pendingLog, setPendingLog] = useState<DeviceCompatibilityPayload | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const result = await checkEsimCompatibility();
+      if (cancelled) {
+        return;
+      }
+      const payload: DeviceCompatibilityPayload = {
+        platform: result.platform,
+        device_model: result.deviceModel,
+        os_version: result.osVersion ?? undefined,
+        esim_supported: result.supported,
+      };
+      if (result.supported) {
+        // AC-10.2: no modal gates the compatible path, so this logs
+        // immediately rather than waiting on a user action.
+        logDeviceCompatibility(accessToken, payload).catch(() => {
+          // Best-effort — a logging failure shouldn't block a
+          // pilgrim who has a perfectly usable, compatible device.
+        });
+        setStage('compatible');
+        return;
+      }
+      if (await hasSeenEsimWarning()) {
+        if (!cancelled) {
+          setStage('qr-only');
+        }
+        return;
+      }
+      if (!cancelled) {
+        setPendingLog(payload);
+        setStage('warning');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
+
+  const resolveWarning = useCallback(async () => {
+    if (pendingLog) {
+      // AC-10.6/behavioural note: the log fires on the action taken
+      // (Continue/Support/back-gesture-as-Continue), not on the
+      // modal simply being shown.
+      await markEsimWarningSeen();
+      logDeviceCompatibility(accessToken, pendingLog).catch(() => {});
+    }
+    setStage('qr-only');
+  }, [accessToken, pendingLog]);
+
+  const handleWarningContinue = useCallback(async () => {
+    await resolveWarning();
+  }, [resolveWarning]);
+
+  const handleWarningSupport = useCallback(async () => {
+    const message = encodeURIComponent(
+      `Hi, I need help with my DamDam eSIM setup. Order reference: ${packageId}`,
+    );
+    Linking.openURL(`https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${message}`).catch(() => {
+      // Best-effort — WhatsApp not being installed shouldn't block
+      // the pilgrim from still reaching the QR fallback.
+    });
+    await resolveWarning();
+  }, [resolveWarning, packageId]);
+
+  return { stage, handleWarningContinue, handleWarningSupport };
+}
