@@ -109,7 +109,8 @@ jobs:
         run: npm run test
       - name: Compile Android debug app
         if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
-        run: ./android/gradlew assembleDebug --no-daemon --stacktrace
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
   build-check:
     name: Docker build check (multi-arch)
