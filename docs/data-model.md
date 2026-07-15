@@ -106,32 +106,15 @@ DeviceCompatibilityLog
 
 ---
 
-### `emergency_content`
+### `emergency_content` — removed, see §6.20
 
-**Design note:** Backs US-12 (scoped down from full offline maps
-to just emergency contacts/phrases — see `prd.md` §4.4's scope
-note). Keyed by `destination_country` (matching `users.
-destination_country`) so a future country expansion is "add a
-row," not a code change — same principle as the OTP/eSIM/payment
-vendor tables, just for content instead of vendors. Deliberately
-minimal: plain text, no images, no map tiles, no file storage —
-this is intentionally the cheapest possible version of the
-multi-country abstraction, since the feature itself was cut down
-to the cheapest possible scope.
-
-| Field | Type | Constraints | Notes |
-|---|---|---|---|
-| destination_country | VARCHAR(2) | PK | ISO code; `SA` is the only populated row for MVP |
-| support_whatsapp_number | VARCHAR(20) | NOT NULL | DamDam's own support number, not destination-specific, but stored per-row for simplicity (avoids a separate global-config lookup) |
-| local_emergency_numbers | JSONB | NOT NULL | e.g. `{"police": "999", "ambulance": "997"}` — structure, not free text, so the app can label each number correctly |
-| phrasebook | JSONB | NOT NULL | Array of `{phrase_key, translated_text, language_code}` — e.g. `help`, `thank_you`, `where_is`, `i_dont_understand`, `i_need_a_doctor` |
-| updated_at | TIMESTAMPTZ | NOT NULL | Content-review timestamp, not a user-facing field |
-
-**Note on the HTO operator's number:** shown alongside this
-content on the SOS screen (AC-16.4) but is NOT stored here — it's
-pulled live from the pilgrim's actual assigned `organizations` row
-(via their manifest/order), since it's specific to each pilgrim's
-HTO, not the destination country.
+This table was designed here ahead of US-12's final acceptance criteria
+and was never migrated or implemented. §6.20 supersedes it: the content
+it would have held (DamDam's support WhatsApp number, the Arabic
+phrasebook) ships as static app-bundled constants instead, per AC-12.3.
+The one note that still holds — the HTO operator's number is pulled live
+from the pilgrim's assigned `organizations` row, not stored as content —
+is carried forward in §6.20.
 
 ---
 
@@ -996,3 +979,49 @@ the second after 5 minutes, and the third clears automatic scheduling and sets
 `admin_queued_at`. Payment and HTO activation commit a due job before asking
 Celery to enqueue it, so a broker outage cannot roll back a paid package or
 silently lose the provisioning work.
+
+---
+
+## 6.20 Amendment — US-12 Drops the `emergency_content` Table
+
+§6.2's `emergency_content` table (destination-country-keyed, with a JSONB
+`phrasebook` and `local_emergency_numbers`) was designed before US-12's
+acceptance criteria were finalized. AC-12.3 as shipped is explicit: this
+content is "bundled directly in the app, not downloaded separately —
+always available offline, zero data cost, no download step, no map SDK
+**or content-pack table needed**." A country-keyed table bought future
+multi-country flexibility DamDam doesn't have a second market to use yet
+(`SA` was always going to be the only populated row for MVP, per that
+table's own design note), at the cost of the one thing AC-12.3 actually
+asks for: content that's available with *zero* network dependency, not
+"available after one successful fetch." A bundled constant is strictly
+better than a one-row table for that specific requirement, and the table
+was never implemented (no migration, no route, no consumer) — so this
+supersedes a design, not a shipped shape.
+
+`emergency_content` is therefore **removed from the schema**. What it
+would have held is now:
+- **DamDam's support WhatsApp number**: a static constant
+  (`apps/mobile/src/config/env.ts`'s `SUPPORT_WHATSAPP_NUMBER`, already
+  present as a placeholder ahead of this amendment).
+- **The Arabic phrasebook** (help, thank you, where is, I don't
+  understand, I need a doctor): a static constant
+  (`apps/mobile/src/content/emergencyEssentials.ts`), not JSONB rows.
+- **Local emergency numbers** (e.g. police/ambulance): dropped entirely,
+  not just moved — `prd.md` §4.4 AC-12.2's current list doesn't include
+  them, so this isn't a downgrade from a shipped feature, only from an
+  unbuilt table's broader original design.
+
+The one thing the original table's own design note got right stands
+unchanged: **the HTO operator's number is still not bundled** — it's
+per-pilgrim, not per-country, and is read live from the pilgrim's
+assigned `organizations` row via the existing `manifest_pilgrims` →
+`manifests` → `organizations` chain (the same join path
+`DeviceCompatibilityService` already uses for the US-10 follow-up flag).
+`GET /me/emergency-contact` (`api-spec.md` §7.2) is the one new,
+narrowly-scoped read for this — it returns only `hto_operator_name`/
+`hto_operator_phone_number`, both nullable for a direct/retail pilgrim
+with no assigned HTO. If a second destination country is ever onboarded,
+reintroducing a country-keyed content table then — when there's an
+actual second row to justify it — is the right move, not building it
+speculatively now.

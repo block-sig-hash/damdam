@@ -35,3 +35,8 @@ class FamilyContactResponse(BaseModel):
     phone_number: str
     name: str | None
     notified_of_nomination: bool
+
+
+class EmergencyContactResponse(BaseModel):
+    hto_operator_name: str | None
+    hto_operator_phone_number: str | None
