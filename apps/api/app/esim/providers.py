@@ -133,14 +133,22 @@ class EsimAccessProvider:
             + self.settings.esim_access_allocation_timeout_seconds
         )
         while self.monotonic() <= deadline:
-            result = self._post(
-                "/api/v1/open/esim/query",
-                {
-                    "orderNo": order_number,
-                    "pager": {"pageNum": 1, "pageSize": 5},
-                },
-                allow_pending=True,
-            )
+            try:
+                result = self._post(
+                    "/api/v1/open/esim/query",
+                    {
+                        "orderNo": order_number,
+                        "pager": {"pageNum": 1, "pageSize": 5},
+                    },
+                    allow_pending=True,
+                )
+            except EsimProviderError as exc:
+                # The order is already accepted/billable. Any subsequent
+                # query failure must retry this transaction id, never cascade
+                # and purchase another supplier's profile.
+                raise EsimProviderPending(
+                    "esim_access allocation status is temporarily unavailable"
+                ) from exc
             result_object = result.get("obj")
             profiles = (
                 result_object.get("esimList")

@@ -9,6 +9,7 @@ from app.esim.providers import (
     EsimAccessProvider,
     EsimIssueRequest,
     EsimProviderError,
+    EsimProviderPending,
     HttpEsimProvider,
     build_esim_providers,
 )
@@ -115,3 +116,33 @@ def test_esim_access_uses_signed_order_then_query_contract(monkeypatch) -> None:
     assert headers["RT-AccessCode"] == "access"
     assert len(str(headers["RT-Signature"])) == 64
     assert requests[1][0].endswith("/api/v1/open/esim/query")
+
+
+def test_esim_access_query_error_after_accepted_order_is_pending(monkeypatch) -> None:
+    calls = 0
+
+    def post(url: str, **kwargs: object) -> object:
+        nonlocal calls
+        del url, kwargs
+        calls += 1
+        if calls == 1:
+            return SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: {"success": True, "obj": {"orderNo": "ORDER-1"}},
+            )
+        raise httpx.ConnectError("query connection reset")
+
+    monkeypatch.setattr(httpx, "post", post)
+    settings = Settings(
+        app_env="test",
+        jwt_secret="test-secret-at-least-32-characters-long",
+        esim_access_access_code="access",
+        esim_access_secret_key="secret",
+        esim_access_package_codes={5: "SA_5GB"},
+    )
+    provider = EsimAccessProvider(settings, monotonic=lambda: 0, sleeper=lambda _: None)
+
+    with pytest.raises(EsimProviderPending, match="status is temporarily unavailable"):
+        provider.issue(EsimIssueRequest(uuid4(), uuid4(), 5))
+
+    assert calls == 2
