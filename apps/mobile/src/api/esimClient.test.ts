@@ -1,4 +1,10 @@
-import { EsimApiError, logDeviceCompatibility } from './esimClient';
+import {
+  EsimApiError,
+  getEsim,
+  issueEsim,
+  logDeviceCompatibility,
+  markEsimDownloaded,
+} from './esimClient';
 
 const fetchMock = jest.fn();
 global.fetch = fetchMock;
@@ -53,5 +59,38 @@ describe('esimClient', () => {
         esim_supported: false,
       }),
     ).rejects.toThrow(EsimApiError);
+  });
+
+  it('AC-11.2/11.3: calls the issue and profile contracts without vendor details', async () => {
+    const profile = {
+      esim_profile_id: 'profile-1',
+      iccid: '8944501234567890123456',
+      activation_code_lpa: 'LPA:1$server$match',
+      qr_code_url: 'https://cdn.example/qr.png',
+      status: 'issued',
+    };
+    fetchMock.mockResolvedValue({ ok: true, json: async () => profile });
+
+    await expect(issueEsim('token', 'package-1')).resolves.toEqual(profile);
+    await expect(getEsim('token', 'package-1')).resolves.toEqual(profile);
+
+    expect(fetchMock.mock.calls[0][0]).toContain('/packages/package-1/esim/issue');
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST');
+    expect(fetchMock.mock.calls[1][0]).toContain('/packages/package-1/esim');
+    expect(fetchMock.mock.calls[1][1].method).toBe('GET');
+  });
+
+  it('AC-11.4: marks the one package profile downloaded', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'downloaded' }),
+    });
+
+    await expect(markEsimDownloaded('token', 'package-1')).resolves.toEqual({
+      status: 'downloaded',
+    });
+    expect(fetchMock.mock.calls[0][0]).toContain(
+      '/packages/package-1/esim/mark-downloaded',
+    );
   });
 });

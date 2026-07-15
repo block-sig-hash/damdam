@@ -1119,6 +1119,93 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/packages/{package_id}/esim/issue:
+    post:
+      tags:
+      - esim
+      summary: Issue Esim
+      operationId: issue_esim_v1_packages__package_id__esim_issue_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EsimIssueResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/packages/{package_id}/esim:
+    get:
+      tags:
+      - esim
+      summary: Get Esim
+      operationId: get_esim_v1_packages__package_id__esim_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EsimProfileResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/packages/{package_id}/esim/mark-downloaded:
+    post:
+      tags:
+      - esim
+      summary: Mark Esim Downloaded
+      operationId: mark_esim_downloaded_v1_packages__package_id__esim_mark_downloaded_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EsimDownloadResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/me/device-compatibility:
     post:
       tags:
@@ -1380,6 +1467,75 @@ components:
           default: true
       type: object
       title: DeviceCompatibilityResponse
+    EsimDownloadResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+      type: object
+      required:
+      - status
+      title: EsimDownloadResponse
+    EsimIssueResponse:
+      properties:
+        esim_profile_id:
+          type: string
+          format: uuid
+          title: Esim Profile Id
+        iccid:
+          type: string
+          title: Iccid
+        activation_code_lpa:
+          type: string
+          title: Activation Code Lpa
+        qr_code_url:
+          type: string
+          title: Qr Code Url
+        status:
+          type: string
+          title: Status
+      type: object
+      required:
+      - esim_profile_id
+      - iccid
+      - activation_code_lpa
+      - qr_code_url
+      - status
+      title: EsimIssueResponse
+    EsimProfileResponse:
+      properties:
+        esim_profile_id:
+          type: string
+          format: uuid
+          title: Esim Profile Id
+        iccid:
+          type: string
+          title: Iccid
+        qr_code_url:
+          type: string
+          title: Qr Code Url
+        status:
+          type: string
+          title: Status
+        downloaded_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Downloaded At
+        activated_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Activated At
+      type: object
+      required:
+      - esim_profile_id
+      - iccid
+      - qr_code_url
+      - status
+      title: EsimProfileResponse
     FamilyContactCreate:
       properties:
         phone_number:

@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     whatsapp_family_nomination_template: str = "family_contact_nominated"
     whatsapp_activation_template: str = "hto_package_activation"
     whatsapp_receipt_template: str = "retail_payment_receipt"
+    whatsapp_esim_ready_template: str = "esim_profile_ready"
     activation_base_url: str = "https://damdam.app/activate"
 
     payment_processor_primary: Literal["paystack", "flutterwave"] = "paystack"
@@ -59,6 +60,26 @@ class Settings(BaseSettings):
     flutterwave_base_url: str = "https://api.flutterwave.com"
     flutterwave_secret_key: str = ""
     flutterwave_webhook_hash: str = ""
+
+    esim_vendor_primary: Literal["monty_mobile", "esim_access", "1global"] = (
+        "monty_mobile"
+    )
+    esim_vendor_secondary: Literal["monty_mobile", "esim_access", "1global"] = (
+        "esim_access"
+    )
+    esim_vendor_tertiary: Literal["monty_mobile", "esim_access", "1global"] = (
+        "1global"
+    )
+    esim_request_timeout_seconds: int = 20
+    monty_mobile_base_url: str = ""
+    monty_mobile_api_key: str = ""
+    esim_access_base_url: str = "https://api.esimaccess.com"
+    esim_access_access_code: str = ""
+    esim_access_secret_key: str = ""
+    esim_access_package_codes: dict[int, str] = Field(default_factory=dict)
+    esim_access_allocation_timeout_seconds: int = 35
+    oneglobal_base_url: str = ""
+    oneglobal_api_key: str = ""
 
     invoice_storage_backend: Literal["filesystem", "s3"] = "filesystem"
     invoice_storage_path: str = "/tmp/damdam-invoices"
@@ -96,6 +117,19 @@ class Settings(BaseSettings):
     def payment_processors_must_differ(self) -> "Settings":
         if self.payment_processor_primary == self.payment_processor_secondary:
             raise ValueError("Payment primary and secondary processors must differ")
+        return self
+
+    @model_validator(mode="after")
+    def esim_vendors_must_be_distinct(self) -> "Settings":
+        vendors = {
+            self.esim_vendor_primary,
+            self.esim_vendor_secondary,
+            self.esim_vendor_tertiary,
+        }
+        if len(vendors) != 3:
+            raise ValueError(
+                "eSIM primary, secondary, and tertiary vendors must differ"
+            )
         return self
 
 

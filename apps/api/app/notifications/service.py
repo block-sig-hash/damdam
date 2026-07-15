@@ -36,6 +36,8 @@ class WhatsAppSender(Protocol):
         self, phone_number: str, tier_name: str, amount_ngn: Decimal, reference: str
     ) -> None: ...
 
+    def send_esim_ready(self, phone_number: str, qr_code_url: str) -> None: ...
+
 
 class NotificationError(Exception):
     pass
@@ -88,3 +90,6 @@ class NotificationService:
         self, phone_number: str, tier_name: str, amount_ngn: Decimal, reference: str
     ) -> None:
         self.whatsapp.send_receipt(phone_number, tier_name, amount_ngn, reference)
+
+    def send_esim_ready(self, phone_number: str, qr_code_url: str) -> None:
+        self.whatsapp.send_esim_ready(phone_number, qr_code_url)

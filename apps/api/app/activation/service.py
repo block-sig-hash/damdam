@@ -15,6 +15,8 @@ from app.auth.models import (
     PricingTier,
     User,
 )
+from app.esim.models import EsimIssuanceJob
+from app.esim.service import EsimIssuanceScheduler
 from app.packages.models import Package, PackageSource, PackageStatus
 
 
@@ -33,8 +35,11 @@ class ActivationPreview:
 
 
 class ActivationService:
-    def __init__(self, clock: Callable[[], datetime]) -> None:
+    def __init__(
+        self, clock: Callable[[], datetime], esim_scheduler: EsimIssuanceScheduler
+    ) -> None:
         self.clock = clock
+        self.esim_scheduler = esim_scheduler
 
     def preview(self, session: Session, activation_code: str) -> ActivationPreview:
         pilgrim = self._find(session, activation_code)
@@ -104,8 +109,21 @@ class ActivationService:
             purchased_at=self.clock(),
         )
         session.add(package)
+        session.add(
+            EsimIssuanceJob(package_id=package.id, next_attempt_at=self.clock())
+        )
         session.commit()
         session.refresh(package)
+        try:
+            self.esim_scheduler.schedule(package.id, 0)
+        except Exception:
+            return package
+        job = session.exec(
+            select(EsimIssuanceJob).where(EsimIssuanceJob.package_id == package.id)
+        ).one()
+        job.next_attempt_at = None
+        session.add(job)
+        session.commit()
         return package
 
     def _is_expired(self, pilgrim: ManifestPilgrim) -> bool:

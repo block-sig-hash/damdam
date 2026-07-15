@@ -276,6 +276,29 @@ Continue/Support/back-gesture only mark the warning as shown
 
 ---
 
+### Screen: eSIM QR Code Display (Screen 17)
+
+**US-11 implementation assumption:** This screen previously appeared only in
+the inventory, with no data/elements/states specification. Until product/design
+provides a fuller per-screen treatment, the minimal implementation uses the
+existing design-system tokens and the US-11 acceptance criteria directly.
+
+**Data displayed:** recommended installation window (2–7 days before
+departure), lifecycle status, a large vendor-hosted QR image, ICCID, and the LPA
+activation code as selectable text fallback.
+
+**Interactive elements:** Android “Download to device” invokes the native
+`EuiccManager` bridge and disables while in flight; iOS stays on the QR/manual
+path and offers a self-reported “I installed this eSIM” action; “Save QR code”
+opens the full-resolution image in the OS viewer so the user can use Save Image.
+
+**States:** preparing; ready; download in progress; downloaded; and failed/
+queued. The queued state explains automatic retry, offers an immediate manual
+retry, polls the idempotent issuance endpoint, and tells the pilgrim they may
+leave because WhatsApp will notify them when the QR is ready.
+
+---
+
 ### Screen: eSIM Activation Prompt
 
 **Two variants:**

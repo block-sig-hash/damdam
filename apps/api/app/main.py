@@ -17,6 +17,7 @@ from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
 from app.config import Settings, get_settings
 from app.container import (
+    CeleryEsimIssuanceScheduler,
     CeleryProvisioningScheduler,
     build_notification_service,
     build_otp_service,
@@ -24,8 +25,16 @@ from app.container import (
     default_dependencies,
 )
 from app.db import SessionFactory
+from app.esim.providers import EsimProvider, build_esim_providers
 from app.esim.routes import router as esim_router
-from app.esim.service import DeviceCompatibilityService, HtoPilgrimService
+from app.esim.service import (
+    DeviceCompatibilityService,
+    EsimError,
+    EsimIssuanceScheduler,
+    EsimProfileService,
+    HtoPilgrimService,
+    NoopEsimIssuanceScheduler,
+)
 from app.manifests.invoices import InvoiceStorage, build_invoice_storage
 from app.manifests.orders import ManifestOrderService, ProvisioningScheduler
 from app.manifests.routes import pricing_router
@@ -56,6 +65,8 @@ def create_app(
     invoice_storage: InvoiceStorage | None = None,
     provisioning_scheduler: ProvisioningScheduler | None = None,
     payment_providers: Mapping[str, PaymentProvider] | None = None,
+    esim_providers: Mapping[str, EsimProvider] | None = None,
+    esim_scheduler: EsimIssuanceScheduler | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     supplied = (redis_client, providers, scheduler, session_factory)
@@ -97,6 +108,11 @@ def create_app(
     notification_service = build_notification_service(
         resolved_settings, email_sender, whatsapp_sender
     )
+    resolved_esim_scheduler = esim_scheduler or (
+        NoopEsimIssuanceScheduler()
+        if resolved_settings.app_env == "test"
+        else CeleryEsimIssuanceScheduler()
+    )
     api.state.manifest_service = ManifestService()
     api.state.manifest_order_service = ManifestOrderService(
         resolved_settings,
@@ -111,16 +127,46 @@ def create_app(
     api.state.family_contact_service = FamilyContactService(
         notification_service, clock
     )
-    api.state.activation_service = ActivationService(clock)
+    api.state.activation_service = ActivationService(clock, resolved_esim_scheduler)
     api.state.retail_pricing_service = RetailPricingService()
     api.state.payment_service = PaymentService(
         resolved_settings,
         payment_providers or build_payment_providers(resolved_settings),
         notification_service,
         clock,
+        resolved_esim_scheduler,
     )
     api.state.device_compatibility_service = DeviceCompatibilityService(clock)
+    api.state.esim_profile_service = EsimProfileService(
+        resolved_settings,
+        esim_providers or build_esim_providers(resolved_settings),
+        resolved_esim_scheduler,
+        notification_service,
+        clock,
+    )
     api.state.hto_pilgrim_service = HtoPilgrimService()
+
+    @api.exception_handler(EsimError)
+    async def esim_error_handler(request: Request, exc: EsimError) -> JSONResponse:
+        del request
+        statuses = {
+            "aggregator_unavailable": 502,
+            "package_not_found": 404,
+            "package_not_active": 409,
+            "esim_profile_not_found": 404,
+        }
+        messages = {
+            "aggregator_unavailable": (
+                "eSIM issuance is queued and will retry automatically."
+            ),
+            "package_not_found": "The package was not found.",
+            "package_not_active": "The package is not active yet.",
+            "esim_profile_not_found": "The eSIM profile has not been issued yet.",
+        }
+        return JSONResponse(
+            status_code=statuses[exc.code],
+            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+        )
 
     @api.exception_handler(OTPError)
     async def otp_error_handler(request: Request, exc: OTPError) -> JSONResponse:

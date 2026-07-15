@@ -73,6 +73,7 @@ class FakeScheduler:
 @pytest.fixture
 def settings() -> Settings:
     return Settings(
+        app_env="test",
         database_url="sqlite://",
         redis_url="redis://unused",
         jwt_secret="test-secret-at-least-32-characters-long",

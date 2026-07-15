@@ -70,6 +70,20 @@ export default function ManifestDetailPage() {
                     <td>
                       {pilgrim.esim_status === "incompatible" ? (
                         <span className="status-badge status-follow-up">Follow up</span>
+                      ) : ["issued", "downloaded", "activated"].includes(
+                          pilgrim.esim_status,
+                        ) ? (
+                        <span
+                          className={`status-badge ${
+                            pilgrim.esim_status === "downloaded" ||
+                            pilgrim.esim_status === "activated"
+                              ? "status-approved"
+                              : ""
+                          }`}
+                        >
+                          {pilgrim.esim_status.charAt(0).toUpperCase() +
+                            pilgrim.esim_status.slice(1)}
+                        </span>
                       ) : (
                         "—"
                       )}
