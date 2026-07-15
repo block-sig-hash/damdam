@@ -96,9 +96,6 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Temporary diagnostic for the delivery-path convergence test.
-          # Remove after the trace confirms the review is posted.
-          show_full_output: true
           # Sonnet by default for cost control, per AGENTS.md's
           # "default to Sonnet, escalate to Opus only when it
           # earns it" guidance — override manually for a specific
