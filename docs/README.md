@@ -36,3 +36,5 @@ model change that requires an API amendment) must be captured
 as a numbered amendment within the affected document, not a
 silent edit — see `data-model.md` §6.4 and §6.5 for the pattern
 to follow.
+
+<!-- Temporary Claude review convergence probe; this branch will not be merged. -->
