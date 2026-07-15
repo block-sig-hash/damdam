@@ -124,6 +124,16 @@ PATCH  /me/family-contact
   404: { error: "family_contact_not_found" }
   503: { error: "notification_unavailable" }
 
+GET    /me/emergency-contact
+  Auth required
+  US-12 AC-12.2 — the HTO operator's number is per-pilgrim, read
+  live from the pilgrim's assigned organization, not static
+  content (see data-model.md §6.20). DamDam's own support WhatsApp
+  number and the Arabic phrasebook are bundled client-side per
+  AC-12.3 and are not part of this response.
+  200: { hto_operator_name, hto_operator_phone_number }
+       Both null for a direct/retail pilgrim with no assigned HTO.
+
 GET    /activation/{activation_code}
   No auth required (pre-login preview, shown before OTP/PIN)
   200: { valid: bool, reason: "activation_code_already_used"|

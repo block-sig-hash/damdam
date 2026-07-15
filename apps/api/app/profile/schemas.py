@@ -45,3 +45,8 @@ class DeviceTokenUpsert(BaseModel):
 
 class DeviceTokenResponse(BaseModel):
     registered: bool = True
+
+
+class EmergencyContactResponse(BaseModel):
+    hto_operator_name: str | None
+    hto_operator_phone_number: str | None

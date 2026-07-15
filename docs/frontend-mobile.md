@@ -297,6 +297,27 @@ queued. The queued state explains automatic retry, offers an immediate manual
 retry, polls the idempotent issuance endpoint, and tells the pilgrim they may
 leave because WhatsApp will notify them when the QR is ready.
 
+**US-12 addition:** the `EmergencyEssentials` component renders below the
+eSIM content once it's loaded (AC-12.1) — the HTO operator's number (read
+live per-pilgrim, hidden entirely for a direct/retail pilgrim with none),
+DamDam's support WhatsApp number, and the five bundled Arabic key phrases
+(help, thank you, where is, I don't understand, I need a doctor), each
+shown as English label + Arabic script (right-to-left) + Latin
+transliteration. It's a bordered card of its own, visually separated from
+the QR/detail cards above rather than merged into them. It only renders
+on the loaded (ready/downloaded) screen state, not on the transient
+preparing/queued states — an explicit scope choice, not an oversight,
+since those states have no eSIM content of their own to be "alongside"
+yet either.
+
+**AC-12.4 deferral:** the same content is also supposed to be reachable
+from the SOS screen for quick reference during an actual emergency — the
+SOS screens (`SosConfirm`/`SosSent`) don't exist yet (US-16, Phase 3).
+`EmergencyEssentials` is built as a screen-agnostic, reusable component
+(it only needs an `accessToken` prop) specifically so it can be dropped
+into the future SOS screen without rework, once that screen exists. This
+is a forward-compatibility decision, not a skipped requirement.
+
 ---
 
 ### Screen: eSIM Activation Prompt

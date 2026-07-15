@@ -8,10 +8,12 @@ export const API_BASE_URL: string = process.env.API_BASE_URL ?? 'http://localhos
 
 /**
  * DamDam's own support WhatsApp number, E.164 without the leading
- * "+". docs/data-model.md's `emergency_content.support_whatsapp_number`
- * is the eventual destination-specific source of truth (US-12, not
- * yet built) — this is the same "single seam" placeholder pattern as
- * API_BASE_URL above until that endpoint exists.
+ * "+". This constant *is* the source of truth (US-12 AC-12.3 bundles
+ * it client-side rather than serving it from an endpoint or table —
+ * see data-model.md §6.20, which supersedes an earlier, never-built
+ * `emergency_content` table design). Still env-overridable per the
+ * same "single seam" pattern as API_BASE_URL above, for per-build
+ * config rather than a runtime fetch.
  */
 export const SUPPORT_WHATSAPP_NUMBER: string =
   process.env.SUPPORT_WHATSAPP_NUMBER ?? '2348000000000';

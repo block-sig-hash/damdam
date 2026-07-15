@@ -998,6 +998,21 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /v1/me/emergency-contact:
+    get:
+      tags:
+      - pilgrim-profile
+      summary: Get Emergency Contact
+      operationId: get_emergency_contact_v1_me_emergency_contact_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmergencyContactResponse'
+      security:
+      - HTTPBearer: []
   /v1/activation/{activation_code}:
     get:
       tags:
@@ -1653,6 +1668,23 @@ components:
       - name
       - notified_of_nomination
       title: FamilyContactResponse
+    EmergencyContactResponse:
+      properties:
+        hto_operator_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hto Operator Name
+        hto_operator_phone_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hto Operator Phone Number
+      type: object
+      required:
+      - hto_operator_name
+      - hto_operator_phone_number
+      title: EmergencyContactResponse
     FamilyContactUpdate:
       properties:
         phone_number:

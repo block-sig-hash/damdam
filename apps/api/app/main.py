@@ -50,6 +50,7 @@ from app.payments.service import PaymentError, PaymentService
 from app.pricing.routes import router as retail_pricing_router
 from app.pricing.service import RetailPricingService
 from app.profile.device_tokens import DeviceTokenService
+from app.profile.emergency_contact import EmergencyContactService
 from app.profile.family_contacts import FamilyContactError, FamilyContactService
 from app.profile.routes import router as profile_router
 
@@ -129,6 +130,7 @@ def create_app(
         notification_service, clock
     )
     api.state.device_token_service = DeviceTokenService(clock)
+    api.state.emergency_contact_service = EmergencyContactService()
     api.state.activation_service = ActivationService(clock, resolved_esim_scheduler)
     api.state.retail_pricing_service = RetailPricingService()
     api.state.payment_service = PaymentService(
