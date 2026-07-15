@@ -40,7 +40,7 @@ class EsimDownloadModule(private val context: ReactApplicationContext) :
               promise.resolve(null)
             }
             EuiccManager.EMBEDDED_SUBSCRIPTION_RESULT_RESOLVABLE_ERROR -> {
-              val activity = currentActivity
+              val activity = context.currentActivity
               if (activity == null) {
                 receiverContext.unregisterReceiver(receiver)
                 promise.reject("ESIM_ACTIVITY", "Open DamDam to confirm eSIM installation.")
