@@ -1,4 +1,5 @@
 import React from 'react';
+import { CheckCircle, Info } from 'phosphor-react-native';
 import {
   ActivityIndicator,
   Image,
@@ -75,13 +76,30 @@ export function EsimQrCodeScreen({
 
       <View style={styles.statusRow}>
         <View style={[styles.statusPill, downloaded && styles.statusPillDone]}>
+          {downloaded ? (
+            <CheckCircle
+              color={color.success700}
+              size={16}
+              weight="bold"
+              style={styles.statusIcon}
+              testID="esim-status-icon-downloaded"
+            />
+          ) : (
+            <Info
+              color={color.info500}
+              size={16}
+              weight="bold"
+              style={styles.statusIcon}
+              testID="esim-status-icon-ready"
+            />
+          )}
           <Text style={[styles.statusText, downloaded && styles.statusTextDone]}>
             {downloaded ? 'Downloaded' : 'Ready to download'}
           </Text>
         </View>
       </View>
 
-      <View style={styles.qrCard}>
+      <View style={styles.qrCard} testID="esim-qr-card">
         <Image
           source={{ uri: profile.qr_code_url }}
           accessibilityLabel="eSIM installation QR code"
@@ -91,11 +109,13 @@ export function EsimQrCodeScreen({
         />
       </View>
 
-      <View style={styles.detailCard}>
+      <View style={styles.detailCard} testID="esim-detail-card">
         <Text style={styles.detailLabel}>ICCID</Text>
         <Text selectable style={styles.detailValue}>{profile.iccid}</Text>
         <Text style={styles.detailLabel}>Activation code</Text>
-        <Text selectable style={styles.codeValue}>{profile.activation_code_lpa}</Text>
+        <Text selectable style={styles.codeValue} testID="esim-activation-code">
+          {profile.activation_code_lpa}
+        </Text>
       </View>
 
       {Platform.OS === 'android' ? (
@@ -159,11 +179,14 @@ const styles = StyleSheet.create({
   },
   statusPill: {
     alignSelf: 'flex-start',
+    alignItems: 'center',
+    flexDirection: 'row',
     borderRadius: 999,
     backgroundColor: color.info100,
     paddingHorizontal: space.space3,
     paddingVertical: space.space1,
   },
+  statusIcon: { marginRight: space.space1 },
   statusPillDone: { backgroundColor: color.success100 },
   statusText: {
     fontSize: typography.caption.fontSize,
@@ -174,6 +197,8 @@ const styles = StyleSheet.create({
   statusTextDone: { color: color.success700 },
   qrCard: {
     backgroundColor: color.white,
+    borderColor: color.gray200,
+    borderWidth: 1,
     borderRadius: radius.card,
     padding: space.space5,
     alignItems: 'center',
@@ -181,6 +206,8 @@ const styles = StyleSheet.create({
   qrImage: { width: 240, height: 240 },
   detailCard: {
     backgroundColor: color.white,
+    borderColor: color.gray200,
+    borderWidth: 1,
     borderRadius: radius.card,
     padding: space.space4,
     marginTop: space.space4,
@@ -198,8 +225,8 @@ const styles = StyleSheet.create({
     color: color.gray900,
   },
   codeValue: {
-    fontSize: typography.caption.fontSize,
-    lineHeight: typography.caption.lineHeight,
+    fontSize: typography.body.fontSize,
+    lineHeight: typography.body.lineHeight,
     color: color.gray900,
   },
   action: { marginTop: space.space4 },

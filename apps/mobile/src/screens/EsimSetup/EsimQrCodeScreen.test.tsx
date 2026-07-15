@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react-native';
 import { issueEsim, markEsimDownloaded } from '../../api/esimClient';
 import { downloadEsimProfile } from '../../services/esimDownload';
@@ -40,6 +41,27 @@ it('AC-11.1/11.3: shows timing guidance, QR, ICCID, and activation fallback', as
   expect(view.getByText(profile.iccid)).toBeTruthy();
   expect(view.getByText(profile.activation_code_lpa)).toBeTruthy();
   expect(view.getByTestId('esim-save-qr')).toBeTruthy();
+});
+
+it('matches the Screen 17 card, status-icon, and fallback-type tokens', async () => {
+  const view = await render(<EsimQrCodeScreen accessToken="token" packageId="package-1" />);
+  await view.findByTestId('esim-qr-image');
+
+  expect(StyleSheet.flatten(view.getByTestId('esim-qr-card').props.style)).toMatchObject({
+    borderColor: '#DDE1E1',
+    borderWidth: 1,
+  });
+  expect(StyleSheet.flatten(view.getByTestId('esim-detail-card').props.style)).toMatchObject({
+    borderColor: '#DDE1E1',
+    borderWidth: 1,
+  });
+  expect(view.getByTestId('esim-status-icon-ready').props).toMatchObject({
+    color: '#3B7DBF',
+  });
+  expect(StyleSheet.flatten(view.getByTestId('esim-activation-code').props.style)).toMatchObject({
+    fontSize: 16,
+    lineHeight: 24,
+  });
 });
 
 it('AC-11.2/11.4: disables double taps while invoking download and marks it once', async () => {
