@@ -113,6 +113,7 @@ a { color: #17623e; font-weight: 700; }
 .status-badge { padding: 5px 9px; border-radius: 999px; background: #f5e8b8; text-transform: capitalize; }
 .status-provisioned, .status-approved { background: #cdebd7; }
 .status-rejected { background: #f7dcd8; }
+.status-follow-up { background: #fbe0d3; color: #8a3b12; }
 .search-row { display: flex; align-items: end; gap: 12px; margin: 24px 0; }
 .search-row label { flex: 1; }
 .search-row button { width: auto; }

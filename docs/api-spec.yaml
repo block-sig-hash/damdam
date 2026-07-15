@@ -1119,6 +1119,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/device-compatibility:
+    post:
+      tags:
+      - esim
+      summary: Log Device Compatibility
+      operationId: log_device_compatibility_v1_me_device_compatibility_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCompatibilityCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCompatibilityResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/hto/pilgrims:
+    get:
+      tags:
+      - esim
+      summary: List Hto Pilgrims
+      operationId: list_hto_pilgrims_v1_hto_pilgrims_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Manifest Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HtoPilgrimListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     ActivationPreviewResponse:
@@ -1293,6 +1351,35 @@ components:
       required:
       - file
       title: Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post
+    DeviceCompatibilityCreate:
+      properties:
+        platform:
+          $ref: '#/components/schemas/Platform'
+        device_model:
+          type: string
+          title: Device Model
+        os_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Os Version
+        esim_supported:
+          type: boolean
+          title: Esim Supported
+      type: object
+      required:
+      - platform
+      - device_model
+      - esim_supported
+      title: DeviceCompatibilityCreate
+    DeviceCompatibilityResponse:
+      properties:
+        logged:
+          type: boolean
+          title: Logged
+          default: true
+      type: object
+      title: DeviceCompatibilityResponse
     FamilyContactCreate:
       properties:
         phone_number:
@@ -1542,6 +1629,58 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    HtoPilgrimListResponse:
+      properties:
+        pilgrims:
+          items:
+            $ref: '#/components/schemas/HtoPilgrimSummary'
+          type: array
+          title: Pilgrims
+      type: object
+      required:
+      - pilgrims
+      title: HtoPilgrimListResponse
+    HtoPilgrimSummary:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        phone_number:
+          type: string
+          title: Phone Number
+        tier:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tier
+        esim_status:
+          type: string
+          title: Esim Status
+        activation_status:
+          type: string
+          title: Activation Status
+        last_checkin_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Checkin At
+        sos_status:
+          type: string
+          title: Sos Status
+          default: none
+      type: object
+      required:
+      - id
+      - name
+      - phone_number
+      - tier
+      - esim_status
+      - activation_status
+      title: HtoPilgrimSummary
     ManifestConfirmResponse:
       properties:
         status:

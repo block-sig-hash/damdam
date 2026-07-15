@@ -222,6 +222,25 @@ export async function getManifestOrders(manifestId: string): Promise<ManifestOrd
   return (await parseResponse<{ orders: ManifestOrder[] }>(response)).orders;
 }
 
+export type HtoPilgrim = {
+  id: string;
+  name: string;
+  phone_number: string;
+  tier: string | null;
+  esim_status: string;
+  activation_status: string;
+  last_checkin_at: string | null;
+  sos_status: string;
+};
+
+export async function getHtoPilgrims(manifestId: string): Promise<HtoPilgrim[]> {
+  const query = new URLSearchParams({ manifest_id: manifestId });
+  const response = await fetch(`${API_BASE_URL}/hto/pilgrims?${query}`, {
+    headers: operatorHeaders(),
+  });
+  return (await parseResponse<{ pilgrims: HtoPilgrim[] }>(response)).pilgrims;
+}
+
 async function openPDF(path: string, headers: HeadersInit) {
   const response = await fetch(`${API_BASE_URL}${path}`, { headers });
   if (!response.ok) await parseResponse(response);

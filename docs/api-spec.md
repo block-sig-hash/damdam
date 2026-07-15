@@ -395,7 +395,9 @@ GET    /hto/manifests
 ```
 GET    /hto/pilgrims
   HTO auth required
-  Query: ?manifest_id=&search=&sort=
+  Query: ?manifest_id= (filters to one manifest; search/sort are not
+         implemented — no AC currently requires them, and adding
+         them is out of US-10's scope)
   200: { pilgrims: [{ id, name, phone_number, tier, esim_status,
           last_checkin_at?, sos_status, activation_status }] }
 
