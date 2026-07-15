@@ -56,40 +56,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Every real run of this workflow used to exhaust its turn
-      # budget regardless of PR size (9/9 turns at the old
-      # --max-turns 8, 25/25 at --max-turns 24, on PRs from 632 to
-      # 2554 additions — zero variance). A diagnostic run with
-      # show_full_output enabled showed why: Claude's Bash tool in
-      # this sandbox rejects any compound command (&&/; chains)
-      # outright, and separately rejects `gh` and `env` calls
-      # individually — with no interactive approver in unattended
-      # CI, those are unrecoverable, not retryable. Since the prompt
-      # never handed Claude the diff, its first move was always
-      # `gh pr view`/`gh pr diff`, which is guaranteed to fail here,
-      # after which it fell into open-ended git/file exploration for
-      # the rest of the budget and never converged past a trivial
-      # diff. Fetching the diff here — as a normal runner step, not
-      # a Claude tool call, so the approval gate doesn't apply — and
-      # handing it to Claude as a file removes both the guaranteed-
-      # wasted turns and the multi-turn "what even changed" phase.
-      - name: Fetch PR diff for review context
-        id: pr_context
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
-          echo "pr_number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
-          DIFF_PATH="${RUNNER_TEMP}/pr-${PR_NUMBER}.diff"
-          gh pr diff "${PR_NUMBER}" --repo "${{ github.repository }}" > "${DIFF_PATH}"
-          echo "diff_path=${DIFF_PATH}" >> "$GITHUB_OUTPUT"
-
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # TEMPORARY: left on through this fix's own convergence
-          # test so a failure is diagnosable too; flip to false in
-          # the follow-up commit once convergence is confirmed.
+          # TEMPORARY: every real run of this workflow has exhausted
+          # its turn budget regardless of PR size (see the PR #50
+          # review discussion) with no per-turn visibility into why.
+          # Flipping this on to capture one real turn-by-turn trace
+          # before making a structural fix — flip back to false once
+          # diagnosed, this isn't meant to stay on permanently.
           show_full_output: true
           # Sonnet by default for cost control, per AGENTS.md's
           # "default to Sonnet, escalate to Opus only when it
@@ -99,21 +74,7 @@ jobs:
             --model claude-sonnet-5
             --max-turns 24
           prompt: |
-            The full diff for this PR (#${{ steps.pr_context.outputs.pr_number }})
-            has already been fetched and saved to
-            ${{ steps.pr_context.outputs.diff_path }} — read that file
-            first via the Read tool and treat it as the source of
-            truth for what changed. Do not re-derive the diff via
-            `git diff`/`git show`/`gh pr diff`/`gh pr view`: `gh` CLI
-            calls and compound Bash commands (anything chained with
-            `&&` or `;`) are not approved in this sandbox and will
-            always fail here, wasting turns better spent reviewing.
-            If you need a file's full content or history beyond what
-            the diff shows, use the Read tool directly on that path,
-            or a single-operation `git log`/`git blame` call — not a
-            chained command.
-
-            Review this diff against docs/testing-qa.md and the
+            Review this PR against docs/testing-qa.md and the
             linked user story's acceptance criteria in docs/prd.md.
 
             If this PR touches apps/mobile/src/screens or
