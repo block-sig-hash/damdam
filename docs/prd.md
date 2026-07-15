@@ -658,8 +658,18 @@ Device capability check differs meaningfully by platform:
   hardware level — is routed to the manual Settings-based guide.
   eSIM hardware support on iOS is effectively iPhone XS and later;
   the app should detect device model (not a capability API, since
-  none exists) against a known-supported-models list to decide
-  whether to show the compatibility warning or the manual guide.
+  none exists) to decide whether to show the compatibility warning
+  or the manual guide.
+
+  **Implementation note (US-10):** rather than a hand-maintained
+  known-supported-models list — which needs a yearly update per
+  iPhone release and is a real source of transcription error to get
+  right from memory — this is implemented as a generation-number
+  threshold: `getDeviceId()` returns iOS's hardware identifier in
+  the form `iPhoneN,M`, and iPhone XS (the oldest eSIM-capable
+  model) is generation 11, so `N >= 11` is treated as supported.
+  Same capability check as a models list would give, without the
+  maintenance burden.
 
 **Flow:**
 1. Compatibility check (platform-specific, as above); result

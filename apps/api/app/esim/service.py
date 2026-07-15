@@ -43,11 +43,13 @@ class DeviceCompatibilityService:
             # won't send a second unsupported check for the same
             # device anyway). Only applies to HTO-manifest-sourced
             # pilgrims — a direct/retail pilgrim has no manifest_pilgrims
-            # row and nothing to flag.
+            # row and nothing to flag. Ordered by id for a deterministic
+            # pick in the rare case a user is linked to more than one
+            # pilgrim row (e.g. re-added on a different manifest).
             pilgrim = session.exec(
-                select(ManifestPilgrim).where(
-                    col(ManifestPilgrim.user_id) == user.id
-                )
+                select(ManifestPilgrim)
+                .where(col(ManifestPilgrim.user_id) == user.id)
+                .order_by(col(ManifestPilgrim.id))
             ).first()
             if pilgrim is not None:
                 pilgrim.esim_incompatible_flag = True
