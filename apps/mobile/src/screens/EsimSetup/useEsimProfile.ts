@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { EsimApiError, EsimProfile, issueEsim, markEsimDownloaded } from '../../api/esimClient';
+import {
+  EsimApiError,
+  EsimProfile,
+  getEsim,
+  issueEsim,
+  markEsimDownloaded,
+} from '../../api/esimClient';
 import { downloadEsimProfile } from '../../services/esimDownload';
 
 const RETRY_POLL_MS = 10_000;
@@ -35,15 +41,38 @@ export function useEsimProfile(accessToken: string, packageId: string) {
     }
   }, [accessToken, packageId]);
 
+  const pollForIssuedProfile = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      await getEsim(accessToken, packageId);
+      // GET intentionally omits the LPA activation string. Once a profile exists,
+      // the idempotent issue endpoint returns that existing profile without making
+      // another vendor request, so the Android download action can be hydrated.
+      const issued = await issueEsim(accessToken, packageId);
+      setProfile(issued);
+      setError(null);
+      setPhase(issued.status === 'downloaded' ? 'downloaded' : 'ready');
+    } catch {
+      // The durable server-side job owns the 60-second/5-minute retry schedule.
+      // A missing profile simply remains queued until the next read-only poll.
+    } finally {
+      inFlight.current = false;
+    }
+  }, [accessToken, packageId]);
+
   useEffect(() => {
     load().catch(() => undefined);
   }, [load]);
 
   useEffect(() => {
     if (phase !== 'queued') return;
-    const timer = setInterval(() => load().catch(() => undefined), RETRY_POLL_MS);
+    const timer = setInterval(
+      () => pollForIssuedProfile().catch(() => undefined),
+      RETRY_POLL_MS,
+    );
     return () => clearInterval(timer);
-  }, [load, phase]);
+  }, [phase, pollForIssuedProfile]);
 
   const download = useCallback(async () => {
     if (inFlight.current || !profile?.activation_code_lpa) return;

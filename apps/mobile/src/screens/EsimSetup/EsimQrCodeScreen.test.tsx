@@ -1,18 +1,24 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react-native';
-import { issueEsim, markEsimDownloaded } from '../../api/esimClient';
+import { getEsim, issueEsim, markEsimDownloaded } from '../../api/esimClient';
 import { downloadEsimProfile } from '../../services/esimDownload';
 import { EsimQrCodeScreen } from './EsimQrCodeScreen';
 import { useEsimProfile } from './useEsimProfile';
 
 jest.mock('../../api/esimClient', () => {
   const actual = jest.requireActual('../../api/esimClient');
-  return { ...actual, issueEsim: jest.fn(), markEsimDownloaded: jest.fn() };
+  return {
+    ...actual,
+    getEsim: jest.fn(),
+    issueEsim: jest.fn(),
+    markEsimDownloaded: jest.fn(),
+  };
 });
 jest.mock('../../services/esimDownload', () => ({ downloadEsimProfile: jest.fn() }));
 
 const mockIssue = issueEsim as jest.MockedFunction<typeof issueEsim>;
+const mockGet = getEsim as jest.MockedFunction<typeof getEsim>;
 const mockMark = markEsimDownloaded as jest.MockedFunction<typeof markEsimDownloaded>;
 const mockDownload = downloadEsimProfile as jest.MockedFunction<typeof downloadEsimProfile>;
 const profile = {
@@ -26,6 +32,7 @@ const profile = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockIssue.mockResolvedValue(profile);
+  mockGet.mockResolvedValue(profile);
   mockDownload.mockResolvedValue('invoked');
   mockMark.mockResolvedValue({ status: 'downloaded' });
 });
@@ -89,4 +96,31 @@ it('AC-11.5: explains that a failed issue is queued for automatic retry', async 
   const view = await render(<EsimQrCodeScreen accessToken="token" packageId="package-1" />);
   expect(await view.findByTestId('esim-profile-queued')).toBeTruthy();
   expect(view.getByText(/queued and will retry automatically/)).toBeTruthy();
+});
+
+it('AC-11.5: queued polling reads status without bypassing server retry backoff', async () => {
+  const { EsimApiError } = jest.requireMock('../../api/esimClient') as {
+    EsimApiError: new (message: string, code: string) => Error;
+  };
+  mockIssue.mockRejectedValueOnce(new EsimApiError('queued', 'aggregator_unavailable'));
+  mockGet.mockRejectedValue(new EsimApiError('not issued', 'esim_profile_not_found'));
+  const intervalSpy = jest.spyOn(global, 'setInterval');
+
+  const hook = await renderHook(() => useEsimProfile('token', 'package-1'));
+  await waitFor(() => expect(hook.result.current.phase).toBe('queued'));
+
+  try {
+    const poll = intervalSpy.mock.calls.find(([, delay]) => delay === 10_000)?.[0];
+    expect(poll).toBeDefined();
+    await act(async () => {
+      (poll as () => void)();
+      await Promise.resolve();
+    });
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(mockIssue).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.phase).toBe('queued');
+  } finally {
+    intervalSpy.mockRestore();
+  }
 });
