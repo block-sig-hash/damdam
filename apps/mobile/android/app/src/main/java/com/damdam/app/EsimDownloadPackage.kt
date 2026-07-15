@@ -6,7 +6,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
 class EsimDownloadPackage : ReactPackage {
-  @Suppress("DEPRECATION")
+  @Suppress("OVERRIDE_DEPRECATION")
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
     listOf(EsimDownloadModule(reactContext))
 
