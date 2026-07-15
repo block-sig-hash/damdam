@@ -36,8 +36,8 @@ describe("HTO manifest pilgrim roster", () => {
             name: "Bello Aliyu",
             phone_number: "+2348087654321",
             tier: null,
-            esim_status: "not_checked",
-            activation_status: "not_activated",
+            esim_status: "downloaded",
+            activation_status: "activated",
             last_checkin_at: null,
             sos_status: "none",
           },
@@ -59,6 +59,7 @@ describe("HTO manifest pilgrim roster", () => {
 
     const belloRow = screen.getByText("Bello Aliyu").closest("tr");
     expect(belloRow!.querySelector(".status-follow-up")).toBeNull();
+    expect(belloRow).toHaveTextContent("Downloaded");
   });
 
   it("shows an empty state when the manifest has no pilgrims", async () => {

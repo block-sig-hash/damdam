@@ -206,6 +206,15 @@ POST   /packages/{id}/esim/issue
   200: { esim_profile_id, iccid, activation_code_lpa,
           qr_code_url, status }
   502: { error: "aggregator_unavailable" }
+  Idempotent by package: an already-issued profile is returned without
+  calling an aggregator again. Supplier order comes from
+  ESIM_VENDOR_PRIMARY/SECONDARY/TERTIARY. If all three fail, the same
+  response records a persistent backoff job; attempt 3 enters the admin queue.
+  eSIM Access uses its signed order/query API and the configured Saudi plan-code
+  map; an accepted but still-allocating order is retried against eSIM Access
+  with the same package transaction id and does not cascade (which would buy a
+  duplicate). Monty Mobile and 1GLOBAL issuance URLs target their configured
+  partner adapters because their commercial wire schemas are partner-gated.
 
 GET    /packages/{id}/esim
   Auth required
@@ -226,6 +235,12 @@ POST   /packages/{id}/esim/mark-activated
   post-activation
   200: { status: "activated" }
 ```
+
+`mark-activated` remains the US-13 contract and is intentionally not
+implemented by US-11. The existing `GET /hto/pilgrims` response derives its
+`esim_status` from the package's `esim_profiles.status` (`issued`, `downloaded`,
+or later `activated`), while the pre-existing `incompatible` follow-up state
+takes precedence.
 
 ---
 

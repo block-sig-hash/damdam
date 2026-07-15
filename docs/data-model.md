@@ -444,10 +444,14 @@ notification queue to retry only the failed channel.
 |---|---|---|---|
 | id | UUID | PK | |
 | user_id | UUID | FK → users, NULLABLE | |
-| platform | ENUM | NOT NULL | `ios` \| `android` |
-| device_model | VARCHAR(100) | NOT NULL | |
+| event_type | ENUM | NOT NULL, DEFAULT `compatibility_check` | `compatibility_check` \| `issuance_attempt` |
+| platform | ENUM | NULLABLE | `ios` \| `android`; required for compatibility checks |
+| device_model | VARCHAR(100) | NULLABLE | Required for compatibility checks |
 | os_version | VARCHAR(20) | NULLABLE | |
-| esim_supported | BOOLEAN | NOT NULL | |
+| esim_supported | BOOLEAN | NULLABLE | Required for compatibility checks |
+| aggregator | ENUM | NULLABLE | Vendor used for an issuance attempt (§6.6) |
+| attempt_succeeded | BOOLEAN | NULLABLE | Set for issuance attempts |
+| failure_reason | VARCHAR(255) | NULLABLE | Sanitized vendor failure summary |
 | checked_at | TIMESTAMPTZ | NOT NULL | |
 
 Feeds the "known incompatible devices" analytics referenced in
@@ -963,3 +967,32 @@ outage can never roll back a paid package. If delivery fails, a later duplicate
 webhook remains a payment no-op but retries only the missing receipt checkpoint;
 successful email delivery also uses the processor reference as Resend's
 idempotency key.
+
+---
+
+## 6.19 Amendment — US-11 eSIM Issuance Retry State and Attempt Audit
+
+US-11 materializes the already-specified `esim_profiles` table in migration
+`0012_us11_esim_profiles`. Its `package_id` unique constraint is the durable
+idempotency boundary. The service also locks the owning `packages` row before
+calling any supplier, while each supplier receives that package UUID as its
+idempotency key; concurrent or repeated taps therefore cannot issue two remote
+profiles before the database uniqueness check runs.
+
+`device_compatibility_log` now records two conditional event shapes. Existing
+rows are backfilled as `compatibility_check` and keep their platform/device/
+support fields. An `issuance_attempt` instead carries `aggregator`,
+`attempt_succeeded`, and an optional sanitized failure reason. The original
+device fields become nullable only because a server-side supplier attempt has
+no device model; compatibility-check writes still require them at the API
+schema/service boundary. This reuses the US-10 operational log, as required by
+PRD §5.4, rather than creating a second vendor-attempt audit table.
+
+No generic admin work queue existed before US-11. `esim_issuance_jobs` is the
+small persistent queue for this lifecycle: unique `package_id`, `attempt_count`,
+`next_attempt_at`, `last_error`, `admin_queued_at`, `completed_at`, and
+`success_notified_at`. The first all-vendor failure retries after 60 seconds,
+the second after 5 minutes, and the third clears automatic scheduling and sets
+`admin_queued_at`. Payment and HTO activation commit a due job before asking
+Celery to enqueue it, so a broker outage cannot roll back a paid package or
+silently lose the provisioning work.

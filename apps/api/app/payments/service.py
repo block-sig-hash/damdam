@@ -11,6 +11,8 @@ from sqlmodel import Session, col, select
 
 from app.auth.models import PricingTier, User
 from app.config import Settings
+from app.esim.models import EsimIssuanceJob, EsimProfile
+from app.esim.service import EsimIssuanceScheduler
 from app.notifications.service import NotificationError, NotificationService
 from app.packages.models import (
     Package,
@@ -50,11 +52,13 @@ class PaymentService:
         providers: Mapping[str, PaymentProvider],
         notifications: NotificationService,
         clock: Callable[[], datetime],
+        esim_scheduler: EsimIssuanceScheduler,
     ) -> None:
         self.settings = settings
         self.providers = providers
         self.notifications = notifications
         self.clock = clock
+        self.esim_scheduler = esim_scheduler
 
     def initialize(
         self,
@@ -163,6 +167,9 @@ class PaymentService:
             package.data_gb_remaining = Decimal(package.data_gb_total)
             package.pstn_minutes_remaining = Decimal(package.pstn_minutes_total)
             session.add(package)
+            session.add(
+                EsimIssuanceJob(package_id=package.id, next_attempt_at=self.clock())
+            )
             session.commit()
             session.refresh(transaction)
         else:
@@ -174,8 +181,39 @@ class PaymentService:
             ).first()
 
         if transaction is not None and transaction.status == TransactionStatus.SUCCESS:
+            self._schedule_esim_if_needed(session, transaction)
             self._send_receipt_if_needed(session, transaction)
         return processed
+
+    def _schedule_esim_if_needed(
+        self, session: Session, transaction: Transaction
+    ) -> None:
+        if transaction.package_id is None:
+            return
+        profile = session.exec(
+            select(EsimProfile).where(EsimProfile.package_id == transaction.package_id)
+        ).first()
+        job = session.exec(
+            select(EsimIssuanceJob).where(
+                EsimIssuanceJob.package_id == transaction.package_id
+            )
+        ).first()
+        if (
+            profile is not None
+            or job is None
+            or job.completed_at is not None
+            or job.next_attempt_at is None
+        ):
+            return
+        try:
+            self.esim_scheduler.schedule(transaction.package_id, 0)
+        except Exception:
+            # Payment is already durable. The job remains visible/due so a
+            # duplicate webhook or operations worker can safely enqueue it.
+            return
+        job.next_attempt_at = None
+        session.add(job)
+        session.commit()
 
     def package_status(self, session: Session, user: User, package_id: UUID) -> Package:
         package = session.exec(

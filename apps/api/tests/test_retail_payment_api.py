@@ -118,6 +118,7 @@ def _payment_api(
     session_factory,
     clock,
     payment_providers,
+    esim_scheduler=None,
 ):
     email = RecordingEmailSender()
     whatsapp = RecordingWhatsAppSender()
@@ -131,8 +132,17 @@ def _payment_api(
         email_sender=email,
         whatsapp_sender=whatsapp,
         payment_providers=payment_providers,
+        esim_scheduler=esim_scheduler,
     )
     return api, email, whatsapp
+
+
+class RecordingEsimScheduler:
+    def __init__(self) -> None:
+        self.calls: list[tuple[UUID, int]] = []
+
+    def schedule(self, package_id: UUID, countdown: int) -> None:
+        self.calls.append((package_id, countdown))
 
 
 def test_checkout_uses_configured_primary_and_current_stored_price(
@@ -463,6 +473,53 @@ def test_duplicate_paystack_webhook_activates_and_sends_receipt_once(
         assert transaction.status == TransactionStatus.SUCCESS
     assert len(whatsapp.receipts) == 1
     assert len(email.receipts) <= 1
+
+
+def test_successful_payment_enqueues_esim_issuance_once(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-11.1: first valid payment callback queues profile issuance once."""
+    payment_providers = {
+        "paystack": FakePaymentProvider("paystack"),
+        "flutterwave": FakePaymentProvider("flutterwave"),
+    }
+    esim_scheduler = RecordingEsimScheduler()
+    api, _, _ = _payment_api(
+        settings,
+        redis_client,
+        providers,
+        scheduler,
+        session_factory,
+        clock,
+        payment_providers,
+        esim_scheduler,
+    )
+    client = _authenticated_client(api)
+    with session_factory() as session:
+        tier = _tier()
+        session.add(tier)
+        session.commit()
+        session.refresh(tier)
+    purchase = client.post(
+        "/v1/packages/purchase", json={"pricing_tier_id": str(tier.id)}
+    ).json()
+    payload = {
+        "status": "success",
+        "reference": purchase["processor_reference"],
+        "amount_ngn": 145000,
+        "payment_method": "card",
+    }
+
+    webhook = TestClient(api)
+    for _ in range(2):
+        response = webhook.post(
+            "/v1/webhooks/paystack",
+            content=json.dumps(payload),
+            headers={"x-test-signature": "valid-paystack"},
+        )
+        assert response.status_code == 200
+
+    assert esim_scheduler.calls == [(UUID(purchase["package_id"]), 0)]
 
 
 def test_flutterwave_webhook_uses_same_idempotency_path_after_failover(

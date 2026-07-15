@@ -164,6 +164,13 @@ class MetaWhatsAppSender:
             [{"type": "text", "text": operator_name}],
         )
 
+    def send_esim_ready(self, phone_number: str, qr_code_url: str) -> None:
+        self._send_template(
+            phone_number,
+            self.settings.whatsapp_esim_ready_template,
+            [{"type": "text", "text": qr_code_url}],
+        )
+
     def send_family_nomination(self, phone_number: str) -> None:
         self._send_template(
             phone_number,

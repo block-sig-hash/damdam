@@ -20,8 +20,14 @@ from app.auth.models import (
 )
 from app.auth.routes import request_otp, verify_otp
 from app.auth.schemas import OTPRequest, OTPVerifyRequest
-from app.esim.models import DeviceCompatibilityLog
+from app.esim.models import (
+    DeviceCompatibilityLog,
+    EsimAggregator,
+    EsimProfile,
+    EsimProfileStatus,
+)
 from app.main import create_app
+from app.packages.models import Package, PackageSource, PackageStatus
 
 
 def _payload(
@@ -317,6 +323,7 @@ def test_hto_pilgrims_list_shows_follow_up_flag_and_is_tenant_scoped(
             phone_number="08066667777",
             row_number=3,
             validation_status=ManifestValidationStatus.VALID,
+            user_id=clean_user_id,
         )
         other_org_pilgrim = ManifestPilgrim(
             manifest_id=other_manifest.id,
@@ -325,9 +332,31 @@ def test_hto_pilgrims_list_shows_follow_up_flag_and_is_tenant_scoped(
             phone_number="08055556666",
             row_number=2,
             validation_status=ManifestValidationStatus.VALID,
-            user_id=clean_user_id,
         )
         session.add_all([flagged, clean, other_org_pilgrim])
+        package = Package(
+            user_id=clean_user_id,
+            pricing_tier_id=tier.id,
+            source=PackageSource.HTO_MANIFEST,
+            status=PackageStatus.ACTIVE,
+            data_gb_total=10,
+            data_gb_remaining=10,
+            pstn_minutes_total=90,
+            pstn_minutes_remaining=90,
+        )
+        session.add(package)
+        session.flush()
+        session.add(
+            EsimProfile(
+                package_id=package.id,
+                aggregator=EsimAggregator.MONTY_MOBILE,
+                iccid="8944501234567890123456",
+                activation_code_lpa="LPA:1$monty.example$match",
+                qr_code_url="https://cdn.example/qr.png",
+                status=EsimProfileStatus.DOWNLOADED,
+                downloaded_at=clock(),
+            )
+        )
         session.commit()
 
     client = TestClient(api, headers=operator_headers(settings, clock, owner.id))
@@ -339,8 +368,10 @@ def test_hto_pilgrims_list_shows_follow_up_flag_and_is_tenant_scoped(
     assert pilgrims["Amina Yusuf"]["esim_status"] == "incompatible"
     assert pilgrims["Amina Yusuf"]["tier"] == "Standard"
     assert pilgrims["Amina Yusuf"]["activation_status"] == "activated"
-    assert pilgrims["Bello Aliyu"]["esim_status"] == "not_checked"
-    assert pilgrims["Bello Aliyu"]["activation_status"] == "not_activated"
+    # AC-11.6: the existing HTO roster reports the profile lifecycle;
+    # there is no second reporting endpoint.
+    assert pilgrims["Bello Aliyu"]["esim_status"] == "downloaded"
+    assert pilgrims["Bello Aliyu"]["activation_status"] == "activated"
     assert pilgrims["Bello Aliyu"]["tier"] is None
 
 

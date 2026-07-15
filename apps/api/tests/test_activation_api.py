@@ -1,6 +1,6 @@
 from datetime import timedelta
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from sqlmodel import select
@@ -19,11 +19,20 @@ from app.auth.models import (
 )
 from app.auth.routes import request_otp, verify_otp
 from app.auth.schemas import OTPRequest, OTPVerifyRequest
+from app.esim.models import EsimIssuanceJob
 from app.packages.models import Package
 
 PILGRIM_LOCAL_PHONE = "08012345678"
 PILGRIM_E164_PHONE = "+2348012345678"
 OTHER_LOCAL_PHONE = "08100000000"
+
+
+class RecordingEsimScheduler:
+    def __init__(self) -> None:
+        self.calls: list[tuple[UUID, int]] = []
+
+    def schedule(self, package_id: UUID, countdown: int) -> None:
+        self.calls.append((package_id, countdown))
 
 
 def seed_activation_code(
@@ -193,6 +202,28 @@ def test_existing_pilgrim_redeems_code_after_logging_in(
     )
 
     assert response.status_code == 200
+
+
+def test_hto_redemption_enqueues_esim_issuance_once(
+    api, session_factory, clock
+) -> None:
+    """AC-11.1: an HTO package queues issuance as soon as it is redeemed."""
+    _, code, _tier = seed_activation_code(session_factory, clock)
+    esim_scheduler = RecordingEsimScheduler()
+    api.state.activation_service.esim_scheduler = esim_scheduler
+    client = authenticated_client(api, PILGRIM_LOCAL_PHONE)
+
+    response = client.post(
+        "/v1/me/activation/redeem", json={"activation_code": code}
+    )
+
+    assert response.status_code == 200
+    package_id = UUID(response.json()["package_id"])
+    assert esim_scheduler.calls == [(package_id, 0)]
+    with session_factory() as session:
+        job = session.exec(select(EsimIssuanceJob)).one()
+        assert job.package_id == package_id
+        assert job.next_attempt_at is None
 
 
 def test_redeem_rejects_an_already_used_code(api, session_factory, clock) -> None:

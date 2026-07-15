@@ -90,6 +90,15 @@ jobs:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: apps/mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            apps/mobile/android/*.gradle
+            apps/mobile/android/gradle/wrapper/gradle-wrapper.properties
       - if: ${{ hashFiles('apps/mobile/package.json') != '' }}
         run: npm ci
       - if: ${{ hashFiles('apps/mobile/package.json') != '' }}
@@ -98,6 +107,10 @@ jobs:
         run: npm run type-check
       - if: ${{ hashFiles('apps/mobile/package.json') != '' }}
         run: npm run test
+      - name: Compile Android debug app
+        if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
   build-check:
     name: Docker build check (multi-arch)

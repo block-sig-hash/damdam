@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -38,3 +39,24 @@ class HtoPilgrimSummary(BaseModel):
 
 class HtoPilgrimListResponse(BaseModel):
     pilgrims: list[HtoPilgrimSummary]
+
+
+class EsimIssueResponse(BaseModel):
+    esim_profile_id: UUID
+    iccid: str
+    activation_code_lpa: str
+    qr_code_url: str
+    status: str
+
+
+class EsimProfileResponse(BaseModel):
+    esim_profile_id: UUID
+    iccid: str
+    qr_code_url: str
+    status: str
+    downloaded_at: datetime | None = None
+    activated_at: datetime | None = None
+
+
+class EsimDownloadResponse(BaseModel):
+    status: str

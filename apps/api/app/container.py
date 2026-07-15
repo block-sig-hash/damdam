@@ -6,6 +6,7 @@ from redis import Redis
 
 from app.config import Settings
 from app.db import SessionFactory, create_session_factory
+from app.esim.service import EsimIssuanceScheduler
 from app.manifests.orders import ProvisioningScheduler
 from app.notifications.providers import MetaWhatsAppSender, ResendEmailSender
 from app.notifications.service import EmailSender, NotificationService, WhatsAppSender
@@ -36,6 +37,15 @@ class CeleryProvisioningScheduler(ProvisioningScheduler):
         from app.worker import celery_app
 
         celery_app.send_task("app.manifests.provision", args=[str(order_id)])
+
+
+class CeleryEsimIssuanceScheduler(EsimIssuanceScheduler):
+    def schedule(self, package_id: UUID, countdown: int) -> None:
+        from app.worker import celery_app
+
+        celery_app.send_task(
+            "app.esim.issue", args=[str(package_id)], countdown=countdown
+        )
 
 
 def build_otp_service(
