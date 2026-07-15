@@ -86,6 +86,6 @@ describe('ActivationSuccessScreen', () => {
       fireEvent.press(screen.getByTestId('activation-success-continue'));
     });
 
-    expect(onContinue).toHaveBeenCalled();
+    expect(onContinue).toHaveBeenCalledWith(expect.objectContaining({ package_id: 'package-1' }));
   });
 });

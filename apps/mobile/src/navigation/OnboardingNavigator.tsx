@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AuthResponse } from '../api/authClient';
 import { ActivationCodeEntryScreen } from '../screens/ActivationCodeEntry/ActivationCodeEntryScreen';
 import { ActivationSuccessScreen } from '../screens/ActivationSuccess/ActivationSuccessScreen';
@@ -14,8 +14,20 @@ type OnboardingStep =
   | { name: 'otp'; phoneNumber: string; activationCode?: string }
   | { name: 'existing-account'; phoneNumber: string; activationCode?: string }
   | { name: 'verified'; result: AuthResponse; activationCode?: string }
-  | { name: 'activated'; accessToken: string; isNewUser: boolean }
+  | {
+      name: 'activated';
+      accessToken: string;
+      isNewUser: boolean;
+      departureDate: string | null;
+      packageId: string;
+    }
   | { name: 'onboarded' };
+
+export interface AuthenticatedMobileSession {
+  accessToken: string;
+  departureDate: string | null;
+  packageId?: string;
+}
 
 interface OnboardingNavigatorProps {
   /**
@@ -24,6 +36,23 @@ interface OnboardingNavigatorProps {
    * This component doesn't itself register the OS-level URL scheme.
    */
   initialActivationCode?: string;
+  /** Hands the authenticated session to the app host without changing onboarding screens. */
+  onAuthenticated?: (session: AuthenticatedMobileSession) => void;
+}
+
+function AuthenticationHandoff({
+  session,
+  onAuthenticated,
+  title,
+}: {
+  session: AuthenticatedMobileSession;
+  onAuthenticated?: (session: AuthenticatedMobileSession) => void;
+  title: string;
+}): React.JSX.Element {
+  useEffect(() => {
+    onAuthenticated?.(session);
+  }, [onAuthenticated, session]);
+  return <PlaceholderScreen title={title} note="Opening Home..." />;
 }
 
 /**
@@ -36,6 +65,7 @@ interface OnboardingNavigatorProps {
  */
 export function OnboardingNavigator({
   initialActivationCode,
+  onAuthenticated,
 }: OnboardingNavigatorProps = {}): React.JSX.Element {
   const [step, setStep] = useState<OnboardingStep>(
     initialActivationCode ? { name: 'activation-entry' } : { name: 'phone' },
@@ -102,23 +132,43 @@ export function OnboardingNavigator({
           <ActivationSuccessScreen
             accessToken={step.result.access_token}
             activationCode={step.activationCode}
-            onContinue={() =>
+            onContinue={(redemption) =>
               setStep({
                 name: 'activated',
                 accessToken: step.result.access_token,
                 isNewUser: step.result.is_new_user,
+                departureDate: step.result.user.departure_date ?? null,
+                packageId: redemption.package_id,
               })
             }
           />
         );
       }
       if (!step.result.is_new_user) {
-        return <PlaceholderScreen title="Welcome back" note="Home — coming in a later story." />;
+        return (
+          <AuthenticationHandoff
+            session={{
+              accessToken: step.result.access_token,
+              departureDate: step.result.user.departure_date ?? null,
+            }}
+            onAuthenticated={onAuthenticated}
+            title="Welcome back"
+          />
+        );
       }
       return (
         <PinSetupScreen
           accessToken={step.result.access_token}
-          onPinSet={() => setStep({ name: 'onboarded' })}
+          onPinSet={() => {
+            if (onAuthenticated) {
+              onAuthenticated({
+                accessToken: step.result.access_token,
+                departureDate: step.result.user.departure_date ?? null,
+              });
+            } else {
+              setStep({ name: 'onboarded' });
+            }
+          }}
         />
       );
     case 'activated':
@@ -127,12 +177,32 @@ export function OnboardingNavigator({
       // package on a device they'd already onboarded from) already
       // has a PIN and must not be routed back through PIN Setup.
       if (!step.isNewUser) {
-        return <PlaceholderScreen title="Package active" note="Home — coming in a later story." />;
+        return (
+          <AuthenticationHandoff
+            session={{
+              accessToken: step.accessToken,
+              departureDate: step.departureDate,
+              packageId: step.packageId,
+            }}
+            onAuthenticated={onAuthenticated}
+            title="Package active"
+          />
+        );
       }
       return (
         <PinSetupScreen
           accessToken={step.accessToken}
-          onPinSet={() => setStep({ name: 'onboarded' })}
+          onPinSet={() => {
+            if (onAuthenticated) {
+              onAuthenticated({
+                accessToken: step.accessToken,
+                departureDate: step.departureDate,
+                packageId: step.packageId,
+              });
+            } else {
+              setStep({ name: 'onboarded' });
+            }
+          }}
         />
       );
     case 'onboarded':

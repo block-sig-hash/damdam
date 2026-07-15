@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -88,6 +88,7 @@ class UserResponse(BaseModel):
     last_name: str
     email: str | None
     verified_cli: bool
+    departure_date: date | None
     platform: str
     status: str
 

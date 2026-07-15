@@ -2576,6 +2576,12 @@ components:
         verified_cli:
           type: boolean
           title: Verified Cli
+        departure_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Departure Date
         platform:
           type: string
           title: Platform
@@ -2590,6 +2596,7 @@ components:
       - last_name
       - email
       - verified_cli
+      - departure_date
       - platform
       - status
       title: UserResponse
