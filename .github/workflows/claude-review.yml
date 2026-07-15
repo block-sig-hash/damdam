@@ -96,6 +96,9 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Temporary diagnostic for the delivery-path convergence test.
+          # Remove after the trace confirms the review is posted.
+          show_full_output: true
           # Sonnet by default for cost control, per AGENTS.md's
           # "default to Sonnet, escalate to Opus only when it
           # earns it" guidance — override manually for a specific
@@ -124,6 +127,7 @@ jobs:
           claude_args: >-
             --model claude-sonnet-5
             --max-turns 1024
+            --allowedTools "mcp__github__add_issue_comment"
           prompt: |
             The full diff for this PR (#${{ steps.pr_context.outputs.pr_number }})
             has already been fetched and saved to
@@ -138,6 +142,19 @@ jobs:
             the diff shows, use the Read tool directly on that path,
             or a single-operation `git log`/`git blame` call — not a
             chained command.
+
+            Your review is not delivered by returning it as your final
+            response. Before finishing, you MUST call
+            `mcp__github__add_issue_comment` exactly once to post a
+            substantive review comment on PR
+            #${{ steps.pr_context.outputs.pr_number }} in
+            `${{ github.repository }}`. The posted comment must summarize
+            what you verified and separate blocking findings from
+            non-blocking suggestions. If you find no issues, still post a
+            substantive checklist of the areas reviewed and explicitly say
+            that there are no blocking findings. Do not merely return the
+            review in your final response: that response is not published
+            to GitHub in this workflow's agent mode.
 
             Budget your investigation: spend at most 15 tool calls
             gathering context (reading the diff, cross-referencing
@@ -185,3 +202,6 @@ jobs:
             matching docs/api-spec.md or docs/data-model.md), and
             cross-tenant isolation gaps (docs/security.md §10.5)
             as blocking. Everything else as non-blocking suggestions.
+
+            Do not finish until the review has been posted with
+            `mcp__github__add_issue_comment` as required above.
