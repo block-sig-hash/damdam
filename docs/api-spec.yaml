@@ -918,6 +918,33 @@ paths:
                   type: boolean
                 type: object
                 title: Response Termii Delivery Report V1 Webhooks Otp Termii Post
+  /v1/me/device-token:
+    put:
+      tags:
+      - pilgrim-profile
+      summary: Register Device Token
+      operationId: register_device_token_v1_me_device_token_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceTokenUpsert'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceTokenResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /v1/me/family-contact:
     post:
       tags:
@@ -1206,6 +1233,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/packages/{package_id}/esim/mark-activated:
+    post:
+      tags:
+      - esim
+      summary: Mark Esim Activated
+      operationId: mark_esim_activated_v1_packages__package_id__esim_mark_activated_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EsimDownloadResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/me/device-compatibility:
     post:
       tags:
@@ -1467,6 +1523,28 @@ components:
           default: true
       type: object
       title: DeviceCompatibilityResponse
+    DeviceTokenResponse:
+      properties:
+        registered:
+          type: boolean
+          title: Registered
+          default: true
+      type: object
+      title: DeviceTokenResponse
+    DeviceTokenUpsert:
+      properties:
+        fcm_token:
+          type: string
+          maxLength: 4096
+          minLength: 20
+          title: Fcm Token
+        platform:
+          $ref: '#/components/schemas/Platform'
+      type: object
+      required:
+      - fcm_token
+      - platform
+      title: DeviceTokenUpsert
     EsimDownloadResponse:
       properties:
         status:

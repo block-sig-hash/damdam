@@ -2,6 +2,13 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+// CI intentionally has no environment-specific Firebase app registration.
+// Production builds apply the official resource generator as soon as their
+// google-services.json is supplied by the deployment environment.
+if (file("google-services.json").exists()) {
+    apply plugin: "com.google.gms.google-services"
+}
+
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
@@ -110,6 +117,12 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    // 21.4.0 is compiled with Kotlin 2.3 metadata; React Native 0.86's
+    // supported Kotlin toolchain is 2.1.20. 21.3.0 exposes the same geofence
+    // APIs and is the newest compatible Google-published artifact.
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation(platform("com.google.firebase:firebase-bom:34.15.0"))
+    implementation("com.google.firebase:firebase-messaging")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

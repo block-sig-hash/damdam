@@ -462,6 +462,21 @@ downstream handling.
 
 ---
 
+### `device_tokens`
+
+| Field | Type | Constraints | Notes |
+|---|---|---|---|
+| id | UUID | PK | |
+| user_id | UUID | FK → users, NOT NULL, ON DELETE CASCADE | Current signed-in pilgrim |
+| fcm_token | VARCHAR(4096) | UNIQUE, NOT NULL | One Firebase app-installation registration |
+| platform | ENUM | NOT NULL | `ios` \| `android` |
+| updated_at | TIMESTAMPTZ | NOT NULL | Refreshed whenever the client uploads its current token |
+
+**Indexes:** `user_id`; `fcm_token` has a unique constraint (which PostgreSQL
+backs with its own unique index).
+
+---
+
 ### `admin_users` (internal, minimal for MVP)
 
 | Field | Type | Constraints | Notes |
@@ -996,3 +1011,22 @@ the second after 5 minutes, and the third clears automatic scheduling and sets
 `admin_queued_at`. Payment and HTO activation commit a due job before asking
 Celery to enqueue it, so a broker outage cannot roll back a paid package or
 silently lose the provisioning work.
+
+---
+
+## 6.20 Amendment — US-13 Push Registration Gap
+
+US-13 requires an opt-in arrival notification but the original model had no
+way to associate an FCM app installation with a pilgrim. `device_tokens` is the
+minimal missing registration table: a globally unique `fcm_token`, its current
+`user_id`, platform, and refresh timestamp. A token is global-unique rather
+than only unique per user because one physical app installation must not remain
+attached to two accounts when a shared phone signs out and another pilgrim
+signs in; uploading it again transfers that installation to the current user.
+
+The table deliberately does not store location history, geofence coordinates,
+notification content, or delivery analytics. Jeddah region monitoring remains
+on-device and opt-in; the permission-free, date-based activation banner remains
+the primary trigger. Firebase recommends refreshing server-side registration
+timestamps whenever the client uploads its current registration, which is why
+`updated_at` is part of this otherwise-small model.

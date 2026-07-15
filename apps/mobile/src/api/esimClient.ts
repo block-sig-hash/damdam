@@ -74,6 +74,17 @@ export function markEsimDownloaded(
   );
 }
 
+export function markEsimActivated(
+  accessToken: string,
+  packageId: string,
+): Promise<{ status: 'activated' }> {
+  return profileRequest<{ status: 'activated' }>(
+    accessToken,
+    `/packages/${packageId}/esim/mark-activated`,
+    'POST',
+  );
+}
+
 export async function logDeviceCompatibility(
   accessToken: string,
   payload: DeviceCompatibilityPayload,

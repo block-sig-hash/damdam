@@ -171,6 +171,18 @@ class EsimProfileService:
             session.refresh(profile)
         return profile
 
+    def mark_activated(
+        self, session: Session, user: User, package_id: UUID
+    ) -> EsimProfile:
+        profile = self.get(session, user, package_id)
+        if profile.status != EsimProfileStatus.ACTIVATED:
+            profile.status = EsimProfileStatus.ACTIVATED
+            profile.activated_at = self.clock()
+            session.add(profile)
+            session.commit()
+            session.refresh(profile)
+        return profile
+
     def _vendor_order(self) -> tuple[str, str, str]:
         return (
             str(self.settings.esim_vendor_primary),

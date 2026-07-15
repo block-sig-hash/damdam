@@ -4,6 +4,7 @@ import {
   issueEsim,
   logDeviceCompatibility,
   markEsimDownloaded,
+  markEsimActivated,
 } from './esimClient';
 
 const fetchMock = jest.fn();
@@ -91,6 +92,18 @@ describe('esimClient', () => {
     });
     expect(fetchMock.mock.calls[0][0]).toContain(
       '/packages/package-1/esim/mark-downloaded',
+    );
+  });
+
+  it('AC-13.6: marks a package profile activated only after client validation', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ status: 'activated' }) });
+
+    await expect(markEsimActivated('token', 'package-1')).resolves.toEqual({
+      status: 'activated',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/packages/package-1/esim/mark-activated'),
+      expect.objectContaining({ method: 'POST' }),
     );
   });
 });

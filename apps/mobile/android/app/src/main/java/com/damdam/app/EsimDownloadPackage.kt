@@ -8,7 +8,11 @@ import com.facebook.react.uimanager.ViewManager
 class EsimDownloadPackage : ReactPackage {
   @Suppress("OVERRIDE_DEPRECATION")
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
-    listOf(EsimDownloadModule(reactContext))
+    listOf(
+      EsimDownloadModule(reactContext),
+      EsimActivationModule(reactContext),
+      ArrivalPromptModule(reactContext),
+    )
 
   override fun createViewManagers(
     reactContext: ReactApplicationContext,

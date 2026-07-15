@@ -102,6 +102,14 @@ PATCH  /me
   Body: { first_name?, last_name?, email?, departure_date? }
   200: { ...updated user }
 
+PUT    /me/device-token
+  Auth required
+  Body: { fcm_token: string, platform: "ios" | "android" }
+  200: { registered: true }
+  Upserts by globally unique FCM app-installation token and refreshes
+  its user association/timestamp. Added by US-13 to fill the push-token
+  schema gap documented in data-model.md §6.20.
+
 POST   /me/family-contact
   Auth required
   Body: { phone_number: string, name?: string }
@@ -234,10 +242,11 @@ POST   /packages/{id}/esim/mark-activated
   Called after the app's connectivity check succeeds
   post-activation
   200: { status: "activated" }
+  Idempotent: an already-activated profile keeps its original
+  activated_at timestamp.
 ```
 
-`mark-activated` remains the US-13 contract and is intentionally not
-implemented by US-11. The existing `GET /hto/pilgrims` response derives its
+`mark-activated` is implemented by US-13. The existing `GET /hto/pilgrims` response derives its
 `esim_status` from the package's `esim_profiles.status` (`issued`, `downloaded`,
 or later `activated`), while the pre-existing `incompatible` follow-up state
 takes precedence.
