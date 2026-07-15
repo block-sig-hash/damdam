@@ -101,23 +101,29 @@ jobs:
           # earns it" guidance — override manually for a specific
           # hard review by commenting "@claude use opus" if needed.
           #
-          # max-turns history: 8 -> 24 -> 40. Both earlier raises
-          # were guesses with no evidence the extra room would be
-          # used well. This one isn't: with the diff now fed
-          # directly (see the step above) instead of discovered via
-          # gh/git exploration, two full show_full_output traces on
-          # real merged PRs (#47, 1259 additions/14 files; #50, 2554
-          # additions/26 files) showed zero wasted turns — every
-          # tool call was reading the diff, cross-referencing
+          # max-turns history: 8 -> 24 -> 40. Raising it alone never
+          # worked: num_turns landed at exactly limit+1 at all three
+          # values, across four different PRs from 632 to 2554
+          # additions, with zero variance every time — including a
+          # 40-turn retest of a 1259-addition PR that two prior
+          # show_full_output traces confirmed was spending every
+          # turn on genuine work (reading the diff, cross-referencing
           # prd.md/testing-qa.md/security.md/design-system.md/data-
-          # model.md/api-spec.md, or inspecting specific touched
-          # files, exactly as the prompt asks — and still ran out at
-          # 24 turns mid-review on both. The bottleneck is genuinely
-          # review scope vs. budget now, not waste, so more budget
-          # is the right lever this time.
+          # model.md/api-spec.md, inspecting touched files), not
+          # waste. That rules out "just needs more room": the review
+          # has no stopping condition, so it fills whatever budget
+          # it's given regardless of size. The real fix is the
+          # explicit turn-budgeting instruction in the prompt below,
+          # forcing it to stop researching and post what it has by a
+          # fixed point instead of digging until cut off. max-turns
+          # is now a high safety ceiling, not the convergence
+          # mechanism — set generously (1024) so an occasional
+          # genuinely large/cross-cutting PR isn't hard-capped, while
+          # the prompt's own budget is what makes typical runs
+          # finish quickly and cheaply.
           claude_args: >-
             --model claude-sonnet-5
-            --max-turns 40
+            --max-turns 1024
           prompt: |
             The full diff for this PR (#${{ steps.pr_context.outputs.pr_number }})
             has already been fetched and saved to
@@ -132,6 +138,20 @@ jobs:
             the diff shows, use the Read tool directly on that path,
             or a single-operation `git log`/`git blame` call — not a
             chained command.
+
+            Budget your investigation: spend at most 15 tool calls
+            gathering context (reading the diff, cross-referencing
+            docs, inspecting touched files). After that, stop
+            researching and post your review with what you have —
+            call out anything you didn't get to as "not verified,
+            out of review budget" rather than continuing to dig for
+            completeness. Every review of this PR to date has run out
+            of turns before posting anything at all; a timely partial
+            review beats a thorough one that never gets posted. Do
+            not treat a large turn allowance as license to be
+            exhaustive — prioritize the acceptance criteria and the
+            blocking-risk categories below over full coverage of
+            every cross-referenced doc.
 
             Review this diff against docs/testing-qa.md and the
             linked user story's acceptance criteria in docs/prd.md.
