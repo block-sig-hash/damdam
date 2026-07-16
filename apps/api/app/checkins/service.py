@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -23,6 +24,8 @@ from app.notifications.service import (
 )
 from app.otp.service import RedisClient
 from app.profile.models import FamilyContact
+
+logger = logging.getLogger(__name__)
 
 
 class CheckInError(Exception):
@@ -72,13 +75,21 @@ class CheckInService:
             return existing
 
         rate_key = f"checkin:rate:{user.id}"
-        acquired = self.redis.set(
-            rate_key,
-            str(payload.client_generated_id),
-            nx=True,
-            ex=self.RATE_LIMIT_SECONDS,
-        )
-        same_retry = self.redis.get(rate_key) == str(payload.client_generated_id)
+        try:
+            acquired = self.redis.set(
+                rate_key,
+                str(payload.client_generated_id),
+                nx=True,
+                ex=self.RATE_LIMIT_SECONDS,
+            )
+            same_retry = self.redis.get(rate_key) == str(payload.client_generated_id)
+        except Exception:
+            # Check-in persistence is safety-critical. PostgreSQL's UUID
+            # constraint still prevents duplicates while rate limiting fails
+            # open during a Redis outage.
+            logger.exception("Check-in rate limiter unavailable; failing open")
+            acquired = True
+            same_retry = False
         if not acquired and not same_retry:
             raise CheckInError("checkin_rate_limited")
 
@@ -287,6 +298,10 @@ class CheckInNotificationService:
             return False
         context = self._context(session, notification)
         if context is None:
+            notification.sms_failure_reason = "family contact unavailable"
+            notification.admin_queued_at = self.clock()
+            session.add(notification)
+            session.commit()
             return False
         checkin, user, contact = context
         name, checked_in_at, maps_url = self._message_parts(checkin, user)

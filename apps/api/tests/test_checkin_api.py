@@ -271,6 +271,41 @@ def test_redis_rate_limit_blocks_a_different_checkin_for_fifteen_minutes(
     assert 0 < redis_client.ttl(f"checkin:rate:{user_id}") <= 900
 
 
+def test_redis_outage_fails_open_without_losing_the_checkin(
+    settings,
+    redis_client,
+    providers,
+    scheduler,
+    session_factory,
+    clock,
+    monkeypatch,
+) -> None:
+    """§14.4.1: rate-limit infrastructure cannot block the safety write."""
+    api, _, _, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
+        session.commit()
+
+    def redis_unavailable(*args, **kwargs):
+        del args, kwargs
+        raise ConnectionError("redis unavailable")
+
+    monkeypatch.setattr(redis_client, "set", redis_unavailable)
+    response = client.post(
+        "/v1/checkins",
+        json={"client_generated_id": str(uuid4()), "timestamp": clock().isoformat()},
+    )
+
+    assert response.status_code == 200
+    with session_factory() as session:
+        assert len(session.exec(select(CheckIn)).all()) == 1
+        assert len(session.exec(select(CheckInNotification)).all()) == 1
+    assert len(notification_scheduler.dispatches) == 1
+
+
 def test_recent_history_is_owned_limited_and_newest_first(
     settings, redis_client, providers, scheduler, session_factory, clock
 ) -> None:
@@ -500,6 +535,39 @@ def test_broker_outage_leaves_durable_pending_notification(
     with session_factory() as session:
         notification = session.exec(select(CheckInNotification)).one()
         assert notification.whatsapp_status.value == "pending"
+
+
+def test_removed_family_contact_terminates_due_fallback(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    api, _, _, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
+        session.commit()
+    client.post(
+        "/v1/checkins",
+        json={"client_generated_id": str(uuid4()), "timestamp": clock().isoformat()},
+    )
+    notification_id = notification_scheduler.dispatches[0]
+    service = api.state.checkin_notification_service
+    with session_factory() as session:
+        service.dispatch_whatsapp(session, notification_id)
+        contact = session.exec(
+            select(FamilyContact).where(FamilyContact.user_id == user_id)
+        ).one()
+        session.delete(contact)
+        session.commit()
+    clock.advance(seconds=60)
+
+    with session_factory() as session:
+        assert service.send_sms_fallback(session, notification_id) is False
+        notification = session.get(CheckInNotification, notification_id)
+        assert notification is not None
+        assert notification.admin_queued_at is not None
+        assert notification.sms_failure_reason == "family contact unavailable"
 
 
 def test_failed_sms_retries_three_times_then_enters_admin_queue(

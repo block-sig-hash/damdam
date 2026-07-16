@@ -198,6 +198,9 @@ deserves testing rigor beyond the general coverage targets in
   underlying check-in/SOS record itself is unaffected by the
   notification failure (per the explicit failure-mode note in
   `prd.md` §5.6)
+- **Redis rate-limiter outage:** force Redis `SET`/`GET` to raise while the API
+  receives a new check-in; the PostgreSQL check-in and notification rows must
+  still commit (rate limiting fails open, UUID idempotency remains enforced)
 - **WhatsApp delivery-time boundary:** confirm an accepted WhatsApp with no
   delivery receipt sends no SMS at 59 seconds and sends exactly one at 60
   seconds; a signed `delivered` webhook before the deadline must suppress it.
