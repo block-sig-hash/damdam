@@ -90,7 +90,7 @@ export function HomeDashboardScreen({
                 : styles.errorBanner
           }>
           {checkInFeedback === 'Check-in sent' ? (
-            <CheckCircle color={color.info500} size={24} weight="bold" />
+            <CheckCircle color={color.success500} size={24} weight="bold" />
           ) : checkInFeedback.includes('queued') ? (
             <Clock color={color.gray700} size={24} weight="bold" />
           ) : (
@@ -192,9 +192,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.space3,
-    backgroundColor: color.info100,
+    backgroundColor: color.success100,
     borderLeftWidth: 4,
-    borderLeftColor: color.info500,
+    borderLeftColor: color.success500,
     padding: space.space4,
   },
   queueBanner: {
