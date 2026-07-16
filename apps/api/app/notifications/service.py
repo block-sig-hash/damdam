@@ -11,6 +11,7 @@ class EmailSender(Protocol):
         timestamp: str,
         maps_url: str | None,
         cancelled: bool,
+        notification_id: str,
     ) -> None: ...
     def send_verification(
         self, email: str, operator_name: str, verification_url: str

@@ -18,6 +18,7 @@ class ResendEmailSender:
         timestamp: str,
         maps_url: str | None,
         cancelled: bool,
+        notification_id: str,
     ) -> None:
         verb = "cancelled their SOS" if cancelled else "triggered an SOS and needs help"
         location = (
@@ -32,7 +33,7 @@ class ResendEmailSender:
                 f"<p>{escape(pilgrim_name)} ({escape(pilgrim_phone)}) "
                 f"{verb} at {escape(timestamp)}.</p>{location}"
             ),
-            idempotency_key=f"sos-{pilgrim_name}-{timestamp}-{cancelled}",
+            idempotency_key=f"damdam-sos-notification-{notification_id}-v1",
         )
 
     def __init__(self, settings: Settings) -> None:

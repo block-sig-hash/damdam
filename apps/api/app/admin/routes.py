@@ -109,7 +109,11 @@ def _retry_sos_rows(request: Request, notification_ids: list[UUID]) -> int:
     queued = 0
     with request.app.state.session_factory() as session:
         rows = session.exec(
-            select(SOSNotification).where(col(SOSNotification.id).in_(notification_ids))
+            select(SOSNotification).where(
+                col(SOSNotification.id).in_(notification_ids),
+                SOSNotification.status == SOSNotificationStatus.FAILED,
+                col(SOSNotification.admin_queued_at).is_not(None),
+            )
         ).all()
         for row in rows:
             row.status = SOSNotificationStatus.PENDING

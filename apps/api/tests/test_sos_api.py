@@ -1,11 +1,14 @@
 """US-16 executable acceptance tests, committed before implementation."""
 
 import asyncio
+from datetime import datetime, timezone
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import httpx
 from sqlmodel import select
 
+from app.admin.routes import _retry_sos_rows
 from app.auth.dependencies import get_current_organization, get_current_user
 from app.auth.models import (
     HTOApprovalStatus,
@@ -240,3 +243,38 @@ def test_notification_failure_enters_admin_queue_without_changing_alert(
         assert notification.status == SOSNotificationStatus.FAILED
         assert notification.admin_queued_at is not None
         assert session.get(SOSAlert, alert_id).status == SOSStatus.ACTIVE
+
+
+def test_admin_retry_only_requeues_failed_admin_queued_notifications(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """Review hardening: stale SENT IDs must never duplicate an SOS delivery."""
+    api, client, _, _, recorder = _setup(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client.post("/v1/sos", json=_payload())
+    with session_factory() as session:
+        rows = session.exec(select(SOSNotification)).all()
+        failed, sent = rows[:2]
+        failed.status = SOSNotificationStatus.FAILED
+        failed.admin_queued_at = datetime.now(timezone.utc)
+        failed.retry_count = 3
+        sent.status = SOSNotificationStatus.SENT
+        session.add(failed)
+        session.add(sent)
+        session.commit()
+        failed_id, sent_id = failed.id, sent.id
+
+    recorder.dispatches.clear()
+    queued = _retry_sos_rows(
+        SimpleNamespace(app=api),  # type: ignore[arg-type]
+        [failed_id, sent_id],
+    )
+
+    assert queued == 1
+    assert [item[0] for item in recorder.dispatches] == [failed_id]
+    with session_factory() as session:
+        failed_row = session.get(SOSNotification, failed_id)
+        sent_row = session.get(SOSNotification, sent_id)
+        assert failed_row.status == SOSNotificationStatus.PENDING
+        assert sent_row.status == SOSNotificationStatus.SENT

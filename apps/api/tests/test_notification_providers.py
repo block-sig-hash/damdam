@@ -58,6 +58,35 @@ def test_resend_invoice_uses_stable_idempotency_key_and_pdf_attachment(
     ]
 
 
+def test_resend_sos_uses_notification_id_as_idempotency_key(monkeypatch) -> None:
+    """A retry is stable without collisions between pilgrims sharing a name/time."""
+    requests: list[dict[str, Any]] = []
+
+    def fake_post(*args, **kwargs):
+        requests.append({"args": args, "kwargs": kwargs})
+        return FakeResponse()
+
+    monkeypatch.setattr("app.notifications.providers.httpx.post", fake_post)
+    settings = Settings(
+        jwt_secret="test-secret-at-least-32-characters-long",
+        resend_api_key="resend-token",
+    )
+
+    ResendEmailSender(settings).send_sos(
+        "operator@example.com",
+        "Amina Yusuf",
+        "+2348012345678",
+        "16 Jul 2026, 09:05 WAT",
+        None,
+        False,
+        "notification-123",
+    )
+
+    assert requests[0]["kwargs"]["headers"]["Idempotency-Key"] == (
+        "damdam-sos-notification-notification-123-v1"
+    )
+
+
 def test_meta_family_nomination_uses_configured_template(monkeypatch) -> None:
     """AC-03.2: the provider sends the approved nomination template via Meta."""
     requests: list[dict[str, Any]] = []

@@ -75,6 +75,7 @@ class SOSProviderAdapter:
                 context.timestamp,
                 context.maps_url,
                 cancelled,
+                str(context.notification_id),
             )
         elif context.channel == SOSNotificationChannel.WHATSAPP_OPERATOR:
             self.notifications.whatsapp.send_sos(
