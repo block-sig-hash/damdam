@@ -6,10 +6,10 @@ import NetInfo, {
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {getRecentCheckIns, sendCheckIn} from '../api/checkInClient';
 import { getEsim, type EsimProfile } from '../api/esimClient';
-import { getPackageStatus } from '../api/paymentClient';
 import { EsimActivationFlow } from '../screens/EsimActivation/EsimActivationFlow';
 import { EsimQrCodeScreen } from '../screens/EsimSetup/EsimQrCodeScreen';
 import { HomeDashboardScreen } from '../screens/HomeDashboard/HomeDashboardScreen';
+import {useHomePackageStatus} from '../screens/HomeDashboard/useHomePackageStatus';
 import { ActiveCallScreen } from '../screens/ActiveCall/ActiveCallScreen';
 import { DialPadScreen } from '../screens/DialPad/DialPadScreen';
 import type { VoiceCallSession } from '../services/voiceGateway';
@@ -45,14 +45,13 @@ export function AuthenticatedApp({
   const [esimStatus, setEsimStatus] = useState<
     EsimProfile['status'] | 'not_issued'
   >('not_issued');
-  const [remainingDataGb, setRemainingDataGb] = useState(0);
-  const [pstnMinutesRemaining, setPstnMinutesRemaining] = useState(0);
   const [activeCall, setActiveCall] = useState<VoiceCallSession>();
   const [recipientName, setRecipientName] = useState<string>();
   const [balanceRefreshBaseline, setBalanceRefreshBaseline] = useState<number>();
   const [queuedCheckIns, setQueuedCheckIns] = useState(0);
   const [lastCheckInAt, setLastCheckInAt] = useState<string | null>(null);
   const [queuedSOS, setQueuedSOS] = useState<SOSOutboxItem>();
+  const [queuedSOSCount, setQueuedSOSCount] = useState(0);
   const [sosServerId, setSosServerId] = useState<string>();
   const [sosSynced, setSosSynced] = useState(false);
   const [htoPhone, setHtoPhone] = useState('');
@@ -63,6 +62,11 @@ export function AuthenticatedApp({
     isInternetReachable: null,
     details: null,
   });
+  const {balances, refresh: refreshPackageStatus} = useHomePackageStatus(
+    accessToken,
+    packageId,
+  );
+  const pstnMinutesRemaining = balances?.pstnMinutesRemaining ?? 0;
   const checkIns = useMemo(
     () =>
       new CheckInSyncService(
@@ -76,7 +80,10 @@ export function AuthenticatedApp({
     () => new SOSSyncService(
       new NitroSOSOutbox(),
       item => sendSOS(accessToken, item),
-      rows => { if (rows[0]) setQueuedSOS(rows[0]); },
+      rows => {
+        setQueuedSOSCount(rows.length);
+        if (rows[0]) setQueuedSOS(rows[0]);
+      },
       (_item, response) => {
         const result = response as SOSResponse;
         setSosServerId(result.id);
@@ -85,6 +92,7 @@ export function AuthenticatedApp({
           cancelSOS(accessToken, result.id).then(() => {
             cancelRequested.current = false;
             setQueuedSOS(undefined);
+            setQueuedSOSCount(0);
             setSosServerId(undefined);
             setScreen('home');
           }).catch(() => undefined);
@@ -159,13 +167,6 @@ export function AuthenticatedApp({
     getEsim(accessToken, packageId)
       .then((profile) => active && setEsimStatus(profile.status))
       .catch(() => active && setEsimStatus('not_issued'));
-    getPackageStatus(accessToken, packageId)
-      .then((status) => {
-        if (!active) return;
-        setRemainingDataGb(status.data_gb_remaining);
-        setPstnMinutesRemaining(status.pstn_minutes_remaining);
-      })
-      .catch(() => undefined);
     // The OS permission prompts are the opt-in gate. A denial never affects the
     // permission-free date banner, and registration can be offered again later.
     optIntoArrivalGeofence(packageId).catch(() => undefined);
@@ -181,10 +182,12 @@ export function AuthenticatedApp({
     const deadline = Date.now() + 60_000;
     const refresh = async (): Promise<void> => {
       try {
-        const status = await getPackageStatus(accessToken, packageId);
+        const status = await refreshPackageStatus();
         if (!active) return;
-        setPstnMinutesRemaining(status.pstn_minutes_remaining);
-        if (status.pstn_minutes_remaining < balanceRefreshBaseline) {
+        if (
+          status &&
+          status.pstnMinutesRemaining < balanceRefreshBaseline
+        ) {
           setBalanceRefreshBaseline(undefined);
           return;
         }
@@ -199,7 +202,7 @@ export function AuthenticatedApp({
       active = false;
       if (timer) clearTimeout(timer);
     };
-  }, [accessToken, balanceRefreshBaseline, packageId]);
+  }, [balanceRefreshBaseline, packageId, refreshPackageStatus]);
 
   if (screen === 'qr' && packageId) {
     return <EsimQrCodeScreen accessToken={accessToken} packageId={packageId} />;
@@ -277,6 +280,7 @@ export function AuthenticatedApp({
         cancelSOS(accessToken, sosServerId)
           .then(() => {
             setQueuedSOS(undefined);
+            setQueuedSOSCount(0);
             setSosServerId(undefined);
             setScreen('home');
           })
@@ -288,7 +292,10 @@ export function AuthenticatedApp({
     <HomeDashboardScreen
       departureDate={departureDate}
       esimStatus={esimStatus}
-      remainingDataGb={remainingDataGb}
+      remainingDataGb={balances?.remainingDataGb ?? null}
+      dataTotalGb={balances?.dataTotalGb ?? null}
+      pstnMinutesRemaining={balances?.pstnMinutesRemaining ?? null}
+      pstnMinutesTotal={balances?.pstnMinutesTotal ?? null}
       onActivateEsim={() => packageId && setScreen('activation')}
       onOpenCall={() => setScreen('dial')}
       onOpenSOS={() => setScreen('sos-confirm')}
@@ -311,6 +318,7 @@ export function AuthenticatedApp({
       }}
       lastCheckInAt={lastCheckInAt}
       queuedCheckIns={queuedCheckIns}
+      queuedSOSAlerts={queuedSOSCount}
     />
   );
 }

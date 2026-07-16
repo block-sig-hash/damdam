@@ -200,9 +200,12 @@ POST   /packages/purchase
 GET    /packages/{id}/status
   Auth required
   200: { status: "pending"|"active"|"expired",
-          data_gb_remaining, pstn_minutes_remaining }
+          data_gb_total, data_gb_remaining,
+          pstn_minutes_total, pstn_minutes_remaining }
   Used by the checkout success-screen polling fallback (§5.3
-  failure mode in prd.md)
+  failure mode in prd.md) and Home balance refresh (US-17). The
+  `*_total` fields are the immutable purchase-time package snapshots,
+  not values re-read from a mutable pricing tier.
   Ownership is enforced against the authenticated pilgrim; another
   user's package returns 404.
 
@@ -796,3 +799,20 @@ confirmed. This endpoint only redeems what that flow already produced —
 `ActivationService.redeem` reads the tier via
 `manifest_pilgrims.manifest_order_id → manifest_orders.pricing_tier_id`, not
 a denormalized copy on `manifest_pilgrims` itself.
+
+---
+
+## 7.20 Amendment — US-17 Package Status Snapshot Totals
+
+US-17 review found that `GET /packages/{id}/status` exposed only remaining
+data and PSTN minutes even though AC-17.3 requires the Home screen to compare
+data remaining with the amount purchased. A client that first observed an
+already-consumed package could not reconstruct that denominator correctly;
+treating the first observed remainder as 100% produced false healthy states.
+
+The response now includes `data_gb_total` and `pstn_minutes_total`, using the
+existing immutable purchase-time snapshot columns on `packages` documented in
+`data-model.md` §6.3/§6.29. No new table or column is introduced. Data warning
+state is computed as `data_gb_remaining / data_gb_total < 20%`; voice warning
+state remains the separate absolute rule `pstn_minutes_remaining < 5` from
+AC-17.3. Both reach the red exhausted state at zero.

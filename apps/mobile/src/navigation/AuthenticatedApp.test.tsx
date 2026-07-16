@@ -96,7 +96,9 @@ beforeEach(() => {
   });
   mockGetPackageStatus.mockResolvedValue({
     status: 'active',
+    data_gb_total: 10,
     data_gb_remaining: 4.25,
+    pstn_minutes_total: 90,
     pstn_minutes_remaining: 30,
   });
   mockRegisterPush.mockResolvedValue('registered');
@@ -119,6 +121,7 @@ it('wires authenticated bootstrap, date banner, and activation navigation', asyn
     expect(mockGetEsim).toHaveBeenCalledWith('access-token', 'package-1');
   });
   expect(screen.getByTestId('esim-activation-banner')).toBeTruthy();
+  await waitFor(() => expect(screen.getByText('30 minutes remaining')).toBeTruthy());
   await act(async () => fireEvent.press(screen.getByTestId('esim-banner-activate')));
   expect(screen.getByTestId('wired-activation-flow')).toBeTruthy();
 });
@@ -152,7 +155,9 @@ it('AC-14.7: refreshes the displayed PSTN balance after a completed call', async
   await fireEvent.press(screen.getByTestId('mock-start-pstn'));
   mockGetPackageStatus.mockResolvedValue({
     status: 'active',
+    data_gb_total: 10,
     data_gb_remaining: 4.25,
+    pstn_minutes_total: 90,
     pstn_minutes_remaining: 29.5,
   });
   await fireEvent.press(screen.getByTestId('mock-finish-call'));

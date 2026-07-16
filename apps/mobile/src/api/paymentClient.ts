@@ -9,7 +9,9 @@ export interface PurchaseCheckout {
 
 export interface PackagePaymentStatus {
   status: 'pending' | 'active' | 'expired';
+  data_gb_total: number;
   data_gb_remaining: number;
+  pstn_minutes_total: number;
   pstn_minutes_remaining: number;
 }
 

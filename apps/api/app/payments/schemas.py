@@ -18,7 +18,9 @@ class PurchaseResponse(BaseModel):
 
 class PackageStatusResponse(BaseModel):
     status: Literal["pending", "active", "expired"]
+    data_gb_total: int
     data_gb_remaining: float
+    pstn_minutes_total: int
     pstn_minutes_remaining: float
 
 

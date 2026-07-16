@@ -464,7 +464,13 @@ def test_duplicate_paystack_webhook_activates_and_sends_receipt_once(
     assert duplicate.json() == {"processed": False}
     status = client.get(f"/v1/packages/{purchase['package_id']}/status")
     assert status.status_code == 200
-    assert status.json()["status"] == "active"
+    assert status.json() == {
+        "status": "active",
+        "data_gb_total": 10,
+        "data_gb_remaining": 10.0,
+        "pstn_minutes_total": 90,
+        "pstn_minutes_remaining": 90.0,
+    }
     with session_factory() as session:
         package = session.get(Package, UUID(purchase["package_id"]))
         transaction = session.exec(select(Transaction)).one()
