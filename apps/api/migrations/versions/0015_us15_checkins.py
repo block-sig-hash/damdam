@@ -85,7 +85,9 @@ def upgrade() -> None:
         sa.Column("sms_message_id", sa.String(255), nullable=True),
         sa.Column("sms_fallback_sent_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("sms_failure_reason", sa.String(255), nullable=True),
-        sa.Column("sms_attempt_count", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column(
+            "sms_attempt_count", sa.Integer(), nullable=False, server_default="0"
+        ),
         sa.Column("admin_queued_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
