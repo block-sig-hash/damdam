@@ -123,7 +123,7 @@ class MetaWhatsAppSender:
         phone_number: str,
         template_name: str,
         parameters: list[dict[str, str]] | None = None,
-    ) -> None:
+    ) -> str | None:
         if not self.settings.whatsapp_access_token:
             raise NotificationError("WhatsApp is not configured")
         template: dict[str, Any] = {
@@ -154,6 +154,13 @@ class MetaWhatsAppSender:
                 timeout=self.settings.notification_timeout_seconds,
             )
             response.raise_for_status()
+            response_json = getattr(response, "json", None)
+            if callable(response_json):
+                data = response_json()
+                messages = data.get("messages", []) if isinstance(data, dict) else []
+                if messages and messages[0].get("id"):
+                    return str(messages[0]["id"])
+            return None
         except httpx.HTTPError as exc:
             raise NotificationError("WhatsApp delivery failed") from exc
 
@@ -202,3 +209,58 @@ class MetaWhatsAppSender:
                 {"type": "text", "text": reference},
             ],
         )
+
+    def send_checkin(
+        self,
+        phone_number: str,
+        pilgrim_name: str,
+        checked_in_at: str,
+        maps_url: str | None,
+    ) -> str:
+        message_id = self._send_template(
+            phone_number,
+            self.settings.whatsapp_checkin_template,
+            [
+                {"type": "text", "text": pilgrim_name},
+                {"type": "text", "text": checked_in_at},
+                {"type": "text", "text": maps_url or ""},
+            ],
+        )
+        if not message_id:
+            raise NotificationError("WhatsApp response omitted message ID")
+        return message_id
+
+
+class TermiiSmsSender:
+    """Outbound family notification SMS, distinct from Termii's OTP endpoint."""
+
+    def __init__(self, settings: Settings, client: httpx.Client | None = None) -> None:
+        self.settings = settings
+        self.client = client or httpx.Client(
+            base_url=settings.termii_base_url,
+            timeout=settings.notification_timeout_seconds,
+        )
+
+    def send(self, phone_number: str, message: str) -> str:
+        if not self.settings.termii_api_key:
+            raise NotificationError("Termii SMS is not configured")
+        try:
+            response = self.client.post(
+                "/api/sms/send",
+                json={
+                    "api_key": self.settings.termii_api_key,
+                    "to": phone_number.removeprefix("+"),
+                    "from": self.settings.termii_sender_id,
+                    "sms": message,
+                    "type": "plain",
+                    "channel": "generic",
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            message_id = data.get("message_id") or data.get("message_id_str")
+            if not message_id:
+                raise NotificationError("Termii SMS response omitted message ID")
+            return str(message_id)
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
+            raise NotificationError("Termii SMS delivery failed") from exc

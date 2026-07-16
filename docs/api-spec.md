@@ -342,6 +342,8 @@ POST   /checkins
           latitude?: float, longitude?: float }
   200: { id, received_at }
   Idempotent on client_generated_id — safe to retry
+  409: checkin_id_conflict (UUID already belongs to another pilgrim)
+  429: checkin_rate_limited (a different check-in was accepted in the last 15 min)
 
 POST   /sos
   Auth required
@@ -358,6 +360,18 @@ GET    /me/checkins
   Auth required
   Query: ?limit=10
   200: { checkins: [{ id, timestamp, latitude?, longitude? }] }
+
+GET    /webhooks/meta/whatsapp
+  Meta subscription verification; validates hub.verify_token and echoes
+  hub.challenge as text for hub.mode=subscribe
+
+POST   /webhooks/meta/whatsapp
+  Meta WhatsApp delivery-status webhook
+  Verifies X-Hub-Signature-256 (HMAC SHA256 of the raw body using the Meta app
+  secret) before parsing. A delivered `wamid` suppresses the scheduled SMS
+  fallback. Missing/malformed signatures return 401 invalid_webhook_signature;
+  authentic malformed JSON returns 400 invalid_webhook_payload.
+  200: { processed: int }
 ```
 
 ---

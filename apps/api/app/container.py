@@ -4,12 +4,22 @@ from uuid import UUID
 
 from redis import Redis
 
+from app.checkins.service import CheckInScheduler
 from app.config import Settings
 from app.db import SessionFactory, create_session_factory
 from app.esim.service import EsimIssuanceScheduler
 from app.manifests.orders import ProvisioningScheduler
-from app.notifications.providers import MetaWhatsAppSender, ResendEmailSender
-from app.notifications.service import EmailSender, NotificationService, WhatsAppSender
+from app.notifications.providers import (
+    MetaWhatsAppSender,
+    ResendEmailSender,
+    TermiiSmsSender,
+)
+from app.notifications.service import (
+    EmailSender,
+    NotificationService,
+    SMSNotificationSender,
+    WhatsAppSender,
+)
 from app.otp.providers import OTPProvider, TermiiProvider, TwilioVerifyProvider
 from app.otp.service import FailoverScheduler, OTPService, RedisClient, utc_now
 from app.payments.providers import (
@@ -45,6 +55,22 @@ class CeleryEsimIssuanceScheduler(EsimIssuanceScheduler):
 
         celery_app.send_task(
             "app.esim.issue", args=[str(package_id)], countdown=countdown
+        )
+
+
+class CeleryCheckInScheduler(CheckInScheduler):
+    def schedule_dispatch(self, notification_id: UUID) -> None:
+        from app.worker import celery_app
+
+        celery_app.send_task("app.checkins.dispatch", args=[str(notification_id)])
+
+    def schedule_fallback(self, notification_id: UUID, countdown: int) -> None:
+        from app.worker import celery_app
+
+        celery_app.send_task(
+            "app.checkins.sms_fallback",
+            args=[str(notification_id)],
+            countdown=countdown,
         )
 
 
@@ -87,6 +113,12 @@ def build_notification_service(
         email_sender or ResendEmailSender(settings),
         whatsapp_sender or MetaWhatsAppSender(settings),
     )
+
+
+def build_sms_sender(
+    settings: Settings, sms_sender: SMSNotificationSender | None = None
+) -> SMSNotificationSender:
+    return sms_sender or TermiiSmsSender(settings)
 
 
 def build_payment_providers(settings: Settings) -> dict[str, PaymentProvider]:

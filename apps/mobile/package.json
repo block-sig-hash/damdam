@@ -9,16 +9,21 @@
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/geolocation": "^3.4.0",
     "@react-native-community/netinfo": "^11.4.1",
     "@telnyx/react-voice-commons-sdk": "^1.0.0",
     "phosphor-react-native": "3.0.6",
     "react": "19.2.7",
     "react-native": "0.86.0",
+    "react-native-background-fetch": "^4.4.2",
     "react-native-contacts": "^8.0.10",
     "react-native-device-info": "15.0.2",
     "react-native-keychain": "10.0.0",
+    "react-native-nitro-modules": "^0.36.1",
+    "react-native-nitro-sqlite": "^9.6.0",
     "react-native-sim-cards-manager": "^1.0.28",
     "react-native-svg": "15.15.5",
+    "react-native-uuid": "^2.0.4",
     "react-native-webview": "^13.17.0"
   },
   "devDependencies": {

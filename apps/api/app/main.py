@@ -15,13 +15,23 @@ from app.admin.routes import router as admin_router
 from app.auth.hto import HTOAuthError, HTOService
 from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
+from app.checkins.routes import router as checkin_router
+from app.checkins.service import (
+    CheckInError,
+    CheckInNotificationService,
+    CheckInScheduler,
+    CheckInService,
+    NoopCheckInScheduler,
+)
 from app.config import Settings, get_settings
 from app.container import (
+    CeleryCheckInScheduler,
     CeleryEsimIssuanceScheduler,
     CeleryProvisioningScheduler,
     build_notification_service,
     build_otp_service,
     build_payment_providers,
+    build_sms_sender,
     default_dependencies,
 )
 from app.db import SessionFactory
@@ -40,7 +50,7 @@ from app.manifests.orders import ManifestOrderService, ProvisioningScheduler
 from app.manifests.routes import pricing_router
 from app.manifests.routes import router as manifest_router
 from app.manifests.service import ManifestError, ManifestService
-from app.notifications.service import EmailSender, WhatsAppSender
+from app.notifications.service import EmailSender, SMSNotificationSender, WhatsAppSender
 from app.otp.providers.base import OTPProvider
 from app.otp.routes import router as otp_webhook_router
 from app.otp.service import FailoverScheduler, OTPError, RedisClient, utc_now
@@ -73,6 +83,8 @@ def create_app(
     voice_provider: VoiceProvider | None = None,
     esim_providers: Mapping[str, EsimProvider] | None = None,
     esim_scheduler: EsimIssuanceScheduler | None = None,
+    sms_sender: SMSNotificationSender | None = None,
+    checkin_scheduler: CheckInScheduler | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     supplied = (redis_client, providers, scheduler, session_factory)
@@ -113,6 +125,11 @@ def create_app(
     api.state.pin_service = PINService(clock)
     notification_service = build_notification_service(
         resolved_settings, email_sender, whatsapp_sender
+    )
+    resolved_checkin_scheduler = checkin_scheduler or (
+        NoopCheckInScheduler()
+        if resolved_settings.app_env == "test"
+        else CeleryCheckInScheduler()
     )
     resolved_esim_scheduler = esim_scheduler or (
         NoopEsimIssuanceScheduler()
@@ -158,6 +175,40 @@ def create_app(
         voice_provider or TelnyxVoiceProvider(resolved_settings),
         clock,
     )
+    api.state.checkin_service = CheckInService(
+        cast(RedisClient, redis_client), resolved_checkin_scheduler, clock
+    )
+    api.state.checkin_notification_service = CheckInNotificationService(
+        notification_service.whatsapp,
+        build_sms_sender(resolved_settings, sms_sender),
+        resolved_checkin_scheduler,
+        clock,
+        resolved_settings.family_notify_fallback_seconds,
+        resolved_settings.family_notify_channel_primary,
+        resolved_settings.family_notify_channel_secondary,
+    )
+
+    @api.exception_handler(CheckInError)
+    async def checkin_error_handler(
+        request: Request, exc: CheckInError
+    ) -> JSONResponse:
+        del request
+        statuses = {
+            "checkin_rate_limited": 429,
+            "checkin_id_conflict": 409,
+            "invalid_webhook_signature": 401,
+            "invalid_webhook_payload": 400,
+        }
+        messages = {
+            "checkin_rate_limited": "You can check in once every 15 minutes.",
+            "checkin_id_conflict": "This check-in identifier is already in use.",
+            "invalid_webhook_signature": "Webhook signature is invalid.",
+            "invalid_webhook_payload": "Webhook payload is invalid.",
+        }
+        return JSONResponse(
+            status_code=statuses[exc.code],
+            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+        )
 
     @api.exception_handler(EsimError)
     async def esim_error_handler(request: Request, exc: EsimError) -> JSONResponse:
@@ -507,6 +558,7 @@ def create_app(
     api.include_router(payment_router, prefix="/v1")
     api.include_router(esim_router, prefix="/v1")
     api.include_router(voice_router, prefix="/v1")
+    api.include_router(checkin_router, prefix="/v1")
     return api
 
 

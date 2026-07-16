@@ -368,6 +368,34 @@ raw / daily-summary retention policy, see security.md §10.3
 
 ---
 
+### `check_in_notifications`
+
+One row per check-in that has a nominated family contact. This is the durable
+WhatsApp-delivery checkpoint and SMS-fallback decision record for AC-15.10.
+
+| Field | Type | Constraints | Notes |
+|---|---|---|---|
+| id | UUID | PK | |
+| check_in_id | UUID | FK → check_ins, UNIQUE, NOT NULL | One notification lifecycle per idempotent check-in |
+| whatsapp_status | ENUM | DEFAULT `pending` | `pending` \| `accepted` \| `delivered` \| `failed` |
+| whatsapp_message_id | VARCHAR(255) | UNIQUE, NULLABLE | Meta `wamid` used to correlate delivery-status webhooks |
+| whatsapp_attempted_at | TIMESTAMPTZ | NULLABLE | |
+| whatsapp_delivered_at | TIMESTAMPTZ | NULLABLE | Prevents the scheduled SMS fallback |
+| whatsapp_failure_reason | VARCHAR(255) | NULLABLE | Sanitized provider failure |
+| fallback_due_at | TIMESTAMPTZ | NULLABLE | Accepted time + configured 60-second window; immediate on send failure |
+| sms_status | ENUM | NULLABLE | `sent` \| `failed`; null until fallback attempted |
+| sms_message_id | VARCHAR(255) | NULLABLE | Configured SMS provider reference (Termii for MVP) |
+| sms_fallback_sent_at | TIMESTAMPTZ | NULLABLE | Idempotent fallback checkpoint |
+| sms_failure_reason | VARCHAR(255) | NULLABLE | Sanitized provider failure |
+| sms_attempt_count | INTEGER | DEFAULT 0 | Failed fallback attempts; capped at three |
+| admin_queued_at | TIMESTAMPTZ | NULLABLE | Set after the third SMS failure for operational follow-up |
+| created_at | TIMESTAMPTZ | NOT NULL | |
+
+**Indexes:** `check_in_id` (unique), `whatsapp_message_id` (unique),
+`fallback_due_at`
+
+---
+
 ### `sos_alerts`
 
 | Field | Type | Constraints | Notes |
@@ -1105,3 +1133,55 @@ account-setup ownership check already represented by `caller_id_verifications`.
 Termii remains primary and Twilio Verify secondary for OTP; neither is the voice
 carrier. That flag gates PSTN caller-ID presentation only. An unverified user may
 still call another registered DamDam SIP identity for free.
+
+---
+
+## 6.23 Amendment — US-15 Check-In Notification Delivery Tracking
+
+The original `check_ins` row made offline retries idempotent but did not record
+the separate family-notification lifecycle required by AC-15.6/AC-15.10. US-15
+adds `check_in_notifications`, one row per check-in with a nominated family
+contact. `check_in_id` is unique, so a retry with the same
+`client_generated_id` returns the existing check-in and cannot enqueue a second
+WhatsApp message. The Meta message ID is also unique and correlates signed
+delivery-status webhooks; an accepted message that has not reached `delivered`
+by `fallback_due_at` is eligible for exactly one SMS fallback.
+
+This is intentionally **not** a polymorphic notification table shared with
+`sos_notifications`. SOS has four independent channels, resolution semantics,
+and a future admin retry queue that are not in front of US-15 yet. Generalizing
+those requirements now would be speculative US-16 infrastructure. US-16 may
+extract common delivery primitives later once its actual channel/retry behavior
+is implemented, while this table remains the minimal, check-in-specific record
+requested by the current story.
+
+The SMS reference is provider-neutral even though PRD §5.6 resolves the MVP
+route to the configured primary OTP provider—Termii today—through a distinct
+outbound-message adapter. It does not reuse Termii's OTP endpoint or leak Termii
+payloads into the check-in service. The worker passes
+`FAMILY_NOTIFY_CHANNEL_PRIMARY` / `FAMILY_NOTIFY_CHANNEL_SECONDARY` into the
+delivery service, which rejects a task whose configured role does not match its
+channel instead of silently ignoring the deployment policy.
+
+## 6.24 Amendment — US-15 Redis-Outage Notification Ceiling
+
+`CheckInService.create` fails open on the Redis rate limiter (§6.23's review
+established this is deliberate: check-in persistence must never be blocked by
+infrastructure). Independent review found that failing open had no ceiling of
+its own: `check_ins.client_generated_id` uniqueness only rejects an
+exact-duplicate retry, not distinct check-ins, so an outage with no other
+guard let every rapid, distinct check-in from the same user trigger its own
+family WhatsApp/SMS send for as long as Redis stayed down — real notification
+cost and, worse, a plausible flood to a family contact's phone. The
+client-side 15-minute UI debounce does not close this gap; it only governs
+the honest app path and has no effect on a direct API call.
+
+`CheckInService._recent_checkin_already_notified` closes it without touching
+the write path: it activates only when the Redis call raised, and queries
+`check_ins` for another row from the same user with `received_at` inside the
+same 15-minute window the Redis key would have covered. If one exists, this
+check-in still gets its own row — the safety-critical write is never
+gated — but no `check_in_notifications` row is created for it, so no second
+WhatsApp/SMS fires. Once Redis recovers, the existing Redis-backed limiter
+governs the very next request as before; this fallback has no effect while
+Redis is healthy.

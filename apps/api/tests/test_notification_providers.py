@@ -2,12 +2,24 @@ from decimal import Decimal
 from typing import Any
 
 from app.config import Settings
-from app.notifications.providers import MetaWhatsAppSender, ResendEmailSender
+from app.notifications.providers import (
+    MetaWhatsAppSender,
+    ResendEmailSender,
+    TermiiSmsSender,
+)
 
 
 class FakeResponse:
     def raise_for_status(self) -> None:
         return None
+
+
+class FakeJsonResponse(FakeResponse):
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.payload = payload
+
+    def json(self) -> dict[str, Any]:
+        return self.payload
 
 
 def test_resend_invoice_uses_stable_idempotency_key_and_pdf_attachment(
@@ -98,3 +110,60 @@ def test_meta_approval_template_keeps_operator_name_parameter(monkeypatch) -> No
             "parameters": [{"type": "text", "text": "Amina"}],
         }
     ]
+
+
+def test_meta_checkin_returns_message_id_for_delivery_tracking(monkeypatch) -> None:
+    """AC-15.6/15.10: accepted WhatsApp has a durable status correlation ID."""
+    requests: list[dict[str, Any]] = []
+
+    def fake_post(*args, **kwargs):
+        requests.append({"args": args, "kwargs": kwargs})
+        return FakeJsonResponse({"messages": [{"id": "wamid.checkin-1"}]})
+
+    monkeypatch.setattr("app.notifications.providers.httpx.post", fake_post)
+    settings = Settings(
+        jwt_secret="test-secret-at-least-32-characters-long",
+        whatsapp_access_token="meta-token",
+        whatsapp_phone_number_id="phone-id",
+        whatsapp_checkin_template="pilgrim_safe_checkin_v1",
+    )
+
+    message_id = MetaWhatsAppSender(settings).send_checkin(
+        "+2349012345678",
+        "Amina Yusuf",
+        "13 Jul 2026, 09:05 WAT",
+        "https://www.google.com/maps?q=21.422487,39.826206",
+    )
+
+    assert message_id == "wamid.checkin-1"
+    assert requests[0]["kwargs"]["json"]["template"]["name"] == (
+        "pilgrim_safe_checkin_v1"
+    )
+
+
+def test_termii_family_sms_uses_plain_message_endpoint() -> None:
+    """AC-15.10: fallback uses Termii outbound SMS, not the OTP endpoint."""
+    class Client:
+        def __init__(self) -> None:
+            self.requests: list[tuple[str, dict[str, Any]]] = []
+
+        def post(self, path: str, json: dict[str, Any]) -> FakeJsonResponse:
+            self.requests.append((path, json))
+            return FakeJsonResponse({"message_id": "termii-family-1"})
+
+    client = Client()
+    settings = Settings(
+        jwt_secret="test-secret-at-least-32-characters-long",
+        termii_api_key="termii-key",
+        termii_sender_id="DamDam",
+    )
+    message_id = TermiiSmsSender(settings, client).send(  # type: ignore[arg-type]
+        "+2349012345678", "Amina checked in safely. All is well."
+    )
+
+    assert message_id == "termii-family-1"
+    path, payload = client.requests[0]
+    assert path == "/api/sms/send"
+    assert payload["to"] == "2349012345678"
+    assert payload["type"] == "plain"
+    assert payload["sms"] == "Amina checked in safely. All is well."
