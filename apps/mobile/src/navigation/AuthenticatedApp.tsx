@@ -16,6 +16,11 @@ import type { VoiceCallSession } from '../services/voiceGateway';
 import {configureCheckInBackgroundSync} from '../services/checkInBackground';
 import {optionalCheckInLocation} from '../services/checkInLocation';
 import {CheckInSyncService, NitroCheckInOutbox} from '../services/checkInOutbox';
+import {sendSOS, cancelSOS, type SOSResponse} from '../api/sosClient';
+import {NitroSOSOutbox, SOSSyncService, type SOSOutboxItem} from '../services/sosOutbox';
+import {SosConfirmScreen} from '../screens/SosConfirm/SosConfirmScreen';
+import {SosSentScreen} from '../screens/SosSent/SosSentScreen';
+import {getEmergencyContact} from '../api/emergencyContactClient';
 import {
   optIntoArrivalGeofence,
   registerPushInstallation,
@@ -23,7 +28,7 @@ import {
 } from '../services/arrivalPrompts';
 import type { AuthenticatedMobileSession } from './OnboardingNavigator';
 
-type Screen = 'home' | 'activation' | 'qr' | 'dial' | 'active-call';
+type Screen = 'home' | 'activation' | 'qr' | 'dial' | 'active-call' | 'sos-confirm' | 'sos-sent';
 
 /**
  * The smallest authenticated host for the eSIM stories. It deliberately leaves
@@ -47,6 +52,11 @@ export function AuthenticatedApp({
   const [balanceRefreshBaseline, setBalanceRefreshBaseline] = useState<number>();
   const [queuedCheckIns, setQueuedCheckIns] = useState(0);
   const [lastCheckInAt, setLastCheckInAt] = useState<string | null>(null);
+  const [queuedSOS, setQueuedSOS] = useState<SOSOutboxItem>();
+  const [sosServerId, setSosServerId] = useState<string>();
+  const [sosSynced, setSosSynced] = useState(false);
+  const [htoPhone, setHtoPhone] = useState('');
+  const cancelRequested = useRef(false);
   const networkState = useRef<NetInfoState>({
     type: NetInfoStateType.unknown,
     isConnected: false,
@@ -60,6 +70,27 @@ export function AuthenticatedApp({
         item => sendCheckIn(accessToken, item),
         pending => setQueuedCheckIns(pending.length),
       ),
+    [accessToken],
+  );
+  const sos = useMemo(
+    () => new SOSSyncService(
+      new NitroSOSOutbox(),
+      item => sendSOS(accessToken, item),
+      rows => { if (rows[0]) setQueuedSOS(rows[0]); },
+      (_item, response) => {
+        const result = response as SOSResponse;
+        setSosServerId(result.id);
+        setSosSynced(true);
+        if (cancelRequested.current) {
+          cancelSOS(accessToken, result.id).then(() => {
+            cancelRequested.current = false;
+            setQueuedSOS(undefined);
+            setSosServerId(undefined);
+            setScreen('home');
+          }).catch(() => undefined);
+        }
+      },
+    ),
     [accessToken],
   );
 
@@ -79,7 +110,7 @@ export function AuthenticatedApp({
       networkState.current = state;
       checkIns.connectivityChanged(state).catch(() => undefined);
     });
-    configureCheckInBackgroundSync(checkIns)
+    configureCheckInBackgroundSync(checkIns, sos)
       .then(stop => {
         if (active) stopBackground = stop;
         else stop();
@@ -91,7 +122,28 @@ export function AuthenticatedApp({
       stopTimer();
       stopBackground();
     };
-  }, [accessToken, checkIns]);
+  }, [accessToken, checkIns, sos]);
+
+  useEffect(() => {
+    let active = true;
+    let stop: () => void = () => undefined;
+    sos.initialize().then(rows => {
+      if (!active) return;
+      if (rows[0]) {
+        setQueuedSOS(rows[0]);
+        setScreen('sos-sent');
+      }
+      stop = sos.start(() => networkState.current);
+    }).catch(() => undefined);
+    const unsubscribe = NetInfo.addEventListener(state => {
+      networkState.current = state;
+      sos.connectivityChanged(state).catch(() => undefined);
+    });
+    getEmergencyContact(accessToken).then(contact => {
+      if (active) setHtoPhone(contact.hto_operator_phone_number ?? '');
+    }).catch(() => undefined);
+    return () => { active = false; stop(); unsubscribe(); };
+  }, [accessToken, sos]);
 
   useEffect(() => {
     registerPushInstallation(accessToken).catch(() => undefined);
@@ -195,6 +247,43 @@ export function AuthenticatedApp({
       />
     );
   }
+  if (screen === 'sos-confirm') {
+    return <SosConfirmScreen onConfirmed={async () => {
+      const item = await sos.captureOnce(undefined, new Date(), true);
+      setQueuedSOS(item);
+      setSosSynced(false);
+      setScreen('sos-sent');
+      try {
+        const location = await optionalCheckInLocation();
+        if (location) await sos.enrichLocation(item.clientGeneratedId, location);
+      } finally {
+        sos.releaseEnrichment(item.clientGeneratedId);
+      }
+      const current = await NetInfo.fetch();
+      networkState.current = current;
+      await sos.sync(current);
+    }} />;
+  }
+  if (screen === 'sos-sent' && queuedSOS) {
+    return <SosSentScreen
+      synced={sosSynced}
+      htoPhone={htoPhone}
+      timestamp={queuedSOS.timestamp}
+      onCancel={() => {
+        if (!sosServerId) {
+          cancelRequested.current = true;
+          return;
+        }
+        cancelSOS(accessToken, sosServerId)
+          .then(() => {
+            setQueuedSOS(undefined);
+            setSosServerId(undefined);
+            setScreen('home');
+          })
+          .catch(() => undefined);
+      }}
+    />;
+  }
   return (
     <HomeDashboardScreen
       departureDate={departureDate}
@@ -202,6 +291,7 @@ export function AuthenticatedApp({
       remainingDataGb={remainingDataGb}
       onActivateEsim={() => packageId && setScreen('activation')}
       onOpenCall={() => setScreen('dial')}
+      onOpenSOS={() => setScreen('sos-confirm')}
       onCheckIn={async () => {
         const tappedAt = new Date();
         const item = await checkIns.capture(undefined, tappedAt, true);

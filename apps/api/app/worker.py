@@ -14,6 +14,7 @@ from app.container import (
     CeleryEsimIssuanceScheduler,
     CeleryFailoverScheduler,
     CeleryProvisioningScheduler,
+    CelerySOSScheduler,
     build_notification_service,
     build_otp_service,
     build_sms_sender,
@@ -24,7 +25,10 @@ from app.esim.providers import build_esim_providers
 from app.esim.service import EsimError, EsimProfileService
 from app.manifests.invoices import InvoicePDFGenerator, build_invoice_storage
 from app.manifests.orders import ManifestOrderService
+from app.notifications.providers import FirebasePushSender
 from app.packages.models import Package
+from app.sos.models import SOSNotification, SOSNotificationStatus
+from app.sos.notifications import SOSNotificationService, SOSProviderAdapter
 
 settings = get_settings()
 celery_app = Celery("damdam", broker=settings.redis_url, backend=settings.redis_url)
@@ -41,7 +45,46 @@ celery_app.conf.beat_schedule = {
         "task": "app.checkins.enqueue_pending",
         "schedule": 30.0,
     },
+    "enqueue-pending-sos-notifications": {
+        "task": "app.sos.enqueue_pending",
+        "schedule": 10.0,
+    },
 }
+
+
+def _sos_notifications() -> SOSNotificationService:
+    return SOSNotificationService(
+        SOSProviderAdapter(
+            build_notification_service(settings), FirebasePushSender(settings)
+        ),
+        utc_now,
+    )
+
+
+@celery_app.task(name="app.sos.dispatch")  # type: ignore[misc]
+def dispatch_sos_notification(notification_id: str, channel: str) -> bool:
+    del channel
+    with create_session_factory(settings)() as session:
+        return _sos_notifications().dispatch(session, UUID(notification_id))
+
+
+@celery_app.task(name="app.sos.enqueue_pending")  # type: ignore[misc]
+def enqueue_pending_sos_notifications() -> int:
+    queued = 0
+    with create_session_factory(settings)() as session:
+        rows = session.exec(
+            select(SOSNotification)
+            .where(
+                SOSNotification.status != SOSNotificationStatus.SENT,
+                SOSNotification.retry_count < 3,
+                col(SOSNotification.admin_queued_at).is_(None),
+            )
+            .with_for_update(skip_locked=True)
+        ).all()
+        for row in rows:
+            CelerySOSScheduler().schedule_dispatch(row.id, row.channel)
+            queued += 1
+    return queued
 
 
 def _checkin_notifications() -> CheckInNotificationService:
@@ -102,8 +145,7 @@ def enqueue_pending_checkin_notifications() -> int:
         rows = session.exec(
             select(CheckInNotification)
             .where(
-                CheckInNotification.whatsapp_status
-                == WhatsAppDeliveryStatus.PENDING
+                CheckInNotification.whatsapp_status == WhatsAppDeliveryStatus.PENDING
             )
             .with_for_update(skip_locked=True)
         ).all()
@@ -147,9 +189,7 @@ def provision_manifest_order(task: Any, order_id: str) -> str:
         raise retry(exc=exc, countdown=60) from exc
 
 
-@celery_app.task(
-    name="app.esim.issue", acks_late=True, reject_on_worker_lost=True
-)  # type: ignore[misc]
+@celery_app.task(name="app.esim.issue", acks_late=True, reject_on_worker_lost=True)  # type: ignore[misc]
 def issue_esim(package_id: str) -> bool:
     service = EsimProfileService(
         settings,

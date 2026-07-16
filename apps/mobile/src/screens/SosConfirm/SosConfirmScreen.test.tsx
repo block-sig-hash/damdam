@@ -10,12 +10,12 @@ it('AC-16.1/16.2: requires a complete three-second hold and shows the countdown'
   const view = await render(<SosConfirmScreen onConfirmed={onConfirmed} />);
   const button = view.getByRole('button', {name: 'SOS / Emergency'});
   expect(button.props.accessibilityHint).toContain('hold for 3 seconds');
-  await act(async () => fireEvent(button, 'pressIn'));
+  await fireEvent(button, 'pressIn');
   expect(view.getByText('3')).toBeTruthy();
   await act(async () => jest.advanceTimersByTimeAsync(2999));
-  fireEvent(button, 'pressOut');
+  await fireEvent(button, 'pressOut');
   expect(onConfirmed).not.toHaveBeenCalled();
-  await act(async () => fireEvent(button, 'pressIn'));
+  await fireEvent(button, 'pressIn');
   await act(async () => jest.advanceTimersByTimeAsync(3000));
   expect(onConfirmed).toHaveBeenCalledTimes(1);
 });

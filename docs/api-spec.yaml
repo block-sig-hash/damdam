@@ -273,6 +273,92 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/sos-notifications/failed:
+    get:
+      tags:
+      - admin
+      summary: Failed Sos Notifications
+      operationId: failed_sos_notifications_v1_admin_sos_notifications_failed_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  items:
+                    additionalProperties: true
+                    type: object
+                  type: array
+                type: object
+                title: Response Failed Sos Notifications V1 Admin Sos Notifications
+                  Failed Get
+      security:
+      - HTTPBearer: []
+  /v1/admin/sos-notifications/retry-bulk:
+    post:
+      tags:
+      - admin
+      summary: Retry Sos Notifications Bulk
+      operationId: retry_sos_notifications_bulk_v1_admin_sos_notifications_retry_bulk_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SOSRetryBulkRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: integer
+                type: object
+                title: Response Retry Sos Notifications Bulk V1 Admin Sos Notifications
+                  Retry Bulk Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/admin/sos-notifications/{notification_id}/retry:
+    post:
+      tags:
+      - admin
+      summary: Retry Sos Notification
+      operationId: retry_sos_notification_v1_admin_sos_notifications__notification_id__retry_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: notification_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Notification Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+                title: Response Retry Sos Notification V1 Admin Sos Notifications  Notification
+                  Id  Retry Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/admin/hto-operators:
     get:
       tags:
@@ -1542,6 +1628,122 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MetaWebhookResponse'
+  /v1/sos:
+    post:
+      tags:
+      - SOS
+      summary: Create Sos
+      operationId: create_sos_v1_sos_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SOSCreate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SOSCreateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/sos/{alert_id}/cancel:
+    post:
+      tags:
+      - SOS
+      summary: Cancel Sos
+      operationId: cancel_sos_v1_sos__alert_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: alert_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Alert Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SOSStatusResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/sos-alerts:
+    get:
+      tags:
+      - SOS
+      summary: List Sos
+      operationId: list_sos_v1_hto_sos_alerts_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/SOSStatus'
+          - type: 'null'
+          default: active
+          title: Status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HtoSOSAlertsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/sos-alerts/{alert_id}/resolve:
+    post:
+      tags:
+      - SOS
+      summary: Resolve Sos
+      operationId: resolve_sos_v1_hto_sos_alerts__alert_id__resolve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: alert_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Alert Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SOSStatusResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     ActivationPreviewResponse:
@@ -2285,6 +2487,55 @@ components:
       - esim_status
       - activation_status
       title: HtoPilgrimSummary
+    HtoSOSAlertResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        pilgrim_name:
+          type: string
+          title: Pilgrim Name
+        pilgrim_phone:
+          type: string
+          title: Pilgrim Phone
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+        latitude:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Latitude
+        longitude:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Longitude
+        status:
+          $ref: '#/components/schemas/SOSStatus'
+      type: object
+      required:
+      - id
+      - pilgrim_name
+      - pilgrim_phone
+      - timestamp
+      - latitude
+      - longitude
+      - status
+      title: HtoSOSAlertResponse
+    HtoSOSAlertsResponse:
+      properties:
+        alerts:
+          items:
+            $ref: '#/components/schemas/HtoSOSAlertResponse'
+          type: array
+          title: Alerts
+      type: object
+      required:
+      - alerts
+      title: HtoSOSAlertsResponse
     ManifestConfirmResponse:
       properties:
         status:
@@ -2883,6 +3134,75 @@ components:
       - pstn_minutes
       - is_group_tier
       title: RetailPricingTierResponse
+    SOSCreate:
+      properties:
+        client_generated_id:
+          type: string
+          format: uuid
+          title: Client Generated Id
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+        latitude:
+          anyOf:
+          - type: number
+            maximum: 90.0
+            minimum: -90.0
+          - type: 'null'
+          title: Latitude
+        longitude:
+          anyOf:
+          - type: number
+            maximum: 180.0
+            minimum: -180.0
+          - type: 'null'
+          title: Longitude
+      type: object
+      required:
+      - client_generated_id
+      - timestamp
+      title: SOSCreate
+    SOSCreateResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        status:
+          $ref: '#/components/schemas/SOSStatus'
+      type: object
+      required:
+      - id
+      - status
+      title: SOSCreateResponse
+    SOSRetryBulkRequest:
+      properties:
+        notification_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          title: Notification Ids
+      type: object
+      required:
+      - notification_ids
+      title: SOSRetryBulkRequest
+    SOSStatus:
+      type: string
+      enum:
+      - active
+      - resolved
+      - cancelled
+      title: SOSStatus
+    SOSStatusResponse:
+      properties:
+        status:
+          $ref: '#/components/schemas/SOSStatus'
+      type: object
+      required:
+      - status
+      title: SOSStatusResponse
     TokenResponse:
       properties:
         access_token:

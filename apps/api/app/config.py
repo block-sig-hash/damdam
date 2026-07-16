@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     whatsapp_receipt_template: str = "retail_payment_receipt"
     whatsapp_esim_ready_template: str = "esim_profile_ready"
     whatsapp_checkin_template: str = "pilgrim_safe_checkin"
+    whatsapp_sos_template: str = "pilgrim_urgent_sos"
+    whatsapp_sos_cancelled_template: str = "pilgrim_sos_cancelled"
+    firebase_project_id: str = ""
+    firebase_access_token: str = ""
     whatsapp_app_secret: str = ""
     whatsapp_webhook_verify_token: str = ""
     family_notify_channel_primary: Literal["whatsapp", "sms"] = "whatsapp"
@@ -73,9 +77,7 @@ class Settings(BaseSettings):
     esim_vendor_secondary: Literal["monty_mobile", "esim_access", "1global"] = (
         "esim_access"
     )
-    esim_vendor_tertiary: Literal["monty_mobile", "esim_access", "1global"] = (
-        "1global"
-    )
+    esim_vendor_tertiary: Literal["monty_mobile", "esim_access", "1global"] = "1global"
     esim_request_timeout_seconds: int = 20
     monty_mobile_base_url: str = ""
     monty_mobile_api_key: str = ""

@@ -57,8 +57,20 @@ class RecordingSOSScheduler:
         self.dispatches.append((notification_id, channel))
 
 
+class RecordingSOSSender:
+    def __init__(self) -> None:
+        self.fail = False
+        self.sent = []
+
+    def send(self, context) -> None:
+        if self.fail:
+            raise RuntimeError("provider unavailable")
+        self.sent.append(context)
+
+
 def _setup(settings, redis_client, providers, scheduler, session_factory, clock):
     sos_scheduler = RecordingSOSScheduler()
+    sos_sender = RecordingSOSSender()
     api = create_app(
         settings=settings,
         redis_client=redis_client,
@@ -67,6 +79,7 @@ def _setup(settings, redis_client, providers, scheduler, session_factory, clock)
         session_factory=session_factory,
         clock=clock,
         sos_scheduler=sos_scheduler,
+        sos_sender=sos_sender,
     )
     user = User(
         phone_number="+2348012345678",

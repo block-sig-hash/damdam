@@ -7,6 +7,35 @@ export type HTORegistration = {
   nahcon_licence_number: string;
 };
 
+export type SOSAlert = {
+  id: string;
+  pilgrim_name: string;
+  pilgrim_phone: string;
+  timestamp: string;
+  latitude: number | null;
+  longitude: number | null;
+  status: "active" | "resolved" | "cancelled";
+};
+
+export async function getSOSAlerts(
+  status?: "active" | "resolved",
+): Promise<SOSAlert[]> {
+  const query = status ? `?status=${status}` : "?status=";
+  const response = await fetch(`${API_BASE_URL}/hto/sos-alerts${query}`, {
+    headers: operatorHeaders(),
+  });
+  return (await parseResponse<{alerts: SOSAlert[]}>(response)).alerts;
+}
+
+export async function resolveSOSAlert(id: string): Promise<void> {
+  await parseResponse(
+    await fetch(`${API_BASE_URL}/hto/sos-alerts/${id}/resolve`, {
+      method: "POST",
+      headers: operatorHeaders(),
+    }),
+  );
+}
+
 type APIError = {
   error?: string;
   message?: string;

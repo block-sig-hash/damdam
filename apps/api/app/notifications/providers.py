@@ -10,6 +10,31 @@ from app.notifications.service import NotificationError
 
 
 class ResendEmailSender:
+    def send_sos(
+        self,
+        email: str,
+        pilgrim_name: str,
+        pilgrim_phone: str,
+        timestamp: str,
+        maps_url: str | None,
+        cancelled: bool,
+    ) -> None:
+        verb = "cancelled their SOS" if cancelled else "triggered an SOS and needs help"
+        location = (
+            f'<p><a href="{escape(maps_url, quote=True)}">View location</a></p>'
+            if maps_url
+            else "<p>Location unavailable.</p>"
+        )
+        self._send(
+            email,
+            "SOS cancelled" if cancelled else "URGENT: pilgrim SOS",
+            (
+                f"<p>{escape(pilgrim_name)} ({escape(pilgrim_phone)}) "
+                f"{verb} at {escape(timestamp)}.</p>{location}"
+            ),
+            idempotency_key=f"sos-{pilgrim_name}-{timestamp}-{cancelled}",
+        )
+
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
@@ -28,11 +53,7 @@ class ResendEmailSender:
                 "https://api.resend.com/emails",
                 headers={
                     "Authorization": f"Bearer {self.settings.resend_api_key}",
-                    **(
-                        {"Idempotency-Key": idempotency_key}
-                        if idempotency_key
-                        else {}
-                    ),
+                    **({"Idempotency-Key": idempotency_key} if idempotency_key else {}),
                 },
                 json={
                     "from": self.settings.resend_from_email,
@@ -131,9 +152,7 @@ class MetaWhatsAppSender:
             "language": {"code": "en"},
         }
         if parameters:
-            template["components"] = [
-                {"type": "body", "parameters": parameters}
-            ]
+            template["components"] = [{"type": "body", "parameters": parameters}]
         payload: dict[str, Any] = {
             "messaging_product": "whatsapp",
             "to": phone_number.removeprefix("+"),
@@ -229,6 +248,63 @@ class MetaWhatsAppSender:
         if not message_id:
             raise NotificationError("WhatsApp response omitted message ID")
         return message_id
+
+    def send_sos(
+        self,
+        phone_number: str,
+        pilgrim_name: str,
+        timestamp: str,
+        maps_url: str | None,
+        hto_phone: str,
+        cancelled: bool,
+    ) -> str:
+        message_id = self._send_template(
+            phone_number,
+            self.settings.whatsapp_sos_cancelled_template
+            if cancelled
+            else self.settings.whatsapp_sos_template,
+            [
+                {"type": "text", "text": pilgrim_name},
+                {"type": "text", "text": timestamp},
+                {"type": "text", "text": maps_url or "Location unavailable"},
+                {"type": "text", "text": hto_phone},
+            ],
+        )
+        if not message_id:
+            raise NotificationError("WhatsApp response omitted message ID")
+        return message_id
+
+
+class FirebasePushSender:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    def send_topic(
+        self, topic: str, title: str, body: str, data: dict[str, str]
+    ) -> None:
+        if (
+            not self.settings.firebase_project_id
+            or not self.settings.firebase_access_token
+        ):
+            raise NotificationError("Firebase push is not configured")
+        try:
+            response = httpx.post(
+                f"https://fcm.googleapis.com/v1/projects/{self.settings.firebase_project_id}/messages:send",
+                headers={
+                    "Authorization": f"Bearer {self.settings.firebase_access_token}"
+                },
+                json={
+                    "message": {
+                        "topic": topic,
+                        "notification": {"title": title, "body": body},
+                        "data": data,
+                    }
+                },
+                timeout=self.settings.notification_timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise NotificationError("Firebase push delivery failed") from exc
 
 
 class TermiiSmsSender:

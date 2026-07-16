@@ -1,4 +1,4 @@
-import { CheckCircle, Clock, Phone, WarningCircle } from 'phosphor-react-native';
+import { CheckCircle, Clock, Phone, Siren, WarningCircle } from 'phosphor-react-native';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { shouldShowDateActivationBanner } from '../../services/arrivalPrompts';
@@ -15,6 +15,7 @@ interface HomeDashboardScreenProps {
   onCheckIn?: () => Promise<'sent' | 'queued'>;
   lastCheckInAt?: string | null;
   queuedCheckIns?: number;
+  onOpenSOS?: () => void;
 }
 
 export function HomeDashboardScreen({
@@ -27,6 +28,7 @@ export function HomeDashboardScreen({
   onCheckIn,
   lastCheckInAt = null,
   queuedCheckIns = 0,
+  onOpenSOS,
 }: HomeDashboardScreenProps): React.JSX.Element {
   const [dismissedThisSession, setDismissedThisSession] = useState(false);
   const [checkInFeedback, setCheckInFeedback] = useState<string>();
@@ -79,6 +81,16 @@ export function HomeDashboardScreen({
           <Text style={styles.rateLimitHint}>Check-in available every 15 minutes</Text>
         ) : null}
       </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="SOS / Emergency"
+        accessibilityHint="Opens the three-second emergency hold control"
+        onPress={onOpenSOS}
+        disabled={!onOpenSOS}
+        style={({pressed}) => [styles.sosButton, pressed && styles.pressedButton]}>
+        <Siren color={color.white} size={28} weight="fill" />
+        <Text style={styles.sosButtonLabel}>SOS / Emergency</Text>
+      </Pressable>
       {checkInFeedback ? (
         <View
           accessibilityLiveRegion="polite"
@@ -184,6 +196,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: color.white,
   },
+  sosButton: {
+    minHeight: 64,
+    borderRadius: radius.button,
+    backgroundColor: color.error700,
+    flexDirection: 'row',
+    gap: space.space2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sosButtonLabel: {...typography.bodyLarge, fontWeight: '700', color: color.white},
   disabledButton: { backgroundColor: color.gray300 },
   disabledButtonLabel: { color: color.gray500 },
   rateLimitHint: { ...typography.caption, color: color.gray600 },

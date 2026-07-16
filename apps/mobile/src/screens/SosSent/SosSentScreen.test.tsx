@@ -15,9 +15,9 @@ it('AC-16.4: shows honest sync state and calls the native dialer, never VoIP', a
 it('AC-16.5: cancellation requires a separate custom confirmation', async () => {
   const onCancel = jest.fn();
   const view = await render(<SosSentScreen synced htoPhone="+2348099999999" timestamp="2026-07-16T08:05:00Z" onCancel={onCancel} />);
-  await act(async () => fireEvent.press(view.getByRole('button', {name: 'Cancel SOS'}));
+  await act(async () => fireEvent.press(view.getByRole('button', {name: 'Cancel SOS'})));
   expect(view.getByText('Are you sure you want to cancel this SOS?')).toBeTruthy();
   expect(onCancel).not.toHaveBeenCalled();
-  await act(async () => fireEvent.press(view.getByRole('button', {name: 'Confirm cancellation'}));
+  await act(async () => fireEvent.press(view.getByRole('button', {name: 'Confirm cancellation'})));
   expect(onCancel).toHaveBeenCalledTimes(1);
 });
