@@ -375,6 +375,88 @@ def test_hto_pilgrims_list_shows_follow_up_flag_and_is_tenant_scoped(
     assert pilgrims["Bello Aliyu"]["tier"] is None
 
 
+def test_hto_pilgrims_list_reflects_real_active_sos_alerts(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """US-18: sos_status was previously dead code (schema default "none",
+    never computed) despite sos_alerts existing since US-16. A pilgrim with
+    an active alert must show "active"; a resolved one and a pilgrim with
+    no alert at all must both show "none", not leak stale alert history."""
+    from app.sos.models import SOSAlert, SOSStatus
+
+    api = _payload(settings, redis_client, providers, scheduler, session_factory, clock)
+    _, alerting_user_id = _authenticated_client(api, "08044445555")
+    _, resolved_user_id = _authenticated_client(api, "08066667777")
+    _, quiet_user_id = _authenticated_client(api, "08077778888")
+    owner = create_operator(session_factory, "hto-owner@example.com")
+
+    with session_factory() as session:
+        manifest = Manifest(
+            organization_id=owner.id,
+            name="Flight NAF203",
+            status=ManifestStatus.VALIDATED,
+        )
+        session.add(manifest)
+        session.flush()
+        session.add_all(
+            [
+                ManifestPilgrim(
+                    manifest_id=manifest.id,
+                    first_name="Amina",
+                    last_name="Yusuf",
+                    phone_number="08044445555",
+                    row_number=1,
+                    validation_status=ManifestValidationStatus.VALID,
+                    user_id=alerting_user_id,
+                ),
+                ManifestPilgrim(
+                    manifest_id=manifest.id,
+                    first_name="Bello",
+                    last_name="Aliyu",
+                    phone_number="08066667777",
+                    row_number=2,
+                    validation_status=ManifestValidationStatus.VALID,
+                    user_id=resolved_user_id,
+                ),
+                ManifestPilgrim(
+                    manifest_id=manifest.id,
+                    first_name="Chidi",
+                    last_name="Okoro",
+                    phone_number="08077778888",
+                    row_number=3,
+                    validation_status=ManifestValidationStatus.VALID,
+                    user_id=quiet_user_id,
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                SOSAlert(
+                    user_id=alerting_user_id,
+                    client_generated_id=uuid4(),
+                    timestamp=clock(),
+                    status=SOSStatus.ACTIVE,
+                ),
+                SOSAlert(
+                    user_id=resolved_user_id,
+                    client_generated_id=uuid4(),
+                    timestamp=clock(),
+                    status=SOSStatus.RESOLVED,
+                ),
+            ]
+        )
+        session.commit()
+
+    client = TestClient(api, headers=operator_headers(settings, clock, owner.id))
+    response = client.get("/v1/hto/pilgrims")
+
+    assert response.status_code == 200
+    pilgrims = {p["name"]: p for p in response.json()["pilgrims"]}
+    assert pilgrims["Amina Yusuf"]["sos_status"] == "active"
+    assert pilgrims["Bello Aliyu"]["sos_status"] == "none"
+    assert pilgrims["Chidi Okoro"]["sos_status"] == "none"
+
+
 def test_hto_pilgrims_list_filters_by_manifest_id(
     settings, redis_client, providers, scheduler, session_factory, clock
 ) -> None:

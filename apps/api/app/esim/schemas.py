@@ -30,10 +30,11 @@ class HtoPilgrimSummary(BaseModel):
     # "not_checked" rather than distinguished.
     esim_status: str
     activation_status: str
-    # Both literal, honest placeholders — US-15 (check-in) and US-16
-    # (SOS) aren't built yet, so "no check-in ever recorded" and "no
-    # active SOS" are simply true, not fabricated data.
     last_checkin_at: str | None = None
+    # "active" | "none" — a two-value signal for the risk-sort/highlight
+    # table (US-18 §6.28): AC-18.4 only needs to distinguish an
+    # unresolved SOS from everything else, so a pilgrim's past resolved
+    # or cancelled alerts are not surfaced here.
     sos_status: str = "none"
 
 

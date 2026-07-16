@@ -36,6 +36,19 @@ export async function resolveSOSAlert(id: string): Promise<void> {
   );
 }
 
+export async function subscribeToPushTopic(fcmToken: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/hto/push-subscriptions`, {
+    method: "POST",
+    headers: {...operatorHeaders(), "Content-Type": "application/json"},
+    body: JSON.stringify({fcm_token: fcmToken}),
+  });
+  if (!response.ok) {
+    const error = (await response.json().catch(() => ({}))) as APIError;
+    throw new Error(error.message ?? "Could not enable browser alerts.");
+  }
+  // 204 No Content on success -- nothing to parse.
+}
+
 type APIError = {
   error?: string;
   message?: string;

@@ -1744,6 +1744,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/push-subscriptions:
+    post:
+      tags:
+      - SOS
+      summary: Create Push Subscription
+      operationId: create_push_subscription_v1_hto_push_subscriptions_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushSubscriptionCreate'
+        required: true
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
 components:
   schemas:
     ActivationPreviewResponse:
@@ -3069,6 +3092,16 @@ components:
       - processor_reference
       - checkout_url
       title: PurchaseResponse
+    PushSubscriptionCreate:
+      properties:
+        fcm_token:
+          type: string
+          minLength: 1
+          title: Fcm Token
+      type: object
+      required:
+      - fcm_token
+      title: PushSubscriptionCreate
     RefreshRequest:
       properties:
         refresh_token:

@@ -40,3 +40,7 @@ class HtoSOSAlertResponse(BaseModel):
 
 class HtoSOSAlertsResponse(BaseModel):
     alerts: list[HtoSOSAlertResponse]
+
+
+class PushSubscriptionCreate(BaseModel):
+    fcm_token: str = Field(min_length=1)

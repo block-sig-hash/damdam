@@ -1,7 +1,7 @@
 """US-16 executable acceptance tests, committed before implementation."""
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -27,6 +27,7 @@ from app.sos.models import (
     SOSAlert,
     SOSNotification,
     SOSNotificationChannel,
+    SOSNotificationEvent,
     SOSNotificationStatus,
     SOSStatus,
 )
@@ -55,6 +56,7 @@ class ApiClient:
 class RecordingSOSScheduler:
     def __init__(self) -> None:
         self.dispatches: list[tuple[object, object]] = []
+        self.fallbacks: list[tuple[object, int]] = []
         self.fail_dispatch = False
 
     def schedule_dispatch(self, notification_id, channel) -> None:
@@ -62,16 +64,20 @@ class RecordingSOSScheduler:
             raise RuntimeError("broker unavailable")
         self.dispatches.append((notification_id, channel))
 
+    def schedule_fallback(self, notification_id, countdown) -> None:
+        self.fallbacks.append((notification_id, countdown))
+
 
 class RecordingSOSSender:
     def __init__(self) -> None:
         self.fail = False
         self.sent = []
 
-    def send(self, context) -> None:
+    def send(self, context):
         if self.fail:
             raise RuntimeError("provider unavailable")
         self.sent.append(context)
+        return f"wamid.sos.{len(self.sent)}"
 
 
 class ChannelSelectiveSOSSender:
@@ -88,11 +94,28 @@ class ChannelSelectiveSOSSender:
         self.sent.append(context.channel)
 
 
+class RecordingPushManager:
+    def __init__(self) -> None:
+        self.fail = False
+        self.subscriptions: list[tuple[str, str]] = []
+
+    def subscribe_topic(self, token: str, topic: str) -> None:
+        if self.fail:
+            from app.notifications.service import NotificationError
+
+            raise NotificationError("provider unavailable")
+        self.subscriptions.append((token, topic))
+
+
 def _setup(
-    settings, redis_client, providers, scheduler, session_factory, clock, sender=None
+    settings, redis_client, providers, scheduler, session_factory, clock,
+    sender=None, push_manager=None,
 ):
     sos_scheduler = RecordingSOSScheduler()
     sos_sender = sender if sender is not None else RecordingSOSSender()
+    push_subscription_manager = (
+        push_manager if push_manager is not None else RecordingPushManager()
+    )
     api = create_app(
         settings=settings,
         redis_client=redis_client,
@@ -102,6 +125,7 @@ def _setup(
         clock=clock,
         sos_scheduler=sos_scheduler,
         sos_sender=sos_sender,
+        push_subscription_manager=push_subscription_manager,
     )
     user = User(
         phone_number="+2348012345678",
@@ -178,7 +202,10 @@ def _payload(client_id=None):
 def test_confirmed_sos_persists_location_and_four_channel_rows_before_dispatch(
     settings, redis_client, providers, scheduler, session_factory, clock
 ) -> None:
-    """AC-16.3: durable alert + four channel queue rows precede dispatch."""
+    """AC-16.3: durable alert + four channel queue rows precede dispatch.
+    SMS_FAMILY (AC-22.3) is deliberately excluded here: it's created lazily
+    only if the WhatsApp family leg needs the fallback, never eagerly at
+    trigger time alongside the other four."""
     api, client, user, _, sos_scheduler = _setup(
         settings, redis_client, providers, scheduler, session_factory, clock
     )
@@ -190,7 +217,12 @@ def test_confirmed_sos_persists_location_and_four_channel_rows_before_dispatch(
         notifications = session.exec(select(SOSNotification)).all()
         assert alert.user_id == user.id
         assert float(alert.latitude) == 21.422487
-        assert {row.channel for row in notifications} == set(SOSNotificationChannel)
+        assert {row.channel for row in notifications} == {
+            SOSNotificationChannel.PUSH,
+            SOSNotificationChannel.EMAIL,
+            SOSNotificationChannel.WHATSAPP_OPERATOR,
+            SOSNotificationChannel.WHATSAPP_FAMILY,
+        }
         assert len(sos_scheduler.dispatches) == 4
 
 
@@ -413,6 +445,94 @@ def test_hto_token_cannot_cancel_and_pilgrim_token_cannot_resolve(
         assert session.get(SOSAlert, UUID(alert_id)).status == SOSStatus.ACTIVE
 
 
+def test_operator_push_subscription_subscribes_to_own_org_topic(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-19.1: an operator's browser token must be tied to their own
+    organization's topic, so send_topic(f"hto-{org_id}", ...) later reaches
+    it — this is the server-side half of the browser push subscription
+    flow that was previously entirely missing."""
+    api, client, _, organization, _ = _setup(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+
+    response = client.post(
+        "/v1/hto/push-subscriptions", json={"fcm_token": "browser-token-abc"}
+    )
+
+    assert response.status_code == 204
+    manager = api.state.push_subscription_service.manager
+    assert manager.subscriptions == [("browser-token-abc", f"hto-{organization.id}")]
+
+
+def test_push_subscription_requires_real_operator_auth_not_a_pilgrim_token(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """A pilgrim's real access token (not a dependency override — _setup()
+    unconditionally overrides get_current_organization, which would make
+    this check meaningless) must be rejected by this HTO-only endpoint,
+    same evidence bar as the cancel/resolve actor boundary test above."""
+    from app.auth.tokens import TokenService
+
+    api = create_app(
+        settings=settings,
+        redis_client=redis_client,
+        providers=providers,
+        scheduler=scheduler,
+        session_factory=session_factory,
+        clock=clock,
+        sos_scheduler=RecordingSOSScheduler(),
+        sos_sender=RecordingSOSSender(),
+        push_subscription_manager=RecordingPushManager(),
+    )
+    user = User(
+        phone_number="+2348012345679", first_name="Amina", last_name="Yusuf",
+        platform=Platform.ANDROID,
+    )
+    with session_factory() as session:
+        session.add(user)
+        session.flush()
+        pilgrim_tokens = TokenService(settings).issue(session, user, clock())
+        session.commit()
+
+    response = ApiClient(api).post(
+        "/v1/hto/push-subscriptions",
+        json={"fcm_token": "browser-token-abc"},
+        headers={"Authorization": f"Bearer {pilgrim_tokens.access_token}"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"] == "invalid_operator_token"
+
+
+def test_push_subscription_rejects_an_empty_token(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    _, client, _, _, _ = _setup(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    response = client.post("/v1/hto/push-subscriptions", json={"fcm_token": ""})
+    assert response.status_code == 422
+
+
+def test_push_subscription_failure_surfaces_as_service_unavailable(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    failing_manager = RecordingPushManager()
+    failing_manager.fail = True
+    api, client, _, _, _ = _setup(
+        settings, redis_client, providers, scheduler, session_factory, clock,
+        push_manager=failing_manager,
+    )
+
+    response = client.post(
+        "/v1/hto/push-subscriptions", json={"fcm_token": "browser-token-abc"}
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error"] == "push_subscription_failed"
+
+
 def test_broker_outage_at_trigger_leaves_durable_pending_rows(
     settings, redis_client, providers, scheduler, session_factory, clock
 ) -> None:
@@ -519,6 +639,365 @@ def test_channels_fail_and_recover_independently_within_one_trigger(
         assert rows[SOSNotificationChannel.WHATSAPP_FAMILY].retry_count == 1
         assert rows[SOSNotificationChannel.WHATSAPP_FAMILY].admin_queued_at is None
         assert session.get(SOSAlert, alert_id).status == SOSStatus.ACTIVE
+
+
+def _whatsapp_family_row(session_factory, alert_id):
+    with session_factory() as session:
+        return session.exec(
+            select(SOSNotification).where(
+                SOSNotification.sos_alert_id == UUID(alert_id),
+                SOSNotification.channel == SOSNotificationChannel.WHATSAPP_FAMILY,
+            )
+        ).one()
+
+
+def test_sos_sms_fallback_fires_at_sixty_seconds_not_before(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-22.3: same 59s/60s controlled-clock evidence bar as US-15's
+    check-in fallback -- not immediate, not indefinitely late."""
+    api, client, _, organization, sos_scheduler = _setup(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    alert_id = client.post("/v1/sos", json=_payload()).json()["id"]
+    service = api.state.sos_notification_service
+    family_row = _whatsapp_family_row(session_factory, alert_id)
+    with session_factory() as session:
+        assert service.dispatch(session, family_row.id) is True
+    assert (family_row.id, 60) in [
+        (fid, secs) for fid, secs in sos_scheduler.fallbacks
+    ]
+
+    clock.advance(seconds=59)
+    with session_factory() as session:
+        assert service.send_sms_fallback(session, family_row.id) is False
+    with session_factory() as session:
+        assert (
+            session.exec(
+                select(SOSNotification).where(
+                    SOSNotification.sos_alert_id == UUID(alert_id),
+                    SOSNotification.channel == SOSNotificationChannel.SMS_FAMILY,
+                )
+            ).first()
+            is None
+        )
+
+    clock.advance(seconds=1)
+    with session_factory() as session:
+        assert service.send_sms_fallback(session, family_row.id) is True
+    with session_factory() as session:
+        sms_row = session.exec(
+            select(SOSNotification).where(
+                SOSNotification.sos_alert_id == UUID(alert_id),
+                SOSNotification.channel == SOSNotificationChannel.SMS_FAMILY,
+            )
+        ).one()
+        assert sms_row.status == SOSNotificationStatus.SENT
+        assert sms_row.event == SOSNotificationEvent.TRIGGERED
+
+
+def test_confirmed_whatsapp_delivery_cancels_sos_sms_fallback(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-22.3: a delivery confirmation before 60s prevents a duplicate SMS,
+    mirroring US-15's exact confirm-suppresses-fallback behavior."""
+    api, client, _, organization, _ = _setup(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    alert_id = client.post("/v1/sos", json=_payload()).json()["id"]
+    service = api.state.sos_notification_service
+    family_row = _whatsapp_family_row(session_factory, alert_id)
+    with session_factory() as session:
+        service.dispatch(session, family_row.id)
+        assert service.confirm_whatsapp_delivery(session, "wamid.sos.1") is True
+    clock.advance(seconds=60)
+
+    with session_factory() as session:
+        assert service.send_sms_fallback(session, family_row.id) is False
+    with session_factory() as session:
+        assert (
+            session.exec(
+                select(SOSNotification).where(
+                    SOSNotification.sos_alert_id == UUID(alert_id),
+                    SOSNotification.channel == SOSNotificationChannel.SMS_FAMILY,
+                )
+            ).first()
+            is None
+        )
+
+
+def test_failed_whatsapp_family_send_makes_fallback_immediately_eligible(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-22.3 says "fails or does not confirm" -- an outright send failure
+    must not still wait out the full 60s window."""
+    api, client, _, organization, sos_scheduler = _setup(
+        settings, redis_client, providers, scheduler, session_factory, clock,
+        sender=ChannelSelectiveSOSSender(SOSNotificationChannel.WHATSAPP_FAMILY),
+    )
+    alert_id = client.post("/v1/sos", json=_payload()).json()["id"]
+    service = api.state.sos_notification_service
+    family_row = _whatsapp_family_row(session_factory, alert_id)
+    with session_factory() as session:
+        assert service.dispatch(session, family_row.id) is False
+
+    assert (family_row.id, 0) in [(fid, secs) for fid, secs in sos_scheduler.fallbacks]
+    with session_factory() as session:
+        # Due immediately (clock hasn't even advanced), not 60s from now.
+        assert service.send_sms_fallback(session, family_row.id) is True
+
+
+def test_signed_meta_webhook_confirms_sos_whatsapp_delivery(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """The shared Meta webhook (already proven for check-in) also resolves
+    SOS family WhatsApp delivery -- one signed endpoint, two tables."""
+    import hashlib
+    import hmac
+    import json
+
+    signed_settings = settings.model_copy(
+        update={"whatsapp_app_secret": "meta-app-secret"}
+    )
+    api, client, _, organization, _ = _setup(
+        signed_settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    alert_id = client.post("/v1/sos", json=_payload()).json()["id"]
+    service = api.state.sos_notification_service
+    family_row = _whatsapp_family_row(session_factory, alert_id)
+    with session_factory() as session:
+        service.dispatch(session, family_row.id)
+
+    body = json.dumps(
+        {
+            "entry": [
+                {
+                    "changes": [
+                        {
+                            "value": {
+                                "statuses": [
+                                    {"id": "wamid.sos.1", "status": "delivered"}
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        separators=(",", ":"),
+    ).encode()
+    signature = "sha256=" + hmac.new(
+        b"meta-app-secret", body, hashlib.sha256
+    ).hexdigest()
+
+    response = client.post(
+        "/v1/webhooks/meta/whatsapp",
+        content=body,
+        headers={
+            "x-hub-signature-256": signature,
+            "content-type": "application/json",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"processed": 1}
+    with session_factory() as session:
+        row = session.get(SOSNotification, family_row.id)
+        assert row.whatsapp_delivered_at is not None
+
+
+def test_due_sos_fallback_query_excludes_delivered_and_already_fallen_back(
+    session_factory,
+) -> None:
+    """The Celery Beat sweep's query must skip rows that were delivered in
+    time and rows that already have an SMS_FAMILY sibling -- otherwise it
+    would re-trigger send_sms_fallback forever."""
+    from app.sos.notifications import due_sos_fallback_notifications_query
+
+    now = datetime(2026, 7, 16, 12, 0, tzinfo=timezone.utc)
+    with session_factory() as session:
+        alert = SOSAlert(
+            user_id=uuid4(), client_generated_id=uuid4(), timestamp=now
+        )
+        delivered_alert = SOSAlert(
+            user_id=uuid4(), client_generated_id=uuid4(), timestamp=now
+        )
+        already_fell_back_alert = SOSAlert(
+            user_id=uuid4(), client_generated_id=uuid4(), timestamp=now
+        )
+        session.add_all([alert, delivered_alert, already_fell_back_alert])
+        session.flush()
+
+        due_row = SOSNotification(
+            sos_alert_id=alert.id,
+            channel=SOSNotificationChannel.WHATSAPP_FAMILY,
+            status=SOSNotificationStatus.SENT,
+            fallback_due_at=now - timedelta(seconds=1),
+        )
+        not_yet_due_row = SOSNotification(
+            sos_alert_id=alert.id,
+            channel=SOSNotificationChannel.WHATSAPP_OPERATOR,
+            status=SOSNotificationStatus.SENT,
+        )
+        delivered_row = SOSNotification(
+            sos_alert_id=delivered_alert.id,
+            channel=SOSNotificationChannel.WHATSAPP_FAMILY,
+            status=SOSNotificationStatus.SENT,
+            fallback_due_at=now - timedelta(seconds=1),
+            whatsapp_delivered_at=now,
+        )
+        already_fell_back_row = SOSNotification(
+            sos_alert_id=already_fell_back_alert.id,
+            channel=SOSNotificationChannel.WHATSAPP_FAMILY,
+            status=SOSNotificationStatus.SENT,
+            fallback_due_at=now - timedelta(seconds=1),
+        )
+        sibling_sms_row = SOSNotification(
+            sos_alert_id=already_fell_back_alert.id,
+            channel=SOSNotificationChannel.SMS_FAMILY,
+            status=SOSNotificationStatus.SENT,
+        )
+        session.add_all(
+            [
+                due_row,
+                not_yet_due_row,
+                delivered_row,
+                already_fell_back_row,
+                sibling_sms_row,
+            ]
+        )
+        session.commit()
+
+        eligible_ids = {
+            row.id
+            for row in session.exec(due_sos_fallback_notifications_query(now)).all()
+        }
+        due_row_id = due_row.id
+        not_yet_due_row_id = not_yet_due_row.id
+        delivered_row_id = delivered_row.id
+        already_fell_back_row_id = already_fell_back_row.id
+
+    assert due_row_id in eligible_ids
+    assert not_yet_due_row_id not in eligible_ids
+    assert delivered_row_id not in eligible_ids
+    assert already_fell_back_row_id not in eligible_ids
+
+
+def test_resolving_mid_retry_stops_the_failed_channel_from_notifying_again(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-19.6: a channel that failed and is still eligible for retry must
+    not fire once the operator has resolved the alert — the exact gap
+    review found in SOSNotificationService.dispatch(), which previously had
+    no idea the parent alert had moved on."""
+    api, client, _, organization, _ = _setup(
+        settings, redis_client, providers, scheduler, session_factory, clock,
+        sender=ChannelSelectiveSOSSender(SOSNotificationChannel.WHATSAPP_FAMILY),
+    )
+    alert_id = UUID(client.post("/v1/sos", json=_payload()).json()["id"])
+    service = api.state.sos_notification_service
+    with session_factory() as session:
+        failing_row = session.exec(
+            select(SOSNotification).where(
+                SOSNotification.sos_alert_id == alert_id,
+                SOSNotification.channel == SOSNotificationChannel.WHATSAPP_FAMILY,
+            )
+        ).one()
+        # First attempt fails (retry_count -> 1), well under the 3-attempt
+        # admin-queue threshold, so the recovery sweep would normally still
+        # consider this row eligible for another try.
+        assert service.dispatch(session, failing_row.id) is False
+        session.commit()
+        failing_id = failing_row.id
+
+    with session_factory() as session:
+        sos_service = api.state.sos_service
+        sos_service.resolve(session, organization, alert_id)
+
+    sender = service.sender
+    sent_before_retry = len(sender.sent)
+    with session_factory() as session:
+        # This is exactly what the 10s Celery Beat sweep would have done:
+        # re-attempt the still-PENDING/FAILED, under-the-cap row.
+        retried = service.dispatch(session, failing_id)
+
+    assert retried is False
+    assert len(sender.sent) == sent_before_retry  # no send attempt was made
+    with session_factory() as session:
+        row = session.get(SOSNotification, failing_id)
+        assert row.status == SOSNotificationStatus.FAILED
+        assert row.retry_count == 1  # unchanged: this was a skip, not an attempt
+        assert row.admin_queued_at is None
+        assert session.get(SOSAlert, alert_id).status == SOSStatus.RESOLVED
+
+
+def test_pending_dispatchable_notifications_query_excludes_resolved_alerts(
+    session_factory,
+) -> None:
+    """The Celery Beat recovery sweep (app.sos.enqueue_pending) must not
+    re-surface a TRIGGERED-event row belonging to a resolved or cancelled
+    alert, even though the row itself is still PENDING/FAILED and under
+    the retry cap. Tests the extracted query directly since the Celery
+    task itself uses a fresh create_session_factory(settings) disconnected
+    from this fixture's engine, matching this codebase's existing
+    convention of not unit-testing worker.py's Celery task wrappers."""
+    from app.sos.notifications import pending_dispatchable_notifications_query
+
+    with session_factory() as session:
+        active_alert = SOSAlert(
+            user_id=uuid4(),
+            client_generated_id=uuid4(),
+            timestamp=datetime.now(timezone.utc),
+        )
+        resolved_alert = SOSAlert(
+            user_id=uuid4(),
+            client_generated_id=uuid4(),
+            timestamp=datetime.now(timezone.utc),
+            status=SOSStatus.RESOLVED,
+        )
+        cancelled_alert = SOSAlert(
+            user_id=uuid4(),
+            client_generated_id=uuid4(),
+            timestamp=datetime.now(timezone.utc),
+            status=SOSStatus.CANCELLED,
+        )
+        session.add_all([active_alert, resolved_alert, cancelled_alert])
+        session.flush()
+
+        active_triggered = SOSNotification(
+            sos_alert_id=active_alert.id, channel=SOSNotificationChannel.EMAIL
+        )
+        resolved_triggered = SOSNotification(
+            sos_alert_id=resolved_alert.id, channel=SOSNotificationChannel.EMAIL
+        )
+        cancelled_triggered = SOSNotification(
+            sos_alert_id=cancelled_alert.id, channel=SOSNotificationChannel.EMAIL
+        )
+        # A legitimate cancellation-event row: its alert is CANCELLED, which
+        # is expected and must not be excluded.
+        cancelled_event = SOSNotification(
+            sos_alert_id=cancelled_alert.id,
+            channel=SOSNotificationChannel.WHATSAPP_FAMILY,
+            event=SOSNotificationEvent.CANCELLED,
+        )
+        session.add_all(
+            [active_triggered, resolved_triggered, cancelled_triggered, cancelled_event]
+        )
+        session.commit()
+
+        eligible_ids = {
+            row.id
+            for row in session.exec(pending_dispatchable_notifications_query()).all()
+        }
+        active_triggered_id = active_triggered.id
+        cancelled_event_id = cancelled_event.id
+        resolved_triggered_id = resolved_triggered.id
+        cancelled_triggered_id = cancelled_triggered.id
+
+    assert active_triggered_id in eligible_ids
+    assert cancelled_event_id in eligible_ids
+    assert resolved_triggered_id not in eligible_ids
+    assert cancelled_triggered_id not in eligible_ids
 
 
 def test_admin_retry_only_requeues_failed_admin_queued_notifications(

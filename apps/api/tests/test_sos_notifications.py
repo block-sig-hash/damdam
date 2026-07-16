@@ -9,7 +9,7 @@ hitting the same function or WhatsApp operator/family destinations being
 swapped.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -88,6 +88,15 @@ class FakeWhatsApp:
         raise AssertionError("not used by SOS")
 
 
+class FakeSms:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    def send(self, phone_number: str, message: str) -> str:
+        self.calls.append((phone_number, message))
+        return "termii-sos-1"
+
+
 def _context(
     channel: SOSNotificationChannel, family_phone: str | None
 ) -> SOSDeliveryContext:
@@ -159,12 +168,16 @@ def test_whatsapp_family_channel_sends_to_family_phone_not_operator() -> None:
         NotificationService(email=FakeEmail(), whatsapp=whatsapp), FakePush()
     )
 
-    adapter.send(
+    message_id = adapter.send(
         _context(SOSNotificationChannel.WHATSAPP_FAMILY, "+2348088888888")
     )
 
     assert len(whatsapp.sos_calls) == 1
     assert whatsapp.sos_calls[0][0] == "+2348088888888"  # family_phone destination
+    # dispatch() needs this back to correlate the Meta delivery webhook and
+    # schedule the AC-22.3 fallback -- unlike the other three channels,
+    # this one must not silently return None on success.
+    assert message_id == "wamid.sos.1"
 
 
 def test_whatsapp_family_channel_without_a_family_contact_raises() -> None:
@@ -177,3 +190,64 @@ def test_whatsapp_family_channel_without_a_family_contact_raises() -> None:
         adapter.send(_context(SOSNotificationChannel.WHATSAPP_FAMILY, None))
 
     assert whatsapp.sos_calls == []
+
+
+def test_sms_family_channel_sends_urgent_message_to_family_with_hto_phone() -> None:
+    """AC-22.1/22.2 apply to the fallback too: URGENT prefix, HTO phone
+    number included, and equivalent content to the WhatsApp message."""
+    sms = FakeSms()
+    adapter = SOSProviderAdapter(
+        NotificationService(email=FakeEmail(), whatsapp=FakeWhatsApp()),
+        FakePush(),
+        sms,
+    )
+
+    adapter.send(_context(SOSNotificationChannel.SMS_FAMILY, "+2348088888888"))
+
+    assert len(sms.calls) == 1
+    phone, message = sms.calls[0]
+    assert phone == "+2348088888888"  # family_phone destination, not operator
+    assert message.startswith("URGENT:")
+    assert "+2348099999999" in message  # hto_phone
+    assert "Amina Yusuf" in message
+
+
+def test_sms_family_channel_cancelled_event_does_not_say_urgent() -> None:
+    sms = FakeSms()
+    adapter = SOSProviderAdapter(
+        NotificationService(email=FakeEmail(), whatsapp=FakeWhatsApp()),
+        FakePush(),
+        sms,
+    )
+    context = replace(
+        _context(SOSNotificationChannel.SMS_FAMILY, "+2348088888888"),
+        event=SOSNotificationEvent.CANCELLED,
+    )
+
+    adapter.send(context)
+
+    assert not sms.calls[0][1].startswith("URGENT:")
+    assert "cancelled" in sms.calls[0][1].lower()
+
+
+def test_sms_family_channel_without_a_family_contact_raises() -> None:
+    sms = FakeSms()
+    adapter = SOSProviderAdapter(
+        NotificationService(email=FakeEmail(), whatsapp=FakeWhatsApp()),
+        FakePush(),
+        sms,
+    )
+
+    with pytest.raises(NotificationError, match="family contact unavailable"):
+        adapter.send(_context(SOSNotificationChannel.SMS_FAMILY, None))
+
+    assert sms.calls == []
+
+
+def test_sms_family_channel_without_an_sms_sender_configured_raises() -> None:
+    adapter = SOSProviderAdapter(
+        NotificationService(email=FakeEmail(), whatsapp=FakeWhatsApp()), FakePush()
+    )
+
+    with pytest.raises(NotificationError, match="not configured"):
+        adapter.send(_context(SOSNotificationChannel.SMS_FAMILY, "+2348088888888"))

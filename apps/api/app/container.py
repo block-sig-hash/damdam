@@ -86,6 +86,15 @@ class CelerySOSScheduler(SOSScheduler):
             "app.sos.dispatch", args=[str(notification_id), channel.value]
         )
 
+    def schedule_fallback(self, notification_id: UUID, countdown: int) -> None:
+        from app.worker import celery_app
+
+        celery_app.send_task(
+            "app.sos.sms_fallback",
+            args=[str(notification_id)],
+            countdown=countdown,
+        )
+
 
 def build_otp_service(
     settings: Settings,
