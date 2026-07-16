@@ -27,6 +27,8 @@ from app.payments.providers import (
     PaymentProvider,
     PaystackProvider,
 )
+from app.sos.models import SOSNotificationChannel
+from app.sos.service import SOSScheduler
 
 
 class CeleryFailoverScheduler:
@@ -71,6 +73,17 @@ class CeleryCheckInScheduler(CheckInScheduler):
             "app.checkins.sms_fallback",
             args=[str(notification_id)],
             countdown=countdown,
+        )
+
+
+class CelerySOSScheduler(SOSScheduler):
+    def schedule_dispatch(
+        self, notification_id: UUID, channel: SOSNotificationChannel
+    ) -> None:
+        from app.worker import celery_app
+
+        celery_app.send_task(
+            "app.sos.dispatch", args=[str(notification_id), channel.value]
         )
 
 

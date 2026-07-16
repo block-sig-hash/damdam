@@ -7,6 +7,22 @@
 * { box-sizing: border-box; }
 body { margin: 0; }
 
+.dashboard-page { max-width: 1100px; margin: 0 auto; padding: 32px; }
+.page-heading, .action-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.filter-row { display: flex; gap: 8px; margin: 24px 0; }
+.filter-row button { grid-column: auto; }
+.filter-row button[aria-pressed="true"] { background: #14181a; }
+.sos-grid { display: grid; gap: 16px; }
+.sos-card { background: white; border: 1px solid #dde1e1; border-left: 8px solid #728080; border-radius: 12px; padding: 20px; display: grid; gap: 16px; }
+.sos-card.sos-active { border-left-color: #c0392b; background: #fbe7e4; }
+.sos-card h2 { margin: 8px 0 4px; }
+.sos-card time { display: block; margin-top: 8px; }
+.sos-card img { width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; }
+.status-pill { font-weight: 800; color: #8f1f17; }
+.sos-home-banner { margin: 20px 0; padding: 20px; display: flex; justify-content: space-between; gap: 16px; background: #c0392b; color: white; border-radius: 8px; }
+.sos-home-banner a { color: white; font-weight: 800; }
+.sos-pinned-row { padding: 18px; display: grid; grid-template-columns: 1fr auto auto; gap: 16px; background: #fbe7e4; border-left: 8px solid #c0392b; color: #14181a; text-decoration: none; }
+
 .auth-shell {
   min-height: 100vh;
   display: grid;

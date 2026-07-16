@@ -18,7 +18,7 @@ export default function LoginPage() {
     setError("");
     try {
       await loginHTO(email, password);
-      router.push("/manifests/new");
+      router.push("/home");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sign in failed.");
     } finally {

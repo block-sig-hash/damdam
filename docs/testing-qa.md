@@ -260,6 +260,24 @@ alive; SQLite persistence, connectivity-triggered sync, app-start recovery, and
 OS-assisted background work protect process-death cases. The full force-quit /
 reboot matrix in §14.3 remains mandatory real-device evidence before pilot.
 
+### 14.4.4 US-16 automated evidence and real-device boundary
+
+US-16 adds deterministic tests for local-write-before-network ordering, the
+10-second foreground retry, connectivity-triggered immediate retry, process
+recreation over the same durable outbox rows, and rapid repeated hold
+completion collapsing to one `client_generated_id`. API tests prove the same
+UUID produces one alert/four trigger notifications, while a different UUID is
+not rate-limited; cancellation and HTO resolution exercise distinct actor paths.
+Forced channel failure is retried three times into the admin queue without
+changing the active alert.
+
+The native dialer is asserted as a `tel:` Linking call rather than the DamDam
+VoIP gateway. Simulator/emulator tests cannot prove real dialer launch,
+background scheduling after an OS-level force-stop/reboot, production FCM topic
+subscription, or delivery through live Meta/Resend/FCM accounts. The §14.3
+real-device matrix, airplane-mode round trip, device reboot, real notification
+delivery, and native-dialer verification remain required before the pilot.
+
 ---
 
 ## 14.5 HTO Dashboard Testing

@@ -3,6 +3,16 @@ from typing import Protocol
 
 
 class EmailSender(Protocol):
+    def send_sos(
+        self,
+        email: str,
+        pilgrim_name: str,
+        pilgrim_phone: str,
+        timestamp: str,
+        maps_url: str | None,
+        cancelled: bool,
+        notification_id: str,
+    ) -> None: ...
     def send_verification(
         self, email: str, operator_name: str, verification_url: str
     ) -> None: ...
@@ -24,6 +34,15 @@ class EmailSender(Protocol):
 
 
 class WhatsAppSender(Protocol):
+    def send_sos(
+        self,
+        phone_number: str,
+        pilgrim_name: str,
+        timestamp: str,
+        maps_url: str | None,
+        hto_phone: str,
+        cancelled: bool,
+    ) -> str: ...
     def send_approval(self, phone_number: str, operator_name: str) -> None: ...
 
     def send_family_nomination(self, phone_number: str) -> None: ...
@@ -68,9 +87,7 @@ class NotificationService:
     def send_approval_email(self, email: str, operator_name: str) -> None:
         self.email.send_approval(email, operator_name)
 
-    def send_approval_whatsapp(
-        self, phone_number: str, operator_name: str
-    ) -> None:
+    def send_approval_whatsapp(self, phone_number: str, operator_name: str) -> None:
         self.whatsapp.send_approval(phone_number, operator_name)
 
     def send_family_nomination(self, phone_number: str) -> None:
@@ -84,9 +101,7 @@ class NotificationService:
         total_ngn: Decimal,
         pdf: bytes,
     ) -> None:
-        self.email.send_invoice(
-            email, operator_name, order_id, total_ngn, pdf
-        )
+        self.email.send_invoice(email, operator_name, order_id, total_ngn, pdf)
 
     def send_activation(
         self, phone_number: str, pilgrim_name: str, tier_name: str, url: str

@@ -421,12 +421,18 @@ WhatsApp-delivery checkpoint and SMS-fallback decision record for AC-15.10.
 | id | UUID | PK | |
 | sos_alert_id | UUID | FK → sos_alerts | |
 | channel | ENUM | NOT NULL | `push` \| `email` \| `whatsapp_operator` \| `whatsapp_family` |
+| event | ENUM | DEFAULT 'triggered' | `triggered` \| `cancelled`; keeps cancellation follow-up delivery independently auditable |
 | status | ENUM | DEFAULT 'pending' | `pending` \| `sent` \| `failed` |
 | sent_at | TIMESTAMPTZ | NULLABLE | |
 | failure_reason | VARCHAR(255) | NULLABLE | |
+| retry_count | INTEGER | DEFAULT 0 | Failed channel attempts; capped at three before admin queue |
+| admin_queued_at | TIMESTAMPTZ | NULLABLE | Set after the third failed attempt |
+| created_at | TIMESTAMPTZ | NOT NULL | |
 
 One row per channel per SOS event — allows the admin failed-
 notification queue to retry only the failed channel.
+
+**Unique constraint:** `(sos_alert_id, channel, event)`
 
 ---
 
@@ -1185,3 +1191,22 @@ gated — but no `check_in_notifications` row is created for it, so no second
 WhatsApp/SMS fires. Once Redis recovers, the existing Redis-backed limiter
 governs the very next request as before; this fallback has no effect while
 Redis is healthy.
+
+## 6.25 Amendment — US-16 Cancellation and Failed-Channel Auditability
+
+US-16 activates the previously specified `sos_alerts` and
+`sos_notifications` tables. The original notification shape represented the
+four trigger-time channels, but AC-16.6 also requires a separately deliverable
+cancellation follow-up. Reusing and overwriting the trigger rows would erase
+whether the original emergency notification was sent. `event` therefore
+distinguishes `triggered` from `cancelled`, and the unique key is the explicit
+triple `(sos_alert_id, channel, event)`. A retry of one client-generated SOS
+still creates only the original four rows; a real cancellation creates exactly
+four additional, independently auditable rows.
+
+The admin Failed Notification Queue already present in `api-spec.md` §7.10
+also requires state that the original table sketch omitted. `retry_count` and
+`admin_queued_at` make the documented three-attempt policy durable across
+workers and deployments. A channel failure never changes or rolls back the
+underlying `sos_alerts` row. Migration `0016_us16_sos` creates this amended
+shape directly because SOS had not been deployed before US-16.

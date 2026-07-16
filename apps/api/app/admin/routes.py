@@ -6,9 +6,11 @@ from uuid import UUID
 import jwt
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
+from sqlmodel import col, select
 
 from app.auth.hto import HTOAuthError, HTOService
-from app.auth.models import AdminUser, HTOApprovalStatus, ManifestOrderStatus
+from app.auth.models import AdminUser, HTOApprovalStatus, ManifestOrderStatus, User
 from app.auth.schemas import (
     HTOApprovalResponse,
     HTOOperatorListResponse,
@@ -24,9 +26,15 @@ from app.manifests.schemas import (
     PricingTierUpdateRequest,
     PricingTierUpdateResponse,
 )
+from app.sos.models import SOSAlert, SOSNotification, SOSNotificationStatus
+from app.sos.service import SOSService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 bearer = HTTPBearer(auto_error=False)
+
+
+class SOSRetryBulkRequest(BaseModel):
+    notification_ids: list[UUID]
 
 
 def _service(request: Request) -> HTOService:
@@ -39,9 +47,7 @@ def _order_service(request: Request) -> ManifestOrderService:
 
 def current_admin(
     request: Request,
-    credentials: Annotated[
-        HTTPAuthorizationCredentials | None, Depends(bearer)
-    ],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
 ) -> AdminUser:
     if credentials is None:
         raise HTOAuthError("invalid_admin_token")
@@ -71,6 +77,77 @@ def current_admin(
         return cast(AdminUser, admin)
 
 
+@router.get("/sos-notifications/failed")
+def failed_sos_notifications(
+    request: Request, admin: Annotated[AdminUser, Depends(current_admin)]
+) -> dict[str, list[dict[str, object]]]:
+    del admin
+    with request.app.state.session_factory() as session:
+        rows = session.exec(
+            select(SOSNotification, SOSAlert, User)
+            .join(SOSAlert, col(SOSAlert.id) == col(SOSNotification.sos_alert_id))
+            .join(User, col(User.id) == col(SOSAlert.user_id))
+            .where(col(SOSNotification.admin_queued_at).is_not(None))
+        ).all()
+        return {
+            "notifications": [
+                {
+                    "id": str(row.id),
+                    "pilgrim_name": f"{user.first_name} {user.last_name}".strip(),
+                    "channel": row.channel.value,
+                    "failure_reason": row.failure_reason,
+                    "sos_timestamp": alert.timestamp,
+                    "retry_count": row.retry_count,
+                }
+                for row, alert, user in rows
+            ]
+        }
+
+
+def _retry_sos_rows(request: Request, notification_ids: list[UUID]) -> int:
+    sos = cast(SOSService, request.app.state.sos_service)
+    queued = 0
+    with request.app.state.session_factory() as session:
+        rows = session.exec(
+            select(SOSNotification).where(
+                col(SOSNotification.id).in_(notification_ids),
+                SOSNotification.status == SOSNotificationStatus.FAILED,
+                col(SOSNotification.admin_queued_at).is_not(None),
+            )
+        ).all()
+        for row in rows:
+            row.status = SOSNotificationStatus.PENDING
+            row.retry_count = 0
+            row.admin_queued_at = None
+            row.failure_reason = None
+            session.add(row)
+        session.commit()
+        for row in rows:
+            sos.scheduler.schedule_dispatch(row.id, row.channel)
+            queued += 1
+    return queued
+
+
+@router.post("/sos-notifications/retry-bulk")
+def retry_sos_notifications_bulk(
+    payload: SOSRetryBulkRequest,
+    request: Request,
+    admin: Annotated[AdminUser, Depends(current_admin)],
+) -> dict[str, int]:
+    del admin
+    return {"queued": _retry_sos_rows(request, payload.notification_ids)}
+
+
+@router.post("/sos-notifications/{notification_id}/retry")
+def retry_sos_notification(
+    notification_id: UUID,
+    request: Request,
+    admin: Annotated[AdminUser, Depends(current_admin)],
+) -> dict[str, int]:
+    del admin
+    return {"queued": _retry_sos_rows(request, [notification_id])}
+
+
 @router.get("/hto-operators", response_model=HTOOperatorListResponse)
 def list_hto_operators(
     request: Request,
@@ -81,15 +158,11 @@ def list_hto_operators(
     with request.app.state.session_factory() as session:
         organizations = _service(request).list_organizations(session, status)
     return HTOOperatorListResponse(
-        operators=[
-            HTOOperatorResponse.model_validate(item) for item in organizations
-        ]
+        operators=[HTOOperatorResponse.model_validate(item) for item in organizations]
     )
 
 
-@router.post(
-    "/hto-operators/{operator_id}/approve", response_model=HTOApprovalResponse
-)
+@router.post("/hto-operators/{operator_id}/approve", response_model=HTOApprovalResponse)
 def approve_hto_operator(
     operator_id: UUID,
     request: Request,
@@ -100,9 +173,7 @@ def approve_hto_operator(
     return HTOApprovalResponse(approval_status=organization.approval_status)
 
 
-@router.post(
-    "/hto-operators/{operator_id}/reject", response_model=HTOApprovalResponse
-)
+@router.post("/hto-operators/{operator_id}/reject", response_model=HTOApprovalResponse)
 def reject_hto_operator(
     operator_id: UUID,
     payload: HTORejectionRequest,

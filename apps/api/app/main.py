@@ -28,6 +28,7 @@ from app.container import (
     CeleryCheckInScheduler,
     CeleryEsimIssuanceScheduler,
     CeleryProvisioningScheduler,
+    CelerySOSScheduler,
     build_notification_service,
     build_otp_service,
     build_payment_providers,
@@ -50,6 +51,7 @@ from app.manifests.orders import ManifestOrderService, ProvisioningScheduler
 from app.manifests.routes import pricing_router
 from app.manifests.routes import router as manifest_router
 from app.manifests.service import ManifestError, ManifestService
+from app.notifications.providers import FirebasePushSender
 from app.notifications.service import EmailSender, SMSNotificationSender, WhatsAppSender
 from app.otp.providers.base import OTPProvider
 from app.otp.routes import router as otp_webhook_router
@@ -63,6 +65,13 @@ from app.profile.device_tokens import DeviceTokenService
 from app.profile.emergency_contact import EmergencyContactService
 from app.profile.family_contacts import FamilyContactError, FamilyContactService
 from app.profile.routes import router as profile_router
+from app.sos.notifications import (
+    SOSChannelSender,
+    SOSNotificationService,
+    SOSProviderAdapter,
+)
+from app.sos.routes import router as sos_router
+from app.sos.service import NoopSOSScheduler, SOSError, SOSScheduler, SOSService
 from app.voice.providers import TelnyxVoiceProvider, VoiceProvider
 from app.voice.routes import router as voice_router
 from app.voice.service import VoiceError, VoiceService
@@ -85,6 +94,8 @@ def create_app(
     esim_scheduler: EsimIssuanceScheduler | None = None,
     sms_sender: SMSNotificationSender | None = None,
     checkin_scheduler: CheckInScheduler | None = None,
+    sos_scheduler: SOSScheduler | None = None,
+    sos_sender: SOSChannelSender | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     supplied = (redis_client, providers, scheduler, session_factory)
@@ -144,12 +155,8 @@ def create_app(
         provisioning_scheduler or CeleryProvisioningScheduler(),
         clock,
     )
-    api.state.hto_service = HTOService(
-        resolved_settings, notification_service, clock
-    )
-    api.state.family_contact_service = FamilyContactService(
-        notification_service, clock
-    )
+    api.state.hto_service = HTOService(resolved_settings, notification_service, clock)
+    api.state.family_contact_service = FamilyContactService(notification_service, clock)
     api.state.device_token_service = DeviceTokenService(clock)
     api.state.emergency_contact_service = EmergencyContactService()
     api.state.activation_service = ActivationService(clock, resolved_esim_scheduler)
@@ -186,6 +193,19 @@ def create_app(
         resolved_settings.family_notify_fallback_seconds,
         resolved_settings.family_notify_channel_primary,
         resolved_settings.family_notify_channel_secondary,
+    )
+    resolved_sos_scheduler = sos_scheduler or (
+        NoopSOSScheduler()
+        if resolved_settings.app_env == "test"
+        else CelerySOSScheduler()
+    )
+    api.state.sos_service = SOSService(resolved_sos_scheduler, clock)
+    api.state.sos_notification_service = SOSNotificationService(
+        sos_sender
+        or SOSProviderAdapter(
+            notification_service, FirebasePushSender(resolved_settings)
+        ),
+        clock,
     )
 
     @api.exception_handler(CheckInError)
@@ -290,9 +310,7 @@ def create_app(
                 status_code=400,
                 content={
                     "error": "pin_too_weak",
-                    "message": (
-                        "Choose a non-repeated, non-sequential 4-digit PIN."
-                    ),
+                    "message": ("Choose a non-repeated, non-sequential 4-digit PIN."),
                     "details": {},
                 },
             )
@@ -543,6 +561,24 @@ def create_app(
             content={"error": exc.code, "message": messages[exc.code], "details": {}},
         )
 
+    @api.exception_handler(SOSError)
+    async def sos_error_handler(request: Request, exc: SOSError) -> JSONResponse:
+        del request
+        statuses = {
+            "sos_id_conflict": 409,
+            "sos_not_found": 404,
+            "sos_already_resolved": 409,
+            "sos_already_cancelled": 409,
+        }
+        return JSONResponse(
+            status_code=statuses[exc.code],
+            content={
+                "error": exc.code,
+                "message": exc.code.replace("_", " ").capitalize(),
+                "details": {},
+            },
+        )
+
     @api.get("/health", tags=["system"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -559,6 +595,7 @@ def create_app(
     api.include_router(esim_router, prefix="/v1")
     api.include_router(voice_router, prefix="/v1")
     api.include_router(checkin_router, prefix="/v1")
+    api.include_router(sos_router, prefix="/v1")
     return api
 
 
