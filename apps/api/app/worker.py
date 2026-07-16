@@ -6,13 +6,17 @@ from redis import Redis
 from sqlmodel import col, select
 
 from app.auth.models import User, utc_now
+from app.checkins.models import CheckInNotification, WhatsAppDeliveryStatus
+from app.checkins.service import CheckInNotificationService
 from app.config import get_settings
 from app.container import (
+    CeleryCheckInScheduler,
     CeleryEsimIssuanceScheduler,
     CeleryFailoverScheduler,
     CeleryProvisioningScheduler,
     build_notification_service,
     build_otp_service,
+    build_sms_sender,
 )
 from app.db import create_session_factory
 from app.esim.models import EsimIssuanceJob
@@ -28,8 +32,83 @@ celery_app.conf.beat_schedule = {
     "enqueue-due-esim-issuance": {
         "task": "app.esim.enqueue_due",
         "schedule": 30.0,
-    }
+    },
+    "enqueue-due-checkin-fallbacks": {
+        "task": "app.checkins.enqueue_due_fallbacks",
+        "schedule": 30.0,
+    },
+    "enqueue-pending-checkin-notifications": {
+        "task": "app.checkins.enqueue_pending",
+        "schedule": 30.0,
+    },
 }
+
+
+def _checkin_notifications() -> CheckInNotificationService:
+    notifications = build_notification_service(settings)
+    return CheckInNotificationService(
+        notifications.whatsapp,
+        build_sms_sender(settings),
+        CeleryCheckInScheduler(),
+        utc_now,
+        settings.family_notify_fallback_seconds,
+    )
+
+
+@celery_app.task(name="app.checkins.dispatch")  # type: ignore[misc]
+def dispatch_checkin_notification(notification_id: str) -> bool:
+    with create_session_factory(settings)() as session:
+        return _checkin_notifications().dispatch_whatsapp(
+            session, UUID(notification_id)
+        )
+
+
+@celery_app.task(name="app.checkins.sms_fallback")  # type: ignore[misc]
+def send_checkin_sms_fallback(notification_id: str) -> bool:
+    with create_session_factory(settings)() as session:
+        return _checkin_notifications().send_sms_fallback(
+            session, UUID(notification_id)
+        )
+
+
+@celery_app.task(name="app.checkins.enqueue_due_fallbacks")  # type: ignore[misc]
+def enqueue_due_checkin_fallbacks() -> int:
+    now = utc_now()
+    queued = 0
+    with create_session_factory(settings)() as session:
+        rows = session.exec(
+            select(CheckInNotification)
+            .where(
+                col(CheckInNotification.fallback_due_at).is_not(None),
+                col(CheckInNotification.fallback_due_at) <= now,
+                col(CheckInNotification.sms_fallback_sent_at).is_(None),
+                col(CheckInNotification.whatsapp_delivered_at).is_(None),
+                col(CheckInNotification.admin_queued_at).is_(None),
+            )
+            .with_for_update(skip_locked=True)
+        ).all()
+        for row in rows:
+            celery_app.send_task("app.checkins.sms_fallback", args=[str(row.id)])
+            queued += 1
+    return queued
+
+
+@celery_app.task(name="app.checkins.enqueue_pending")  # type: ignore[misc]
+def enqueue_pending_checkin_notifications() -> int:
+    queued = 0
+    with create_session_factory(settings)() as session:
+        rows = session.exec(
+            select(CheckInNotification)
+            .where(
+                CheckInNotification.whatsapp_status
+                == WhatsAppDeliveryStatus.PENDING
+            )
+            .with_for_update(skip_locked=True)
+        ).all()
+        for row in rows:
+            celery_app.send_task("app.checkins.dispatch", args=[str(row.id)])
+            queued += 1
+    return queued
 
 
 @celery_app.task(name="app.otp.failover")  # type: ignore[misc]

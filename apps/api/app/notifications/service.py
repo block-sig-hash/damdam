@@ -38,6 +38,18 @@ class WhatsAppSender(Protocol):
 
     def send_esim_ready(self, phone_number: str, qr_code_url: str) -> None: ...
 
+    def send_checkin(
+        self,
+        phone_number: str,
+        pilgrim_name: str,
+        checked_in_at: str,
+        maps_url: str | None,
+    ) -> str: ...
+
+
+class SMSNotificationSender(Protocol):
+    def send(self, phone_number: str, message: str) -> str: ...
+
 
 class NotificationError(Exception):
     pass

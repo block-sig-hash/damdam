@@ -1434,6 +1434,114 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/checkins:
+    post:
+      tags:
+      - check-ins
+      summary: Create Checkin
+      operationId: create_checkin_v1_checkins_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckInCreate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInCreateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/me/checkins:
+    get:
+      tags:
+      - check-ins
+      summary: History
+      operationId: history_v1_me_checkins_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 10
+          minimum: 1
+          default: 10
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInHistoryResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/webhooks/meta/whatsapp:
+    get:
+      tags:
+      - check-ins
+      summary: Verify Meta Webhook
+      operationId: verify_meta_webhook_v1_webhooks_meta_whatsapp_get
+      parameters:
+      - name: hub.mode
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Hub.Mode
+      - name: hub.verify_token
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Hub.Verify Token
+      - name: hub.challenge
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Hub.Challenge
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            text/plain:
+              schema:
+                type: string
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - check-ins
+      summary: Meta Webhook
+      operationId: meta_webhook_v1_webhooks_meta_whatsapp_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaWebhookResponse'
 components:
   schemas:
     ActivationPreviewResponse:
@@ -1657,6 +1765,88 @@ components:
       - pstn
       - app_to_app
       title: CallType
+    CheckInCreate:
+      properties:
+        client_generated_id:
+          type: string
+          format: uuid
+          title: Client Generated Id
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+        latitude:
+          anyOf:
+          - type: number
+            maximum: 90.0
+            minimum: -90.0
+          - type: 'null'
+          title: Latitude
+        longitude:
+          anyOf:
+          - type: number
+            maximum: 180.0
+            minimum: -180.0
+          - type: 'null'
+          title: Longitude
+      type: object
+      required:
+      - client_generated_id
+      - timestamp
+      title: CheckInCreate
+    CheckInCreateResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        received_at:
+          type: string
+          format: date-time
+          title: Received At
+      type: object
+      required:
+      - id
+      - received_at
+      title: CheckInCreateResponse
+    CheckInHistoryResponse:
+      properties:
+        checkins:
+          items:
+            $ref: '#/components/schemas/CheckInResponse'
+          type: array
+          title: Checkins
+      type: object
+      required:
+      - checkins
+      title: CheckInHistoryResponse
+    CheckInResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+        latitude:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Latitude
+        longitude:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Longitude
+      type: object
+      required:
+      - id
+      - timestamp
+      - latitude
+      - longitude
+      title: CheckInResponse
     DeviceCompatibilityCreate:
       properties:
         platform:
@@ -2398,6 +2588,15 @@ components:
       required:
       - message
       title: MessageResponse
+    MetaWebhookResponse:
+      properties:
+        processed:
+          type: integer
+          title: Processed
+      type: object
+      required:
+      - processed
+      title: MetaWebhookResponse
     OTPRequest:
       properties:
         phone_number:

@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { HomeDashboardScreen } from './HomeDashboardScreen';
 
 afterEach(async () => {
@@ -52,7 +52,9 @@ it('AC-15.1/15.8: one tap sends immediately with no confirmation dialog', async 
     />,
   );
 
-  fireEvent.press(view.getByRole('button', {name: "I'm okay"}));
+  await act(async () => {
+    fireEvent.press(view.getByRole('button', {name: "I'm okay"}));
+  });
 
   await waitFor(() => expect(onCheckIn).toHaveBeenCalledTimes(1));
   expect(view.queryByText(/are you sure/i)).toBeNull();
@@ -72,11 +74,33 @@ it('AC-15.4: queued check-in and queue count remain visible inline', async () =>
     />,
   );
 
-  fireEvent.press(view.getByRole('button', {name: "I'm okay"}));
+  await act(async () => {
+    fireEvent.press(view.getByRole('button', {name: "I'm okay"}));
+  });
 
   await waitFor(() =>
     expect(view.getByText('Check-in queued, will send when connected')).toBeTruthy(),
   );
   expect(view.getByText('1 check-in waiting to send')).toBeTruthy();
   expect(view.getByText(/Last check-in:/)).toBeTruthy();
+});
+
+it('AC-15.9: disables another check-in during the 15-minute window', async () => {
+  const onCheckIn = jest.fn().mockResolvedValue('sent');
+  const view = await render(
+    <HomeDashboardScreen
+      departureDate={null}
+      esimStatus="activated"
+      remainingDataGb={4.25}
+      onActivateEsim={jest.fn()}
+      onCheckIn={onCheckIn}
+      lastCheckInAt="2026-07-13T08:05:00Z"
+      now={new Date('2026-07-13T08:10:00Z')}
+    />,
+  );
+
+  fireEvent.press(view.getByRole('button', {name: "I'm okay"}));
+
+  expect(onCheckIn).not.toHaveBeenCalled();
+  expect(view.getByText('Check-in available every 15 minutes')).toBeTruthy();
 });

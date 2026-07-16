@@ -12,6 +12,9 @@ interface HomeDashboardScreenProps {
   onActivateEsim: () => void;
   now?: Date;
   onOpenCall?: () => void;
+  onCheckIn?: () => Promise<'sent' | 'queued'>;
+  lastCheckInAt?: string | null;
+  queuedCheckIns?: number;
 }
 
 export function HomeDashboardScreen({
@@ -21,8 +24,16 @@ export function HomeDashboardScreen({
   onActivateEsim,
   now = new Date(),
   onOpenCall,
+  onCheckIn,
+  lastCheckInAt = null,
+  queuedCheckIns = 0,
 }: HomeDashboardScreenProps): React.JSX.Element {
   const [dismissedThisSession, setDismissedThisSession] = useState(false);
+  const [checkInFeedback, setCheckInFeedback] = useState<string>();
+  const [checkingIn, setCheckingIn] = useState(false);
+  const lastCheckInTime = lastCheckInAt ? new Date(lastCheckInAt).getTime() : 0;
+  const rateLimited =
+    lastCheckInTime > 0 && now.getTime() - lastCheckInTime < 15 * 60 * 1000;
   const showBanner =
     !dismissedThisSession &&
     shouldShowDateActivationBanner(departureDate, esimStatus, now);
@@ -30,6 +41,70 @@ export function HomeDashboardScreen({
   return (
     <ScrollView contentContainerStyle={styles.screen}>
       <Text style={styles.title}>Home</Text>
+      <View style={styles.checkInControl}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="I'm okay"
+          disabled={!onCheckIn || checkingIn || rateLimited}
+          onPress={() => {
+            if (!onCheckIn) return;
+            setCheckingIn(true);
+            onCheckIn()
+              .then(result =>
+                setCheckInFeedback(
+                  result === 'sent'
+                    ? 'Check-in sent'
+                    : 'Check-in queued, will send when connected',
+                ),
+              )
+              .catch(() => setCheckInFeedback('Check-in unavailable — try again'))
+              .finally(() => setCheckingIn(false));
+          }}
+          style={({pressed}) => [
+            styles.checkInButton,
+            (!onCheckIn || checkingIn || rateLimited) && styles.disabledButton,
+            pressed && styles.pressedButton,
+          ]}>
+          <CheckCircle color={color.white} size={24} weight="bold" />
+          <Text style={styles.checkInButtonLabel}>
+            {checkingIn ? 'Saving check-in…' : "I'm okay"}
+          </Text>
+        </Pressable>
+        {rateLimited ? (
+          <Text style={styles.rateLimitHint}>Check-in available every 15 minutes</Text>
+        ) : null}
+      </View>
+      {checkInFeedback ? (
+        <View
+          accessibilityLiveRegion="polite"
+          style={
+            checkInFeedback === 'Check-in sent'
+              ? styles.successBanner
+              : checkInFeedback.includes('queued')
+                ? styles.queueBanner
+                : styles.errorBanner
+          }>
+          <Text style={styles.bannerText}>{checkInFeedback}</Text>
+        </View>
+      ) : null}
+      {queuedCheckIns > 0 ? (
+        <View style={styles.queueBanner} testID="queued-events-indicator">
+          <Text style={styles.bannerText}>
+            {queuedCheckIns} {queuedCheckIns === 1 ? 'check-in' : 'check-ins'} waiting to send
+          </Text>
+        </View>
+      ) : null}
+      <Text style={styles.lastCheckIn}>
+        Last check-in:{' '}
+        {lastCheckInAt
+          ? new Date(lastCheckInAt).toLocaleString([], {
+              day: 'numeric',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : 'Not yet'}
+      </Text>
       {showBanner ? (
         <EsimActivationBanner
           onActivate={onActivateEsim}
@@ -75,6 +150,42 @@ const styles = StyleSheet.create({
     gap: space.space6,
   },
   title: { ...typography.heading1, color: color.gray900 },
+  checkInControl: { gap: space.space2 },
+  checkInButton: {
+    minHeight: 64,
+    borderRadius: radius.button,
+    backgroundColor: color.primary500,
+    flexDirection: 'row',
+    gap: space.space2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkInButtonLabel: {
+    ...typography.bodyLarge,
+    fontWeight: '600',
+    color: color.white,
+  },
+  disabledButton: { backgroundColor: color.gray300 },
+  rateLimitHint: { ...typography.caption, color: color.gray600 },
+  pressedButton: { opacity: 0.92, transform: [{scale: 0.98}] },
+  successBanner: {
+    backgroundColor: color.success100,
+    borderLeftWidth: 4,
+    borderLeftColor: color.success500,
+    padding: space.space4,
+  },
+  queueBanner: {
+    backgroundColor: color.gray100,
+    padding: space.space4,
+  },
+  errorBanner: {
+    backgroundColor: color.error100,
+    borderLeftWidth: 4,
+    borderLeftColor: color.error700,
+    padding: space.space4,
+  },
+  bannerText: { ...typography.body, color: color.gray900 },
+  lastCheckIn: { ...typography.body, color: color.gray600 },
   packageCard: {
     backgroundColor: color.white,
     borderWidth: 1,

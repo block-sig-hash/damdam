@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     whatsapp_activation_template: str = "hto_package_activation"
     whatsapp_receipt_template: str = "retail_payment_receipt"
     whatsapp_esim_ready_template: str = "esim_profile_ready"
+    whatsapp_checkin_template: str = "pilgrim_safe_checkin"
+    whatsapp_app_secret: str = ""
+    whatsapp_webhook_verify_token: str = ""
+    family_notify_channel_primary: Literal["whatsapp"] = "whatsapp"
+    family_notify_channel_secondary: Literal["sms"] = "sms"
+    family_notify_fallback_seconds: int = 60
     activation_base_url: str = "https://damdam.app/activate"
 
     payment_processor_primary: Literal["paystack", "flutterwave"] = "paystack"

@@ -1,0 +1,189 @@
+import type {NetInfoState} from '@react-native-community/netinfo';
+import type {NitroSQLiteConnection} from 'react-native-nitro-sqlite';
+import uuid from 'react-native-uuid';
+
+export interface CheckInLocation {
+  latitude: number;
+  longitude: number;
+}
+
+export interface CheckInOutboxItem {
+  clientGeneratedId: string;
+  timestamp: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface CheckInOutbox {
+  initialize(): Promise<void>;
+  enqueue(item: CheckInOutboxItem): Promise<void>;
+  pending(): Promise<CheckInOutboxItem[]>;
+  remove(clientGeneratedId: string): Promise<void>;
+  updateLocation?(clientGeneratedId: string, location: CheckInLocation): Promise<void>;
+}
+
+type OutboxRow = {
+  client_generated_id: string;
+  timestamp: string;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+export class NitroCheckInOutbox implements CheckInOutbox {
+  private database?: NitroSQLiteConnection;
+
+  async initialize(): Promise<void> {
+    if (this.database) return;
+    // Lazy loading keeps Jest and any pre-native bootstrap path from touching the
+    // HybridObject before React Native has installed native modules.
+    const {open} = require('react-native-nitro-sqlite') as typeof import('react-native-nitro-sqlite');
+    this.database = open({name: 'damdam-safety.sqlite'});
+    await this.database.executeAsync(
+      `CREATE TABLE IF NOT EXISTS checkin_outbox (
+        client_generated_id TEXT PRIMARY KEY NOT NULL,
+        timestamp TEXT NOT NULL,
+        latitude REAL,
+        longitude REAL
+      )`,
+    );
+  }
+
+  private async db(): Promise<NitroSQLiteConnection> {
+    await this.initialize();
+    if (!this.database) throw new Error('check-in outbox unavailable');
+    return this.database;
+  }
+
+  async enqueue(item: CheckInOutboxItem): Promise<void> {
+    const database = await this.db();
+    await database.executeAsync(
+      `INSERT OR IGNORE INTO checkin_outbox
+       (client_generated_id, timestamp, latitude, longitude)
+       VALUES (?, ?, ?, ?)`,
+      [
+        item.clientGeneratedId,
+        item.timestamp,
+        item.latitude ?? null,
+        item.longitude ?? null,
+      ],
+    );
+  }
+
+  async pending(): Promise<CheckInOutboxItem[]> {
+    const database = await this.db();
+    const result = await database.executeAsync<OutboxRow>(
+      `SELECT client_generated_id, timestamp, latitude, longitude
+       FROM checkin_outbox ORDER BY timestamp ASC`,
+    );
+    return result.rows._array.map(row => ({
+      clientGeneratedId: row.client_generated_id,
+      timestamp: row.timestamp,
+      ...(row.latitude === null
+        ? {}
+        : {latitude: Number(row.latitude), longitude: Number(row.longitude)}),
+    }));
+  }
+
+  async remove(clientGeneratedId: string): Promise<void> {
+    const database = await this.db();
+    await database.executeAsync(
+      'DELETE FROM checkin_outbox WHERE client_generated_id = ?',
+      [clientGeneratedId],
+    );
+  }
+
+  async updateLocation(
+    clientGeneratedId: string,
+    location: CheckInLocation,
+  ): Promise<void> {
+    const database = await this.db();
+    await database.executeAsync(
+      `UPDATE checkin_outbox SET latitude = ?, longitude = ?
+       WHERE client_generated_id = ?`,
+      [location.latitude, location.longitude, clientGeneratedId],
+    );
+  }
+}
+
+export class CheckInSyncService {
+  private syncing?: Promise<number>;
+
+  constructor(
+    private readonly outbox: CheckInOutbox,
+    private readonly send: (item: CheckInOutboxItem) => Promise<unknown>,
+    private readonly onChanged: (pending: CheckInOutboxItem[]) => void = () => undefined,
+  ) {}
+
+  async initialize(): Promise<CheckInOutboxItem[]> {
+    await this.outbox.initialize();
+    const rows = await this.outbox.pending();
+    this.onChanged(rows);
+    return rows;
+  }
+
+  async capture(
+    location?: CheckInLocation,
+    tappedAt = new Date(),
+  ): Promise<CheckInOutboxItem> {
+    await this.outbox.initialize();
+    const item: CheckInOutboxItem = {
+      clientGeneratedId: String(uuid.v4()),
+      timestamp: tappedAt.toISOString(),
+      ...location,
+    };
+    await this.outbox.enqueue(item);
+    this.onChanged(await this.outbox.pending());
+    return item;
+  }
+
+  async enrichLocation(
+    clientGeneratedId: string,
+    location: CheckInLocation,
+  ): Promise<void> {
+    await this.outbox.updateLocation?.(clientGeneratedId, location);
+    this.onChanged(await this.outbox.pending());
+  }
+
+  async sync(state: NetInfoState): Promise<number> {
+    if (!state.isConnected || state.isInternetReachable === false) return 0;
+    if (this.syncing) return this.syncing;
+    this.syncing = this.performSync();
+    try {
+      return await this.syncing;
+    } finally {
+      this.syncing = undefined;
+    }
+  }
+
+  private async performSync(): Promise<number> {
+    let sent = 0;
+    for (const item of await this.outbox.pending()) {
+      try {
+        await this.send(item);
+        await this.outbox.remove(item.clientGeneratedId);
+        sent += 1;
+      } catch {
+        break;
+      }
+    }
+    this.onChanged(await this.outbox.pending());
+    return sent;
+  }
+
+  start(networkState: () => NetInfoState): () => void {
+    const timer = setInterval(() => {
+      this.sync(networkState()).catch(() => undefined);
+    }, 30_000);
+    return () => clearInterval(timer);
+  }
+
+  async connectivityChanged(state: NetInfoState): Promise<number> {
+    return this.sync(state);
+  }
+
+  async isPending(clientGeneratedId: string): Promise<boolean> {
+    return (await this.outbox.pending()).some(
+      item => item.clientGeneratedId === clientGeneratedId,
+    );
+  }
+}

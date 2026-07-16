@@ -78,7 +78,9 @@ it('AC-15.4: retries every 30 seconds and immediately when connectivity returns'
   const service = new CheckInSyncService(outbox, send);
   await service.capture(undefined, new Date('2026-07-13T08:05:00Z'));
 
-  const stop = service.start(() => offline);
+  await service.sync(offline);
+  expect(send).not.toHaveBeenCalled();
+  const stop = service.start(() => online);
   await jest.advanceTimersByTimeAsync(30_000);
   expect(send).toHaveBeenCalledTimes(1);
   expect(await outbox.pending()).toHaveLength(1);
@@ -105,4 +107,3 @@ it('AC-15.4: response loss retries the identical client_generated_id', async () 
   expect(ids).toHaveLength(2);
   expect(new Set(ids).size).toBe(1);
 });
-

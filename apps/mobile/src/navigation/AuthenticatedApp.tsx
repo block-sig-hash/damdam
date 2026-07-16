@@ -1,5 +1,10 @@
 import DeviceInfo from 'react-native-device-info';
-import React, { useEffect, useState } from 'react';
+import NetInfo, {
+  NetInfoStateType,
+  type NetInfoState,
+} from '@react-native-community/netinfo';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {getRecentCheckIns, sendCheckIn} from '../api/checkInClient';
 import { getEsim, type EsimProfile } from '../api/esimClient';
 import { getPackageStatus } from '../api/paymentClient';
 import { EsimActivationFlow } from '../screens/EsimActivation/EsimActivationFlow';
@@ -8,6 +13,9 @@ import { HomeDashboardScreen } from '../screens/HomeDashboard/HomeDashboardScree
 import { ActiveCallScreen } from '../screens/ActiveCall/ActiveCallScreen';
 import { DialPadScreen } from '../screens/DialPad/DialPadScreen';
 import type { VoiceCallSession } from '../services/voiceGateway';
+import {configureCheckInBackgroundSync} from '../services/checkInBackground';
+import {optionalCheckInLocation} from '../services/checkInLocation';
+import {CheckInSyncService, NitroCheckInOutbox} from '../services/checkInOutbox';
 import {
   optIntoArrivalGeofence,
   registerPushInstallation,
@@ -37,6 +45,53 @@ export function AuthenticatedApp({
   const [activeCall, setActiveCall] = useState<VoiceCallSession>();
   const [recipientName, setRecipientName] = useState<string>();
   const [balanceRefreshBaseline, setBalanceRefreshBaseline] = useState<number>();
+  const [queuedCheckIns, setQueuedCheckIns] = useState(0);
+  const [lastCheckInAt, setLastCheckInAt] = useState<string | null>(null);
+  const networkState = useRef<NetInfoState>({
+    type: NetInfoStateType.unknown,
+    isConnected: false,
+    isInternetReachable: null,
+    details: null,
+  });
+  const checkIns = useMemo(
+    () =>
+      new CheckInSyncService(
+        new NitroCheckInOutbox(),
+        item => sendCheckIn(accessToken, item),
+        pending => setQueuedCheckIns(pending.length),
+      ),
+    [accessToken],
+  );
+
+  useEffect(() => {
+    let active = true;
+    let stopTimer: () => void = () => undefined;
+    let stopBackground: () => void = () => undefined;
+    checkIns.initialize().then(rows => {
+      if (!active) return;
+      if (rows.length) setLastCheckInAt(rows[rows.length - 1].timestamp);
+      stopTimer = checkIns.start(() => networkState.current);
+    }).catch(() => undefined);
+    getRecentCheckIns(accessToken)
+      .then(rows => active && rows.length && setLastCheckInAt(rows[0].timestamp))
+      .catch(() => undefined);
+    const unsubscribe = NetInfo.addEventListener(state => {
+      networkState.current = state;
+      checkIns.connectivityChanged(state).catch(() => undefined);
+    });
+    configureCheckInBackgroundSync(checkIns)
+      .then(stop => {
+        if (active) stopBackground = stop;
+        else stop();
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      unsubscribe();
+      stopTimer();
+      stopBackground();
+    };
+  }, [accessToken, checkIns]);
 
   useEffect(() => {
     registerPushInstallation(accessToken).catch(() => undefined);
@@ -147,6 +202,19 @@ export function AuthenticatedApp({
       remainingDataGb={remainingDataGb}
       onActivateEsim={() => packageId && setScreen('activation')}
       onOpenCall={() => setScreen('dial')}
+      onCheckIn={async () => {
+        const tappedAt = new Date();
+        const item = await checkIns.capture(undefined, tappedAt);
+        setLastCheckInAt(item.timestamp);
+        const location = await optionalCheckInLocation();
+        if (location) await checkIns.enrichLocation(item.clientGeneratedId, location);
+        const current = await NetInfo.fetch();
+        networkState.current = current;
+        await checkIns.sync(current);
+        return (await checkIns.isPending(item.clientGeneratedId)) ? 'queued' : 'sent';
+      }}
+      lastCheckInAt={lastCheckInAt}
+      queuedCheckIns={queuedCheckIns}
     />
   );
 }

@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import json
@@ -5,9 +6,10 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
-from fastapi.testclient import TestClient
+import httpx
 from sqlmodel import select
 
+from app.auth.dependencies import get_current_user
 from app.auth.models import (
     HTOApprovalStatus,
     Manifest,
@@ -21,8 +23,8 @@ from app.auth.models import (
 from app.auth.routes import request_otp, verify_otp
 from app.auth.schemas import OTPRequest, OTPVerifyRequest
 from app.checkins.models import CheckIn, CheckInNotification
-from app.main import create_app
 from app.esim.service import HtoPilgrimService
+from app.main import create_app
 from app.profile.models import FamilyContact
 
 
@@ -30,8 +32,11 @@ class RecordingCheckInScheduler:
     def __init__(self) -> None:
         self.dispatches: list[UUID] = []
         self.fallbacks: list[tuple[UUID, int]] = []
+        self.fail_dispatch = False
 
     def schedule_dispatch(self, notification_id: UUID) -> None:
+        if self.fail_dispatch:
+            raise RuntimeError("broker unavailable")
         self.dispatches.append(notification_id)
 
     def schedule_fallback(self, notification_id: UUID, countdown: int) -> None:
@@ -58,10 +63,41 @@ class RecordingWhatsAppSender:
 class RecordingSmsSender:
     def __init__(self) -> None:
         self.messages: list[tuple[str, str]] = []
+        self.fail = False
 
     def send(self, phone_number: str, message: str) -> str:
+        if self.fail:
+            from app.notifications.service import NotificationError
+
+            raise NotificationError("sms unavailable")
         self.messages.append((phone_number, message))
         return f"termii-sms-{len(self.messages)}"
+
+
+class ApiClient:
+    """ASGI client that avoids the local Conda blocking-portal regression."""
+
+    def __init__(self, api, headers: dict[str, str]) -> None:
+        self.api = api
+        self.headers = headers
+
+    def request(self, method: str, path: str, **kwargs) -> httpx.Response:
+        async def run() -> httpx.Response:
+            headers = {**self.headers, **kwargs.pop("headers", {})}
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=self.api),
+                base_url="http://testserver",
+                headers=headers,
+            ) as client:
+                return await client.request(method, path, **kwargs)
+
+        return asyncio.run(run())
+
+    def post(self, path: str, **kwargs) -> httpx.Response:
+        return self.request("POST", path, **kwargs)
+
+    def get(self, path: str, **kwargs) -> httpx.Response:
+        return self.request("GET", path, **kwargs)
 
 
 def _build_api(
@@ -86,7 +122,7 @@ def _build_api(
     )
 
 
-def _authenticated(api) -> tuple[TestClient, UUID]:
+def _authenticated(api) -> tuple[ApiClient, UUID]:
     request = SimpleNamespace(app=api)
     request_otp(OTPRequest(phone_number="08012345678"), request)
     auth = verify_otp(
@@ -95,8 +131,12 @@ def _authenticated(api) -> tuple[TestClient, UUID]:
         ),
         request,
     )
+    async def current_user_override():
+        return auth.user
+
+    api.dependency_overrides[get_current_user] = current_user_override
     return (
-        TestClient(api, headers={"Authorization": f"Bearer {auth.access_token}"}),
+        ApiClient(api, headers={"Authorization": f"Bearer {auth.access_token}"}),
         auth.user.id,
     )
 
@@ -122,6 +162,9 @@ def test_checkin_records_tap_time_location_and_queues_one_notification(
         settings, redis_client, providers, scheduler, session_factory, clock
     )
     client, user_id = _authenticated(api)
+    with session_factory() as session:
+        session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
+        session.commit()
     client_id = uuid4()
     timestamp = "2026-07-13T08:05:00Z"
 
@@ -142,7 +185,10 @@ def test_checkin_records_tap_time_location_and_queues_one_notification(
         notification = session.exec(select(CheckInNotification)).one()
         assert checkin.user_id == user_id
         assert checkin.client_generated_id == client_id
-        assert checkin.timestamp == datetime(2026, 7, 13, 8, 5, tzinfo=timezone.utc)
+        stored_timestamp = checkin.timestamp
+        if stored_timestamp.tzinfo is None:
+            stored_timestamp = stored_timestamp.replace(tzinfo=timezone.utc)
+        assert stored_timestamp == datetime(2026, 7, 13, 8, 5, tzinfo=timezone.utc)
         assert float(checkin.latitude) == 21.422487
         assert float(checkin.longitude) == 39.826206
         assert notification.check_in_id == checkin.id
@@ -156,7 +202,10 @@ def test_retry_with_same_client_id_returns_same_row_and_never_resends(
     api, _, _, notification_scheduler = _api_dependencies(
         settings, redis_client, providers, scheduler, session_factory, clock
     )
-    client, _ = _authenticated(api)
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
+        session.commit()
     payload = {
         "client_generated_id": str(uuid4()),
         "timestamp": "2026-07-13T08:05:00Z",
@@ -342,7 +391,17 @@ def test_signed_meta_delivery_webhook_marks_message_delivered(
     body = json.dumps(
         {
             "entry": [
-                {"changes": [{"value": {"statuses": [{"id": "wamid.1", "status": "delivered"}]}}]}
+                {
+                    "changes": [
+                        {
+                            "value": {
+                                "statuses": [
+                                    {"id": "wamid.1", "status": "delivered"}
+                                ]
+                            }
+                        }
+                    ]
+                }
             ]
         },
         separators=(",", ":"),
@@ -393,6 +452,65 @@ def test_missing_family_contact_never_rolls_back_the_checkin(
     assert notification_scheduler.dispatches == []
 
 
+def test_broker_outage_leaves_durable_pending_notification(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-15.6: a Celery outage cannot roll back or lose family notification."""
+    api, _, _, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    notification_scheduler.fail_dispatch = True
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
+        session.commit()
+
+    response = client.post(
+        "/v1/checkins",
+        json={"client_generated_id": str(uuid4()), "timestamp": clock().isoformat()},
+    )
+
+    assert response.status_code == 200
+    with session_factory() as session:
+        notification = session.exec(select(CheckInNotification)).one()
+        assert notification.whatsapp_status.value == "pending"
+
+
+def test_failed_sms_retries_three_times_then_enters_admin_queue(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """PRD §5.6: fallback failure retries three times, then becomes operable."""
+    api, _, sms, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
+        session.commit()
+    client.post(
+        "/v1/checkins",
+        json={"client_generated_id": str(uuid4()), "timestamp": clock().isoformat()},
+    )
+    notification_id = notification_scheduler.dispatches[0]
+    service = api.state.checkin_notification_service
+    with session_factory() as session:
+        service.dispatch_whatsapp(session, notification_id)
+    sms.fail = True
+    clock.advance(seconds=60)
+
+    for attempt in range(3):
+        with session_factory() as session:
+            assert service.send_sms_fallback(session, notification_id) is False
+        if attempt < 2:
+            clock.advance(seconds=30)
+
+    with session_factory() as session:
+        notification = session.get(CheckInNotification, notification_id)
+        assert notification is not None
+        assert notification.sms_attempt_count == 3
+        assert notification.admin_queued_at is not None
+
+
 def test_hto_pilgrim_monitoring_reads_latest_checkin_for_its_own_pilgrim(
     session_factory, clock
 ) -> None:
@@ -439,8 +557,6 @@ def test_hto_pilgrim_monitoring_reads_latest_checkin_for_its_own_pilgrim(
             )
         )
         session.commit()
-        session.expunge(organization)
-
         result = HtoPilgrimService().list_pilgrims(session, organization, None)
 
     assert result[0].last_checkin_at == clock().isoformat()

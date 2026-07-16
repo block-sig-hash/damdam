@@ -1,5 +1,5 @@
 from collections.abc import Callable, Mapping
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
 from uuid import UUID
 
@@ -13,6 +13,7 @@ from app.auth.models import (
     PricingTier,
     User,
 )
+from app.checkins.models import CheckIn
 from app.config import Settings
 from app.esim.models import (
     DeviceCompatibilityEvent,
@@ -345,7 +346,15 @@ class HtoPilgrimService:
 
         user_ids = {p.user_id for p in pilgrims if p.user_id is not None}
         esim_statuses: dict[UUID, str] = {}
+        last_checkins: dict[UUID, datetime] = {}
         if user_ids:
+            checkins = session.exec(
+                select(CheckIn).where(col(CheckIn.user_id).in_(user_ids))
+            ).all()
+            for checkin in checkins:
+                current = last_checkins.get(checkin.user_id)
+                if current is None or checkin.timestamp > current:
+                    last_checkins[checkin.user_id] = checkin.timestamp
             profiles = session.exec(
                 select(EsimProfile)
                 .join(Package, col(Package.id) == col(EsimProfile.package_id))
@@ -387,6 +396,17 @@ class HtoPilgrimService:
                 ),
                 activation_status=(
                     "activated" if pilgrim.user_id is not None else "not_activated"
+                ),
+                last_checkin_at=(
+                    (
+                        last_checkins[pilgrim.user_id]
+                        if last_checkins[pilgrim.user_id].tzinfo is not None
+                        else last_checkins[pilgrim.user_id].replace(
+                            tzinfo=timezone.utc
+                        )
+                    ).isoformat()
+                    if pilgrim.user_id in last_checkins
+                    else None
                 ),
             )
             for pilgrim in pilgrims

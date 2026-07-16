@@ -169,7 +169,7 @@ deserves testing rigor beyond the general coverage targets in
   reflects "queued" state correctly (AC-15.4, AC-16.3), then
   disable airplane mode and confirm sync completes within the
   specified retry interval
-- **Force-quit during queued state:** trigger SOS while offline,
+- **Force-quit during queued state:** trigger check-in/SOS while offline,
   force-quit the app before connectivity returns, relaunch, confirm
   the queued SOS is still present and still attempts to sync
   (AC-24.4 — "queue persists across app restarts and device
@@ -198,6 +198,10 @@ deserves testing rigor beyond the general coverage targets in
   underlying check-in/SOS record itself is unaffected by the
   notification failure (per the explicit failure-mode note in
   `prd.md` §5.6)
+- **WhatsApp delivery-time boundary:** confirm an accepted WhatsApp with no
+  delivery receipt sends no SMS at 59 seconds and sends exactly one at 60
+  seconds; a signed `delivered` webhook before the deadline must suppress it.
+  Unsigned and malformed Meta status webhooks must not suppress fallback.
 
 ### 14.4.2 Pre-Hajj-season load and chaos testing
 
@@ -226,6 +230,29 @@ one device at a time:
   during the real Hajj season — walk through "a pilgrim's SOS
   doesn't seem to have reached anyone, what do you actually do
   right now" as a human process question, not just a system test
+
+### 14.4.3 US-15 automated evidence and OS scheduling boundary
+
+The US-15 feature PR must include deterministic tests that recreate the mobile
+sync service over the same SQLite-backed rows (process-restart simulation),
+retry the identical `client_generated_id` after a lost response, and prove the
+server creates one `check_ins` row and one `check_in_notifications` row under a
+real-PostgreSQL concurrent retry. The foreground retry interval is exactly 30
+seconds and a connectivity-change event triggers an immediate attempt.
+
+The maintained native modules selected for this implementation are
+[`react-native-nitro-sqlite`](https://github.com/margelo/react-native-nitro-sqlite)
+for the durable outbox, React Native Community
+[`geolocation`](https://github.com/michalchudziak/react-native-geolocation) for
+optional tap-time GPS, and Transistor Software
+[`react-native-background-fetch`](https://github.com/transistorsoft/react-native-background-fetch)
+for OS-assisted Android terminate/reboot recovery and iOS background fetch. The
+last mechanism does not make a false timing promise: iOS controls background
+wakeups (approximately 15-minute minimum), and Android schedulers may defer
+work. AC-15.4's exact 30-second cadence is deterministic while the JS runtime is
+alive; SQLite persistence, connectivity-triggered sync, app-start recovery, and
+OS-assisted background work protect process-death cases. The full force-quit /
+reboot matrix in §14.3 remains mandatory real-device evidence before pilot.
 
 ---
 
