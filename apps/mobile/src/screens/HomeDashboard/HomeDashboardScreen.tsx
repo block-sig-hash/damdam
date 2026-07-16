@@ -1,4 +1,4 @@
-import { CheckCircle, Phone } from 'phosphor-react-native';
+import { CheckCircle, Clock, Phone, WarningCircle } from 'phosphor-react-native';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { shouldShowDateActivationBanner } from '../../services/arrivalPrompts';
@@ -34,6 +34,7 @@ export function HomeDashboardScreen({
   const lastCheckInTime = lastCheckInAt ? new Date(lastCheckInAt).getTime() : 0;
   const rateLimited =
     lastCheckInTime > 0 && now.getTime() - lastCheckInTime < 15 * 60 * 1000;
+  const checkInForeground = rateLimited ? color.gray500 : color.white;
   const showBanner =
     !dismissedThisSession &&
     shouldShowDateActivationBanner(departureDate, esimStatus, now);
@@ -65,8 +66,12 @@ export function HomeDashboardScreen({
             (!onCheckIn || checkingIn || rateLimited) && styles.disabledButton,
             pressed && styles.pressedButton,
           ]}>
-          <CheckCircle color={color.white} size={24} weight="bold" />
-          <Text style={styles.checkInButtonLabel}>
+          <CheckCircle color={checkInForeground} size={24} weight="bold" />
+          <Text
+            style={[
+              styles.checkInButtonLabel,
+              rateLimited && styles.disabledButtonLabel,
+            ]}>
             {checkingIn ? 'Saving check-in…' : "I'm okay"}
           </Text>
         </Pressable>
@@ -84,12 +89,26 @@ export function HomeDashboardScreen({
                 ? styles.queueBanner
                 : styles.errorBanner
           }>
-          <Text style={styles.bannerText}>{checkInFeedback}</Text>
+          {checkInFeedback === 'Check-in sent' ? (
+            <CheckCircle color={color.info500} size={24} weight="bold" />
+          ) : checkInFeedback.includes('queued') ? (
+            <Clock color={color.gray700} size={24} weight="bold" />
+          ) : (
+            <WarningCircle color={color.error700} size={24} weight="bold" />
+          )}
+          <Text
+            style={[
+              styles.bannerText,
+              checkInFeedback.includes('queued') && styles.queueBannerText,
+            ]}>
+            {checkInFeedback}
+          </Text>
         </View>
       ) : null}
       {queuedCheckIns > 0 ? (
         <View style={styles.queueBanner} testID="queued-events-indicator">
-          <Text style={styles.bannerText}>
+          <Clock color={color.gray700} size={24} weight="bold" />
+          <Text style={[styles.bannerText, styles.queueBannerText]}>
             {queuedCheckIns} {queuedCheckIns === 1 ? 'check-in' : 'check-ins'} waiting to send
           </Text>
         </View>
@@ -166,25 +185,36 @@ const styles = StyleSheet.create({
     color: color.white,
   },
   disabledButton: { backgroundColor: color.gray300 },
+  disabledButtonLabel: { color: color.gray500 },
   rateLimitHint: { ...typography.caption, color: color.gray600 },
   pressedButton: { opacity: 0.92, transform: [{scale: 0.98}] },
   successBanner: {
-    backgroundColor: color.success100,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.space3,
+    backgroundColor: color.info100,
     borderLeftWidth: 4,
-    borderLeftColor: color.success500,
+    borderLeftColor: color.info500,
     padding: space.space4,
   },
   queueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.space3,
     backgroundColor: color.gray100,
     padding: space.space4,
   },
   errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.space3,
     backgroundColor: color.error100,
     borderLeftWidth: 4,
     borderLeftColor: color.error700,
     padding: space.space4,
   },
   bannerText: { ...typography.body, color: color.gray900 },
+  queueBannerText: { color: color.gray700 },
   lastCheckIn: { ...typography.body, color: color.gray600 },
   packageCard: {
     backgroundColor: color.white,

@@ -20,6 +20,14 @@ class PersistentTestOutbox implements CheckInOutbox {
       row => row.clientGeneratedId !== clientGeneratedId,
     );
   }
+  async updateLocation(
+    clientGeneratedId: string,
+    location: {latitude: number; longitude: number},
+  ): Promise<void> {
+    PersistentTestOutbox.rows = PersistentTestOutbox.rows.map(row =>
+      row.clientGeneratedId === clientGeneratedId ? {...row, ...location} : row,
+    );
+  }
 }
 
 const online = {isConnected: true, isInternetReachable: true} as NetInfoState;
@@ -106,4 +114,28 @@ it('AC-15.4: response loss retries the identical client_generated_id', async () 
 
   expect(ids).toHaveLength(2);
   expect(new Set(ids).size).toBe(1);
+});
+
+it('AC-15.2/15.7: connectivity cannot send a row while GPS enrichment is pending', async () => {
+  const send = jest.fn().mockResolvedValue(undefined);
+  const service = new CheckInSyncService(new PersistentTestOutbox(), send);
+  const item = await service.capture(
+    undefined,
+    new Date('2026-07-13T08:05:00Z'),
+    true,
+  );
+
+  await service.connectivityChanged(online);
+  expect(send).not.toHaveBeenCalled();
+
+  await service.enrichLocation(item.clientGeneratedId, {
+    latitude: 21.422487,
+    longitude: 39.826206,
+  });
+  service.releaseEnrichment(item.clientGeneratedId);
+  await service.connectivityChanged(online);
+
+  expect(send).toHaveBeenCalledWith(
+    expect.objectContaining({latitude: 21.422487, longitude: 39.826206}),
+  );
 });

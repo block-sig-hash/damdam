@@ -238,7 +238,10 @@ sync service over the same SQLite-backed rows (process-restart simulation),
 retry the identical `client_generated_id` after a lost response, and prove the
 server creates one `check_ins` row and one `check_in_notifications` row under a
 real-PostgreSQL concurrent retry. The foreground retry interval is exactly 30
-seconds and a connectivity-change event triggers an immediate attempt.
+seconds and a connectivity-change event triggers an immediate attempt. A newly
+captured row is held from sync for at most two seconds while contextual GPS is
+resolved, preventing a connectivity event from racing location enrichment while
+still leaving at least three seconds of AC-15.3's connected-send budget.
 
 The maintained native modules selected for this implementation are
 [`react-native-nitro-sqlite`](https://github.com/margelo/react-native-nitro-sqlite)

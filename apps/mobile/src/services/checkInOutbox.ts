@@ -107,6 +107,7 @@ export class NitroCheckInOutbox implements CheckInOutbox {
 
 export class CheckInSyncService {
   private syncing?: Promise<number>;
+  private readonly heldForEnrichment = new Set<string>();
 
   constructor(
     private readonly outbox: CheckInOutbox,
@@ -124,6 +125,7 @@ export class CheckInSyncService {
   async capture(
     location?: CheckInLocation,
     tappedAt = new Date(),
+    holdForEnrichment = false,
   ): Promise<CheckInOutboxItem> {
     await this.outbox.initialize();
     const item: CheckInOutboxItem = {
@@ -131,7 +133,13 @@ export class CheckInSyncService {
       timestamp: tappedAt.toISOString(),
       ...location,
     };
-    await this.outbox.enqueue(item);
+    if (holdForEnrichment) this.heldForEnrichment.add(item.clientGeneratedId);
+    try {
+      await this.outbox.enqueue(item);
+    } catch (error) {
+      this.heldForEnrichment.delete(item.clientGeneratedId);
+      throw error;
+    }
     this.onChanged(await this.outbox.pending());
     return item;
   }
@@ -142,6 +150,10 @@ export class CheckInSyncService {
   ): Promise<void> {
     await this.outbox.updateLocation?.(clientGeneratedId, location);
     this.onChanged(await this.outbox.pending());
+  }
+
+  releaseEnrichment(clientGeneratedId: string): void {
+    this.heldForEnrichment.delete(clientGeneratedId);
   }
 
   async sync(state: NetInfoState): Promise<number> {
@@ -158,6 +170,7 @@ export class CheckInSyncService {
   private async performSync(): Promise<number> {
     let sent = 0;
     for (const item of await this.outbox.pending()) {
+      if (this.heldForEnrichment.has(item.clientGeneratedId)) continue;
       try {
         await this.send(item);
         await this.outbox.remove(item.clientGeneratedId);

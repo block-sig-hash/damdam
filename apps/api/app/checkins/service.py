@@ -177,7 +177,9 @@ class CheckInNotificationService:
         return checkin, user, contact
 
     @classmethod
-    def _message_parts(cls, checkin: CheckIn, user: User) -> tuple[str, str | None]:
+    def _message_parts(
+        cls, checkin: CheckIn, user: User
+    ) -> tuple[str, str, str | None]:
         name = f"{user.first_name} {user.last_name}".strip() or "Your family member"
         timestamp = checkin.timestamp
         if timestamp.tzinfo is None:
@@ -191,7 +193,7 @@ class CheckInNotificationService:
                 "https://www.google.com/maps?q="
                 f"{float(checkin.latitude):.6f},{float(checkin.longitude):.6f}"
             )
-        return f"{name}|{checked_in_at}", maps_url
+        return name, checked_in_at, maps_url
 
     def dispatch_whatsapp(self, session: Session, notification_id: UUID) -> bool:
         notification = session.exec(
@@ -212,8 +214,7 @@ class CheckInNotificationService:
             session.commit()
             return False
         checkin, user, contact = context
-        combined, maps_url = self._message_parts(checkin, user)
-        name, checked_in_at = combined.split("|", maxsplit=1)
+        name, checked_in_at, maps_url = self._message_parts(checkin, user)
         notification.whatsapp_attempted_at = self.clock()
         try:
             message_id = self.whatsapp.send_checkin(
@@ -276,8 +277,7 @@ class CheckInNotificationService:
         if context is None:
             return False
         checkin, user, contact = context
-        combined, maps_url = self._message_parts(checkin, user)
-        name, checked_in_at = combined.split("|", maxsplit=1)
+        name, checked_in_at, maps_url = self._message_parts(checkin, user)
         message = f"{name} checked in safely at {checked_in_at}. All is well."
         if maps_url:
             message = f"{message} {maps_url}"

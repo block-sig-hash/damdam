@@ -204,10 +204,16 @@ export function AuthenticatedApp({
       onOpenCall={() => setScreen('dial')}
       onCheckIn={async () => {
         const tappedAt = new Date();
-        const item = await checkIns.capture(undefined, tappedAt);
+        const item = await checkIns.capture(undefined, tappedAt, true);
         setLastCheckInAt(item.timestamp);
-        const location = await optionalCheckInLocation();
-        if (location) await checkIns.enrichLocation(item.clientGeneratedId, location);
+        try {
+          const location = await optionalCheckInLocation();
+          if (location) {
+            await checkIns.enrichLocation(item.clientGeneratedId, location);
+          }
+        } finally {
+          checkIns.releaseEnrichment(item.clientGeneratedId);
+        }
         const current = await NetInfo.fetch();
         networkState.current = current;
         await checkIns.sync(current);
