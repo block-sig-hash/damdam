@@ -38,15 +38,25 @@ describe('paymentClient', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ status: 'active', data_gb_remaining: 10, pstn_minutes_remaining: 90 }),
+        json: async () => ({
+          status: 'active',
+          data_gb_total: 10,
+          data_gb_remaining: 2,
+          pstn_minutes_total: 90,
+          pstn_minutes_remaining: 4,
+        }),
       });
 
     await expect(initializePurchase('token', 'standard')).rejects.toThrow(
       'Both payment services are unavailable.',
     );
     await expect(getPackageStatus('token', 'package-1')).resolves.toEqual(
-      expect.objectContaining({ status: 'active' }),
+      expect.objectContaining({
+        data_gb_total: 10,
+        data_gb_remaining: 2,
+        pstn_minutes_total: 90,
+        pstn_minutes_remaining: 4,
+      }),
     );
   });
 });
-

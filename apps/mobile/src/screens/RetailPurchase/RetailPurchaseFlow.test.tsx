@@ -50,7 +50,10 @@ describe('RetailPurchaseFlow', () => {
       processor_reference: 'reference-1',
       checkout_url: 'https://checkout.example/reference-1',
     });
-    mockStatus.mockResolvedValue({ status: 'pending', data_gb_remaining: 0, pstn_minutes_remaining: 0 });
+    mockStatus.mockResolvedValue({
+      status: 'pending', data_gb_total: 10, data_gb_remaining: 0,
+      pstn_minutes_total: 90, pstn_minutes_remaining: 0,
+    });
 
     await render(<RetailPurchaseFlow accessToken="token" />);
     await act(async () => fireEvent.press(await screen.findByTestId('tier-Standard')));
@@ -68,7 +71,10 @@ describe('RetailPurchaseFlow', () => {
       processor_reference: 'reference-1',
       checkout_url: 'https://checkout.example/reference-1',
     });
-    mockStatus.mockResolvedValue({ status: 'active', data_gb_remaining: 10, pstn_minutes_remaining: 90 });
+    mockStatus.mockResolvedValue({
+      status: 'active', data_gb_total: 10, data_gb_remaining: 10,
+      pstn_minutes_total: 90, pstn_minutes_remaining: 90,
+    });
 
     await render(<RetailPurchaseFlow accessToken="token" />);
     await act(async () => fireEvent.press(await screen.findByTestId('tier-Standard')));
@@ -86,7 +92,10 @@ describe('RetailPurchaseFlow', () => {
         processor_reference: 'reference-1',
         checkout_url: 'https://checkout.example/reference-1',
       });
-    mockStatus.mockResolvedValue({ status: 'pending', data_gb_remaining: 0, pstn_minutes_remaining: 0 });
+    mockStatus.mockResolvedValue({
+      status: 'pending', data_gb_total: 6, data_gb_remaining: 0,
+      pstn_minutes_total: 45, pstn_minutes_remaining: 0,
+    });
 
     await render(<RetailPurchaseFlow accessToken="token" />);
     await act(async () => fireEvent.press(await screen.findByTestId('tier-Basic')));
@@ -105,7 +114,10 @@ describe('RetailPurchaseFlow', () => {
       processor_reference: 'reference-1',
       checkout_url: 'https://checkout.example/reference-1',
     });
-    mockStatus.mockResolvedValue({ status: 'pending', data_gb_remaining: 0, pstn_minutes_remaining: 0 });
+    mockStatus.mockResolvedValue({
+      status: 'pending', data_gb_total: 3, data_gb_remaining: 0,
+      pstn_minutes_total: 20, pstn_minutes_remaining: 0,
+    });
 
     await render(<RetailPurchaseFlow accessToken="token" />);
     await act(async () => fireEvent.press(await screen.findByTestId('tier-Starter')));
@@ -124,8 +136,14 @@ describe('RetailPurchaseFlow', () => {
       checkout_url: 'https://checkout.example/reference-1',
     });
     mockStatus
-      .mockResolvedValueOnce({ status: 'pending', data_gb_remaining: 0, pstn_minutes_remaining: 0 })
-      .mockResolvedValueOnce({ status: 'active', data_gb_remaining: 10, pstn_minutes_remaining: 90 });
+      .mockResolvedValueOnce({
+        status: 'pending', data_gb_total: 10, data_gb_remaining: 0,
+        pstn_minutes_total: 90, pstn_minutes_remaining: 0,
+      })
+      .mockResolvedValueOnce({
+        status: 'active', data_gb_total: 10, data_gb_remaining: 10,
+        pstn_minutes_total: 90, pstn_minutes_remaining: 90,
+      });
 
     await render(<RetailPurchaseFlow accessToken="token" />);
     await act(async () => fireEvent.press(await screen.findByTestId('tier-Standard')));

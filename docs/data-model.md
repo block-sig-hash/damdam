@@ -1305,3 +1305,18 @@ highlight, so a pilgrim's past resolved or cancelled alerts are not
 surfaced in this summary — that history remains queryable through
 `sos_alerts` directly if a future story needs it. No schema change; this
 is a query-only amendment to an already-existing field.
+
+## 6.29 Amendment — US-17 Exposes Purchased Balance Snapshots
+
+The `packages.data_gb_total` and `packages.pstn_minutes_total` columns have
+always been immutable snapshots copied from `pricing_tiers` at purchase time
+(§6.3). Mid-story review of US-17 found that the package-status API omitted
+both fields and returned only the mutable remaining values. That made the
+required percentage warning impossible to calculate correctly after reinstall
+or whenever the first Home refresh happened after usage had already occurred.
+
+`GET /packages/{id}/status` now returns both existing total fields alongside
+their corresponding remaining fields. This is a response-contract correction,
+not a schema migration: no stored shape, constraint, or snapshot semantics
+change. The numbering deliberately reserves §6.26–§6.28 for concurrent PR #70;
+its source changes do not touch the payment package endpoint.

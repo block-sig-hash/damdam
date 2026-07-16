@@ -433,3 +433,21 @@ handling; it is used for US-14. Device contacts use maintained
 [`react-native-contacts`](https://github.com/morenoh149/react-native-contacts)
 with `READ_CONTACTS`/Contacts-framework autolinking. No custom WebRTC, CallKit,
 ConnectionService, or contacts native bridge is justified or implemented.
+
+---
+
+## 14.10 Home Package Balance Verification — US-17
+
+US-17 must test the two distinct low-balance rules rather than applying one
+percentage formula to both resources:
+
+- data is healthy at exactly 20%, warning below 20%, and exhausted at zero;
+- PSTN voice is healthy at exactly 5 minutes, warning below 5 minutes, and
+  exhausted at zero, regardless of the percentage of purchased minutes left;
+- `GET /packages/{id}/status` returns the immutable purchase snapshots
+  (`data_gb_total`, `pstn_minutes_total`) with both remaining values, so the
+  data denominator is never inferred from the first balance a device observes;
+- the Home refresh timer performs a real status fetch at 60 seconds, while a
+  failed/offline refresh retains both cached balances;
+- the Home queued-events indicator is tested with check-in and SOS rows pending
+  at the same time, and reports their combined count.

@@ -49,7 +49,9 @@ async def package_status(
         package = service.package_status(session, user, package_id)
         return PackageStatusResponse(
             status=package.status.value,
+            data_gb_total=package.data_gb_total,
             data_gb_remaining=float(package.data_gb_remaining),
+            pstn_minutes_total=package.pstn_minutes_total,
             pstn_minutes_remaining=float(package.pstn_minutes_remaining),
         )
 

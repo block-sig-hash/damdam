@@ -5,7 +5,9 @@ import {useHomePackageStatus} from './useHomePackageStatus';
 
 const firstStatus: PackagePaymentStatus = {
   status: 'active',
+  data_gb_total: 10,
   data_gb_remaining: 4.25,
+  pstn_minutes_total: 90,
   pstn_minutes_remaining: 30,
 };
 
@@ -40,10 +42,30 @@ it('AC-17.2: refreshes both balances every 60 seconds', async () => {
   expect(fetchStatus).toHaveBeenCalledTimes(2);
   expect(result.current.balances).toMatchObject({
     remainingDataGb: 4,
-    dataTotalGb: 4.25,
+    dataTotalGb: 10,
     pstnMinutesRemaining: 29,
-    pstnMinutesTotal: 30,
+    pstnMinutesTotal: 90,
   });
+});
+
+it('AC-17.3: uses purchased totals rather than the first observed remainder', async () => {
+  const fetchStatus = jest.fn<Promise<PackagePaymentStatus>, []>().mockResolvedValue({
+    status: 'active',
+    data_gb_total: 10,
+    data_gb_remaining: 1.9,
+    pstn_minutes_total: 90,
+    pstn_minutes_remaining: 4,
+  });
+  const {result} = await renderHook(() =>
+    useHomePackageStatus('token', 'package-1', fetchStatus),
+  );
+
+  await waitFor(() => expect(result.current.balances).toMatchObject({
+    remainingDataGb: 1.9,
+    dataTotalGb: 10,
+    pstnMinutesRemaining: 4,
+    pstnMinutesTotal: 90,
+  }));
 });
 
 it('AC-17.6: hydrates cached data and minutes and retains them when offline', async () => {

@@ -2932,16 +2932,24 @@ components:
           - active
           - expired
           title: Status
+        data_gb_total:
+          type: integer
+          title: Data Gb Total
         data_gb_remaining:
           type: number
           title: Data Gb Remaining
+        pstn_minutes_total:
+          type: integer
+          title: Pstn Minutes Total
         pstn_minutes_remaining:
           type: number
           title: Pstn Minutes Remaining
       type: object
       required:
       - status
+      - data_gb_total
       - data_gb_remaining
+      - pstn_minutes_total
       - pstn_minutes_remaining
       title: PackageStatusResponse
     PaymentConfirmationResponse:

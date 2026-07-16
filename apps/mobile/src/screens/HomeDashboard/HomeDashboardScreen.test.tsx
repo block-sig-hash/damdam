@@ -1,7 +1,11 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import {Linking} from 'react-native';
-import {HomeDashboardScreen, getHomeBalanceTone} from './HomeDashboardScreen';
+import {
+  getBalanceProgressTone,
+  getHomeBalanceTone,
+  HomeDashboardScreen,
+} from './HomeDashboardScreen';
 
 const balanceProps = {
   remainingDataGb: 4.25,
@@ -148,6 +152,20 @@ it.each([
 ] as const)('AC-17.3/17.4: %s', (_label, dataPercent, minutes, tone) => {
   expect(getHomeBalanceTone(dataPercent, minutes)).toBe(tone);
 });
+
+it.each([
+  ['data at 20%', 'data', 20, 20, 'healthy'],
+  ['data below 20%', 'data', 19.99, 20, 'warning'],
+  ['data at zero', 'data', 0, 0, 'error'],
+  ['minutes at 5', 'minutes', 8, 5, 'healthy'],
+  ['minutes below 5', 'minutes', 80, 4.99, 'warning'],
+  ['minutes at zero', 'minutes', 80, 0, 'error'],
+] as const)(
+  'AC-17.3/17.4 progress color: %s',
+  (_label, kind, percent, remaining, tone) => {
+    expect(getBalanceProgressTone(kind, percent, remaining)).toBe(tone);
+  },
+);
 
 it('AC-17.3/17.4: renders warning and exhausted banners with exact boundaries', async () => {
   const view = await render(

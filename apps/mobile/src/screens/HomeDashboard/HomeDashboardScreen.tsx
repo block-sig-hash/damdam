@@ -205,7 +205,9 @@ export function HomeDashboardScreen({
           <Text style={styles.inactiveText}>Balance unavailable</Text>
         ) : (
           <BalanceProgress
+            kind="data"
             label="Mobile data"
+            remaining={remainingDataGb}
             value={`${remainingDataGb.toFixed(2)} GB remaining`}
             percent={dataPercent}
             testID="data-balance-progress"
@@ -215,7 +217,9 @@ export function HomeDashboardScreen({
           <Text style={styles.inactiveText}>Minutes balance unavailable</Text>
         ) : (
           <BalanceProgress
+            kind="minutes"
             label="Calling minutes"
+            remaining={pstnMinutesRemaining}
             value={`${formatMinutes(pstnMinutesRemaining)} minutes remaining`}
             percent={minutesPercent}
             testID="minutes-balance-progress"
@@ -267,9 +271,24 @@ function percentage(remaining: number | null, total: number | null): number {
   return Math.min(100, Math.max(0, (remaining / total) * 100));
 }
 
-function progressColor(percent: number): string {
-  if (percent < 5) return color.error700;
-  if (percent < 20) return color.warning500;
+export function getBalanceProgressTone(
+  kind: 'data' | 'minutes',
+  percent: number,
+  remaining: number,
+): BalanceTone {
+  if (remaining <= 0) return 'error';
+  if (kind === 'data' ? percent < 20 : remaining < 5) return 'warning';
+  return 'healthy';
+}
+
+function progressColor(
+  kind: 'data' | 'minutes',
+  percent: number,
+  remaining: number,
+): string {
+  const tone = getBalanceProgressTone(kind, percent, remaining);
+  if (tone === 'error') return color.error700;
+  if (tone === 'warning') return color.warning500;
   return color.success500;
 }
 
@@ -287,12 +306,16 @@ function queueBreakdown(checkIns: number, sosAlerts: number): string {
 }
 
 function BalanceProgress({
+  kind,
   label,
+  remaining,
   value,
   percent,
   testID,
 }: {
+  kind: 'data' | 'minutes';
   label: string;
+  remaining: number;
   value: string;
   percent: number;
   testID: string;
@@ -311,7 +334,10 @@ function BalanceProgress({
         <View
           style={[
             styles.progressFill,
-            {backgroundColor: progressColor(percent), width: `${percent}%`},
+            {
+              backgroundColor: progressColor(kind, percent, remaining),
+              width: `${percent}%`,
+            },
           ]}
         />
       </View>
