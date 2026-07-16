@@ -184,6 +184,8 @@ def create_app(
         resolved_checkin_scheduler,
         clock,
         resolved_settings.family_notify_fallback_seconds,
+        resolved_settings.family_notify_channel_primary,
+        resolved_settings.family_notify_channel_secondary,
     )
 
     @api.exception_handler(CheckInError)

@@ -52,8 +52,8 @@ class Settings(BaseSettings):
     whatsapp_checkin_template: str = "pilgrim_safe_checkin"
     whatsapp_app_secret: str = ""
     whatsapp_webhook_verify_token: str = ""
-    family_notify_channel_primary: Literal["whatsapp"] = "whatsapp"
-    family_notify_channel_secondary: Literal["sms"] = "sms"
+    family_notify_channel_primary: Literal["whatsapp", "sms"] = "whatsapp"
+    family_notify_channel_secondary: Literal["whatsapp", "sms"] = "sms"
     family_notify_fallback_seconds: int = 60
     activation_base_url: str = "https://damdam.app/activate"
 
@@ -130,6 +130,12 @@ class Settings(BaseSettings):
     def payment_processors_must_differ(self) -> "Settings":
         if self.payment_processor_primary == self.payment_processor_secondary:
             raise ValueError("Payment primary and secondary processors must differ")
+        return self
+
+    @model_validator(mode="after")
+    def family_notification_channels_must_differ(self) -> "Settings":
+        if self.family_notify_channel_primary == self.family_notify_channel_secondary:
+            raise ValueError("Family notification channels must differ")
         return self
 
     @model_validator(mode="after")

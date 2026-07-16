@@ -154,6 +154,32 @@ def _api_dependencies(
     return api, whatsapp, sms, notification_scheduler
 
 
+def test_family_notification_channel_order_is_wired_from_settings(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    configured = settings.model_copy(
+        update={
+            "family_notify_channel_primary": "sms",
+            "family_notify_channel_secondary": "whatsapp",
+        }
+    )
+    api = _build_api(
+        configured,
+        redis_client,
+        providers,
+        scheduler,
+        session_factory,
+        clock,
+        RecordingWhatsAppSender(),
+        RecordingSmsSender(),
+        RecordingCheckInScheduler(),
+    )
+
+    service = api.state.checkin_notification_service
+    assert service.primary_channel == "sms"
+    assert service.secondary_channel == "whatsapp"
+
+
 def test_checkin_records_tap_time_location_and_queues_one_notification(
     settings, redis_client, providers, scheduler, session_factory, clock
 ) -> None:

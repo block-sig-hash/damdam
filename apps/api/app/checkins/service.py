@@ -155,12 +155,16 @@ class CheckInNotificationService:
         scheduler: CheckInScheduler,
         clock: Callable[[], datetime],
         fallback_seconds: int = 60,
+        primary_channel: str = "whatsapp",
+        secondary_channel: str = "sms",
     ) -> None:
         self.whatsapp = whatsapp
         self.sms = sms
         self.scheduler = scheduler
         self.clock = clock
         self.fallback_seconds = fallback_seconds
+        self.primary_channel = primary_channel
+        self.secondary_channel = secondary_channel
 
     def _context(
         self, session: Session, notification: CheckInNotification
@@ -196,6 +200,10 @@ class CheckInNotificationService:
         return name, checked_in_at, maps_url
 
     def dispatch_whatsapp(self, session: Session, notification_id: UUID) -> bool:
+        if self.primary_channel != "whatsapp":
+            raise NotificationError(
+                f"Unsupported primary family channel: {self.primary_channel}"
+            )
         notification = session.exec(
             select(CheckInNotification)
             .where(CheckInNotification.id == notification_id)
@@ -256,6 +264,10 @@ class CheckInNotificationService:
         return True
 
     def send_sms_fallback(self, session: Session, notification_id: UUID) -> bool:
+        if self.secondary_channel != "sms":
+            raise NotificationError(
+                f"Unsupported secondary family channel: {self.secondary_channel}"
+            )
         notification = session.exec(
             select(CheckInNotification)
             .where(CheckInNotification.id == notification_id)

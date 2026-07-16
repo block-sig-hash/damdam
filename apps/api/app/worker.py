@@ -52,6 +52,8 @@ def _checkin_notifications() -> CheckInNotificationService:
         CeleryCheckInScheduler(),
         utc_now,
         settings.family_notify_fallback_seconds,
+        settings.family_notify_channel_primary,
+        settings.family_notify_channel_secondary,
     )
 
 

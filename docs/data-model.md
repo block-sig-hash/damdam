@@ -1158,4 +1158,7 @@ requested by the current story.
 The SMS reference is provider-neutral even though PRD §5.6 resolves the MVP
 route to the configured primary OTP provider—Termii today—through a distinct
 outbound-message adapter. It does not reuse Termii's OTP endpoint or leak Termii
-payloads into the check-in service.
+payloads into the check-in service. The worker passes
+`FAMILY_NOTIFY_CHANNEL_PRIMARY` / `FAMILY_NOTIFY_CHANNEL_SECONDARY` into the
+delivery service, which rejects a task whose configured role does not match its
+channel instead of silently ignoring the deployment policy.
