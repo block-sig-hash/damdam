@@ -1,6 +1,6 @@
-import { CheckCircle } from 'phosphor-react-native';
+import { CheckCircle, Phone } from 'phosphor-react-native';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { shouldShowDateActivationBanner } from '../../services/arrivalPrompts';
 import { color, radius, space, typography } from '../../theme/tokens';
 import { EsimActivationBanner } from './EsimActivationBanner';
@@ -11,6 +11,7 @@ interface HomeDashboardScreenProps {
   remainingDataGb: number;
   onActivateEsim: () => void;
   now?: Date;
+  onOpenCall?: () => void;
 }
 
 export function HomeDashboardScreen({
@@ -19,6 +20,7 @@ export function HomeDashboardScreen({
   remainingDataGb,
   onActivateEsim,
   now = new Date(),
+  onOpenCall,
 }: HomeDashboardScreenProps): React.JSX.Element {
   const [dismissedThisSession, setDismissedThisSession] = useState(false);
   const showBanner =
@@ -54,6 +56,12 @@ export function HomeDashboardScreen({
           <Text style={styles.inactiveText}>Saudi Arabia data is ready to activate.</Text>
         )}
       </View>
+      {onOpenCall ? (
+        <Pressable onPress={onOpenCall} style={styles.callButton} testID="open-call-tab">
+          <Phone color={color.white} size={24} weight="fill" />
+          <Text style={styles.callButtonLabel}>Call family</Text>
+        </Pressable>
+      ) : null}
     </ScrollView>
   );
 }
@@ -100,4 +108,14 @@ const styles = StyleSheet.create({
   dataValue: { ...typography.numeral, color: color.gray900 },
   dataLabel: { ...typography.body, color: color.gray600 },
   inactiveText: { ...typography.body, color: color.gray600 },
+  callButton: {
+    minHeight: 64,
+    borderRadius: radius.button,
+    backgroundColor: color.primary500,
+    flexDirection: 'row',
+    gap: space.space2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  callButtonLabel: { ...typography.bodyLarge, fontWeight: '600', color: color.white },
 });

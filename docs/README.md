@@ -21,7 +21,7 @@ security, and infrastructure decisions. Read in this order:
 | 8 | [`scaling-infrastructure.md`](./scaling-infrastructure.md) | **Forward-looking** — multi-region architecture, global payments, AI-tooling split for post-MVP scale |
 | 9 | [`corporate-structure.md`](./corporate-structure.md) | Entity structure (UAE parent + Nigeria OpCo), payment rail allocation, pre-launch legal action items |
 | 10 | [`testing-qa.md`](./testing-qa.md) | TDD policy, coverage targets mapped to acceptance criteria, device matrix, offline/chaos testing for check-in & SOS |
-| 11 | [`design-system.md`](./design-system.md) | **Scaffold, not yet produced** — mobile app design tokens/patterns; required before Codex implements mobile screens |
+| 11 | [`design-system.md`](./design-system.md) | Mobile app design tokens/patterns; produced and required for all Codex-implemented screens |
 
 ## Status
 
