@@ -53,6 +53,9 @@ from app.profile.device_tokens import DeviceTokenService
 from app.profile.emergency_contact import EmergencyContactService
 from app.profile.family_contacts import FamilyContactError, FamilyContactService
 from app.profile.routes import router as profile_router
+from app.voice.providers import TelnyxVoiceProvider, VoiceProvider
+from app.voice.routes import router as voice_router
+from app.voice.service import VoiceError, VoiceService
 
 
 def create_app(
@@ -67,6 +70,7 @@ def create_app(
     invoice_storage: InvoiceStorage | None = None,
     provisioning_scheduler: ProvisioningScheduler | None = None,
     payment_providers: Mapping[str, PaymentProvider] | None = None,
+    voice_provider: VoiceProvider | None = None,
     esim_providers: Mapping[str, EsimProvider] | None = None,
     esim_scheduler: EsimIssuanceScheduler | None = None,
 ) -> FastAPI:
@@ -149,6 +153,11 @@ def create_app(
         clock,
     )
     api.state.hto_pilgrim_service = HtoPilgrimService()
+    api.state.voice_service = VoiceService(
+        resolved_settings,
+        voice_provider or TelnyxVoiceProvider(resolved_settings),
+        clock,
+    )
 
     @api.exception_handler(EsimError)
     async def esim_error_handler(request: Request, exc: EsimError) -> JSONResponse:
@@ -461,6 +470,28 @@ def create_app(
             content={"error": exc.code, "message": messages[exc.code], "details": {}},
         )
 
+    @api.exception_handler(VoiceError)
+    async def voice_error_handler(request: Request, exc: VoiceError) -> JSONResponse:
+        del request
+        statuses = {
+            "invalid_webhook_signature": 401,
+            "invalid_webhook_payload": 400,
+            "cli_not_verified": 403,
+            "pstn_balance_exhausted": 409,
+            "voice_unavailable": 503,
+        }
+        messages = {
+            "invalid_webhook_signature": "Webhook signature is invalid.",
+            "invalid_webhook_payload": "Webhook payload is invalid.",
+            "cli_not_verified": "Verify your Nigerian number before making PSTN calls.",
+            "pstn_balance_exhausted": "No PSTN minutes remain on your package.",
+            "voice_unavailable": "Calling is temporarily unavailable.",
+        }
+        return JSONResponse(
+            status_code=statuses[exc.code],
+            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+        )
+
     @api.get("/health", tags=["system"])
     def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -475,6 +506,7 @@ def create_app(
     api.include_router(retail_pricing_router, prefix="/v1")
     api.include_router(payment_router, prefix="/v1")
     api.include_router(esim_router, prefix="/v1")
+    api.include_router(voice_router, prefix="/v1")
     return api
 
 

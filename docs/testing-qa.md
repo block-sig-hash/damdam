@@ -322,3 +322,63 @@ already has a "Tests added/updated?" checkbox — extend it):
   fixed-date surge pattern as Hajj season and can have their load
   testing scoped later, once real usage data from the Hajj pilot
   exists to model against
+
+---
+
+## 14.9 Voice / WebRTC Verification — US-14 Gap Closure
+
+Before US-14, this document had no voice, WebRTC, call-quality, CallKit, or
+ConnectionService guidance. That omission was materially different from the
+explicit real-device requirements for push/geofencing in §14.3. Voice tests now
+have two evidence tiers; a mocked SDK/webhook suite is necessary but cannot be
+reported as pilot-ready calling evidence.
+
+**Required automated evidence in the feature PR:**
+
+- Dial-pad number entry, contextual contacts-permission request, zero-minute
+  PSTN disablement, app-to-app exemption, low-minute warning, offline banner,
+  last-20 history rendering, and exact connectivity-loss copy/navigation.
+- Telnyx token/eligibility contract tests, including unverified PSTN denial and
+  unverified app-to-app allowance.
+- Ed25519 webhook tests proving missing, malformed, stale, and incorrectly
+  signed requests receive `401 invalid_webhook_signature` before JSON is
+  trusted; authentic malformed JSON receives `400 invalid_webhook_payload`.
+- Duplicate hangup idempotency plus a real-Postgres concurrent/rapid-hangup test
+  at a sub-minute balance. The final value must be exactly zero, no call log may
+  contain a negative charge, and the next PSTN eligibility/token request must
+  be blocked.
+
+**Required real-device / real-network evidence before an HTO pilot (not
+substitutable with simulator screenshots):**
+
+- One actual Telnyx-account PSTN call per platform over cellular/eSIM data,
+  confirming the recipient sees the verified Nigerian CLI and the call reaches
+  Telnyx's signed webhook endpoint.
+- Call quality on at least 4G, degraded/packet-loss cellular data, and a forced
+  mid-call network drop; compare the in-app indicator with audible behavior and
+  confirm connected seconds only are billed.
+- Native call UI/audio routing on physical iOS (CallKit) and Android
+  (ConnectionService), including background/lock-screen behavior, microphone,
+  mute, speaker, and Bluetooth routes.
+- Contextual Contacts permission on both platforms, including denial and a
+  later Settings re-enable.
+
+**US-14 implementation evidence boundary:** simulator/emulator component flows,
+mocked Telnyx SDK state, and cryptographically signed mocked webhooks may be
+completed in CI. They do **not** prove actual media quality, carrier CLI
+presentation, real Telnyx routing, or native lock-screen call UI. The repository
+currently has no `apps/mobile/ios` project directory, so iOS AppDelegate/
+PushKit/CallKit autolinking cannot be built locally until that platform project
+is generated; this is a pre-pilot blocker, not a reason to hand-roll CallKit.
+
+**Native-module evaluation (2026-07-16):** Telnyx's old
+[`@telnyx/react-native`](https://www.npmjs.com/package/@telnyx/react-native)
+1.1.2 is deprecated and explicitly redirects users to the native iOS/Android
+SDKs. Telnyx's maintained
+[`@telnyx/react-voice-commons-sdk`](https://github.com/team-telnyx/react-native-voice-commons)
+1.0.0 (released 2026-06-14) wraps the official native voice bridge and includes
+CallKit/ConnectionService, push, lifecycle, mute/speaker, and call-state
+handling; it is used for US-14. Device contacts use maintained
+[`react-native-contacts`](https://github.com/morenoh149/react-native-contacts)
+with `READ_CONTACTS`/Contacts-framework autolinking. No custom WebRTC, CallKit,
+ConnectionService, or contacts native bridge is justified or implemented.

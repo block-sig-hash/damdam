@@ -95,7 +95,7 @@ DeviceCompatibilityLog
 | pin_failed_attempts | INTEGER | DEFAULT 0 | Resets on success |
 | pin_locked_until | TIMESTAMPTZ | NULLABLE | |
 | account_source | ENUM | NOT NULL | `direct` \| `hto_manifest` |
-| verified_cli | BOOLEAN | DEFAULT FALSE | True once Twilio Verify passes |
+| verified_cli | BOOLEAN | DEFAULT FALSE | True once the account-setup OTP ownership check succeeds through `caller_id_verifications` (`termii` or `twilio`) |
 | departure_date | DATE | NULLABLE | Drives the eSIM banner timing |
 | destination_country | VARCHAR(2) | DEFAULT 'SA' | ISO code; hardcoded SA for MVP |
 | platform | ENUM | NOT NULL | `ios` \| `android` — set at registration |
@@ -408,16 +408,30 @@ notification queue to retry only the failed channel.
 |---|---|---|---|
 | id | UUID | PK | |
 | user_id | UUID | FK → users | |
-| twilio_call_sid | VARCHAR(64) | UNIQUE, NOT NULL | |
+| telnyx_call_leg_id | VARCHAR(64) | UNIQUE, NOT NULL | Stable Telnyx call-leg correlation ID; `call_control_id` remains the command token and is not persisted as identity |
 | direction | ENUM | NOT NULL | `outbound` only for MVP |
 | call_type | ENUM | NOT NULL | `pstn` \| `app_to_app` |
-| to_number | VARCHAR(14) | NULLABLE | Null for app-to-app |
+| to_number | VARCHAR(14) | NULLABLE | Recipient Nigerian number for PSTN and app-to-app history; nullable only when a provider event lacks a resolvable destination |
 | duration_seconds | INTEGER | NOT NULL | |
 | pstn_minutes_charged | DECIMAL(6,2) | DEFAULT 0 | 0 for app-to-app |
 | started_at | TIMESTAMPTZ | NOT NULL | |
 | ended_at | TIMESTAMPTZ | NULLABLE | |
 
-**Indexes:** `user_id`, `twilio_call_sid` (unique)
+**Indexes:** `user_id`, `telnyx_call_leg_id` (unique)
+
+---
+
+### `voice_credentials`
+
+| Field | Type | Constraints | Notes |
+|---|---|---|---|
+| id | UUID | PK | |
+| user_id | UUID | FK → users, UNIQUE | One Telnyx identity per pilgrim; app-to-app lookup target |
+| telnyx_telephony_credential_id | VARCHAR(64) | UNIQUE, NOT NULL | Server-side credential resource used to mint short-lived JWTs |
+| sip_username | VARCHAR(128) | UNIQUE, NOT NULL | Telnyx `gencred…` SIP username used for app-to-app routing and signed-webhook correlation |
+| created_at | TIMESTAMPTZ | NOT NULL | |
+
+**Indexes:** `user_id` (unique), `sip_username` (unique)
 
 ---
 
@@ -1059,3 +1073,35 @@ on-device and opt-in; the permission-free, date-based activation banner remains
 the primary trigger. Firebase recommends refreshing server-side registration
 timestamps whenever the client uploads its current registration, which is why
 `updated_at` is part of this otherwise-small model.
+
+---
+
+## 6.22 Amendment — US-14 Telnyx Call Identity and Per-User WebRTC Credentials
+
+The original `call_logs.twilio_call_sid` field survived the Phase 0 voice-vendor
+decision even though `api-spec.md` §7.5 had already moved the contract to
+Telnyx. This is a semantic amendment, not a vendor-name substitution. Telnyx
+exposes three related identifiers: `call_control_id` is the opaque token used
+to issue commands for a live leg, `call_session_id` groups related legs, and
+`call_leg_id` is the stable identifier intended to correlate webhooks for one
+leg. `call_logs` therefore persists `telnyx_call_leg_id`; its unique constraint
+is also the hangup-webhook billing idempotency boundary. `call_control_id` stays
+ephemeral and is used only while issuing dial/bridge/hangup commands.
+
+The table was documentation-only before US-14—no migration had materialized
+it—so migration `0014_us14_voice_calling` creates the corrected Telnyx shape
+directly. There is no deployed Twilio column requiring data migration.
+
+US-14 also makes the previously implicit client identity explicit through
+`voice_credentials`. Telnyx recommends one telephony credential per application
+user; sharing one account-wide SIP login would make signed call webhooks
+impossible to attribute safely and would couple app-to-app routing to a global
+secret. The API creates a per-user credential lazily, stores only its Telnyx
+resource ID and SIP username, and returns short-lived JWTs to the app. API keys
+and credential-management calls remain server-side.
+
+Finally, `users.verified_cli` is corrected to describe the provider-agnostic
+account-setup ownership check already represented by `caller_id_verifications`.
+Termii remains primary and Twilio Verify secondary for OTP; neither is the voice
+carrier. That flag gates PSTN caller-ID presentation only. An unverified user may
+still call another registered DamDam SIP identity for free.

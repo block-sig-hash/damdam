@@ -1335,6 +1335,105 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/voice/eligibility:
+    get:
+      tags:
+      - voice
+      summary: Eligibility
+      operationId: eligibility_v1_voice_eligibility_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: phone_number
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Phone Number
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceEligibilityResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/voice/token:
+    post:
+      tags:
+      - voice
+      summary: Token
+      operationId: token_v1_voice_token_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoiceTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceTokenResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/webhooks/telnyx/call-events:
+    post:
+      tags:
+      - voice
+      summary: Webhook
+      operationId: webhook_v1_webhooks_telnyx_call_events_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+  /v1/me/calls:
+    get:
+      tags:
+      - voice
+      summary: History
+      operationId: history_v1_me_calls_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 20
+          minimum: 1
+          default: 20
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallHistoryResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     ActivationPreviewResponse:
@@ -1509,6 +1608,55 @@ components:
       required:
       - file
       title: Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post
+    CallHistoryResponse:
+      properties:
+        calls:
+          items:
+            $ref: '#/components/schemas/CallResponse'
+          type: array
+          title: Calls
+      type: object
+      required:
+      - calls
+      title: CallHistoryResponse
+    CallResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        call_type:
+          $ref: '#/components/schemas/CallType'
+        to_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: To Number
+        duration_seconds:
+          type: integer
+          title: Duration Seconds
+        pstn_minutes_charged:
+          type: number
+          title: Pstn Minutes Charged
+        started_at:
+          type: string
+          format: date-time
+          title: Started At
+      type: object
+      required:
+      - id
+      - call_type
+      - to_number
+      - duration_seconds
+      - pstn_minutes_charged
+      - started_at
+      title: CallResponse
+    CallType:
+      type: string
+      enum:
+      - pstn
+      - app_to_app
+      title: CallType
     DeviceCompatibilityCreate:
       properties:
         platform:
@@ -1560,6 +1708,23 @@ components:
       - fcm_token
       - platform
       title: DeviceTokenUpsert
+    EmergencyContactResponse:
+      properties:
+        hto_operator_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hto Operator Name
+        hto_operator_phone_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Hto Operator Phone Number
+      type: object
+      required:
+      - hto_operator_name
+      - hto_operator_phone_number
+      title: EmergencyContactResponse
     EsimDownloadResponse:
       properties:
         status:
@@ -1668,23 +1833,6 @@ components:
       - name
       - notified_of_nomination
       title: FamilyContactResponse
-    EmergencyContactResponse:
-      properties:
-        hto_operator_name:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Hto Operator Name
-        hto_operator_phone_number:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Hto Operator Phone Number
-      type: object
-      required:
-      - hto_operator_name
-      - hto_operator_phone_number
-      title: EmergencyContactResponse
     FamilyContactUpdate:
       properties:
         phone_number:
@@ -2653,6 +2801,69 @@ components:
       - msg
       - type
       title: ValidationError
+    VoiceEligibilityResponse:
+      properties:
+        allowed:
+          type: boolean
+          title: Allowed
+        call_type:
+          $ref: '#/components/schemas/CallType'
+        destination:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Destination
+        reason:
+          anyOf:
+          - type: string
+            enum:
+            - cli_not_verified
+            - pstn_balance_exhausted
+          - type: 'null'
+          title: Reason
+        pstn_minutes_remaining:
+          type: number
+          title: Pstn Minutes Remaining
+      type: object
+      required:
+      - allowed
+      - call_type
+      - pstn_minutes_remaining
+      title: VoiceEligibilityResponse
+    VoiceTokenRequest:
+      properties:
+        to_number:
+          type: string
+          title: To Number
+      type: object
+      required:
+      - to_number
+      title: VoiceTokenRequest
+    VoiceTokenResponse:
+      properties:
+        token:
+          type: string
+          title: Token
+        sip_username:
+          type: string
+          title: Sip Username
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+        call_type:
+          $ref: '#/components/schemas/CallType'
+        destination:
+          type: string
+          title: Destination
+      type: object
+      required:
+      - token
+      - sip_username
+      - expires_at
+      - call_type
+      - destination
+      title: VoiceTokenResponse
     WebhookResponse:
       properties:
         processed:

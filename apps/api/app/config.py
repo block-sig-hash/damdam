@@ -81,6 +81,13 @@ class Settings(BaseSettings):
     oneglobal_base_url: str = ""
     oneglobal_api_key: str = ""
 
+    telnyx_base_url: str = "https://api.telnyx.com/v2"
+    telnyx_api_key: str = ""
+    telnyx_connection_id: str = ""
+    telnyx_public_key: str = ""
+    voice_request_timeout_seconds: int = 15
+    telnyx_webhook_tolerance_seconds: int = 300
+
     invoice_storage_backend: Literal["filesystem", "s3"] = "filesystem"
     invoice_storage_path: str = "/tmp/damdam-invoices"
     invoice_s3_endpoint_url: str = ""

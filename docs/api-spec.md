@@ -282,19 +282,47 @@ confirmed exact field shapes against Termii's and Twilio's official
 docs when implementing US-01.
 
 ```
+GET    /voice/eligibility?phone_number={nigerian_number}
+  Auth required
+  Contextual lookup used after a complete number is entered/selected; it does
+  not enumerate users and accepts only a full Nigerian number.
+  200: { allowed, call_type: "pstn" | "app_to_app",
+         destination?: string, reason?: "cli_not_verified" |
+         "pstn_balance_exhausted", pstn_minutes_remaining }
+  Registered target → app_to_app, allowed even when the caller is unverified
+  or has zero PSTN minutes. The target's Telnyx SIP username is provisioned and
+  returned only by POST /voice/token, keeping this GET lookup side-effect free.
+  Non-registered target → PSTN, requiring verified_cli and positive balance.
+
 POST   /voice/token
   Auth required
-  200: { token: string, sip_username: string, expires_at }
+  Body: { to_number: string }
+  200: { token: string, sip_username: string, expires_at,
+         call_type: "pstn" | "app_to_app", destination: string }
   Short-lived Telnyx WebRTC credential for the client SDK
   (cross-platform — same endpoint serves iOS and Android)
+  Each user has a distinct Telnyx telephony credential. The app requests a
+  token only when starting a call and refreshes before `expires_at`.
+  403 cli_not_verified: PSTN only; app-to-app remains allowed
+  409 pstn_balance_exhausted: PSTN only; app-to-app remains allowed
 
 POST   /webhooks/telnyx/call-events
   Telnyx-signed webhook (Call Control API), not user-facing
+  Headers: telnyx-timestamp, telnyx-signature-ed25519
   Body: Telnyx Call Control event payload (call initiated,
   answered, hangup, etc.)
-  200: sets callerId from verified_cli lookup on the outbound leg;
-  on a hangup event, writes call_log (data-model.md §6) and
-  triggers balance deduction (§5.7)
+  Signature: base64 Ed25519 over `{timestamp}|{raw_request_body}` using the
+  account public key, with a 5-minute replay window. This follows the existing
+  reject-before-parse signed-webhook pattern but not Paystack's HMAC algorithm.
+  401 invalid_webhook_signature: missing, malformed, stale, or invalid signature
+  400 invalid_webhook_payload: authentic signature but malformed event envelope
+  200: on the client call.initiated event, looks up the SIP credential owner,
+  requires verified_cli + a positive balance for PSTN, and creates the outbound
+  leg with `from` set to that user's verified Nigerian number and
+  `time_limit_secs` capped to the current balance; bridges on call.answered.
+  On call.hangup, writes one call_log keyed by Telnyx `call_leg_id` and deducts
+  duration from the locked active package row. Duplicate events are no-ops and
+  the balance is clamped at zero.
 
 GET    /me/calls
   Auth required
