@@ -1,6 +1,14 @@
-import { CheckCircle, Clock, Phone, Siren, WarningCircle } from 'phosphor-react-native';
+import {
+  ChatCircle,
+  CheckCircle,
+  Clock,
+  Phone,
+  Siren,
+  WarningCircle,
+} from 'phosphor-react-native';
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {Linking, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {SUPPORT_WHATSAPP_NUMBER} from '../../config/env';
 import { shouldShowDateActivationBanner } from '../../services/arrivalPrompts';
 import { color, radius, space, typography } from '../../theme/tokens';
 import { EsimActivationBanner } from './EsimActivationBanner';
@@ -8,13 +16,17 @@ import { EsimActivationBanner } from './EsimActivationBanner';
 interface HomeDashboardScreenProps {
   departureDate: string | null;
   esimStatus: 'issued' | 'downloaded' | 'activated' | 'not_issued';
-  remainingDataGb: number;
+  remainingDataGb: number | null;
+  dataTotalGb: number | null;
+  pstnMinutesRemaining: number | null;
+  pstnMinutesTotal: number | null;
   onActivateEsim: () => void;
   now?: Date;
   onOpenCall?: () => void;
   onCheckIn?: () => Promise<'sent' | 'queued'>;
   lastCheckInAt?: string | null;
   queuedCheckIns?: number;
+  queuedSOSAlerts?: number;
   onOpenSOS?: () => void;
 }
 
@@ -22,12 +34,16 @@ export function HomeDashboardScreen({
   departureDate,
   esimStatus,
   remainingDataGb,
+  dataTotalGb,
+  pstnMinutesRemaining,
+  pstnMinutesTotal,
   onActivateEsim,
   now = new Date(),
   onOpenCall,
   onCheckIn,
   lastCheckInAt = null,
   queuedCheckIns = 0,
+  queuedSOSAlerts = 0,
   onOpenSOS,
 }: HomeDashboardScreenProps): React.JSX.Element {
   const [dismissedThisSession, setDismissedThisSession] = useState(false);
@@ -40,6 +56,13 @@ export function HomeDashboardScreen({
   const showBanner =
     !dismissedThisSession &&
     shouldShowDateActivationBanner(departureDate, esimStatus, now);
+  const queuedEvents = queuedCheckIns + queuedSOSAlerts;
+  const dataPercent = percentage(remainingDataGb, dataTotalGb);
+  const minutesPercent = percentage(pstnMinutesRemaining, pstnMinutesTotal);
+  const balanceTone =
+    remainingDataGb === null || pstnMinutesRemaining === null
+      ? 'healthy'
+      : getHomeBalanceTone(dataPercent, pstnMinutesRemaining);
 
   return (
     <ScrollView contentContainerStyle={styles.screen}>
@@ -117,12 +140,17 @@ export function HomeDashboardScreen({
           </Text>
         </View>
       ) : null}
-      {queuedCheckIns > 0 ? (
+      {queuedEvents > 0 ? (
         <View style={styles.queueBanner} testID="queued-events-indicator">
           <Clock color={color.gray700} size={24} weight="bold" />
-          <Text style={[styles.bannerText, styles.queueBannerText]}>
-            {queuedCheckIns} {queuedCheckIns === 1 ? 'check-in' : 'check-ins'} waiting to send
-          </Text>
+          <View style={styles.queueCopy}>
+            <Text style={[styles.bannerText, styles.queueBannerText]}>
+              {queuedEvents} {queuedEvents === 1 ? 'event' : 'events'} waiting to send
+            </Text>
+            <Text style={styles.queueDetail}>
+              {queueBreakdown(queuedCheckIns, queuedSOSAlerts)}
+            </Text>
+          </View>
         </View>
       ) : null}
       <Text style={styles.lastCheckIn}>
@@ -142,6 +170,22 @@ export function HomeDashboardScreen({
           onDismiss={() => setDismissedThisSession(true)}
         />
       ) : null}
+      {remainingDataGb !== null && balanceTone === 'warning' ? (
+        <View style={styles.warningBanner} testID="balance-warning-banner">
+          <WarningCircle color={color.warning500} size={24} weight="bold" />
+          <Text style={styles.bannerText}>
+            Balance running low. Message support if you need more data or minutes.
+          </Text>
+        </View>
+      ) : null}
+      {remainingDataGb !== null && balanceTone === 'error' ? (
+        <View style={styles.errorBanner} testID="balance-error-banner">
+          <WarningCircle color={color.error700} size={24} weight="bold" />
+          <Text style={styles.bannerText}>
+            A balance is exhausted. Message support to get connected again.
+          </Text>
+        </View>
+      ) : null}
       <View style={styles.packageCard} testID="home-package-card">
         <View style={styles.cardHeader}>
           <Text style={styles.packageTitle}>DamDam eSIM</Text>
@@ -152,15 +196,50 @@ export function HomeDashboardScreen({
             </View>
           ) : null}
         </View>
-        {esimStatus === 'activated' ? (
-          <>
-            <Text style={styles.activeTitle}>Saudi Arabia data — active</Text>
-            <Text style={styles.dataValue}>{remainingDataGb.toFixed(2)} GB</Text>
-            <Text style={styles.dataLabel}>remaining</Text>
-          </>
+        <Text style={styles.activeTitle}>
+          {esimStatus === 'activated'
+            ? 'Saudi Arabia data — active'
+            : 'Saudi Arabia data is ready to activate.'}
+        </Text>
+        {remainingDataGb === null ? (
+          <Text style={styles.inactiveText}>Balance unavailable</Text>
         ) : (
-          <Text style={styles.inactiveText}>Saudi Arabia data is ready to activate.</Text>
+          <BalanceProgress
+            label="Mobile data"
+            value={`${remainingDataGb.toFixed(2)} GB remaining`}
+            percent={dataPercent}
+            testID="data-balance-progress"
+          />
         )}
+        {pstnMinutesRemaining === null ? (
+          <Text style={styles.inactiveText}>Minutes balance unavailable</Text>
+        ) : (
+          <BalanceProgress
+            label="Calling minutes"
+            value={`${formatMinutes(pstnMinutesRemaining)} minutes remaining`}
+            percent={minutesPercent}
+            testID="minutes-balance-progress"
+          />
+        )}
+        {remainingDataGb !== null || pstnMinutesRemaining !== null ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Message support on WhatsApp"
+            onPress={() =>
+              Linking.openURL(
+                `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(
+                  'Hello DamDam Support, I need help adding more data or calling minutes.',
+                )}`,
+              ).catch(() => undefined)
+            }
+            style={({pressed}) => [
+              styles.supportButton,
+              pressed && styles.pressedButton,
+            ]}>
+            <ChatCircle color={color.primary500} size={20} weight="bold" />
+            <Text style={styles.supportButtonLabel}>Need more? Message support</Text>
+          </Pressable>
+        ) : null}
       </View>
       {onOpenCall ? (
         <Pressable onPress={onOpenCall} style={styles.callButton} testID="open-call-tab">
@@ -169,6 +248,74 @@ export function HomeDashboardScreen({
         </Pressable>
       ) : null}
     </ScrollView>
+  );
+}
+
+type BalanceTone = 'healthy' | 'warning' | 'error';
+
+export function getHomeBalanceTone(
+  dataRemainingPercent: number,
+  pstnMinutesRemaining: number,
+): BalanceTone {
+  if (dataRemainingPercent <= 0 || pstnMinutesRemaining <= 0) return 'error';
+  if (dataRemainingPercent < 20 || pstnMinutesRemaining < 5) return 'warning';
+  return 'healthy';
+}
+
+function percentage(remaining: number | null, total: number | null): number {
+  if (remaining === null || total === null || total <= 0) return 0;
+  return Math.min(100, Math.max(0, (remaining / total) * 100));
+}
+
+function progressColor(percent: number): string {
+  if (percent < 5) return color.error700;
+  if (percent < 20) return color.warning500;
+  return color.success500;
+}
+
+function formatMinutes(minutes: number): string {
+  return Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(2);
+}
+
+function queueBreakdown(checkIns: number, sosAlerts: number): string {
+  const pieces: string[] = [];
+  if (checkIns > 0) pieces.push(`${checkIns} ${checkIns === 1 ? 'check-in' : 'check-ins'}`);
+  if (sosAlerts > 0) {
+    pieces.push(`${sosAlerts} SOS ${sosAlerts === 1 ? 'alert' : 'alerts'}`);
+  }
+  return pieces.join(' and ');
+}
+
+function BalanceProgress({
+  label,
+  value,
+  percent,
+  testID,
+}: {
+  label: string;
+  value: string;
+  percent: number;
+  testID: string;
+}): React.JSX.Element {
+  return (
+    <View style={styles.balanceBlock}>
+      <View style={styles.balanceHeading}>
+        <Text style={styles.balanceLabel}>{label}</Text>
+        <Text style={styles.dataValue}>{value}</Text>
+      </View>
+      <View
+        accessibilityRole="progressbar"
+        accessibilityValue={{min: 0, max: 100, now: percent}}
+        style={styles.progressTrack}
+        testID={testID}>
+        <View
+          style={[
+            styles.progressFill,
+            {backgroundColor: progressColor(percent), width: `${percent}%`},
+          ]}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -237,6 +384,8 @@ const styles = StyleSheet.create({
   },
   bannerText: { ...typography.body, color: color.gray900 },
   queueBannerText: { color: color.gray700 },
+  queueCopy: {flex: 1, gap: space.space1},
+  queueDetail: {...typography.caption, color: color.gray600},
   lastCheckIn: { ...typography.body, color: color.gray600 },
   packageCard: {
     backgroundColor: color.white,
@@ -269,7 +418,37 @@ const styles = StyleSheet.create({
   },
   activeTitle: { ...typography.bodyLarge, fontWeight: '600', color: color.gray900 },
   dataValue: { ...typography.numeral, color: color.gray900 },
-  dataLabel: { ...typography.body, color: color.gray600 },
+  balanceBlock: {gap: space.space2, paddingVertical: space.space1},
+  balanceHeading: {gap: space.space1},
+  balanceLabel: {...typography.caption, fontWeight: '600', color: color.gray700},
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: color.gray200,
+    overflow: 'hidden',
+  },
+  progressFill: {height: 8, borderRadius: 4},
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.space3,
+    backgroundColor: color.warning100,
+    borderLeftWidth: 4,
+    borderLeftColor: color.warning500,
+    padding: space.space4,
+  },
+  supportButton: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.space2,
+  },
+  supportButtonLabel: {
+    ...typography.bodyLarge,
+    fontWeight: '600',
+    color: color.primary500,
+  },
   inactiveText: { ...typography.body, color: color.gray600 },
   callButton: {
     minHeight: 64,

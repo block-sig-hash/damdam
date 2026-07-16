@@ -119,6 +119,7 @@ it('wires authenticated bootstrap, date banner, and activation navigation', asyn
     expect(mockGetEsim).toHaveBeenCalledWith('access-token', 'package-1');
   });
   expect(screen.getByTestId('esim-activation-banner')).toBeTruthy();
+  await waitFor(() => expect(screen.getByText('30 minutes remaining')).toBeTruthy());
   await act(async () => fireEvent.press(screen.getByTestId('esim-banner-activate')));
   expect(screen.getByTestId('wired-activation-flow')).toBeTruthy();
 });
