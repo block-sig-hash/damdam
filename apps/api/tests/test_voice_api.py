@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -16,7 +16,7 @@ from app.auth.routes import request_otp, verify_otp
 from app.auth.schemas import OTPRequest, OTPVerifyRequest
 from app.main import create_app
 from app.packages.models import Package, PackageSource, PackageStatus
-from app.voice.models import CallLog
+from app.voice.models import CallLog, VoiceCredential
 from app.voice.providers import ProvisionedVoiceCredential, VoiceAccessToken
 
 
@@ -262,6 +262,87 @@ def test_unsigned_stale_and_malformed_telnyx_webhooks_are_rejected(
     )
     assert response.status_code == 400
     assert response.json()["error"] == "invalid_webhook_payload"
+
+
+def test_webhook_resigned_with_wrong_key_is_rejected(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-14.7: a well-formed, freshly-timestamped payload signed by a key
+    other than the one configured for this Telnyx account must not pass
+    verification just because it is syntactically valid base64/Ed25519."""
+    api, _, _signer = _api_and_signer(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client = TestClient(api, raise_server_exceptions=False)
+    attacker_key = Ed25519PrivateKey.generate()
+    body = _hangup(uuid4(), "leg-forged", 60)
+    headers = _signed_headers(attacker_key, body, clock())
+
+    response = client.post(
+        "/v1/webhooks/telnyx/call-events", content=body, headers=headers
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"] == "invalid_webhook_signature"
+
+
+def test_unverified_credentialed_user_pstn_dial_is_blocked_at_webhook_layer(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-14.1/4/7: a user can hold a VoiceCredential (provisioned as the
+    callee of someone else's app-to-app call) without ever being CLI
+    verified. If a call.initiated event later arrives claiming to originate
+    from that user's SIP identity toward a PSTN number, the re-check inside
+    _handle_initiated must block the dial — not just the /voice/token
+    endpoint — so an unverified phone_number is never handed to the
+    provider as a caller_id."""
+    api, voice, signer = _api_and_signer(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    caller, _ = _authenticated(api, "08012345678")
+    _, unverified_id = _authenticated(api, "08098765432")
+    with session_factory() as session:
+        unverified = session.get(User, unverified_id)
+        assert unverified is not None
+        unverified.verified_cli = False
+        session.add(unverified)
+        session.commit()
+
+    # Provisions the callee's (unverified user's) VoiceCredential as a side
+    # effect of the caller's free app-to-app token request.
+    token_response = caller.post(
+        "/v1/voice/token", json={"to_number": "08098765432"}
+    )
+    assert token_response.status_code == 200
+    with session_factory() as session:
+        credential = session.exec(
+            select(VoiceCredential).where(VoiceCredential.user_id == unverified_id)
+        ).first()
+        assert credential is not None
+        sip_username = credential.sip_username
+
+    initiated = json.dumps(
+        {
+            "data": {
+                "event_type": "call.initiated",
+                "payload": {
+                    "from": f"sip:{sip_username}@sip.telnyx.com",
+                    "to": "+2348011119999",
+                    "call_control_id": "unverified-attempt",
+                },
+            }
+        },
+        separators=(",", ":"),
+    ).encode()
+
+    response = caller.post(
+        "/v1/webhooks/telnyx/call-events",
+        content=initiated,
+        headers=_signed_headers(signer, initiated, clock()),
+    )
+
+    assert response.json() == {"processed": False}
+    assert voice.initiated == []
 
 
 def test_app_to_app_hangup_writes_free_history_without_balance(
