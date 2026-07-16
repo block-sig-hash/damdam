@@ -37,3 +37,46 @@ it('AC-13.6: activated status hides banner and shows remaining Saudi data', asyn
   expect(view.getByText('Saudi Arabia data — active')).toBeTruthy();
   expect(view.getByText('4.25 GB')).toBeTruthy();
 });
+
+it('AC-15.1/15.8: one tap sends immediately with no confirmation dialog', async () => {
+  const onCheckIn = jest.fn().mockResolvedValue('sent');
+  const view = await render(
+    <HomeDashboardScreen
+      departureDate={null}
+      esimStatus="activated"
+      remainingDataGb={4.25}
+      onActivateEsim={jest.fn()}
+      onCheckIn={onCheckIn}
+      lastCheckInAt={null}
+      queuedCheckIns={0}
+    />,
+  );
+
+  fireEvent.press(view.getByRole('button', {name: "I'm okay"}));
+
+  await waitFor(() => expect(onCheckIn).toHaveBeenCalledTimes(1));
+  expect(view.queryByText(/are you sure/i)).toBeNull();
+  expect(view.getByText('Check-in sent')).toBeTruthy();
+});
+
+it('AC-15.4: queued check-in and queue count remain visible inline', async () => {
+  const view = await render(
+    <HomeDashboardScreen
+      departureDate={null}
+      esimStatus="activated"
+      remainingDataGb={4.25}
+      onActivateEsim={jest.fn()}
+      onCheckIn={jest.fn().mockResolvedValue('queued')}
+      lastCheckInAt="2026-07-13T08:05:00Z"
+      queuedCheckIns={1}
+    />,
+  );
+
+  fireEvent.press(view.getByRole('button', {name: "I'm okay"}));
+
+  await waitFor(() =>
+    expect(view.getByText('Check-in queued, will send when connected')).toBeTruthy(),
+  );
+  expect(view.getByText('1 check-in waiting to send')).toBeTruthy();
+  expect(view.getByText(/Last check-in:/)).toBeTruthy();
+});

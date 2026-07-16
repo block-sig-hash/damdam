@@ -1,0 +1,446 @@
+import hashlib
+import hmac
+import json
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from uuid import UUID, uuid4
+
+from fastapi.testclient import TestClient
+from sqlmodel import select
+
+from app.auth.models import (
+    HTOApprovalStatus,
+    Manifest,
+    ManifestPilgrim,
+    ManifestStatus,
+    ManifestValidationStatus,
+    Organization,
+    OrganizationType,
+    User,
+)
+from app.auth.routes import request_otp, verify_otp
+from app.auth.schemas import OTPRequest, OTPVerifyRequest
+from app.checkins.models import CheckIn, CheckInNotification
+from app.main import create_app
+from app.esim.service import HtoPilgrimService
+from app.profile.models import FamilyContact
+
+
+class RecordingCheckInScheduler:
+    def __init__(self) -> None:
+        self.dispatches: list[UUID] = []
+        self.fallbacks: list[tuple[UUID, int]] = []
+
+    def schedule_dispatch(self, notification_id: UUID) -> None:
+        self.dispatches.append(notification_id)
+
+    def schedule_fallback(self, notification_id: UUID, countdown: int) -> None:
+        self.fallbacks.append((notification_id, countdown))
+
+
+class RecordingWhatsAppSender:
+    def __init__(self) -> None:
+        self.checkins: list[tuple[str, str, str, str | None]] = []
+        self.fail = False
+
+    def send_checkin(
+        self, phone_number: str, pilgrim_name: str, checked_in_at: str,
+        maps_url: str | None,
+    ) -> str:
+        if self.fail:
+            from app.notifications.service import NotificationError
+
+            raise NotificationError("whatsapp unavailable")
+        self.checkins.append((phone_number, pilgrim_name, checked_in_at, maps_url))
+        return f"wamid.{len(self.checkins)}"
+
+
+class RecordingSmsSender:
+    def __init__(self) -> None:
+        self.messages: list[tuple[str, str]] = []
+
+    def send(self, phone_number: str, message: str) -> str:
+        self.messages.append((phone_number, message))
+        return f"termii-sms-{len(self.messages)}"
+
+
+def _build_api(
+    settings, redis_client, providers, scheduler, session_factory, clock,
+    whatsapp, sms, checkin_scheduler,
+):
+    return create_app(
+        settings=settings.model_copy(
+            update={
+                "whatsapp_app_secret": "meta-app-secret",
+                "whatsapp_webhook_verify_token": "meta-verify-token",
+            }
+        ),
+        redis_client=redis_client,
+        providers=providers,
+        scheduler=scheduler,
+        session_factory=session_factory,
+        clock=clock,
+        whatsapp_sender=whatsapp,
+        sms_sender=sms,
+        checkin_scheduler=checkin_scheduler,
+    )
+
+
+def _authenticated(api) -> tuple[TestClient, UUID]:
+    request = SimpleNamespace(app=api)
+    request_otp(OTPRequest(phone_number="08012345678"), request)
+    auth = verify_otp(
+        OTPVerifyRequest(
+            phone_number="08012345678", otp="123456", platform="android"
+        ),
+        request,
+    )
+    return (
+        TestClient(api, headers={"Authorization": f"Bearer {auth.access_token}"}),
+        auth.user.id,
+    )
+
+
+def _api_dependencies(
+    settings, redis_client, providers, scheduler, session_factory, clock
+):
+    whatsapp = RecordingWhatsAppSender()
+    sms = RecordingSmsSender()
+    notification_scheduler = RecordingCheckInScheduler()
+    api = _build_api(
+        settings, redis_client, providers, scheduler, session_factory, clock,
+        whatsapp, sms, notification_scheduler,
+    )
+    return api, whatsapp, sms, notification_scheduler
+
+
+def test_checkin_records_tap_time_location_and_queues_one_notification(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-15.2/15.3/15.5/15.6/15.7: persist immediately and enqueue delivery."""
+    api, _, _, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    client_id = uuid4()
+    timestamp = "2026-07-13T08:05:00Z"
+
+    response = client.post(
+        "/v1/checkins",
+        json={
+            "client_generated_id": str(client_id),
+            "timestamp": timestamp,
+            "latitude": 21.422487,
+            "longitude": 39.826206,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["received_at"] == clock().isoformat().replace("+00:00", "Z")
+    with session_factory() as session:
+        checkin = session.exec(select(CheckIn)).one()
+        notification = session.exec(select(CheckInNotification)).one()
+        assert checkin.user_id == user_id
+        assert checkin.client_generated_id == client_id
+        assert checkin.timestamp == datetime(2026, 7, 13, 8, 5, tzinfo=timezone.utc)
+        assert float(checkin.latitude) == 21.422487
+        assert float(checkin.longitude) == 39.826206
+        assert notification.check_in_id == checkin.id
+        assert notification_scheduler.dispatches == [notification.id]
+
+
+def test_retry_with_same_client_id_returns_same_row_and_never_resends(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-15.4: a lost response retry cannot duplicate check-ins or WhatsApp."""
+    api, _, _, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, _ = _authenticated(api)
+    payload = {
+        "client_generated_id": str(uuid4()),
+        "timestamp": "2026-07-13T08:05:00Z",
+    }
+
+    first = client.post("/v1/checkins", json=payload)
+    second = client.post("/v1/checkins", json=payload)
+
+    assert first.status_code == second.status_code == 200
+    assert first.json() == second.json()
+    with session_factory() as session:
+        assert len(session.exec(select(CheckIn)).all()) == 1
+        assert len(session.exec(select(CheckInNotification)).all()) == 1
+    assert len(notification_scheduler.dispatches) == 1
+
+
+def test_redis_rate_limit_blocks_a_different_checkin_for_fifteen_minutes(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-15.9: limiter is shared in Redis and keyed per user."""
+    api, _, _, _ = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    first = client.post(
+        "/v1/checkins",
+        json={"client_generated_id": str(uuid4()), "timestamp": clock().isoformat()},
+    )
+    second = client.post(
+        "/v1/checkins",
+        json={"client_generated_id": str(uuid4()), "timestamp": clock().isoformat()},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.json()["error"] == "checkin_rate_limited"
+    assert 0 < redis_client.ttl(f"checkin:rate:{user_id}") <= 900
+
+
+def test_recent_history_is_owned_limited_and_newest_first(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-15.8: Home can read the pilgrim's latest successful check-in."""
+    api, _, _, _ = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        for index in range(12):
+            session.add(
+                CheckIn(
+                    user_id=user_id,
+                    client_generated_id=uuid4(),
+                    timestamp=clock() + timedelta(minutes=index),
+                    received_at=clock() + timedelta(minutes=index),
+                )
+            )
+        other = User(phone_number="+2348099999999", platform="android")
+        session.add(other)
+        session.flush()
+        session.add(
+            CheckIn(
+                user_id=other.id,
+                client_generated_id=uuid4(),
+                timestamp=clock() + timedelta(days=1),
+                received_at=clock() + timedelta(days=1),
+            )
+        )
+        session.commit()
+
+    response = client.get("/v1/me/checkins?limit=10")
+
+    assert response.status_code == 200
+    assert len(response.json()["checkins"]) == 10
+    timestamps = [row["timestamp"] for row in response.json()["checkins"]]
+    assert timestamps == sorted(timestamps, reverse=True)
+
+
+def test_whatsapp_copy_maps_link_and_sms_fallback_fire_at_sixty_seconds(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-15.6/15.7/15.10: fallback is due at 60s, not merely present."""
+    api, whatsapp, sms, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        user = session.get(User, user_id)
+        assert user is not None
+        user.first_name = "Amina"
+        user.last_name = "Yusuf"
+        session.add(user)
+        session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
+        session.commit()
+    response = client.post(
+        "/v1/checkins",
+        json={
+            "client_generated_id": str(uuid4()),
+            "timestamp": "2026-07-13T08:05:00Z",
+            "latitude": 21.422487,
+            "longitude": 39.826206,
+        },
+    )
+    notification_id = notification_scheduler.dispatches[0]
+
+    with session_factory() as session:
+        service = api.state.checkin_notification_service
+        assert service.dispatch_whatsapp(session, notification_id) is True
+    assert whatsapp.checkins == [
+        (
+            "+2349012345678",
+            "Amina Yusuf",
+            "13 Jul 2026, 09:05 WAT",
+            "https://www.google.com/maps?q=21.422487,39.826206",
+        )
+    ]
+    assert notification_scheduler.fallbacks == [(notification_id, 60)]
+
+    clock.advance(seconds=59)
+    with session_factory() as session:
+        assert service.send_sms_fallback(session, notification_id) is False
+    assert sms.messages == []
+
+    clock.advance(seconds=1)
+    with session_factory() as session:
+        assert service.send_sms_fallback(session, notification_id) is True
+    assert sms.messages == [
+        (
+            "+2349012345678",
+            "Amina Yusuf checked in safely at 13 Jul 2026, 09:05 WAT. All is well. "
+            "https://www.google.com/maps?q=21.422487,39.826206",
+        )
+    ]
+    assert response.status_code == 200
+
+
+def test_confirmed_whatsapp_delivery_cancels_sms_fallback(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-15.10: a delivery confirmation before 60s prevents duplicate SMS."""
+    api, _, sms, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
+        session.commit()
+    client.post(
+        "/v1/checkins",
+        json={"client_generated_id": str(uuid4()), "timestamp": clock().isoformat()},
+    )
+    notification_id = notification_scheduler.dispatches[0]
+    service = api.state.checkin_notification_service
+    with session_factory() as session:
+        service.dispatch_whatsapp(session, notification_id)
+        assert service.confirm_whatsapp_delivery(session, "wamid.1") is True
+    clock.advance(seconds=60)
+    with session_factory() as session:
+        assert service.send_sms_fallback(session, notification_id) is False
+    assert sms.messages == []
+
+
+def test_signed_meta_delivery_webhook_marks_message_delivered(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-15.10: real delivery status reaches the fallback decision securely."""
+    api, _, sms, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
+        session.commit()
+    client.post(
+        "/v1/checkins",
+        json={"client_generated_id": str(uuid4()), "timestamp": clock().isoformat()},
+    )
+    notification_id = notification_scheduler.dispatches[0]
+    with session_factory() as session:
+        api.state.checkin_notification_service.dispatch_whatsapp(
+            session, notification_id
+        )
+    body = json.dumps(
+        {
+            "entry": [
+                {"changes": [{"value": {"statuses": [{"id": "wamid.1", "status": "delivered"}]}}]}
+            ]
+        },
+        separators=(",", ":"),
+    ).encode()
+    signature = "sha256=" + hmac.new(
+        b"meta-app-secret", body, hashlib.sha256
+    ).hexdigest()
+
+    unsigned = client.post(
+        "/v1/webhooks/meta/whatsapp", content=body,
+        headers={"content-type": "application/json"},
+    )
+    delivered = client.post(
+        "/v1/webhooks/meta/whatsapp", content=body,
+        headers={"x-hub-signature-256": signature, "content-type": "application/json"},
+    )
+    clock.advance(seconds=60)
+    with session_factory() as session:
+        fallback = api.state.checkin_notification_service.send_sms_fallback(
+            session, notification_id
+        )
+
+    assert unsigned.status_code == 401
+    assert unsigned.json()["error"] == "invalid_webhook_signature"
+    assert delivered.status_code == 200
+    assert delivered.json() == {"processed": 1}
+    assert fallback is False
+    assert sms.messages == []
+
+
+def test_missing_family_contact_never_rolls_back_the_checkin(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-15.3: notification availability cannot lose the safety record."""
+    api, _, _, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, _ = _authenticated(api)
+    response = client.post(
+        "/v1/checkins",
+        json={"client_generated_id": str(uuid4()), "timestamp": clock().isoformat()},
+    )
+
+    assert response.status_code == 200
+    with session_factory() as session:
+        assert len(session.exec(select(CheckIn)).all()) == 1
+        assert len(session.exec(select(CheckInNotification)).all()) == 0
+    assert notification_scheduler.dispatches == []
+
+
+def test_hto_pilgrim_monitoring_reads_latest_checkin_for_its_own_pilgrim(
+    session_factory, clock
+) -> None:
+    """AC-15.5: successful receipt updates the existing HTO last-seen field."""
+    with session_factory() as session:
+        organization = Organization(
+            org_type=OrganizationType.HTO_OPERATOR,
+            name="Safe Hajj Ltd",
+            primary_contact_name="Operator",
+            email="operator@example.com",
+            password_hash="hash",
+            phone_number="+2348011111111",
+            nahcon_licence_number="NAHCON-1",
+            email_verified=True,
+            approval_status=HTOApprovalStatus.APPROVED,
+        )
+        user = User(phone_number="+2348012345678", platform="android")
+        session.add(organization)
+        session.add(user)
+        session.flush()
+        manifest = Manifest(
+            organization_id=organization.id,
+            status=ManifestStatus.VALIDATED,
+            valid_rows=1,
+        )
+        session.add(manifest)
+        session.flush()
+        pilgrim = ManifestPilgrim(
+            manifest_id=manifest.id,
+            first_name="Amina",
+            last_name="Yusuf",
+            phone_number=user.phone_number,
+            row_number=2,
+            validation_status=ManifestValidationStatus.VALID,
+            user_id=user.id,
+        )
+        session.add(pilgrim)
+        session.add(
+            CheckIn(
+                user_id=user.id,
+                client_generated_id=uuid4(),
+                timestamp=clock(),
+                received_at=clock(),
+            )
+        )
+        session.commit()
+        session.expunge(organization)
+
+        result = HtoPilgrimService().list_pilgrims(session, organization, None)
+
+    assert result[0].last_checkin_at == clock().isoformat()
