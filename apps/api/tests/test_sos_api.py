@@ -1,9 +1,7 @@
 """US-16 executable acceptance tests, committed before implementation."""
 
 import asyncio
-from datetime import datetime, timezone
-from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 from sqlmodel import select
@@ -22,7 +20,13 @@ from app.auth.models import (
 )
 from app.main import create_app
 from app.profile.models import FamilyContact
-from app.sos.models import SOSAlert, SOSNotification, SOSNotificationChannel, SOSStatus
+from app.sos.models import (
+    SOSAlert,
+    SOSNotification,
+    SOSNotificationChannel,
+    SOSNotificationStatus,
+    SOSStatus,
+)
 
 
 class ApiClient:
@@ -53,9 +57,7 @@ class RecordingSOSScheduler:
         self.dispatches.append((notification_id, channel))
 
 
-def _setup(
-    settings, redis_client, providers, scheduler, session_factory, clock
-):
+def _setup(settings, redis_client, providers, scheduler, session_factory, clock):
     sos_scheduler = RecordingSOSScheduler()
     api = create_app(
         settings=settings,
@@ -77,6 +79,7 @@ def _setup(
         name="Barakah Hajj",
         primary_contact_name="Musa Bello",
         email="musa@example.test",
+        password_hash="not-used-in-this-test",
         phone_number="+2348099999999",
         nahcon_licence_number="NAHCON-16",
         email_verified=True,
@@ -108,12 +111,12 @@ def _setup(
             FamilyContact(
                 user_id=user.id,
                 phone_number="+2348088888888",
-                relationship="daughter",
-                opted_in=True,
-                confirmed_at=clock(),
+                name="Zainab",
             )
         )
         session.commit()
+        session.refresh(user)
+        session.refresh(organization)
         session.expunge(user)
         session.expunge(organization)
 
@@ -159,7 +162,7 @@ def test_confirmed_sos_persists_location_and_four_channel_rows_before_dispatch(
 def test_same_client_id_is_idempotent_and_has_no_rate_limit_for_distinct_ids(
     settings, redis_client, providers, scheduler, session_factory, clock
 ) -> None:
-    """AC-16.7: retries collapse, while distinct deliberate SOS events remain allowed."""
+    """AC-16.7: retries collapse; distinct deliberate events remain allowed."""
     _, client, _, _, sos_scheduler = _setup(
         settings, redis_client, providers, scheduler, session_factory, clock
     )
@@ -188,8 +191,8 @@ def test_pilgrim_cancel_and_hto_resolve_are_separate_transitions(
     resolved = client.post(f"/v1/hto/sos-alerts/{second_id}/resolve")
     assert resolved.json() == {"status": "resolved"}
     with session_factory() as session:
-        assert session.get(SOSAlert, alert_id).status == SOSStatus.CANCELLED
-        assert session.get(SOSAlert, second_id).status == SOSStatus.RESOLVED
+        assert session.get(SOSAlert, UUID(alert_id)).status == SOSStatus.CANCELLED
+        assert session.get(SOSAlert, UUID(second_id)).status == SOSStatus.RESOLVED
 
 
 def test_hto_list_is_tenant_scoped_and_active_first(
@@ -204,3 +207,23 @@ def test_hto_list_is_tenant_scoped_and_active_first(
     assert response.json()["alerts"][0]["pilgrim_name"] == "Amina Yusuf"
     assert response.json()["alerts"][0]["pilgrim_phone"] == "+2348012345678"
 
+
+def test_notification_failure_enters_admin_queue_without_changing_alert(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """Required chaos case: three delivery failures never roll back the SOS."""
+    api, client, _, _, recorder = _setup(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    alert_id = UUID(client.post("/v1/sos", json=_payload()).json()["id"])
+    notification_id = recorder.dispatches[0][0]
+    service = api.state.sos_notification_service
+    service.sender.fail = True
+    with session_factory() as session:
+        assert service.dispatch(session, notification_id) is False
+        assert service.dispatch(session, notification_id) is False
+        assert service.dispatch(session, notification_id) is False
+        notification = session.get(SOSNotification, notification_id)
+        assert notification.status == SOSNotificationStatus.FAILED
+        assert notification.admin_queued_at is not None
+        assert session.get(SOSAlert, alert_id).status == SOSStatus.ACTIVE
