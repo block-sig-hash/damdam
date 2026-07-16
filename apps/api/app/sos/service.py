@@ -29,12 +29,29 @@ class SOSScheduler(Protocol):
         self, notification_id: UUID, channel: SOSNotificationChannel
     ) -> None: ...
 
+    def schedule_fallback(self, notification_id: UUID, countdown: int) -> None: ...
+
 
 class NoopSOSScheduler:
     def schedule_dispatch(
         self, notification_id: UUID, channel: SOSNotificationChannel
     ) -> None:
         del notification_id, channel
+
+    def schedule_fallback(self, notification_id: UUID, countdown: int) -> None:
+        del notification_id, countdown
+
+
+# SMS_FAMILY is created lazily by SOSNotificationService.send_sms_fallback
+# only if the WHATSAPP_FAMILY leg fails or doesn't confirm delivery within
+# the fallback window (AC-22.3/§6.27) — it must never be one of the four
+# rows eagerly created here at trigger/cancel time.
+EAGER_NOTIFICATION_CHANNELS = (
+    SOSNotificationChannel.PUSH,
+    SOSNotificationChannel.EMAIL,
+    SOSNotificationChannel.WHATSAPP_OPERATOR,
+    SOSNotificationChannel.WHATSAPP_FAMILY,
+)
 
 
 class SOSService:
@@ -47,7 +64,7 @@ class SOSService:
     ) -> list[SOSNotification]:
         rows = [
             SOSNotification(sos_alert_id=alert.id, channel=channel, event=event)
-            for channel in SOSNotificationChannel
+            for channel in EAGER_NOTIFICATION_CHANNELS
         ]
         session.add_all(rows)
         return rows

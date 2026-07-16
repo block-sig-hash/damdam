@@ -23,6 +23,7 @@ from app.checkins.service import (
 )
 from app.config import Settings
 from app.db import SessionFactory
+from app.sos.notifications import SOSNotificationService
 
 router = APIRouter(tags=["check-ins"])
 
@@ -96,9 +97,18 @@ async def meta_webhook(request: Request) -> MetaWebhookResponse:
     except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
         raise CheckInError("invalid_webhook_payload") from exc
     factory = cast(SessionFactory, request.app.state.session_factory)
-    service = cast(
+    checkin_service = cast(
         CheckInNotificationService, request.app.state.checkin_notification_service
     )
+    sos_service = cast(
+        SOSNotificationService, request.app.state.sos_notification_service
+    )
     with factory() as session:
-        processed = service.process_meta_statuses(session, payload)
+        # One shared Meta webhook serves both check-in and SOS family
+        # WhatsApp delivery confirmations -- a wamid uniquely correlates to
+        # at most one of the two tables, so checking both is cheap and
+        # avoids a second signed webhook endpoint/vendor integration point.
+        processed = checkin_service.process_meta_statuses(
+            session, payload
+        ) + sos_service.process_meta_statuses(session, payload)
         return MetaWebhookResponse(processed=processed)

@@ -366,7 +366,9 @@ GET    /webhooks/meta/whatsapp
   hub.challenge as text for hub.mode=subscribe
 
 POST   /webhooks/meta/whatsapp
-  Meta WhatsApp delivery-status webhook
+  Meta WhatsApp delivery-status webhook — shared by check-in (AC-15.10) and
+  SOS family (AC-22.3); a wamid uniquely correlates to at most one of the
+  two notification tables, so one signed endpoint checks both.
   Verifies X-Hub-Signature-256 (HMAC SHA256 of the raw body using the Meta app
   secret) before parsing. A delivered `wamid` suppresses the scheduled SMS
   fallback. Missing/malformed signatures return 401 invalid_webhook_signature;
@@ -471,9 +473,12 @@ GET    /hto/manifests
 ```
 GET    /hto/pilgrims
   HTO auth required
-  Query: ?manifest_id= (filters to one manifest; search/sort are not
-         implemented — no AC currently requires them, and adding
-         them is out of US-10's scope)
+  Query: ?manifest_id= (filters to one manifest; risk-sort AC-18.1,
+         amber-highlight AC-18.3, and search AC-18.7 are all
+         implemented client-side against this same full-list
+         response, not as new server query params — a per-manifest
+         roster is small enough that server-side pagination/sort
+         isn't warranted yet)
   200: { pilgrims: [{ id, name, phone_number, tier, esim_status,
           last_checkin_at?, sos_status, activation_status }] }
 
@@ -490,6 +495,19 @@ GET    /hto/sos-alerts
 POST   /hto/sos-alerts/{id}/resolve
   HTO auth required
   200: { status: "resolved" }
+  409: sos_already_cancelled (a pilgrim already cancelled this alert)
+  A resolved alert's still-pending/failed trigger-event notification rows
+  are never sent or retried again (data-model.md §6.26).
+
+POST   /hto/push-subscriptions
+  HTO auth required
+  Body: { fcm_token: string }
+  204
+  Associates the operator's browser FCM registration token with that
+  organization's own SOS push topic (hto-{organization_id}) via Firebase's
+  Instance ID API, server-side — a browser cannot subscribe itself
+  directly, it can only obtain the token from Firebase's client SDK.
+  503: push_subscription_failed (Firebase unavailable or misconfigured)
 
 GET    /hto/manifests/{id}/report
   HTO auth required

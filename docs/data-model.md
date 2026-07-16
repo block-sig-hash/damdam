@@ -420,19 +420,24 @@ WhatsApp-delivery checkpoint and SMS-fallback decision record for AC-15.10.
 |---|---|---|---|
 | id | UUID | PK | |
 | sos_alert_id | UUID | FK → sos_alerts | |
-| channel | ENUM | NOT NULL | `push` \| `email` \| `whatsapp_operator` \| `whatsapp_family` |
+| channel | ENUM | NOT NULL | `push` \| `email` \| `whatsapp_operator` \| `whatsapp_family` \| `sms_family` — see §6.27 |
 | event | ENUM | DEFAULT 'triggered' | `triggered` \| `cancelled`; keeps cancellation follow-up delivery independently auditable |
 | status | ENUM | DEFAULT 'pending' | `pending` \| `sent` \| `failed` |
 | sent_at | TIMESTAMPTZ | NULLABLE | |
 | failure_reason | VARCHAR(255) | NULLABLE | |
 | retry_count | INTEGER | DEFAULT 0 | Failed channel attempts; capped at three before admin queue |
+| whatsapp_message_id | VARCHAR(255) | UNIQUE, NULLABLE | `whatsapp_family` only — Meta `wamid`, correlates the delivery webhook shared with check-in (§6.27) |
+| whatsapp_delivered_at | TIMESTAMPTZ | NULLABLE | `whatsapp_family` only — set by the Meta webhook; suppresses the SMS fallback if present before `fallback_due_at` |
+| fallback_due_at | TIMESTAMPTZ | NULLABLE | `whatsapp_family` only — accepted time + configured window, or immediate on outright send failure |
 | admin_queued_at | TIMESTAMPTZ | NULLABLE | Set after the third failed attempt |
 | created_at | TIMESTAMPTZ | NOT NULL | |
 
 One row per channel per SOS event — allows the admin failed-
-notification queue to retry only the failed channel.
+notification queue to retry only the failed channel. `sms_family` rows
+are the one exception: created lazily by the fallback, not eagerly with
+the other four (§6.27).
 
-**Unique constraint:** `(sos_alert_id, channel, event)`
+**Unique constraint:** `(sos_alert_id, channel, event)`, `whatsapp_message_id` (unique, nullable)
 
 ---
 
@@ -1210,3 +1215,93 @@ also requires state that the original table sketch omitted. `retry_count` and
 workers and deployments. A channel failure never changes or rolls back the
 underlying `sos_alerts` row. Migration `0016_us16_sos` creates this amended
 shape directly because SOS had not been deployed before US-16.
+
+## 6.26 Amendment — US-19 Resolved-Alert Notification Suppression
+
+Independent review of US-16 found that `SOSNotificationService.dispatch()`
+and the Celery Beat recovery sweep (`app.sos.enqueue_pending`) never
+consulted the parent `sos_alerts.status` before sending or retrying a
+`triggered`-event row. A channel that failed once and was still under the
+three-attempt cap could therefore still fire minutes after an operator
+resolved the alert, violating AC-19.6 ("Resolved SOS sends no further
+notifications"). No schema change was needed — both call sites now check
+`sos_alerts.status == 'active'` before a `triggered`-event row is sent,
+skipping (and logging) rather than erroring if the alert has since moved to
+`resolved` or `cancelled`. `cancelled`-event rows are exempt from this
+check: `cancel()` always sets the alert to `cancelled` before creating
+them, and the state machine never transitions out of `cancelled` again
+(§6.25's mutual-exclusion guards), so that half of the notification table
+is never at risk of the same race.
+
+This amendment also introduces the browser-push half of AC-19.1, which had
+no delivery path at all: `FirebasePushSender.send_topic` already sent real
+FCM topic messages, but nothing in the dashboard ever subscribed a browser
+to receive them. `FirebasePushSender.subscribe_topic` calls Firebase's
+Instance ID API to associate an operator's browser FCM registration token
+with `hto-{organization_id}`, the same topic `send_topic` already targets.
+No new table is introduced — Firebase's own infrastructure holds the
+token-to-topic association; DamDam does not need to persist it to route a
+later `send_topic` call correctly.
+
+## 6.27 Amendment — US-22 SOS Family WhatsApp SMS Fallback
+
+AC-22.3 was previously unbuilt: `sos_notification_channel` had no SMS
+option at all, so a WhatsApp send that failed or went unconfirmed for the
+family contact had no fallback, unlike check-in's already-proven
+WhatsApp-to-SMS pattern (§6.23). `sms_family` is added to the channel
+enum via `ALTER TYPE ... ADD VALUE`, but — unlike the other four channels,
+which are always created together at trigger/cancel time — an
+`sms_family` row is created lazily, only if the `whatsapp_family` row
+needs the fallback. It is never one of the four rows `SOSService._notifications`
+eagerly creates.
+
+Three columns move onto `sos_notifications` rather than a new table,
+because the fallback state (was WhatsApp delivered? when is the fallback
+due?) belongs to the `whatsapp_family` row it governs, not to a row that
+may not exist yet: `whatsapp_message_id` (unique, correlates the Meta
+delivery webhook — reused as-is from check-in, since a `wamid` cannot
+belong to both a check-in and an SOS notification), `whatsapp_delivered_at`
+(distinct from the generic `status`, which stays `sent` once Meta accepts
+the message regardless of later delivery — this is what actually
+suppresses the fallback), and `fallback_due_at` (the 60-second deadline,
+or immediate on an outright send failure rather than a missed
+confirmation). These three columns are meaningless for the other three
+channels and remain null there.
+
+`SOSNotificationService.send_sms_fallback` reuses the same idempotency
+pattern as every other write path in this codebase: it attempts to insert
+the `sms_family` row and relies on the `(sos_alert_id, channel, event)`
+unique constraint plus an `IntegrityError` catch, not a pre-check select,
+so a concurrent retry cannot create two. Once created, the row is
+dispatched through the ordinary `dispatch()`/retry/admin-queue machinery
+already built for the other four channels — no bespoke `sms_attempt_count`
+field was needed the way check-in required one, because SOS's per-channel-
+row design already carries `retry_count`/`admin_queued_at` generically.
+
+The Celery Beat sweep for due fallbacks (`app.sos.enqueue_due_fallbacks`,
+mirroring check-in's `enqueue_due_fallbacks`) anti-joins against an
+existing `sms_family` sibling so it stops re-triggering `send_sms_fallback`
+once the fallback row exists at all — that row's own retries, if it failed,
+belong to the existing generic recovery sweep (§6.26's
+`pending_dispatchable_notifications_query`), not this one.
+
+The SMS sender is the same `TermiiSmsSender` check-in already uses
+(`app.notifications.providers`), injected into `SOSProviderAdapter`
+alongside the existing WhatsApp/email/push senders — no second SMS vendor
+integration was introduced.
+
+## 6.28 Amendment — US-18 Live `sos_status` on the HTO Pilgrim Roster
+
+`GET /hto/pilgrims`'s `sos_status` field (`api-spec.md` §7.8) has existed
+since US-10, but was always the schema default `"none"` — no query ever
+computed it, even after `sos_alerts` was materialized in US-16.
+`HtoPilgrimService.list_pilgrims` now queries `sos_alerts` for the listed
+pilgrims' `user_id`s and reports `"active"` if any row is
+`SOSStatus.ACTIVE`, `"none"` otherwise. This is a deliberately two-value
+signal, matching the existing `esim_status` field's own precedent (see
+its comment in `app/esim/schemas.py`): AC-18.4 only needs to distinguish
+an unresolved SOS from everything else to drive the risk-sort and
+highlight, so a pilgrim's past resolved or cancelled alerts are not
+surfaced in this summary — that history remains queryable through
+`sos_alerts` directly if a future story needs it. No schema change; this
+is a query-only amendment to an already-existing field.

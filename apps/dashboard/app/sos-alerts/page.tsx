@@ -2,6 +2,7 @@
 
 import {useCallback, useEffect, useState} from "react";
 import {getSOSAlerts, resolveSOSAlert, type SOSAlert} from "../../lib/api";
+import {enableSOSPushAlerts, type PushSubscriptionOutcome} from "../../lib/push";
 
 type Filter = "active" | "resolved" | "all";
 
@@ -9,6 +10,9 @@ export default function SOSAlertsPage() {
   const [filter, setFilter] = useState<Filter>("active");
   const [alerts, setAlerts] = useState<SOSAlert[]>([]);
   const [error, setError] = useState("");
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [pushOutcome, setPushOutcome] = useState<PushSubscriptionOutcome>();
+  const [enablingPush, setEnablingPush] = useState(false);
   const load = useCallback(async () => {
     try {
       setAlerts(await getSOSAlerts(filter === "all" ? undefined : filter));
@@ -22,13 +26,41 @@ export default function SOSAlertsPage() {
     const timer = window.setInterval(load, 15_000);
     return () => { window.clearTimeout(initial); window.clearInterval(timer); };
   }, [load]);
+  useEffect(() => {
+    // One-time sync with a browser API that isn't available during SSR
+    // (Notification is undefined in Node), so it can't be read at render
+    // time -- not a subscription, nothing to clean up.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPushPermission(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
+  }, []);
   async function resolve(alert: SOSAlert) {
     await resolveSOSAlert(alert.id);
     setAlerts(rows => rows.map(row => row.id === alert.id ? {...row, status: "resolved"} : row));
   }
+  async function requestPushAlerts() {
+    // Only ever called from this button press -- never on page load.
+    setEnablingPush(true);
+    try {
+      const outcome = await enableSOSPushAlerts();
+      setPushOutcome(outcome);
+      setPushPermission(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
+    } finally {
+      setEnablingPush(false);
+    }
+  }
   return (
     <main className="dashboard-page">
       <header className="page-heading"><div><p className="eyebrow">HTO safety desk</p><h1>SOS Alerts</h1></div><p>Refreshes every 15 seconds</p></header>
+      {pushPermission === "default" ? (
+        <aside className="push-banner" role="status">
+          <p>Get an alert on this browser the moment an SOS comes in, even when this tab isn&apos;t open.</p>
+          <button disabled={enablingPush} onClick={requestPushAlerts}>
+            {enablingPush ? "Enabling…" : "Enable browser alerts"}
+          </button>
+        </aside>
+      ) : null}
+      {pushOutcome === "error" ? <p role="alert">Could not enable browser alerts. Try again shortly.</p> : null}
+      {pushOutcome === "unsupported" ? <p role="alert">This browser doesn&apos;t support push alerts.</p> : null}
       <nav aria-label="SOS status filter" className="filter-row">
         {(["active", "resolved", "all"] as const).map(value => <button aria-pressed={filter === value} key={value} onClick={() => setFilter(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}
       </nav>

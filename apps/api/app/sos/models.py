@@ -29,6 +29,7 @@ class SOSNotificationChannel(str, Enum):
     EMAIL = "email"
     WHATSAPP_OPERATOR = "whatsapp_operator"
     WHATSAPP_FAMILY = "whatsapp_family"
+    SMS_FAMILY = "sms_family"
 
 
 class SOSNotificationStatus(str, Enum):
@@ -140,6 +141,24 @@ class SOSNotification(SQLModel, table=True):
         default=None, sa_column=Column(String(255), nullable=True)
     )
     retry_count: int = Field(default=0)
+    # The three fields below apply only to the WHATSAPP_FAMILY channel's
+    # AC-22.3 SMS fallback (§6.27): whatsapp_message_id correlates the same
+    # shared Meta delivery webhook already used for check-in;
+    # whatsapp_delivered_at (distinct from `status`, which stays SENT once
+    # Meta accepts the send) suppresses the fallback if delivery is
+    # confirmed within the window; fallback_due_at marks when the
+    # SMS_FAMILY row becomes eligible.
+    whatsapp_message_id: str | None = Field(
+        default=None,
+        sa_column=Column(String(255), nullable=True, unique=True, index=True),
+    )
+    whatsapp_delivered_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    fallback_due_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True, index=True),
+    )
     admin_queued_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True, index=True),

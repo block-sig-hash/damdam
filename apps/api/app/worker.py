@@ -27,8 +27,13 @@ from app.manifests.invoices import InvoicePDFGenerator, build_invoice_storage
 from app.manifests.orders import ManifestOrderService
 from app.notifications.providers import FirebasePushSender
 from app.packages.models import Package
-from app.sos.models import SOSNotification, SOSNotificationStatus
-from app.sos.notifications import SOSNotificationService, SOSProviderAdapter
+from app.sos.models import SOSNotification
+from app.sos.notifications import (
+    SOSNotificationService,
+    SOSProviderAdapter,
+    due_sos_fallback_notifications_query,
+    pending_dispatchable_notifications_query,
+)
 
 settings = get_settings()
 celery_app = Celery("damdam", broker=settings.redis_url, backend=settings.redis_url)
@@ -49,15 +54,23 @@ celery_app.conf.beat_schedule = {
         "task": "app.sos.enqueue_pending",
         "schedule": 10.0,
     },
+    "enqueue-due-sos-fallbacks": {
+        "task": "app.sos.enqueue_due_fallbacks",
+        "schedule": 10.0,
+    },
 }
 
 
 def _sos_notifications() -> SOSNotificationService:
     return SOSNotificationService(
         SOSProviderAdapter(
-            build_notification_service(settings), FirebasePushSender(settings)
+            build_notification_service(settings),
+            FirebasePushSender(settings),
+            build_sms_sender(settings),
         ),
         utc_now,
+        CelerySOSScheduler(),
+        settings.family_notify_fallback_seconds,
     )
 
 
@@ -68,21 +81,38 @@ def dispatch_sos_notification(notification_id: str, channel: str) -> bool:
         return _sos_notifications().dispatch(session, UUID(notification_id))
 
 
+@celery_app.task(name="app.sos.sms_fallback")  # type: ignore[misc]
+def send_sos_sms_fallback(notification_id: str) -> bool:
+    with create_session_factory(settings)() as session:
+        return _sos_notifications().send_sms_fallback(session, UUID(notification_id))
+
+
 @celery_app.task(name="app.sos.enqueue_pending")  # type: ignore[misc]
 def enqueue_pending_sos_notifications() -> int:
     queued = 0
     with create_session_factory(settings)() as session:
         rows = session.exec(
-            select(SOSNotification)
-            .where(
-                SOSNotification.status != SOSNotificationStatus.SENT,
-                SOSNotification.retry_count < 3,
-                col(SOSNotification.admin_queued_at).is_(None),
+            pending_dispatchable_notifications_query().with_for_update(
+                skip_locked=True, of=SOSNotification
             )
-            .with_for_update(skip_locked=True)
         ).all()
         for row in rows:
             CelerySOSScheduler().schedule_dispatch(row.id, row.channel)
+            queued += 1
+    return queued
+
+
+@celery_app.task(name="app.sos.enqueue_due_fallbacks")  # type: ignore[misc]
+def enqueue_due_sos_fallbacks() -> int:
+    queued = 0
+    with create_session_factory(settings)() as session:
+        rows = session.exec(
+            due_sos_fallback_notifications_query(utc_now()).with_for_update(
+                skip_locked=True, of=SOSNotification
+            )
+        ).all()
+        for row in rows:
+            CelerySOSScheduler().schedule_fallback(row.id, 0)
             queued += 1
     return queued
 

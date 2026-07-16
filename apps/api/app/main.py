@@ -66,6 +66,8 @@ from app.profile.emergency_contact import EmergencyContactService
 from app.profile.family_contacts import FamilyContactError, FamilyContactService
 from app.profile.routes import router as profile_router
 from app.sos.notifications import (
+    PushSubscriptionManager,
+    PushSubscriptionService,
     SOSChannelSender,
     SOSNotificationService,
     SOSProviderAdapter,
@@ -96,6 +98,7 @@ def create_app(
     checkin_scheduler: CheckInScheduler | None = None,
     sos_scheduler: SOSScheduler | None = None,
     sos_sender: SOSChannelSender | None = None,
+    push_subscription_manager: PushSubscriptionManager | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     supplied = (redis_client, providers, scheduler, session_factory)
@@ -182,12 +185,13 @@ def create_app(
         voice_provider or TelnyxVoiceProvider(resolved_settings),
         clock,
     )
+    resolved_sms_sender = build_sms_sender(resolved_settings, sms_sender)
     api.state.checkin_service = CheckInService(
         cast(RedisClient, redis_client), resolved_checkin_scheduler, clock
     )
     api.state.checkin_notification_service = CheckInNotificationService(
         notification_service.whatsapp,
-        build_sms_sender(resolved_settings, sms_sender),
+        resolved_sms_sender,
         resolved_checkin_scheduler,
         clock,
         resolved_settings.family_notify_fallback_seconds,
@@ -200,12 +204,16 @@ def create_app(
         else CelerySOSScheduler()
     )
     api.state.sos_service = SOSService(resolved_sos_scheduler, clock)
+    push_sender = FirebasePushSender(resolved_settings)
     api.state.sos_notification_service = SOSNotificationService(
         sos_sender
-        or SOSProviderAdapter(
-            notification_service, FirebasePushSender(resolved_settings)
-        ),
+        or SOSProviderAdapter(notification_service, push_sender, resolved_sms_sender),
         clock,
+        resolved_sos_scheduler,
+        resolved_settings.family_notify_fallback_seconds,
+    )
+    api.state.push_subscription_service = PushSubscriptionService(
+        push_subscription_manager or push_sender
     )
 
     @api.exception_handler(CheckInError)
@@ -569,6 +577,7 @@ def create_app(
             "sos_not_found": 404,
             "sos_already_resolved": 409,
             "sos_already_cancelled": 409,
+            "push_subscription_failed": 503,
         }
         return JSONResponse(
             status_code=statuses[exc.code],

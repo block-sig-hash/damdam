@@ -3,10 +3,12 @@ from typing import Any
 
 from app.config import Settings
 from app.notifications.providers import (
+    FirebasePushSender,
     MetaWhatsAppSender,
     ResendEmailSender,
     TermiiSmsSender,
 )
+from app.notifications.service import NotificationError
 
 
 class FakeResponse:
@@ -196,3 +198,101 @@ def test_termii_family_sms_uses_plain_message_endpoint() -> None:
     assert payload["to"] == "2349012345678"
     assert payload["type"] == "plain"
     assert payload["sms"] == "Amina checked in safely. All is well."
+
+
+def test_firebase_push_sends_to_the_correct_topic(monkeypatch) -> None:
+    """AC-19.1: an HTO alert must target that org's own topic, not a global one."""
+    requests: list[dict[str, Any]] = []
+
+    def fake_post(url: str, **kwargs: Any) -> FakeJsonResponse:
+        requests.append({"url": url, **kwargs})
+        return FakeJsonResponse({})
+
+    monkeypatch.setattr("app.notifications.providers.httpx.post", fake_post)
+    settings = Settings(
+        jwt_secret="test-secret-at-least-32-characters-long",
+        firebase_project_id="damdam-prod",
+        firebase_access_token="firebase-oauth-token",
+    )
+
+    FirebasePushSender(settings).send_topic(
+        "hto-org-1",
+        "URGENT: pilgrim SOS",
+        "Amina Yusuf needs help now.",
+        {"sos_id": "n-1"},
+    )
+
+    assert requests[0]["url"] == (
+        "https://fcm.googleapis.com/v1/projects/damdam-prod/messages:send"
+    )
+    assert requests[0]["headers"]["Authorization"] == "Bearer firebase-oauth-token"
+    assert requests[0]["json"]["message"]["topic"] == "hto-org-1"
+    assert requests[0]["json"]["message"]["notification"]["title"] == (
+        "URGENT: pilgrim SOS"
+    )
+
+
+def test_firebase_push_send_topic_requires_configuration() -> None:
+    settings = Settings(jwt_secret="test-secret-at-least-32-characters-long")
+    try:
+        FirebasePushSender(settings).send_topic("hto-org-1", "t", "b", {})
+        raise AssertionError("expected NotificationError")
+    except NotificationError as exc:
+        assert "not configured" in str(exc)
+
+
+def test_firebase_subscribe_topic_associates_the_token_via_instance_id_api(
+    monkeypatch,
+) -> None:
+    """A browser's FCM registration token must be linked to the org's own
+    topic (hto-{org_id}), not a shared/global one, via Firebase's Instance
+    ID batchAdd endpoint — the real server-side half of the browser push
+    subscription flow; getToken() alone never subscribes anything."""
+    requests: list[dict[str, Any]] = []
+
+    def fake_post(url: str, **kwargs: Any) -> FakeJsonResponse:
+        requests.append({"url": url, **kwargs})
+        return FakeJsonResponse({})
+
+    monkeypatch.setattr("app.notifications.providers.httpx.post", fake_post)
+    settings = Settings(
+        jwt_secret="test-secret-at-least-32-characters-long",
+        firebase_access_token="firebase-oauth-token",
+    )
+
+    FirebasePushSender(settings).subscribe_topic("browser-fcm-token", "hto-org-1")
+
+    assert requests[0]["url"] == "https://iid.googleapis.com/iid/v1:batchAdd"
+    assert requests[0]["headers"]["Authorization"] == "Bearer firebase-oauth-token"
+    assert requests[0]["json"] == {
+        "to": "/topics/hto-org-1",
+        "registration_tokens": ["browser-fcm-token"],
+    }
+
+
+def test_firebase_subscribe_topic_requires_configuration() -> None:
+    settings = Settings(jwt_secret="test-secret-at-least-32-characters-long")
+    try:
+        FirebasePushSender(settings).subscribe_topic("token", "hto-org-1")
+        raise AssertionError("expected NotificationError")
+    except NotificationError as exc:
+        assert "not configured" in str(exc)
+
+
+def test_firebase_subscribe_topic_wraps_http_errors(monkeypatch) -> None:
+    import httpx
+
+    def fake_post(url: str, **kwargs: Any):
+        raise httpx.ConnectError("network unreachable")
+
+    monkeypatch.setattr("app.notifications.providers.httpx.post", fake_post)
+    settings = Settings(
+        jwt_secret="test-secret-at-least-32-characters-long",
+        firebase_access_token="firebase-oauth-token",
+    )
+
+    try:
+        FirebasePushSender(settings).subscribe_topic("token", "hto-org-1")
+        raise AssertionError("expected NotificationError")
+    except NotificationError as exc:
+        assert "subscription failed" in str(exc)

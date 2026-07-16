@@ -307,6 +307,27 @@ class FirebasePushSender:
         except httpx.HTTPError as exc:
             raise NotificationError("Firebase push delivery failed") from exc
 
+    def subscribe_topic(self, token: str, topic: str) -> None:
+        """Associates a browser's FCM registration token with a topic via
+        the Instance ID API, so a later send_topic(topic, ...) call reaches
+        it. Subscription is a one-time, server-side operation — the browser
+        cannot subscribe itself directly, it can only obtain the token."""
+        if not self.settings.firebase_access_token:
+            raise NotificationError("Firebase push is not configured")
+        try:
+            response = httpx.post(
+                "https://iid.googleapis.com/iid/v1:batchAdd",
+                headers={
+                    "Authorization": f"Bearer {self.settings.firebase_access_token}",
+                    "access_token_auth": "true",
+                },
+                json={"to": f"/topics/{topic}", "registration_tokens": [token]},
+                timeout=self.settings.notification_timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise NotificationError("Firebase topic subscription failed") from exc
+
 
 class TermiiSmsSender:
     """Outbound family notification SMS, distinct from Termii's OTP endpoint."""

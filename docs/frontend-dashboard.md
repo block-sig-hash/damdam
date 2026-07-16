@@ -101,6 +101,19 @@ tier, eSIM status, last check-in, SOS status. Sorted by risk by
 default (unresolved SOS first, stale check-ins next, alphabetical
 last).
 
+**Implementation note (US-18):** this spec describes a single
+cross-manifest roster at `/home`. The actual US-18 build instead
+implements the risk-sort/highlight/search table per-manifest at
+`/manifests/[id]`, deliberately leaving `/home`'s existing narrower
+unresolved-SOS-only banner (built earlier, still live) untouched
+rather than conflating the two. `/home` therefore does not yet show
+the "manifest/batch" column or a cross-manifest aggregate view — a
+pilgrim's risk state is only visible by opening their specific
+manifest. Reconciling this (either building the cross-manifest `/home`
+view this section describes, or updating this section to describe the
+per-manifest scope as the intended design) is open follow-up work, not
+resolved silently in either direction here.
+
 **Interactive elements:**
 - Filter by manifest (dropdown)
 - Search by name/phone
