@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 import fakeredis
 import pytest
-from sqlmodel import Session, SQLModel, create_engine, select
+from sqlmodel import Session, SQLModel, col, create_engine, select
 
 from app.auth.models import User
 from app.checkins.models import CheckIn, CheckInNotification
@@ -62,6 +62,16 @@ def test_concurrent_same_uuid_creates_one_checkin_and_one_notification() -> None
 
     assert ids[0] == ids[1]
     with Session(engine) as session:
-        assert len(session.exec(select(CheckIn)).all()) == 1
-        assert len(session.exec(select(CheckInNotification)).all()) == 1
+        checkins = session.exec(
+            select(CheckIn).where(CheckIn.user_id == user.id)
+        ).all()
+        notifications = session.exec(
+            select(CheckInNotification).where(
+                col(CheckInNotification.check_in_id).in_(
+                    [checkin.id for checkin in checkins]
+                )
+            )
+        ).all()
+        assert len(checkins) == 1
+        assert len(notifications) == 1
     assert len(scheduler.dispatched) == 1

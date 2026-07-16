@@ -1162,3 +1162,26 @@ payloads into the check-in service. The worker passes
 `FAMILY_NOTIFY_CHANNEL_PRIMARY` / `FAMILY_NOTIFY_CHANNEL_SECONDARY` into the
 delivery service, which rejects a task whose configured role does not match its
 channel instead of silently ignoring the deployment policy.
+
+## 6.24 Amendment — US-15 Redis-Outage Notification Ceiling
+
+`CheckInService.create` fails open on the Redis rate limiter (§6.23's review
+established this is deliberate: check-in persistence must never be blocked by
+infrastructure). Independent review found that failing open had no ceiling of
+its own: `check_ins.client_generated_id` uniqueness only rejects an
+exact-duplicate retry, not distinct check-ins, so an outage with no other
+guard let every rapid, distinct check-in from the same user trigger its own
+family WhatsApp/SMS send for as long as Redis stayed down — real notification
+cost and, worse, a plausible flood to a family contact's phone. The
+client-side 15-minute UI debounce does not close this gap; it only governs
+the honest app path and has no effect on a direct API call.
+
+`CheckInService._recent_checkin_already_notified` closes it without touching
+the write path: it activates only when the Redis call raised, and queries
+`check_ins` for another row from the same user with `received_at` inside the
+same 15-minute window the Redis key would have covered. If one exists, this
+check-in still gets its own row — the safety-critical write is never
+gated — but no `check_in_notifications` row is created for it, so no second
+WhatsApp/SMS fires. Once Redis recovers, the existing Redis-backed limiter
+governs the very next request as before; this fallback has no effect while
+Redis is healthy.

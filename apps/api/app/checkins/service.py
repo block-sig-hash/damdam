@@ -75,6 +75,7 @@ class CheckInService:
             return existing
 
         rate_key = f"checkin:rate:{user.id}"
+        redis_unavailable = False
         try:
             acquired = self.redis.set(
                 rate_key,
@@ -85,11 +86,18 @@ class CheckInService:
             same_retry = self.redis.get(rate_key) == str(payload.client_generated_id)
         except Exception:
             # Check-in persistence is safety-critical. PostgreSQL's UUID
-            # constraint still prevents duplicates while rate limiting fails
-            # open during a Redis outage.
+            # constraint still prevents duplicate writes, and the write
+            # itself is never blocked here, while rate limiting fails open
+            # during a Redis outage. That alone would let every distinct
+            # check-in during the outage trigger its own WhatsApp/SMS send
+            # with no ceiling, so `_recent_checkin_already_notified` below is
+            # a Postgres-backed fallback ceiling that suppresses redundant
+            # notifications (not the write) for the same 15-minute window
+            # Redis would otherwise have enforced. See data-model.md §6.24.
             logger.exception("Check-in rate limiter unavailable; failing open")
             acquired = True
             same_retry = False
+            redis_unavailable = True
         if not acquired and not same_retry:
             raise CheckInError("checkin_rate_limited")
 
@@ -127,8 +135,11 @@ class CheckInService:
         contact = session.exec(
             select(FamilyContact).where(FamilyContact.user_id == user.id)
         ).first()
+        suppressed = redis_unavailable and self._recent_checkin_already_notified(
+            session, user.id, checkin.id
+        )
         notification: CheckInNotification | None = None
-        if contact is not None:
+        if contact is not None and not suppressed:
             notification = CheckInNotification(check_in_id=checkin.id)
             session.add(notification)
         session.commit()
@@ -137,6 +148,28 @@ class CheckInService:
             session.refresh(notification)
             self._schedule_dispatch(notification.id)
         return checkin
+
+    def _recent_checkin_already_notified(
+        self, session: Session, user_id: UUID, exclude_checkin_id: UUID
+    ) -> bool:
+        """Redis-independent fallback ceiling used only during a Redis
+        outage: if this user already has another check-in within the same
+        15-minute window this instance would otherwise have enforced, skip
+        triggering a second family notification. The check-in write itself
+        is always persisted regardless of this check."""
+        window_start = self.clock() - timedelta(seconds=self.RATE_LIMIT_SECONDS)
+        return (
+            session.exec(
+                select(CheckIn.id)
+                .where(
+                    CheckIn.user_id == user_id,
+                    CheckIn.id != exclude_checkin_id,
+                    col(CheckIn.received_at) > window_start,
+                )
+                .limit(1)
+            ).first()
+            is not None
+        )
 
     def _schedule_dispatch(self, notification_id: UUID) -> None:
         try:

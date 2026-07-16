@@ -271,6 +271,85 @@ def test_redis_rate_limit_blocks_a_different_checkin_for_fifteen_minutes(
     assert 0 < redis_client.ttl(f"checkin:rate:{user_id}") <= 900
 
 
+def test_redis_outage_fails_open_but_postgres_ceiling_caps_notifications(
+    settings,
+    redis_client,
+    providers,
+    scheduler,
+    session_factory,
+    clock,
+    monkeypatch,
+) -> None:
+    """During a sustained Redis outage, every distinct check-in is still
+    persisted (the safety-critical write is never blocked), but only the
+    first one within the 15-minute window triggers a family WhatsApp/SMS
+    notification. The Postgres-backed fallback ceiling in
+    `_recent_checkin_already_notified` closes the gap Redis would otherwise
+    have covered: unlimited notification-triggering spam during an outage."""
+    api, whatsapp, _, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
+        session.commit()
+
+    def redis_unavailable(*args, **kwargs):
+        del args, kwargs
+        raise ConnectionError("redis unavailable")
+
+    monkeypatch.setattr(redis_client, "set", redis_unavailable)
+
+    responses = [
+        client.post(
+            "/v1/checkins",
+            json={
+                "client_generated_id": str(uuid4()),
+                "timestamp": clock().isoformat(),
+            },
+        )
+        for _ in range(5)
+    ]
+
+    assert [r.status_code for r in responses] == [200] * 5
+    with session_factory() as session:
+        assert len(session.exec(select(CheckIn)).all()) == 5
+        assert len(session.exec(select(CheckInNotification)).all()) == 1
+    assert len(notification_scheduler.dispatches) == 1
+    assert len(whatsapp.checkins) == 0  # dispatch is scheduled, not sent inline
+
+
+def test_recent_checkin_ceiling_never_applies_when_redis_is_available(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """The Postgres fallback ceiling only activates on Redis failure. With
+    Redis healthy, a second distinct check-in inside the window is still
+    rejected outright by the existing Redis limiter (429), proving the new
+    check does not change the normal, non-outage path."""
+    api, _, _, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
+        session.commit()
+
+    first = client.post(
+        "/v1/checkins",
+        json={"client_generated_id": str(uuid4()), "timestamp": clock().isoformat()},
+    )
+    second = client.post(
+        "/v1/checkins",
+        json={"client_generated_id": str(uuid4()), "timestamp": clock().isoformat()},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    with session_factory() as session:
+        assert len(session.exec(select(CheckIn)).all()) == 1
+    assert len(notification_scheduler.dispatches) == 1
+
+
 def test_redis_outage_fails_open_without_losing_the_checkin(
     settings,
     redis_client,
@@ -491,6 +570,69 @@ def test_signed_meta_delivery_webhook_marks_message_delivered(
     assert delivered.json() == {"processed": 1}
     assert fallback is False
     assert sms.messages == []
+
+
+def test_meta_webhook_signed_with_wrong_secret_is_rejected(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-15.10: a well-formed signature computed with the wrong app secret
+    must be rejected, not just a request missing the header entirely."""
+    api, _, sms, notification_scheduler = _api_dependencies(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
+        session.commit()
+    client.post(
+        "/v1/checkins",
+        json={"client_generated_id": str(uuid4()), "timestamp": clock().isoformat()},
+    )
+    notification_id = notification_scheduler.dispatches[0]
+    with session_factory() as session:
+        api.state.checkin_notification_service.dispatch_whatsapp(
+            session, notification_id
+        )
+    body = json.dumps(
+        {
+            "entry": [
+                {
+                    "changes": [
+                        {
+                            "value": {
+                                "statuses": [
+                                    {"id": "wamid.1", "status": "delivered"}
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        separators=(",", ":"),
+    ).encode()
+    wrong_secret_signature = "sha256=" + hmac.new(
+        b"attacker-guessed-secret", body, hashlib.sha256
+    ).hexdigest()
+
+    response = client.post(
+        "/v1/webhooks/meta/whatsapp",
+        content=body,
+        headers={
+            "x-hub-signature-256": wrong_secret_signature,
+            "content-type": "application/json",
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"] == "invalid_webhook_signature"
+    clock.advance(seconds=60)
+    with session_factory() as session:
+        fallback = api.state.checkin_notification_service.send_sms_fallback(
+            session, notification_id
+        )
+    assert fallback is True
+    assert len(sms.messages) == 1
 
 
 def test_missing_family_contact_never_rolls_back_the_checkin(
