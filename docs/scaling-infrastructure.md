@@ -472,3 +472,35 @@ enough volume and commercial standing to support an actual
 enterprise carrier sales relationship — a later-stage question for
 either path, not a Phase 0 one, and not something to pair
 symmetrically with IDT Express before that standing exists.
+
+## 12.10 GitHub Actions Self-Hosted Runners — Flagged, Not Set Up
+
+**Not needed now.** Path-filtering CI jobs by what actually changed
+(`.github/workflows/ci.yml`, gating each job on `dorny/paths-filter`
+output rather than running unconditionally) is the first, cheaper
+fix for approaching the free-tier 2000 Actions minutes/month limit —
+the Android compile step alone (`:app:assembleDebug`) ran on every
+single PR regardless of whether `apps/mobile` changed, at ~20-22
+minutes per run, before that fix. Flagged here so the next step
+isn't lost as conversation if minutes usage is still high after
+path-filtering lands.
+
+**The idea:** self-hosting a GitHub Actions runner on the same OCI
+Always Free Ampere A1 instance already running the production stack
+(per §12.2 and `infrastructure.md`) — registering it as a repo-level
+runner so CI jobs execute there instead of GitHub-hosted minutes.
+Same underlying hardware DamDam is already paying nothing for.
+
+**The real caveat, not a permanent guarantee:** GitHub announced a
+per-minute platform fee for self-hosted runners on private repos
+for March 2026, then postponed it indefinitely after user backlash.
+Self-hosted runners are currently still free to use, but that's a
+postponement, not a reversal — this should be re-checked against
+GitHub's current pricing docs before actually provisioning
+anything, not assumed permanent from this note.
+
+**Practical implication:** if minutes usage is still high after
+path-filtering (e.g. once mobile-touching PR volume grows), this
+is the next lever — worth revisiting then, not before, and worth
+re-confirming the self-hosted-runner fee status at that time given
+it's an active, if currently paused, GitHub policy area.
