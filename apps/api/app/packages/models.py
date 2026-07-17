@@ -21,6 +21,11 @@ class PackageStatus(str, Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
     CANCELLED = "cancelled"
+    # AC-25.3: set when a later chained purchase supersedes this package
+    # before its own natural expiry -- distinct from EXPIRED, which means
+    # the package ran out of validity time on its own. See data-model.md
+    # §6.30.
+    SUPERSEDED = "superseded"
 
 
 class Package(SQLModel, table=True):

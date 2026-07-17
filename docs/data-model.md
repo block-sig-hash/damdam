@@ -1320,3 +1320,139 @@ their corresponding remaining fields. This is a response-contract correction,
 not a schema migration: no stored shape, constraint, or snapshot semantics
 change. The numbering deliberately reserves §6.26–§6.28 for concurrent PR #70;
 its source changes do not touch the payment package endpoint.
+
+## 6.30 Amendment — US-25 AC-25.3 Package Validity and Chaining
+
+AC-25.3 ("one active package per destination per trip period") turned out
+not to mean "block a second purchase" once checked against a real product
+scenario: a pilgrim who exhausts a package's data/voice mid-trip and rebuys
+should get immediate use of the new tier's allowance, and a pilgrim with two
+genuinely separate future trips (e.g. Umrah now, Hajj next year) must not be
+blocked either. Blocking the second, genuinely-paid purchase also has no
+good answer for what happens to the money already collected — no refund
+infrastructure exists in this codebase today (confirmed: no refund method
+exists on any payment provider abstraction, and `api-spec.md` §7.13 already
+treats refund processing as out of scope for the MVP admin UI, a direct
+database action instead). Chaining avoids that problem entirely by never
+creating a stranded, paid-for, blocked package in the first place.
+
+**`pricing_tiers.validity_days`** (`int`, `NOT NULL`, `server_default '30'`)
+is new: how many days a package provisioned from that tier remains valid,
+governing both a fresh package's `expires_at` and how a chained renewal's
+new window is computed. Intended real values are 7/15/30 days for the
+base/medium/high retail tiers, admin-configured the same way `ngn_price`
+already is (§6.16) — there is no seed or tier-creation endpoint in this
+codebase at all yet, so setting real values remains a direct database
+action until one exists, same MVP-scope precedent as §6.16.
+
+**`PackageStatus.SUPERSEDED`** is a new terminal status, added via
+`ALTER TYPE package_status ADD VALUE`, distinct from `EXPIRED`: `EXPIRED`
+means a package ran out of its own validity window unrenewed; `SUPERSEDED`
+means a later purchase chained onto it and replaced it before that
+happened.
+
+**Chaining mechanics** (`app/packages/service.py`,
+`PackageChainingService.chain()`), invoked from both provisioning paths
+(the payment webhook success handler and activation-code redemption,
+replacing what those two paths used to do — populate a package's balance
+and `expires_at` directly from the tier alone):
+
+- If the purchasing user has no package with `status = 'active'`, the new
+  package gets a fresh window: `expires_at = now + validity_days`, no
+  balance carried in.
+- If an active package exists and its `expires_at` is still in the future,
+  the purchase is a genuine rebuy: the new package's window starts from
+  the *current* package's `expires_at` (not from the purchase moment,
+  which is what makes this a renewal rather than two overlapping
+  purchases), its unused `data_gb_remaining`/`pstn_minutes_remaining` roll
+  forward on top of the new tier's own allowance, and the current package
+  flips to `SUPERSEDED`.
+- If an active package exists but its `expires_at` has already passed,
+  it represents a concluded, unrenewed past trip, not a rebuy — nothing
+  in this codebase currently sweeps packages to `EXPIRED` on a schedule,
+  so a package can sit at `status = 'active'` past its own window
+  indefinitely. Chaining lazily corrects this: the stale package is
+  flipped to `EXPIRED` (not `SUPERSEDED`) when discovered, its balance is
+  *not* rolled forward, and the new package gets a fresh window from now.
+  This keeps "exactly one `ACTIVE` package per user" true as an invariant
+  without requiring new background sweep infrastructure — every other
+  reader of "the active package" in this codebase (e.g. the PSTN balance
+  lookup in `app/voice/service.py`) continues to work unmodified.
+- The boundary (`expires_at == now`, exactly) is treated as already
+  expired, not still valid.
+
+**Top-ups** (a separate voice/data top-up purchase, distinct from a
+full-package rebuy) inherit the parent package's existing validity window
+rather than carrying an independent one of their own — the same chaining
+mechanics apply, with the top-up's own tier's `data_gb`/`pstn_minutes`
+rolling into `extra_data_gb`/`extra_pstn_minutes` the same way a rebuy's
+leftover balance does, rather than opening a second concurrent window.
+Note: no top-up purchase flow exists yet in this codebase (retail purchase
+and activation redemption both provision full packages only) — this
+documents the intended mechanics for when one is built, not a currently
+reachable code path.
+
+**Admin reversal** — a pilgrim who mistakenly buys twice needs a way for
+an admin to undo one purchase. In scope for US-25: a minimal
+`POST /admin/packages/{id}/cancel` (see `api-spec.md`) that sets the
+target package's `status` to `CANCELLED` and writes an audit log entry
+(§6.31, `PACKAGE_CANCELLED_BY_ADMIN`) — cancel-only, no automatic balance
+reversal, chain re-linking, or payment refund/credit. This mirrors the
+same MVP-scope precedent as `validity_days` above: `api-spec.md` §7.13
+already treats refund processing and manual package editing as direct
+database actions for MVP, not admin-UI features. A smarter automatic
+reversal (unwinding a chain, crediting/refunding the superseded
+transaction) is explicitly future work, tied to the payment-abstraction
+refund capability `scaling-infrastructure.md` already lists as a
+post-MVP goal — no such infrastructure exists today.
+
+## 6.31 Amendment — US-25 AC-25.4 `audit_log` Table
+
+No audit trail existed anywhere in this schema before US-25: duplicate
+payment-webhook retries (AC-25.1) and duplicate activation-code redemption
+attempts (AC-25.2) were already correctly absorbed as silent no-ops, but
+left no record for admin review, and the new AC-25.3 chaining decision
+(§6.30) needed the same treatment. A single minimal table covers all three,
+plus the admin-cancel action above:
+
+```
+audit_log
+  id              UUID PK
+  created_at      TIMESTAMPTZ NOT NULL, indexed
+  event_type      VARCHAR(64) NOT NULL, indexed
+  user_id         UUID NULL, FK -> users.id ON DELETE SET NULL, indexed
+  reference       VARCHAR(255) NULL
+  outcome         VARCHAR(64) NOT NULL, indexed
+  details         VARCHAR(500) NULL
+```
+
+`event_type` and `outcome` are deliberately plain `VARCHAR`, not
+Postgres-native enum types — this table is meant to absorb new event
+sources and outcomes over time without a migration each time; type safety
+for the values actually written is enforced in application code via the
+`AuditEventType`/`AuditOutcome` Python enums (`app/audit/models.py`), not
+the database schema. `user_id` is `ON DELETE SET NULL` rather than
+`CASCADE`, unlike most user-owned tables in this schema, so the audit trail
+survives account deletion instead of disappearing with it. `reference` is
+deliberately untyped/unvalidated — a payment `processor_reference`, an
+activation code, or a package id, whichever is relevant to the event — this
+is a log, not a foreign key to any one of those tables.
+
+Current write sites (`app/audit/service.py`, `AuditLogService.record()`,
+which never commits on its own — each caller commits it as part of its own
+transaction, since in both duplicate-detection paths the audit write must
+survive an exception that's about to unwind the rest of the transaction):
+
+- `duplicate_webhook_absorbed` — a payment webhook retry that resolves to
+  an already-processed transaction (`app/payments/service.py`).
+- `duplicate_activation_attempted` — a second redemption attempt on an
+  already-used activation code, from either of the two places
+  `ActivationError("activation_code_already_used")` can be raised
+  (`app/activation/service.py`).
+- `package_chained_onto_active_window` — §6.30's chaining path actually
+  superseded an existing active package, from both provisioning paths.
+- `package_cancelled_by_admin` — the admin-cancel endpoint (§6.30).
+
+No admin UI to browse this log is in scope for US-25 — only the table and
+the write-path, per the same reasoning as the cancel endpoint's own scope
+above.

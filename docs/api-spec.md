@@ -623,6 +623,19 @@ POST   /admin/sos-notifications/retry-bulk
 GET    /admin/device-compatibility-log
   Query: ?esim_supported=false&platform=ios
   Used to build the "known incompatible devices" list
+
+POST   /admin/packages/{id}/cancel
+  Admin auth required
+  200: { id, status: "cancelled" }
+  404: package_not_found
+  AC-25.3/25.4 (see data-model.md §6.30/§6.31): sets the package's
+  status to `cancelled` and writes an `audit_log` row
+  (`package_cancelled_by_admin`). Cancel-only — no balance
+  reversal, chain re-linking, or payment refund/credit; calling it
+  on an already-cancelled package is a no-op (idempotent, no
+  duplicate audit row). Lets an admin undo one side of a mistaken
+  duplicate purchase; see §7.13 for why this is a narrow exception
+  rather than a reopening of "manual package editing."
 ```
 
 ---
@@ -680,6 +693,18 @@ Explicitly not in the admin UI for MVP: user search/lookup, manual
 package editing, refund processing, analytics dashboards. Anything
 outside these four screens is a direct database action for MVP,
 acceptable given expected pilot volume.
+
+`POST /admin/packages/{id}/cancel` (§7.10, added for US-25 AC-25.3)
+is a narrow, deliberate exception to "no manual package editing":
+it can only flip a package to `cancelled`, nothing else about a
+package is editable through it. It exists because chaining
+(data-model.md §6.30) means a mistaken duplicate purchase is no
+longer silently blocked — an admin needs a way to undo one side of
+it. It does not reverse balance, re-link a chain, or touch
+payment/refund state, so it doesn't reopen the refund-processing
+exclusion above; automatic reversal remains future work tied to
+the payment-abstraction refund capability in
+scaling-infrastructure.md.
 
 ---
 

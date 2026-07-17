@@ -9,6 +9,8 @@ from sqlalchemy import update
 from sqlalchemy.engine import CursorResult
 from sqlmodel import Session, col, select
 
+from app.audit.models import AuditEventType, AuditOutcome
+from app.audit.service import AuditLogService
 from app.auth.models import PricingTier, User
 from app.config import Settings
 from app.esim.models import EsimIssuanceJob, EsimProfile
@@ -23,6 +25,7 @@ from app.packages.models import (
     Transaction,
     TransactionStatus,
 )
+from app.packages.service import PackageChainingService
 from app.payments.providers import (
     PaymentCheckout,
     PaymentInitialization,
@@ -53,12 +56,16 @@ class PaymentService:
         notifications: NotificationService,
         clock: Callable[[], datetime],
         esim_scheduler: EsimIssuanceScheduler,
+        chaining: PackageChainingService,
+        audit: AuditLogService,
     ) -> None:
         self.settings = settings
         self.providers = providers
         self.notifications = notifications
         self.clock = clock
         self.esim_scheduler = esim_scheduler
+        self.chaining = chaining
+        self.audit = audit
 
     def initialize(
         self,
@@ -163,17 +170,48 @@ class PaymentService:
             if package is None:
                 session.rollback()
                 raise PaymentError("package_not_found")
+            tier = session.get(PricingTier, package.pricing_tier_id)
+            if tier is None:
+                session.rollback()
+                raise PaymentError("package_not_found")
+            window = self.chaining.chain(session, package.user_id, tier)
             package.status = PackageStatus.ACTIVE
-            package.data_gb_remaining = Decimal(package.data_gb_total)
-            package.pstn_minutes_remaining = Decimal(package.pstn_minutes_total)
+            package.data_gb_remaining = (
+                Decimal(package.data_gb_total) + window.extra_data_gb
+            )
+            package.pstn_minutes_remaining = (
+                Decimal(package.pstn_minutes_total) + window.extra_pstn_minutes
+            )
+            package.expires_at = window.expires_at
             session.add(package)
             session.add(
                 EsimIssuanceJob(package_id=package.id, next_attempt_at=self.clock())
             )
+            if window.superseded_package_id is not None:
+                self.audit.record(
+                    session,
+                    AuditEventType.PACKAGE_PROVISIONING,
+                    AuditOutcome.PACKAGE_CHAINED_ONTO_ACTIVE_WINDOW,
+                    user_id=package.user_id,
+                    reference=str(package.id),
+                    details=(
+                        f"superseded={window.superseded_package_id} "
+                        f"rolled_forward_data_gb={window.extra_data_gb} "
+                        f"rolled_forward_pstn_minutes={window.extra_pstn_minutes}"
+                    ),
+                )
             session.commit()
             session.refresh(transaction)
         else:
             session.rollback()
+            self.audit.record(
+                session,
+                AuditEventType.PAYMENT_WEBHOOK,
+                AuditOutcome.DUPLICATE_WEBHOOK_ABSORBED,
+                reference=event.processor_reference,
+                details=f"processor={processor}",
+            )
+            session.commit()
             transaction = session.exec(
                 select(Transaction).where(
                     Transaction.processor_reference == event.processor_reference,

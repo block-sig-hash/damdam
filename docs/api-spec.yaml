@@ -596,6 +596,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/packages/{package_id}/cancel:
+    post:
+      tags:
+      - admin
+      summary: Cancel Package
+      operationId: cancel_package_v1_admin_packages__package_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackageCancelResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/hto/manifests:
     get:
       tags:
@@ -2923,6 +2952,20 @@ components:
           default: true
       type: object
       title: PINVerifyResponse
+    PackageCancelResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        status:
+          type: string
+          title: Status
+      type: object
+      required:
+      - id
+      - status
+      title: PackageCancelResponse
     PackageStatusResponse:
       properties:
         status:

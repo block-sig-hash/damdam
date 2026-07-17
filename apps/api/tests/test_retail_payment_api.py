@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID
@@ -7,6 +8,7 @@ from uuid import UUID
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
+from app.audit.models import AuditLog, AuditOutcome
 from app.auth.models import PricingTier
 from app.auth.routes import request_otp, verify_otp
 from app.auth.schemas import OTPRequest, OTPVerifyRequest
@@ -632,3 +634,171 @@ def test_first_signed_webhook_wins_even_after_ambiguous_primary_timeout(
         transaction = session.exec(select(Transaction)).one()
         assert transaction.processor == PaymentProcessor.PAYSTACK
         assert transaction.status == TransactionStatus.SUCCESS
+
+
+def test_second_purchase_while_first_still_active_chains_through_real_webhook_flow(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-25.3, end-to-end through the real HTTP/webhook path (not the
+    isolated PackageChainingService unit tests in test_package_chaining.py):
+    a pilgrim who buys a second package while the first is still valid does
+    not end up with two concurrently-active packages. The second package
+    activates with the first's unused balance rolled forward and a window
+    chained from the first's expiry, and the first flips to SUPERSEDED."""
+    payment_providers = {
+        "paystack": FakePaymentProvider("paystack"),
+        "flutterwave": FakePaymentProvider("flutterwave"),
+    }
+    api, _, _ = _payment_api(
+        settings,
+        redis_client,
+        providers,
+        scheduler,
+        session_factory,
+        clock,
+        payment_providers,
+    )
+    client = _authenticated_client(api)
+    with session_factory() as session:
+        first_tier = _tier()
+        first_tier.validity_days = 15
+        second_tier = PricingTier(
+            name="Premium",
+            usd_reference_price=Decimal("150.00"),
+            data_gb=12,
+            pstn_minutes=100,
+            wholesale_usd_price=Decimal("120.00"),
+            active=True,
+            ngn_price=Decimal("75000.00"),
+            validity_days=30,
+        )
+        session.add(first_tier)
+        session.add(second_tier)
+        session.commit()
+        session.refresh(first_tier)
+        session.refresh(second_tier)
+        first_tier_id, second_tier_id = str(first_tier.id), str(second_tier.id)
+
+    first_purchase = client.post(
+        "/v1/packages/purchase", json={"pricing_tier_id": first_tier_id}
+    ).json()
+    first_payload = json.dumps(
+        {
+            "status": "success",
+            "reference": first_purchase["processor_reference"],
+            "amount_ngn": 145000,
+            "payment_method": "card",
+        }
+    )
+    first_webhook = TestClient(api).post(
+        "/v1/webhooks/paystack",
+        content=first_payload,
+        headers={"x-test-signature": "valid-paystack"},
+    )
+    assert first_webhook.json() == {"processed": True}
+
+    with session_factory() as session:
+        first_package = session.get(Package, UUID(first_purchase["package_id"]))
+        assert first_package is not None
+        # Simulate some usage before the rebuy, so the roll-forward is
+        # actually exercised rather than trivially rolling forward a
+        # still-full balance.
+        first_package.data_gb_remaining = Decimal("4.00")
+        first_package.pstn_minutes_remaining = Decimal("30.00")
+        session.add(first_package)
+        session.commit()
+        first_expires_at = first_package.expires_at
+
+    second_purchase = client.post(
+        "/v1/packages/purchase", json={"pricing_tier_id": second_tier_id}
+    ).json()
+    second_payload = json.dumps(
+        {
+            "status": "success",
+            "reference": second_purchase["processor_reference"],
+            "amount_ngn": 75000,
+            "payment_method": "card",
+        }
+    )
+    second_webhook = TestClient(api).post(
+        "/v1/webhooks/paystack",
+        content=second_payload,
+        headers={"x-test-signature": "valid-paystack"},
+    )
+    assert second_webhook.json() == {"processed": True}
+
+    with session_factory() as session:
+        first_package = session.get(Package, UUID(first_purchase["package_id"]))
+        second_package = session.get(Package, UUID(second_purchase["package_id"]))
+        assert first_package is not None and second_package is not None
+        assert first_package.status == PackageStatus.SUPERSEDED
+        assert second_package.status == PackageStatus.ACTIVE
+        # Rolled forward from the first package's leftover balance, on top
+        # of the second tier's own allowance (12 GB / 100 minutes).
+        assert second_package.data_gb_remaining == Decimal("16.00")
+        assert second_package.pstn_minutes_remaining == Decimal("130.00")
+        # Chained from the first package's expiry, not from purchase time.
+        assert second_package.expires_at == first_expires_at + timedelta(days=30)
+
+        audit_entry = session.exec(
+            select(AuditLog).where(
+                AuditLog.outcome == AuditOutcome.PACKAGE_CHAINED_ONTO_ACTIVE_WINDOW
+            )
+        ).one()
+        assert audit_entry.reference == str(second_package.id)
+        assert str(first_package.id) in (audit_entry.details or "")
+
+
+def test_duplicate_webhook_writes_audit_log_entry(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """AC-25.4: a duplicate webhook retry is absorbed silently (no error
+    surfaced to the caller, verified elsewhere) but leaves an audit trail
+    for admin review."""
+    payment_providers = {
+        "paystack": FakePaymentProvider("paystack"),
+        "flutterwave": FakePaymentProvider("flutterwave"),
+    }
+    api, _, _ = _payment_api(
+        settings,
+        redis_client,
+        providers,
+        scheduler,
+        session_factory,
+        clock,
+        payment_providers,
+    )
+    client = _authenticated_client(api)
+    with session_factory() as session:
+        tier = _tier()
+        session.add(tier)
+        session.commit()
+        session.refresh(tier)
+    purchase = client.post(
+        "/v1/packages/purchase", json={"pricing_tier_id": str(tier.id)}
+    ).json()
+    payload = json.dumps(
+        {
+            "status": "success",
+            "reference": purchase["processor_reference"],
+            "amount_ngn": 145000,
+            "payment_method": "card",
+        }
+    )
+
+    for _ in range(2):
+        response = TestClient(api).post(
+            "/v1/webhooks/paystack",
+            content=payload,
+            headers={"x-test-signature": "valid-paystack"},
+        )
+        assert response.status_code == 200
+
+    with session_factory() as session:
+        audit_entry = session.exec(
+            select(AuditLog).where(
+                AuditLog.outcome == AuditOutcome.DUPLICATE_WEBHOOK_ABSORBED
+            )
+        ).one()
+        assert audit_entry.reference == purchase["processor_reference"]
+        assert "paystack" in (audit_entry.details or "")
