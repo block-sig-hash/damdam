@@ -26,6 +26,7 @@ from app.manifests.schemas import (
     PricingTierUpdateRequest,
     PricingTierUpdateResponse,
 )
+from app.packages.service import PackageAdminService
 from app.sos.models import SOSAlert, SOSNotification, SOSNotificationStatus
 from app.sos.service import SOSService
 
@@ -37,12 +38,21 @@ class SOSRetryBulkRequest(BaseModel):
     notification_ids: list[UUID]
 
 
+class PackageCancelResponse(BaseModel):
+    id: UUID
+    status: str
+
+
 def _service(request: Request) -> HTOService:
     return cast(HTOService, request.app.state.hto_service)
 
 
 def _order_service(request: Request) -> ManifestOrderService:
     return cast(ManifestOrderService, request.app.state.manifest_order_service)
+
+
+def _package_admin_service(request: Request) -> PackageAdminService:
+    return cast(PackageAdminService, request.app.state.package_admin_service)
 
 
 def current_admin(
@@ -281,3 +291,14 @@ def update_admin_pricing_tier(
         percent_change=percent_change,
         changed_at=change.changed_at,
     )
+
+
+@router.post("/packages/{package_id}/cancel", response_model=PackageCancelResponse)
+def cancel_package(
+    package_id: UUID,
+    request: Request,
+    admin: Annotated[AdminUser, Depends(current_admin)],
+) -> PackageCancelResponse:
+    with request.app.state.session_factory() as session:
+        package = _package_admin_service(request).cancel(session, package_id, admin)
+        return PackageCancelResponse(id=package.id, status=package.status.value)

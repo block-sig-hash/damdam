@@ -12,6 +12,7 @@ from redis import Redis
 from app.activation.routes import router as activation_router
 from app.activation.service import ActivationError, ActivationService
 from app.admin.routes import router as admin_router
+from app.audit.service import AuditLogService
 from app.auth.hto import HTOAuthError, HTOService
 from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
@@ -56,6 +57,11 @@ from app.notifications.service import EmailSender, SMSNotificationSender, WhatsA
 from app.otp.providers.base import OTPProvider
 from app.otp.routes import router as otp_webhook_router
 from app.otp.service import FailoverScheduler, OTPError, RedisClient, utc_now
+from app.packages.service import (
+    PackageAdminService,
+    PackageChainingService,
+    PackageError,
+)
 from app.payments.providers import PaymentProvider
 from app.payments.routes import router as payment_router
 from app.payments.service import PaymentError, PaymentService
@@ -162,7 +168,16 @@ def create_app(
     api.state.family_contact_service = FamilyContactService(notification_service, clock)
     api.state.device_token_service = DeviceTokenService(clock)
     api.state.emergency_contact_service = EmergencyContactService()
-    api.state.activation_service = ActivationService(clock, resolved_esim_scheduler)
+    resolved_chaining_service = PackageChainingService(clock)
+    resolved_audit_service = AuditLogService(clock)
+    api.state.audit_service = resolved_audit_service
+    api.state.package_admin_service = PackageAdminService(resolved_audit_service)
+    api.state.activation_service = ActivationService(
+        clock,
+        resolved_esim_scheduler,
+        resolved_chaining_service,
+        resolved_audit_service,
+    )
     api.state.retail_pricing_service = RetailPricingService()
     api.state.payment_service = PaymentService(
         resolved_settings,
@@ -170,6 +185,8 @@ def create_app(
         notification_service,
         clock,
         resolved_esim_scheduler,
+        resolved_chaining_service,
+        resolved_audit_service,
     )
     api.state.device_compatibility_service = DeviceCompatibilityService(clock)
     api.state.esim_profile_service = EsimProfileService(
@@ -542,6 +559,18 @@ def create_app(
             "invalid_webhook_payload": "Webhook payload is invalid.",
             "package_not_found": "The package was not found.",
         }
+        return JSONResponse(
+            status_code=statuses[exc.code],
+            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+        )
+
+    @api.exception_handler(PackageError)
+    async def package_error_handler(
+        request: Request, exc: PackageError
+    ) -> JSONResponse:
+        del request
+        statuses = {"package_not_found": 404}
+        messages = {"package_not_found": "The package was not found."}
         return JSONResponse(
             status_code=statuses[exc.code],
             content={"error": exc.code, "message": messages[exc.code], "details": {}},

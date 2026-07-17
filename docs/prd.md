@@ -491,6 +491,46 @@ package provisioning.
 - AC-25.4: Duplicate attempts logged for admin review, no visible
   user-facing error
 
+**Implementation note (AC-25.3, finalized post-MVP-scoping
+discussion):** "one active package per trip period" is implemented
+as **chaining, not blocking**. Each `pricing_tiers` row carries a
+`validity_days` value (MVP defaults: 7 / 15 / 30 days for
+base/medium/high tiers). A pilgrim buying a new package while one is
+already active does not get rejected or produce a second
+concurrently-active package — the purchase immediately supersedes
+the current package: the new package's allowance
+(`data_gb_remaining`/`pstn_minutes_remaining`) becomes usable right
+away, its remaining balance is rolled forward from the superseded
+package (nothing paid-for is stranded), and its `expires_at` is
+computed from the *superseded package's expiry*, not from the
+purchase moment — i.e. validity periods stack back-to-back rather
+than overlapping. The superseded package moves to a new terminal
+status (`PackageStatus.SUPERSEDED`, distinct from `EXPIRED`, which
+still means "ran out naturally"). This keeps "exactly one `ACTIVE`
+package per user at a time" true as an invariant, so nothing
+elsewhere that reads "the active package" (e.g. PSTN balance lookup
+in `app/voice/service.py`) needed to change.
+
+Top-ups (AC-17.5's WhatsApp-support-manual add-ons, no in-app
+purchase flow yet) do **not** get their own validity window under
+this design — once built, a top-up should add allowance to the
+current active package and inherit its existing `expires_at`, not
+extend or reset it. That's a forward-looking data-model note only;
+no top-up purchase flow exists to build against yet.
+
+For the genuine-mistake case (pilgrim accidentally double-purchases,
+wants one reversed): an admin-only `cancel` action sets a package to
+`CANCELLED` and writes an audit-log entry. It deliberately does
+**not** attempt automatic balance/chain reversal, refund, credit, or
+reactivation of a superseded package — none of that infrastructure
+exists yet (confirmed: no refund method anywhere in `app/payments/`,
+and `api-spec.md` §7.13 already excludes refund processing from the
+MVP admin UI, treating corrections as a direct database action for
+now). A smarter automatic reversal is real future work, but belongs
+alongside the payment-abstraction refund capability
+`scaling-infrastructure.md`'s multi-processor design already
+anticipates building post-MVP — not invented ad hoc here.
+
 **US-26** [P1] — As an Admin, I want to manually update Naira
 package prices from the dashboard so that pricing can be adjusted
 when the exchange rate moves, without a live FX API dependency or

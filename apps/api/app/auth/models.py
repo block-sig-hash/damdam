@@ -385,6 +385,14 @@ class PricingTier(SQLModel, table=True):
     )
     active: bool = Field(default=True)
     ngn_price: Decimal = Field(sa_column=Column(Numeric(12, 2), nullable=False))
+    # AC-25.3 (prd.md US-25 implementation note, data-model.md §6.30):
+    # how long a package provisioned from this tier is valid for. Governs
+    # both the package's own expires_at and how a chained renewal's new
+    # window is computed. Admin-configurable per tier, same spirit as
+    # ngn_price (§6.16) -- no MVP admin UI for editing it yet, direct
+    # database action, same as pricing_tiers itself has no seed/creation
+    # endpoint in this codebase at all.
+    validity_days: int = Field(default=30)
 
 
 class PricingTierPriceChange(SQLModel, table=True):

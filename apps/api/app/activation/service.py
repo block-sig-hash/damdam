@@ -1,12 +1,16 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, cast
+from uuid import UUID
 
 from sqlalchemy import update
 from sqlalchemy.engine import CursorResult
 from sqlmodel import Session, col, select
 
+from app.audit.models import AuditEventType, AuditOutcome
+from app.audit.service import AuditLogService
 from app.auth.models import (
     Manifest,
     ManifestOrder,
@@ -18,6 +22,7 @@ from app.auth.models import (
 from app.esim.models import EsimIssuanceJob
 from app.esim.service import EsimIssuanceScheduler
 from app.packages.models import Package, PackageSource, PackageStatus
+from app.packages.service import PackageChainingService
 
 
 class ActivationError(Exception):
@@ -36,10 +41,16 @@ class ActivationPreview:
 
 class ActivationService:
     def __init__(
-        self, clock: Callable[[], datetime], esim_scheduler: EsimIssuanceScheduler
+        self,
+        clock: Callable[[], datetime],
+        esim_scheduler: EsimIssuanceScheduler,
+        chaining: PackageChainingService,
+        audit: AuditLogService,
     ) -> None:
         self.clock = clock
         self.esim_scheduler = esim_scheduler
+        self.chaining = chaining
+        self.audit = audit
 
     def preview(self, session: Session, activation_code: str) -> ActivationPreview:
         pilgrim = self._find(session, activation_code)
@@ -69,6 +80,7 @@ class ActivationService:
     def redeem(self, session: Session, user: User, activation_code: str) -> Package:
         pilgrim = self._find(session, activation_code)
         if pilgrim.activation_code_used:
+            self._log_duplicate_activation(session, user.id, activation_code)
             raise ActivationError("activation_code_already_used")
         if self._is_expired(pilgrim):
             raise ActivationError("activation_code_expired")
@@ -94,8 +106,10 @@ class ActivationService:
             ),
         )
         if result.rowcount == 0:
+            self._log_duplicate_activation(session, user.id, activation_code)
             raise ActivationError("activation_code_already_used")
 
+        window = self.chaining.chain(session, user.id, tier)
         package = Package(
             user_id=user.id,
             pricing_tier_id=tier.id,
@@ -103,12 +117,34 @@ class ActivationService:
             status=PackageStatus.ACTIVE,
             group_size=1,
             data_gb_total=tier.data_gb,
-            data_gb_remaining=tier.data_gb,
+            data_gb_remaining=Decimal(tier.data_gb) + window.extra_data_gb,
             pstn_minutes_total=tier.pstn_minutes,
-            pstn_minutes_remaining=tier.pstn_minutes,
+            pstn_minutes_remaining=(
+                Decimal(tier.pstn_minutes) + window.extra_pstn_minutes
+            ),
             purchased_at=self.clock(),
+            expires_at=window.expires_at,
         )
         session.add(package)
+        if window.superseded_package_id is not None:
+            self.audit.record(
+                session,
+                AuditEventType.PACKAGE_PROVISIONING,
+                AuditOutcome.PACKAGE_CHAINED_ONTO_ACTIVE_WINDOW,
+                user_id=user.id,
+                reference=activation_code,
+                details=(
+                    f"superseded={window.superseded_package_id} "
+                    f"rolled_forward_data_gb={window.extra_data_gb} "
+                    f"rolled_forward_pstn_minutes={window.extra_pstn_minutes}"
+                ),
+            )
+        # Flush before adding the job row: without an ORM relationship()
+        # tying EsimIssuanceJob to Package, SQLAlchemy's flush ordering
+        # doesn't infer the FK dependency and may emit the job's INSERT
+        # before the package's -- harmless on SQLite (FK enforcement is
+        # off by default) but a hard FK violation on real Postgres.
+        session.flush()
         session.add(
             EsimIssuanceJob(package_id=package.id, next_attempt_at=self.clock())
         )
@@ -125,6 +161,22 @@ class ActivationService:
         session.add(job)
         session.commit()
         return package
+
+    def _log_duplicate_activation(
+        self, session: Session, user_id: UUID, activation_code: str
+    ) -> None:
+        # Committed here, before the caller raises ActivationError: the
+        # route's `with session_factory() as session:` block closes (and
+        # rolls back anything uncommitted) once the exception propagates,
+        # so the audit write would otherwise be silently lost.
+        self.audit.record(
+            session,
+            AuditEventType.ACTIVATION_REDEMPTION,
+            AuditOutcome.DUPLICATE_ACTIVATION_ATTEMPTED,
+            user_id=user_id,
+            reference=activation_code,
+        )
+        session.commit()
 
     def _is_expired(self, pilgrim: ManifestPilgrim) -> bool:
         expires_at = pilgrim.activation_code_expires_at
