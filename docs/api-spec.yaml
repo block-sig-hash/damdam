@@ -1450,6 +1450,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/reports/provisioning.csv:
+    get:
+      tags:
+      - HTO reports
+      summary: Download Provisioning Report
+      operationId: download_provisioning_report_v1_hto_reports_provisioning_csv_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Manifest Id
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/voice/eligibility:
     get:
       tags:

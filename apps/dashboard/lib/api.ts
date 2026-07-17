@@ -298,6 +298,49 @@ export async function openManifestInvoice(manifestId: string, orderId: string) {
   );
 }
 
+export type Manifest = {
+  id: string;
+  name: string | null;
+  status: "draft" | "validated" | "partially_ordered" | "provisioned";
+  valid_rows: number;
+  created_at: string;
+};
+
+export async function getManifests(): Promise<Manifest[]> {
+  const response = await fetch(`${API_BASE_URL}/hto/manifests`, {
+    headers: operatorHeaders(),
+  });
+  return (await parseResponse<{ manifests: Manifest[] }>(response)).manifests;
+}
+
+export type ProvisioningReportFilter = {
+  manifestId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
+// AC-20.1: triggers a real browser file download (not a new tab, unlike
+// openPDF above) since a CSV has no useful inline viewer to open into.
+export async function downloadProvisioningReport(
+  filter: ProvisioningReportFilter,
+): Promise<void> {
+  const query = new URLSearchParams();
+  if (filter.manifestId) query.set("manifest_id", filter.manifestId);
+  if (filter.dateFrom) query.set("date_from", filter.dateFrom);
+  if (filter.dateTo) query.set("date_to", filter.dateTo);
+  const response = await fetch(
+    `${API_BASE_URL}/hto/reports/provisioning.csv?${query}`,
+    { headers: operatorHeaders() },
+  );
+  if (!response.ok) await parseResponse(response);
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "provisioning-report.csv";
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 function adminHeaders(): HeadersInit {
   const token = window.localStorage.getItem("admin_access_token");
   if (!token) throw new Error("An administrator session is required.");

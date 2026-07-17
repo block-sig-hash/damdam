@@ -248,6 +248,59 @@ manifest/batch context.
 
 ---
 
+### Screen: Reports (Screen 12)
+
+**US-20 implementation assumption:** This screen previously appeared
+only in the §9.1 inventory, with no data/elements/states
+specification — the same category of gap Screen 17 had in
+`frontend-mobile.md` before US-11. Until product/design provides a
+fuller per-screen treatment, the minimal implementation uses the
+existing dashboard's own established conventions (matching Screens
+4–11, not `design-system.md`, which explicitly excludes the
+dashboard per its own §15.2 non-goals) and the US-20 acceptance
+criteria directly. See `api-spec.md` §7.21 for the backend contract
+and a related pre-existing spec discrepancy this also resolves.
+
+**Purpose:** Lets an HTO operator download a per-pilgrim provisioning
+CSV for their own records and NAHCON compliance (AC-20.1) — a
+generation/export action, not a live monitoring view, so it does not
+poll or auto-refresh the way Home and SOS Alerts do.
+
+**Data displayed:** No table on this screen itself — the CSV is the
+report; the screen is the controls to shape and request it. A
+read-only summary line states which manifest(s) and date range are
+about to be exported once both are chosen, so the operator isn't
+downloading blind.
+
+**Interactive elements:**
+- Manifest selector — dropdown populated from `GET /hto/manifests`,
+  defaulting to "All manifests" (maps to an omitted `manifest_id`,
+  AC-20.3)
+- Date range picker — "From" / "To" date inputs, both optional; an
+  empty range downloads the operator's full provisioning history
+- "Download CSV" button — disabled while a generation request is in
+  flight
+- No preview table before download — AC-20.4's ≤30s generation
+  window is short enough that a preview step would only slow the
+  actual task down, and the CSV headers (AC-20.2) are self-explanatory
+  once opened
+
+**States:**
+- **Idle** — controls enabled, no request in flight
+- **Generating** — shown for the AC-20.4 window; button reads
+  "Generating…" and disables, plus a short note ("This can take up
+  to 30 seconds for large manifests") so the operator doesn't assume
+  the click failed and retry mid-request
+- **Downloaded** — the browser's native download completes; the
+  screen returns to Idle rather than showing a persistent success
+  state, consistent with how `openManifestInvoice`'s PDF download
+  already behaves elsewhere in this dashboard
+- **Error** — inline message on request failure (e.g. auth expiry),
+  same `role="alert"` pattern used on SOS Alerts and other screens;
+  controls re-enable so the operator can retry without reloading
+
+---
+
 ### Screen: Admin — HTO Operator Approvals (Screen 14)
 
 **Data displayed:** Table of HTO operator registrations, filterable
