@@ -310,9 +310,7 @@ def test_unverified_credentialed_user_pstn_dial_is_blocked_at_webhook_layer(
 
     # Provisions the callee's (unverified user's) VoiceCredential as a side
     # effect of the caller's free app-to-app token request.
-    token_response = caller.post(
-        "/v1/voice/token", json={"to_number": "08098765432"}
-    )
+    token_response = caller.post("/v1/voice/token", json={"to_number": "08098765432"})
     assert token_response.status_code == 200
     with session_factory() as session:
         credential = session.exec(
@@ -522,3 +520,91 @@ def test_rapid_hangups_at_zero_are_capped_without_negative_balance(
     )
     assert eligibility.json()["allowed"] is False
     assert eligibility.json()["reason"] == "pstn_balance_exhausted"
+
+
+def test_pstn_billing_hits_the_package_matching_the_users_destination_not_the_newest(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """A user can now hold an ACTIVE package per destination at once
+    (data-model.md §6.32). A call must bill against the package matching
+    the user's own destination_country, not whichever package happens to
+    have been purchased most recently -- the KE package here is bought
+    *after* the SA one specifically to prove this isn't just picking the
+    newest row."""
+    api, _, signer = _api_and_signer(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, user_id = _authenticated(api)
+    with session_factory() as session:
+        sa_tier = PricingTier(
+            name=f"SA-{user_id}",
+            usd_reference_price=Decimal("100"),
+            data_gb=5,
+            pstn_minutes=10,
+            wholesale_usd_price=Decimal("80"),
+            ngn_price=Decimal("100000"),
+        )
+        ke_tier = PricingTier(
+            name=f"KE-{user_id}",
+            usd_reference_price=Decimal("100"),
+            data_gb=5,
+            pstn_minutes=10,
+            wholesale_usd_price=Decimal("80"),
+            ngn_price=Decimal("100000"),
+        )
+        session.add(sa_tier)
+        session.add(ke_tier)
+        session.flush()
+        session.add(
+            Package(
+                user_id=user_id,
+                pricing_tier_id=sa_tier.id,
+                source=PackageSource.RETAIL,
+                status=PackageStatus.ACTIVE,
+                data_gb_total=5,
+                data_gb_remaining=Decimal("5"),
+                pstn_minutes_total=10,
+                pstn_minutes_remaining=Decimal("3.00"),
+                purchased_at=clock() - timedelta(days=1),
+                destination_country="SA",
+            )
+        )
+        session.add(
+            Package(
+                user_id=user_id,
+                pricing_tier_id=ke_tier.id,
+                source=PackageSource.RETAIL,
+                status=PackageStatus.ACTIVE,
+                data_gb_total=5,
+                data_gb_remaining=Decimal("5"),
+                pstn_minutes_total=10,
+                pstn_minutes_remaining=Decimal("9.00"),
+                purchased_at=clock(),  # purchased *after* the SA package
+                destination_country="KE",
+            )
+        )
+        session.commit()
+
+    body = _hangup(user_id, "leg-destination-scoped", 90)
+    response = client.post(
+        "/v1/webhooks/telnyx/call-events",
+        content=body,
+        headers=_signed_headers(signer, body, clock()),
+    )
+
+    assert response.json() == {"processed": True}
+    with session_factory() as session:
+        sa_package = session.exec(
+            select(Package).where(Package.destination_country == "SA")
+        ).one()
+        ke_package = session.exec(
+            select(Package).where(Package.destination_country == "KE")
+        ).one()
+        # 90 seconds = 1.50 minutes charged against the SA package's 3.00
+        # remaining -- the user's own destination_country defaults to SA
+        # (app/auth/models.py), so this is the correct package.
+        assert sa_package.pstn_minutes_remaining == Decimal("1.50")
+        # The KE package -- more recently purchased, and would have been
+        # picked by the old "most recent ACTIVE package" logic -- is
+        # completely untouched.
+        assert ke_package.pstn_minutes_remaining == Decimal("9.00")

@@ -72,6 +72,14 @@ class Package(SQLModel, table=True):
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+    # Immutable purchase-time snapshot of the purchasing user's
+    # users.destination_country, same pattern as data_gb_total/
+    # pstn_minutes_total above (data-model.md §6.29) -- not a live
+    # reference to the user's current value, so a user's destination
+    # changing later never rewrites history for packages already bought.
+    # Drives AC-25.3 chaining scope and voice's active-package lookup
+    # (data-model.md §6.32).
+    destination_country: str = Field(default="SA", max_length=2)
     expires_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )

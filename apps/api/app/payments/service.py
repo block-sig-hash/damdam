@@ -90,6 +90,7 @@ class PaymentService:
             pstn_minutes_total=tier.pstn_minutes,
             pstn_minutes_remaining=Decimal("0.00"),
             purchased_at=self.clock(),
+            destination_country=user.destination_country,
         )
         reference = str(uuid4())
         initialization = PaymentInitialization(
@@ -186,8 +187,15 @@ class PaymentService:
             if tier is None:
                 session.rollback()
                 raise PaymentError("package_not_found")
-            window = self.chaining.chain(session, package.user_id, tier)
+            user = session.get(User, package.user_id)
+            if user is None:
+                session.rollback()
+                raise PaymentError("package_not_found")
+            window = self.chaining.chain(
+                session, package.user_id, user.destination_country, tier
+            )
             package.status = PackageStatus.ACTIVE
+            package.destination_country = user.destination_country
             package.data_gb_remaining = (
                 Decimal(package.data_gb_total) + window.extra_data_gb
             )
