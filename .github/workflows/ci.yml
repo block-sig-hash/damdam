@@ -22,7 +22,13 @@ jobs:
   changes:
     name: Detect changed paths
     runs-on: ubuntu-latest
+    # Declaring any job-level `permissions:` switches that job from
+    # GitHub's default (permissive) token to an explicit allow-list for
+    # every scope -- `contents: read` must be listed here too, or
+    # actions/checkout below fails ("repository not found", GitHub's
+    # generic error for a token that can't read the repo at all).
     permissions:
+      contents: read
       pull-requests: read
     outputs:
       api: ${{ steps.filter.outputs.api }}
