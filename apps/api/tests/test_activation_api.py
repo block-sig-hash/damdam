@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
+from app.audit.models import AuditLog, AuditOutcome
 from app.auth.models import (
     HTOApprovalStatus,
     Manifest,
@@ -237,6 +238,33 @@ def test_redeem_rejects_an_already_used_code(api, session_factory, clock) -> Non
 
     assert second.status_code == 409
     assert second.json()["error"] == "activation_code_already_used"
+
+
+def test_duplicate_activation_attempt_writes_audit_log_entry(
+    api, session_factory, clock
+) -> None:
+    """AC-25.4: a duplicate activation-code redemption attempt is rejected
+    with a 409 (correct, pre-existing user-facing behavior -- unlike the
+    payment-webhook and chaining paths, this one is *not* meant to be
+    silent, since the pilgrim genuinely needs to know redemption failed),
+    but still leaves an audit trail for admin review. The audit write must
+    survive even though the route raises an exception afterward."""
+    _, code, _tier = seed_activation_code(session_factory, clock)
+    client = authenticated_client(api, PILGRIM_LOCAL_PHONE)
+
+    first = client.post("/v1/me/activation/redeem", json={"activation_code": code})
+    assert first.status_code == 200
+
+    second = client.post("/v1/me/activation/redeem", json={"activation_code": code})
+    assert second.status_code == 409
+
+    with session_factory() as session:
+        entry = session.exec(
+            select(AuditLog).where(
+                AuditLog.outcome == AuditOutcome.DUPLICATE_ACTIVATION_ATTEMPTED
+            )
+        ).one()
+        assert entry.reference == code
 
 
 def test_redeem_rejects_an_expired_code(api, session_factory, clock) -> None:
