@@ -67,3 +67,5 @@ production reference compose file this is based on.
 Pre-MVP. Spec-complete as of July 2026, entering build phase.
 Target: HTO pilot onboarding by February 2027, ahead of Hajj 2027
 (~May 14, 2027).
+
+<!-- CI path-filter verification: docs-only change, 2026-07-17T20:20:14Z -->
