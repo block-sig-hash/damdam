@@ -7,8 +7,60 @@ on:
     branches: [develop]
 
 jobs:
+  # Path-filters which of the four jobs below actually need to run,
+  # based on what changed. This job itself always runs (the workflow's
+  # `on:` trigger is untouched), so every downstream job name is still
+  # reported to GitHub even when its `if:` skips it — a skipped job
+  # reports conclusion=skipped, which GitHub's required-status-checks
+  # treats as passing, not as pending/failing. Gating at the *job*
+  # level like this (rather than filtering the whole workflow's `on:`
+  # trigger with top-level `paths:`) is deliberate: top-level `paths:`
+  # would make the workflow never run at all for a non-matching PR, so
+  # branch protection would see those check names as never-reported
+  # ("Expected — waiting for status") rather than skipped/passing,
+  # which blocks merge instead of allowing it.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    # Declaring any job-level `permissions:` switches that job from
+    # GitHub's default (permissive) token to an explicit allow-list for
+    # every scope -- `contents: read` must be listed here too, or
+    # actions/checkout below fails ("repository not found", GitHub's
+    # generic error for a token that can't read the repo at all).
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      docker: ${{ steps.filter.outputs.docker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          # This workflow file itself is included in every group as a
+          # safety net: a change to CI logic should re-validate against
+          # all four jobs, not silently trust the new filtering.
+          filters: |
+            api:
+              - 'apps/api/**'
+              - '.github/workflows/ci.yml'
+            dashboard:
+              - 'apps/dashboard/**'
+              - '.github/workflows/ci.yml'
+            mobile:
+              - 'apps/mobile/**'
+              - '.github/workflows/ci.yml'
+            docker:
+              - 'apps/api/**'
+              - '.github/workflows/ci.yml'
+
   lint-and-test-api:
     name: API — Lint, type-check, test
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -55,6 +107,8 @@ jobs:
 
   lint-and-test-dashboard:
     name: Dashboard — Lint, type-check, test
+    needs: changes
+    if: needs.changes.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -78,6 +132,8 @@ jobs:
 
   lint-and-test-mobile:
     name: Mobile — Lint, type-check, test
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -114,6 +170,8 @@ jobs:
 
   build-check:
     name: Docker build check (multi-arch)
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
