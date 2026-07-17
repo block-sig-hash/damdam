@@ -512,11 +512,20 @@ POST   /hto/push-subscriptions
   directly, it can only obtain the token from Firebase's client SDK.
   503: push_subscription_failed (Firebase unavailable or misconfigured)
 
-GET    /hto/manifests/{id}/report
+GET    /hto/reports/provisioning.csv
   HTO auth required
-  Query: ?format=csv
-  200: (file download, or 202 + job_id if generated
-        asynchronously for large manifests)
+  Query: ?manifest_id= (optional; omitted = all of the operator's
+         manifests) &date_from=&date_to= (optional, YYYY-MM-DD,
+         filtered on purchase_date)
+  200: text/csv, Content-Disposition: attachment
+       Columns: name, phone, tier, purchase_date, esim_status,
+       check_in_count, sos_events (AC-20.2, in this order)
+       Generated synchronously (AC-20.4: measured under 30s at 500
+       rows in real testing — see api-spec.md §7.21, no async/job_id
+       path needed). Only rows whose manifest_order has reached
+       `provisioned` are included (data-model.md §6.14).
+  See §7.21 for the full amendment, including a pre-existing spec
+  discrepancy this replaces.
 ```
 
 ---
@@ -841,3 +850,65 @@ existing immutable purchase-time snapshot columns on `packages` documented in
 state is computed as `data_gb_remaining / data_gb_total < 20%`; voice warning
 state remains the separate absolute rule `pstn_minutes_remaining < 5` from
 AC-17.3. Both reach the red exhausted state at zero.
+
+---
+
+## 7.21 Amendment — US-20 HTO Provisioning Report
+
+**Supersedes a pre-existing spec discrepancy, flagged explicitly rather
+than silently overwritten:** §7.8 previously sketched
+`GET /hto/manifests/{id}/report?format=csv` as a placeholder, with a
+mandatory manifest in the path and an async 202/`job_id` escape hatch
+for large manifests. That shape predates this implementation and was
+never referenced anywhere else in `/docs` (checked: not in
+`testing-qa.md`, `data-model.md`, or `frontend-dashboard.md`) or built
+against. It doesn't fit AC-20.3 as written — "filterable by manifest
+**and date range**" reads as an optional filter over a
+cross-manifest report, not a report that only ever exists scoped to
+one manifest by URL. The real endpoint is
+`GET /hto/reports/provisioning.csv`, with `manifest_id` as an
+*optional* query parameter (omitted = every one of the operator's
+manifests) alongside `date_from`/`date_to`. The async/`job_id` path is
+dropped: AC-20.4's own 500-row/30s ceiling was measured for real (not
+assumed) at ~0.1s server-side generation time against a real Postgres
+database (`tests/test_provisioning_report_performance_postgres.py`),
+so a synchronous response comfortably clears the bar with no queue
+infrastructure needed.
+
+**Row scope:** a pilgrim only appears once their `manifest_order` has
+reached `ManifestOrderStatus.PROVISIONED` — `data-model.md` §6.14
+defines that status as "every selected pilgrim has a delivered
+activation link," i.e. genuinely provisioned. Pilgrims still
+`awaiting_payment`/`paid`/`provisioning` are excluded; this is a
+*provisioning* report, not a manifest roster (that's already
+`GET /hto/pilgrims`, §7.8).
+
+**"Purchase date" (AC-20.2) and the date-range filter (AC-20.3):**
+`manifest_orders.payment_confirmed_at` — the only per-pilgrim date this
+report has, since HTO packages are purchased at the order level, not
+per pilgrim (`data-model.md` §6.14). The date-range filter applies to
+this field.
+
+**Check-in count / SOS events (AC-20.2):** lifetime totals for the
+pilgrim's linked user account, not scoped to the date-range filter —
+a check-in the week after a June-dated purchase still counts toward
+that pilgrim's row even if the report itself is filtered to June.
+eSIM status reuses the exact same rank/precedence logic as
+`GET /hto/pilgrims` (§7.8, `app/esim/service.py`
+`HtoPilgrimService.list_pilgrims`) so the two surfaces never disagree
+about the same pilgrim's status.
+
+**Cross-tenant isolation:** identical pattern to `GET /hto/pilgrims` —
+scoped at the query level via `Manifest.organization_id`, not at the
+UI layer; verified with a negative test
+(`test_cross_tenant_isolation_one_hto_cannot_see_another_hto_report_data`)
+that one operator cannot pull another's rows even by guessing the
+other's `manifest_id` directly in the query string.
+
+**Frontend doc gap, flagged not guessed past:** `frontend-dashboard.md`
+lists "Reports" as Screen 12 in the §9.1 inventory but had zero
+per-screen specification — no data/elements/states section, the same
+category of gap `frontend-mobile.md`'s Screen 17 had before US-11. A
+minimal per-screen spec has been added to `frontend-dashboard.md` §9.3
+covering the assumptions made (manifest selector, date-range picker,
+"Download CSV" button, loading state for the generation window).

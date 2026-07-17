@@ -71,6 +71,8 @@ from app.profile.device_tokens import DeviceTokenService
 from app.profile.emergency_contact import EmergencyContactService
 from app.profile.family_contacts import FamilyContactError, FamilyContactService
 from app.profile.routes import router as profile_router
+from app.reports.routes import router as reports_router
+from app.reports.service import ProvisioningReportService
 from app.sos.notifications import (
     PushSubscriptionManager,
     PushSubscriptionService,
@@ -197,6 +199,7 @@ def create_app(
         clock,
     )
     api.state.hto_pilgrim_service = HtoPilgrimService()
+    api.state.report_service = ProvisioningReportService(clock)
     api.state.voice_service = VoiceService(
         resolved_settings,
         voice_provider or TelnyxVoiceProvider(resolved_settings),
@@ -631,6 +634,7 @@ def create_app(
     api.include_router(retail_pricing_router, prefix="/v1")
     api.include_router(payment_router, prefix="/v1")
     api.include_router(esim_router, prefix="/v1")
+    api.include_router(reports_router, prefix="/v1")
     api.include_router(voice_router, prefix="/v1")
     api.include_router(checkin_router, prefix="/v1")
     api.include_router(sos_router, prefix="/v1")
