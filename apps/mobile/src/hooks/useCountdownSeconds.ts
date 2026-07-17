@@ -17,3 +17,5 @@ export function useCountdownSeconds(totalSeconds: number): number {
 
   return remaining;
 }
+
+// CI path-filter verification: mobile-only change, 2026-07-17T20:20:57Z
