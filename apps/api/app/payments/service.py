@@ -113,6 +113,18 @@ class PaymentService:
             status=TransactionStatus.PENDING,
         )
         session.add(package)
+        # Flush before adding the transaction row: without an ORM
+        # relationship() tying Transaction to Package, SQLAlchemy's flush
+        # ordering doesn't infer the FK dependency, so nothing guarantees
+        # the package's INSERT happens before the transaction's -- the
+        # same class of bug found and fixed in ActivationService.redeem()
+        # (US-25). Harmless on SQLite (FK enforcement off by default), a
+        # potential FK violation on real Postgres. Defensive hardening: a
+        # direct real-Postgres test of this path did not reproduce an
+        # ordering failure, but nothing here guarantees insert order
+        # either, so this costs nothing and removes the dependency on
+        # SQLAlchemy's unspecified default behavior.
+        session.flush()
         session.add(transaction)
         session.commit()
         return PurchaseResult(package.id, checkout)
