@@ -171,6 +171,9 @@ jobs:
       - name: Set up QEMU (for arm64 emulation)
         if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
         uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
+        uses: docker/setup-buildx-action@v3
       - name: Build Android build image (x86_64, cached across runs)
         if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
         working-directory: ${{ github.workspace }}
