@@ -168,6 +168,9 @@ jobs:
         run: npm run type-check
       - if: ${{ hashFiles('apps/mobile/package.json') != '' }}
         run: npm run test
+      - name: Set up QEMU (for arm64 emulation)
+        if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
+        uses: docker/setup-qemu-action@v3
       - name: Build Android build image (x86_64, cached across runs)
         if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
         working-directory: ${{ github.workspace }}
