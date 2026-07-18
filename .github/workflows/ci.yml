@@ -185,6 +185,20 @@ jobs:
         run: docker compose --env-file compose.env.example config --quiet
       - name: Build API from the Compose configuration
         run: docker compose --env-file compose.env.example build api
+      - name: Smoke-test readiness with real Postgres and Redis
+        run: |
+          cleanup() {
+            docker compose --env-file compose.env.example down --volumes
+          }
+          trap cleanup EXIT
+          docker compose --env-file compose.env.example up -d --wait postgres redis api
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8000/health
+          docker compose --env-file compose.env.example stop redis
+          status=$(curl --silent --show-error --max-time 10 \
+            --output /tmp/readiness.json --write-out '%{http_code}' \
+            http://127.0.0.1:8000/health)
+          test "$status" = "503"
+          grep --quiet '"redis":"unavailable"' /tmp/readiness.json
       - name: Build API image for both architectures
         # Catches aarch64 wheel/dependency availability issues in
         # CI rather than at OCI deploy time — see

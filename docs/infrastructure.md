@@ -567,8 +567,9 @@ mark a release healthy while its database or task broker was unreachable, and
 there was no executable rollback path.
 
 **What is real and locally/CI verifiable:** Compose parsing and API image builds,
-dependency health ordering, readiness behavior, staging secret preflight, exact
-commit image tagging, readiness polling, and application-image rollback logic.
+dependency health ordering, a Compose smoke test against real Postgres and
+Redis (including a forced Redis outage returning 503), staging secret preflight,
+exact commit image tagging, readiness polling, and application-image rollback logic.
 Legacy GB-only eSIM package-code configuration remains subject to §6.36's
 separate deploy migration warning.
 
