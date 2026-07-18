@@ -90,6 +90,7 @@ class PaymentService:
             pstn_minutes_total=tier.pstn_minutes,
             pstn_minutes_remaining=Decimal("0.00"),
             purchased_at=self.clock(),
+            destination_country=user.destination_country,
         )
         reference = str(uuid4())
         initialization = PaymentInitialization(
@@ -186,7 +187,16 @@ class PaymentService:
             if tier is None:
                 session.rollback()
                 raise PaymentError("package_not_found")
-            window = self.chaining.chain(session, package.user_id, tier)
+            # destination_country is the immutable snapshot initialize()
+            # already took at the true purchase moment (data-model.md
+            # §6.32) -- reusing it here, rather than re-deriving from the
+            # user's *current* value at webhook-processing time, means a
+            # future change to users.destination_country between checkout
+            # and webhook confirmation can never silently overwrite the
+            # correct purchase-time snapshot with a later value.
+            window = self.chaining.chain(
+                session, package.user_id, package.destination_country, tier
+            )
             package.status = PackageStatus.ACTIVE
             package.data_gb_remaining = (
                 Decimal(package.data_gb_total) + window.extra_data_gb

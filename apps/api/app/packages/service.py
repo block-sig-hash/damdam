@@ -31,25 +31,38 @@ class ChainedWindow:
 
 class PackageChainingService:
     """AC-25.3: a pilgrim buying a new package while one is already active
-    does not get blocked or end up with two concurrently-active packages.
-    The purchase supersedes the current one -- the new package's window
-    starts when the current one's validity would have ended (not from the
-    purchase moment), and any unused balance rolls forward so nothing
-    paid-for is stranded. This keeps "exactly one ACTIVE package per user"
-    true as an invariant, so nothing that reads "the active package"
-    elsewhere in the codebase (e.g. PSTN balance lookup in
-    app/voice/service.py) needed to change."""
+    for the *same destination* does not get blocked or end up with two
+    concurrently-active packages there. The purchase supersedes the
+    current one -- the new package's window starts when the current one's
+    validity would have ended (not from the purchase moment), and any
+    unused balance rolls forward so nothing paid-for is stranded. This
+    keeps "exactly one ACTIVE package per (user, destination)" true as an
+    invariant -- not "per user" outright, which was the pre-destination-
+    abstraction version of this invariant and is no longer correct once a
+    user can hold active packages for two different destinations at once
+    (data-model.md §6.32). Everything that reads "the active package"
+    elsewhere in the codebase (voice's PSTN balance lookup,
+    app/voice/service.py) must filter by destination the same way this
+    does, not just by user_id."""
 
     def __init__(self, clock: Callable[[], datetime]) -> None:
         self.clock = clock
 
     def chain(
-        self, session: Session, user_id: UUID, tier: PricingTier
+        self,
+        session: Session,
+        user_id: UUID,
+        destination_country: str,
+        tier: PricingTier,
     ) -> ChainedWindow:
         now = self.clock()
         current = session.exec(
             select(Package)
-            .where(Package.user_id == user_id, Package.status == PackageStatus.ACTIVE)
+            .where(
+                Package.user_id == user_id,
+                Package.destination_country == destination_country,
+                Package.status == PackageStatus.ACTIVE,
+            )
             .with_for_update()
         ).first()
         if current is None:

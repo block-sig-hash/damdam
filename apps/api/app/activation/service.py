@@ -109,7 +109,7 @@ class ActivationService:
             self._log_duplicate_activation(session, user.id, activation_code)
             raise ActivationError("activation_code_already_used")
 
-        window = self.chaining.chain(session, user.id, tier)
+        window = self.chaining.chain(session, user.id, user.destination_country, tier)
         package = Package(
             user_id=user.id,
             pricing_tier_id=tier.id,
@@ -124,6 +124,7 @@ class ActivationService:
             ),
             purchased_at=self.clock(),
             expires_at=window.expires_at,
+            destination_country=user.destination_country,
         )
         session.add(package)
         if window.superseded_package_id is not None:

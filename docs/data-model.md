@@ -1456,3 +1456,66 @@ survive an exception that's about to unwind the rest of the transaction):
 No admin UI to browse this log is in scope for US-25 — only the table and
 the write-path, per the same reasoning as the cancel endpoint's own scope
 above.
+
+## 6.32 Amendment — `packages.destination_country` (Multi-Destination Audit)
+
+`users.destination_country` (§2, `VARCHAR(2) DEFAULT 'SA'`) has always been
+the only place this codebase records a pilgrim's destination — a single,
+account-level value, hardcoded to `'SA'` for MVP with no flow that ever
+sets it to anything else. An audit ahead of any real second-destination
+product decision found that this shape had already produced a real latent
+bug: §6.30's AC-25.3 chaining/superseding query
+(`PackageChainingService.chain()`, `app/packages/service.py`) and voice's
+active-package PSTN balance lookup (`app/voice/service.py`,
+`_remaining_balance` and the hangup-billing query) both picked "the
+active package for this `user_id`" with no destination dimension at all —
+correct only because exactly one destination has ever existed. Once a
+second destination is real, both would misbehave: chaining would
+incorrectly supersede or roll balance from an unrelated destination's
+package into a brand-new one, and voice would silently bill minutes
+against whichever package happened to be purchased most recently,
+regardless of which destination the call was actually relevant to.
+
+**`packages.destination_country`** (`VARCHAR(2) NOT NULL DEFAULT 'SA'`,
+migration `0019_pkg_destination_country`) closes this: an immutable
+purchase-time snapshot of the purchasing user's `users.destination_country`
+at the moment the package is created, the same pattern as the existing
+`data_gb_total`/`pstn_minutes_total` snapshots (§6.29) — not a live
+reference to the user's current value, so a user's destination changing
+later (whenever a real flow for that exists) never rewrites the
+destination of packages already bought. Set at both provisioning paths
+(`app/payments/service.py` `initialize()`/`process_webhook()`,
+`app/activation/service.py` `redeem()`), read from the `User` row already
+in scope at each site. Existing rows are backfilled via the migration's
+`server_default` — every package that has ever existed was purchased by a
+user whose `destination_country` has only ever been `'SA'`, so this is the
+historically correct value, not just a convenient default; verified
+against a real Postgres database with pre-existing rows inserted before
+the migration ran, not just a fresh empty schema.
+
+**The invariant this changes:** §6.30 states chaining keeps "exactly one
+`ACTIVE` package per user" true. That is no longer correct on its own —
+the actual invariant, as of this amendment, is "exactly one `ACTIVE`
+package per `(user, destination)`." `PackageChainingService.chain()` now
+takes a `destination_country` parameter and filters/supersedes only
+within that destination; a purchase for a new destination never touches,
+chains onto, or rolls balance from another destination's active package.
+Voice's two active-package lookups now filter by
+`Package.destination_country == user.destination_country` — reusing the
+same field the chaining fix threads through, not a new signal — so a call
+bills against the package matching the destination the user's account
+currently indicates, not whichever package is newest.
+
+**Explicitly out of scope for this amendment** (found during the same
+audit, deliberately not built here — each requires a real product
+decision this task doesn't make): US-13's 150km Jeddah geofence trigger
+is hardcoded as native Android constants
+(`apps/mobile/android/.../ArrivalPromptModule.kt`) with no config layer at
+all; `pricing_tiers` has no destination dimension and the eSIM vendor
+cascade (`app/esim/providers.py`) hardcodes `"destination_country": "SA"`
+in the outbound vendor payload for both `HttpEsimProvider`-based vendors,
+with `EsimIssueRequest` carrying no destination field for any provider to
+honor even if that were fixed. US-12's bundled Arabic emergency phrasebook
+(`apps/mobile/src/content/emergencyEssentials.ts`) was already correctly
+identified in §6.20 as an intentional MVP-scoped decision with its own
+documented multi-country trigger condition, and needs no change here.

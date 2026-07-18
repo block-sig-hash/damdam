@@ -11,6 +11,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
+from sqlmodel.sql.expression import SelectOfScalar
 
 from app.auth.models import User
 from app.config import Settings
@@ -209,16 +210,15 @@ class VoiceService:
             session.rollback()
             return False
 
-        package = session.exec(
-            select(Package)
-            .where(
-                Package.user_id == user_id,
-                Package.status == PackageStatus.ACTIVE,
-                Package.pstn_minutes_remaining > 0,
-            )
-            .order_by(col(Package.purchased_at).desc())
-            .with_for_update()
-        ).first()
+        package = None
+        billing_user = session.get(User, user_id)
+        if billing_user is not None:
+            package = session.exec(
+                self._active_package_query(billing_user)
+                .where(Package.pstn_minutes_remaining > 0)
+                .order_by(col(Package.purchased_at).desc())
+                .with_for_update()
+            ).first()
         charged = Decimal("0.00")
         if package is not None:
             charged = min(Decimal(package.pstn_minutes_remaining), requested_charge)
@@ -292,11 +292,25 @@ class VoiceService:
         session.refresh(credential)
         return credential
 
+    def _active_package_query(self, user: User) -> SelectOfScalar[Package]:
+        # Scoped by destination_country, not just user_id: a user can now
+        # hold an ACTIVE package per destination at once (data-model.md
+        # §6.32), and a call should only ever bill against the package
+        # for the destination the user's account currently indicates --
+        # picking "most recently purchased" across destinations would
+        # silently charge minutes against an unrelated trip's balance.
+        return select(Package).where(
+            Package.user_id == user.id,
+            Package.destination_country == user.destination_country,
+            Package.status == PackageStatus.ACTIVE,
+        )
+
     def _remaining_balance(self, session: Session, user_id: UUID) -> Decimal:
+        user = session.get(User, user_id)
+        if user is None:
+            return Decimal("0.00")
         package = session.exec(
-            select(Package)
-            .where(Package.user_id == user_id, Package.status == PackageStatus.ACTIVE)
-            .order_by(col(Package.purchased_at).desc())
+            self._active_package_query(user).order_by(col(Package.purchased_at).desc())
         ).first()
         return Decimal(package.pstn_minutes_remaining) if package else Decimal("0.00")
 
