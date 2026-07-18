@@ -371,6 +371,7 @@ class PricingTier(SQLModel, table=True):
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
+    destination_country: str = Field(default="SA", max_length=2)
     name: str = Field(max_length=50)
     usd_reference_price: Decimal = Field(
         sa_column=Column(Numeric(10, 2), nullable=False)

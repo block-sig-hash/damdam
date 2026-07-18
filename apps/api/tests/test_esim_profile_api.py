@@ -165,6 +165,11 @@ def test_issue_cascades_vendors_and_logs_every_attempt(
     assert response.status_code == 200
     assert response.json()["status"] == "issued"
     assert response.json()["activation_code_lpa"].startswith("LPA:1$1global")
+    assert all(
+        request.destination_country == "SA"
+        for vendor in vendors.values()
+        for request in vendor.calls
+    )
     with session_factory() as session:
         profile = session.exec(select(EsimProfile)).one()
         assert profile.aggregator == EsimAggregator.ONEGLOBAL

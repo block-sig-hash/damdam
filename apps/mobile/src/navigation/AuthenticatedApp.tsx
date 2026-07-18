@@ -169,7 +169,7 @@ export function AuthenticatedApp({
       .catch(() => active && setEsimStatus('not_issued'));
     // The OS permission prompts are the opt-in gate. A denial never affects the
     // permission-free date banner, and registration can be offered again later.
-    optIntoArrivalGeofence(packageId).catch(() => undefined);
+    optIntoArrivalGeofence(accessToken, packageId).catch(() => undefined);
     return () => {
       active = false;
     };

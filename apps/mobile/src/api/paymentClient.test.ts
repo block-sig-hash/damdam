@@ -1,4 +1,8 @@
-import { getPackageStatus, initializePurchase } from './paymentClient';
+import {
+  getPackageGeofence,
+  getPackageStatus,
+  initializePurchase,
+} from './paymentClient';
 
 const fetchMock = jest.fn();
 global.fetch = fetchMock;
@@ -26,6 +30,28 @@ describe('paymentClient', () => {
         method: 'POST',
         headers: expect.objectContaining({ Authorization: 'Bearer token' }),
         body: JSON.stringify({ pricing_tier_id: 'family', group_size: 4 }),
+      }),
+    );
+  });
+
+  it('AC-13.1: fetches package-owned destination geofence configuration', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        latitude: 21.4858,
+        longitude: 39.1925,
+        radius_meters: 150000,
+        request_id: 'arrival-sa-package-1',
+      }),
+    });
+
+    await expect(getPackageGeofence('token', 'package-1')).resolves.toEqual(
+      expect.objectContaining({ request_id: 'arrival-sa-package-1' }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/packages/package-1/geofence'),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer token' }),
       }),
     );
   });

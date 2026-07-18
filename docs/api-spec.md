@@ -209,6 +209,17 @@ GET    /packages/{id}/status
   Ownership is enforced against the authenticated pilgrim; another
   user's package returns 404.
 
+GET    /packages/{id}/geofence
+  Auth required
+  200: { latitude: number, longitude: number, radius_meters: number,
+          request_id: string }
+  404: { error: "package_not_found" }
+       | { error: "destination_geofence_not_configured" }
+  Resolves arrival-alert configuration from the package's immutable
+  destination_country snapshot. Ownership is enforced exactly as for
+  /packages/{id}/status; another user's package returns 404. A destination
+  without a configured row fails closed and never falls back to SA.
+
 GET    /me/packages
   Auth required
   200: { packages: [{ id, tier_name, status, group_size,
@@ -912,3 +923,22 @@ category of gap `frontend-mobile.md`'s Screen 17 had before US-11. A
 minimal per-screen spec has been added to `frontend-dashboard.md` §9.3
 covering the assumptions made (manifest selector, date-range picker,
 "Download CSV" button, loading state for the generation window).
+
+---
+
+## 7.22 Amendment — US-13 Destination-Keyed Arrival Geofence
+
+`GET /packages/{id}/geofence` adds the package-owned configuration read used
+before Android geofence registration. It follows the existing package-status
+authorization contract: authentication is required, another user's package is
+indistinguishable from a missing package (`package_not_found`, 404), and the
+server derives the destination from `packages.destination_country` rather than
+trusting a client-supplied country. The response contains `latitude`,
+`longitude`, `radius_meters`, and a stable `request_id` for the native geofence.
+
+Only SA is configured for MVP, using US-13's existing Jeddah values. An
+unconfigured destination returns `destination_geofence_not_configured` (404),
+with no silent fallback to SA. iOS native geofencing remains a pre-existing
+platform-completeness gap and is explicitly outside this destination-
+abstraction amendment; AC-13.7's permission-free date banner remains the
+reliable cross-platform trigger.

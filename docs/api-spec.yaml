@@ -1250,6 +1250,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/packages/{package_id}/geofence:
+    get:
+      tags:
+      - payments
+      summary: Package Geofence
+      operationId: package_geofence_v1_packages__package_id__geofence_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackageGeofenceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/webhooks/{processor}:
     post:
       tags:
@@ -3014,6 +3043,27 @@ components:
       - id
       - status
       title: PackageCancelResponse
+    PackageGeofenceResponse:
+      properties:
+        latitude:
+          type: number
+          title: Latitude
+        longitude:
+          type: number
+          title: Longitude
+        radius_meters:
+          type: number
+          title: Radius Meters
+        request_id:
+          type: string
+          title: Request Id
+      type: object
+      required:
+      - latitude
+      - longitude
+      - radius_meters
+      - request_id
+      title: PackageGeofenceResponse
     PackageStatusResponse:
       properties:
         status:
