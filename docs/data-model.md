@@ -1591,6 +1591,11 @@ eSIM Access package-code configuration is now a JSON string map keyed as
 data-only integer key. String composite keys deliberately preserve native
 `pydantic-settings` JSON environment parsing.
 
+Deployment must update the production `ESIM_ACCESS_PACKAGE_CODES` value
+atomically with this code; legacy GB-only keys intentionally do not match the
+new destination-aware lookup and would make eSIM Access report every tier as
+unconfigured before the cascade tries the next provider.
+
 Only existing SA vendor codes may be configured. A missing
 `(destination_country, data_gb)` combination raises the existing clear
 `EsimProviderError` and may proceed through the configured provider cascade; it
