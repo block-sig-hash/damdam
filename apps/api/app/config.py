@@ -181,6 +181,14 @@ class Settings(BaseSettings):
                 "composite format introduced by data-model.md §6.36 (e.g. "
                 f"'SA:5'), not a bare data_gb key. Invalid key(s): {bad_keys}"
             )
+        # The "at least one SA: entry" rule below bakes in today's real
+        # business fact -- SA is the only destination ever sold -- the
+        # same trigger data-model.md §6.20 names for revisiting bundled
+        # single-destination content elsewhere in the codebase. When a
+        # real second destination is onboarded, this check needs to
+        # change from "must contain SA:" to something destination-aware
+        # (e.g. "must contain an entry for the purchasing user's
+        # destination"), not be silently satisfied or removed.
         if not any(
             key.startswith("SA:") for key in self.esim_access_package_codes
         ):
