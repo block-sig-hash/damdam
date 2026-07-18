@@ -187,15 +187,17 @@ class PaymentService:
             if tier is None:
                 session.rollback()
                 raise PaymentError("package_not_found")
-            user = session.get(User, package.user_id)
-            if user is None:
-                session.rollback()
-                raise PaymentError("package_not_found")
+            # destination_country is the immutable snapshot initialize()
+            # already took at the true purchase moment (data-model.md
+            # §6.32) -- reusing it here, rather than re-deriving from the
+            # user's *current* value at webhook-processing time, means a
+            # future change to users.destination_country between checkout
+            # and webhook confirmation can never silently overwrite the
+            # correct purchase-time snapshot with a later value.
             window = self.chaining.chain(
-                session, package.user_id, user.destination_country, tier
+                session, package.user_id, package.destination_country, tier
             )
             package.status = PackageStatus.ACTIVE
-            package.destination_country = user.destination_country
             package.data_gb_remaining = (
                 Decimal(package.data_gb_total) + window.extra_data_gb
             )
