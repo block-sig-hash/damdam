@@ -111,7 +111,7 @@ prerequisite in its own right, separate from the items it documents.
 | First production Compose release manually bootstrapped | Explicitly documented as "manual and Ibrahim-owned" (PR #79) — automated production deploy refuses to proceed without a prior image to preserve as a rollback target, so this is a hard prerequisite, not automatable |
 | Cloudflare tunnel / DNS configured for production | Real tunnel token and DNS records in place — `compose.env.example`'s `CF_TUNNEL_TOKEN` is a placeholder (`replace-with-a-real-cloudflare-tunnel-token`) |
 | Production secrets supplied | Real values for every secret currently placeholder/example-only across `.env.example` and `compose.env.example` |
-| `ESIM_ACCESS_PACKAGE_CODES` format migration | **New, from PR #78 (merged 2026-07-18):** the eSIM Access package-code config changed from integer keys (`{"5":"SA_5GB"}`) to destination-composite keys (`{"SA:5":"SA_5GB"}`). Production's env var must be updated **atomically with the code deploy** — the PR's own deploy note warns that omitting this makes eSIM Access silently report every tier as unconfigured (it degrades into the vendor cascade rather than crashing, so this is easy to miss without checking) |
+| `ESIM_ACCESS_PACKAGE_CODES` format migration | **From PR #78 (merged 2026-07-18), deploy-safety fix landed separately:** the eSIM Access package-code config changed from integer keys (`{"5":"SA_5GB"}`) to destination-composite keys (`{"SA:5":"SA_5GB"}`). `Settings` now validates this at app boot (`esim_access_package_codes_must_use_composite_keys` in `app/config.py`) — an old-format or SA-less env var now crashes the app on startup instead of silently degrading eSIM Access into "every tier unconfigured" behind the vendor cascade. **Done:** production/staging's `ESIM_ACCESS_PACKAGE_CODES` env var is confirmed in the `"COUNTRY:GB"` composite format with at least one `SA:` entry, and a real deploy (or `Settings()` construction against the real production env values) boots cleanly — i.e. the startup validator has actually run against the real value, not just against a test fixture |
 
 ## 9. Compliance (cross-reference, not duplicated)
 
@@ -152,6 +152,10 @@ Sources pulled from, directly:
 
 **One item newly surfaced while compiling this document, not previously
 flagged anywhere:** PR #78's `ESIM_ACCESS_PACKAGE_CODES` key-format change
-needs an atomic production env-var update on deploy (§8) — this was recorded
+needed an atomic production env-var update on deploy (§8) — this was recorded
 as a deploy note inside PR #78 itself but had not been pulled into any
-pre-pilot or pre-promotion checklist until now.
+pre-pilot or pre-promotion checklist until this document. It has since moved
+from a documentation-only risk to a startup-time guardrail: `Settings` now
+refuses to boot on the old key format or on an SA-less config (see §8), so
+the remaining pre-pilot work on that item is confirming the real
+production/staging env var, not building anything further.
