@@ -272,6 +272,72 @@ the API service itself.
 
 ---
 
+### 11.4.1 Self-Hosted Runner — Tried 2026-07-18, Reverted Same Day
+
+**Status: not in use.** `ci.yml` runs on GitHub-hosted `ubuntu-latest`
+for all jobs. This section is kept as a record of what was attempted
+and why it was undone, not as a description of active infrastructure.
+
+**Why it was tried:** GitHub-hosted Actions minutes hit the
+account-level free-tier spending limit mid-project, hard-blocking
+`ci.yml` entirely (all four jobs). Self-hosted runners are exempt from
+Actions-minutes billing regardless of job duration — flagged as a
+future option in `scaling-infrastructure.md` §12.10 and acted on
+sooner than that note anticipated, because the block became a hard
+stop rather than a rising-cost concern. A runner was registered on
+`hermes` (Ibrahim's personal OCI Ampere A1 VM, not DamDam's own
+production/staging infrastructure), with real, verified isolation
+from Hermes' other services: a dedicated unprivileged user
+(`gha-runner`, no `sudo`/`docker` group membership, confirmed unable
+to read Hermes' secrets/TLS keys/Docker socket), rootless Docker
+instead of group membership, and systemd CPU/memory quotas protecting
+Hermes' real-time voice-relay service from build contention.
+
+**What it actually surfaced:** the runner infrastructure itself
+worked as designed. But `apps/mobile`'s Android build hit a real,
+verified upstream gap — Google publishes no native `linux-aarch64`
+`aapt2` at any current AGP version (checked 8.12.3 through 9.3.0
+directly against `dl.google.com/maven2`; all 404) — so an ARM64
+self-hosted runner can only build the Android app via full x86_64
+emulation (containerized BuildKit + QEMU). Getting that path working
+took several real, distinct fixes (correct buildx builder selection,
+installing Node.js for React Native's autolinking `npx` call, Gradle
+network-resilience settings for multi-hour downloads), and even after
+every fix landed, a single validation build ran to roughly three
+hours under emulation. None of this is a flaw in the self-hosted
+approach — it's specific to ARM64 hosts, and doesn't apply on a
+standard x86_64 GitHub-hosted runner at all.
+
+**Why it was reverted:** two independent things changed on
+2026-07-18. First, the repo was made public, and public GitHub
+repositories get unlimited free Actions minutes on hosted runners —
+this resolves the original billing block directly, confirmed by a
+real passing CI run on `develop` on hosted `ubuntu-latest`
+(Mobile job included, 11m25s, no emulation needed since native
+x86_64 `aapt2` just works). Second, and more importantly: GitHub
+explicitly advises against self-hosted runners on public
+repositories, because any external contributor can open a PR that
+executes arbitrary code on the runner machine. Continuing to run a
+self-hosted runner on Ibrahim's personal system — which runs live
+personal integrations (Zoho Calendar, LinkedIn automation, a voice
+relay) — would have been a real, ongoing security exposure once the
+repo went public, independent of whether the Android/emulation work
+was finished. The runner was fully decommissioned the same day:
+systemd service stopped/uninstalled, unregistered from GitHub,
+`gha-runner` user and its toolchain (JDK, Android SDK, rootless
+Docker data) removed, confirmed Hermes' own services (the 2-week-uptime
+personal automation container, Tailscale) were unaffected throughout.
+
+**If minutes pressure returns for a private repo in the future:**
+re-read this section before reproducing the approach — the ARM64
+emulation cost is real and specific to ARM64 hosts, so an x86_64
+self-hosted box (a spare machine, or a small cloud VM) avoids the
+entire emulation problem this section describes. If the repo is
+public at that time, self-hosting is very unlikely to be the right
+call regardless of minutes cost, per the security reasoning above.
+
+---
+
 ## 11.5 Monitoring & Alerting
 
 | Metric | Tool | Alert threshold |
