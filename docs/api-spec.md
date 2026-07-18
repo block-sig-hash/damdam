@@ -17,6 +17,23 @@ operators (`aud: hto_dashboard` claim), separate scope for admin
 uploads (`multipart/form-data`) and webhooks (raw payload per
 provider spec)
 
+System health endpoints sit outside the `/v1` API prefix:
+
+```
+GET /health/live
+  200: { status: "alive" }
+  Cheap process liveness only; does not probe dependencies.
+
+GET /health
+  200: { status: "ready", checks: { postgres: "ok", redis: "ok" } }
+  503: { status: "not_ready", checks: {
+           postgres: "ok" | "unavailable",
+           redis: "ok" | "unavailable"
+         } }
+  Deployment and uptime readiness gate. Both dependencies are probed on every
+  request; no dependency failure silently falls back to a healthy response.
+```
+
 ---
 
 ## 7.1 Authentication
@@ -942,3 +959,19 @@ with no silent fallback to SA. iOS native geofencing remains a pre-existing
 platform-completeness gap and is explicitly outside this destination-
 abstraction amendment; AC-13.7's permission-free date banner remains the
 reliable cross-platform trigger.
+
+---
+
+## 7.23 Amendment — Dependency-Aware Health Contract
+
+`GET /health` is now the deployment and monitoring readiness contract. It
+executes a real `SELECT 1` through the configured SQLAlchemy session factory and
+a real Redis `PING`; it returns 200 only when both succeed and otherwise returns
+503 with the status of each dependency. It exposes no connection strings or
+exception details.
+
+`GET /health/live` is the separate cheap process-liveness contract. It returns
+200 whenever FastAPI can serve the request and deliberately does not probe
+Postgres or Redis. This separation prevents container/process diagnostics from
+conflating a dependency outage with a crashed API process while ensuring deploy
+gates cannot accept the old liveness-only false positive.
