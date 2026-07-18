@@ -558,7 +558,8 @@ not a blocker to launch.
 `/health/live` is the cheap process-only probe; `ci.yml` now deploys successful
 `develop` pushes to the isolated staging environment; and `deploy.yml` tags and
 restores the previous application image and checkout when production deploy or
-readiness verification fails.
+readiness verification fails. Both deployment workflows validate their named
+environment secrets before entering an SSH action.
 
 **Why:** the earlier document and workflows described these controls but did
 not implement them. A fixed sleep followed by a liveness-only response could

@@ -12,6 +12,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate production deployment secrets
+        env:
+          OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_DEPLOY_USER: ${{ secrets.OCI_DEPLOY_USER }}
+          OCI_SSH_KEY: ${{ secrets.OCI_SSH_KEY }}
+        run: |
+          missing=""
+          for name in OCI_HOST OCI_DEPLOY_USER OCI_SSH_KEY; do
+            if [ -z "$(printenv "$name")" ]; then
+              missing="$missing $name"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Production deploy cannot run. Add these secrets to the production GitHub Environment:$missing"
+            exit 1
+          fi
+
       - name: Deploy tagged API stack to OCI
         id: production-deploy
         continue-on-error: true
@@ -62,6 +79,7 @@ jobs:
 
       - name: Roll back failed production release
         if: steps.production-deploy.outcome == 'failure' || steps.production-health.outcome == 'failure'
+        continue-on-error: true
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.OCI_HOST }}
@@ -82,7 +100,11 @@ jobs:
             git checkout --detach "$previous_commit"
 
       - name: Verify rollback readiness
-        if: steps.production-deploy.outcome == 'failure' || steps.production-health.outcome == 'failure'
+        if: >-
+          always() &&
+          (steps.production-deploy.outcome == 'failure' ||
+          steps.production-health.outcome == 'failure')
+        continue-on-error: true
         run: |
           curl --fail --silent --show-error \
             --connect-timeout 5 --max-time 10 \
@@ -90,7 +112,10 @@ jobs:
             https://api.damdam.app/health
 
       - name: Fail unsuccessful production deployment
-        if: steps.production-deploy.outcome == 'failure' || steps.production-health.outcome == 'failure'
+        if: >-
+          always() &&
+          (steps.production-deploy.outcome == 'failure' ||
+          steps.production-health.outcome == 'failure')
         run: |
           echo "::error::Production deployment failed and the previous application image was restored. Database migrations are not automatically downgraded."
           exit 1

@@ -288,6 +288,7 @@ jobs:
 
       - name: Roll back failed staging release
         if: steps.staging-deploy.outcome == 'failure' || steps.staging-health.outcome == 'failure'
+        continue-on-error: true
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.STAGING_OCI_HOST }}
@@ -307,7 +308,10 @@ jobs:
             git checkout --detach "$previous_commit"
 
       - name: Fail unsuccessful staging deployment
-        if: steps.staging-deploy.outcome == 'failure' || steps.staging-health.outcome == 'failure'
+        if: >-
+          always() &&
+          (steps.staging-deploy.outcome == 'failure' ||
+          steps.staging-health.outcome == 'failure')
         run: |
           echo "::error::Staging deployment failed. The previous release was restored when one existed; inspect the deploy logs."
           exit 1
