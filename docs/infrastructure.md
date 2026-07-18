@@ -270,6 +270,84 @@ the API service itself.
     HTO-onboarding deadline, not right up against it
 ```
 
+### 11.4.1 Self-Hosted Runner — Adopted 2026-07-18
+
+**Why:** GitHub-hosted Actions minutes hit the account-level free-tier
+spending limit mid-project, hard-blocking `ci.yml` entirely (all four
+jobs). Self-hosted runners are confirmed exempt from Actions-minutes
+billing regardless of job duration — this was flagged as a future
+option in `scaling-infrastructure.md` §12.10 and is now acted on,
+sooner than that note anticipated, because the block became a hard
+stop rather than a rising-cost concern. Per that note, this is not a
+permanent-guarantee assumption: GitHub floated (then postponed) a
+per-minute platform fee for self-hosted runners on private repos in
+March 2026 — worth re-checking against current pricing if usage
+patterns change materially.
+
+**Where it runs — not the DamDam production box.** The runner is
+registered on `hermes` (Ibrahim's personal OCI Ampere A1 VM, Ubuntu
+24.04, 2 OCPU/12GB, arm64/Neoverse-N1) — a machine unrelated to
+DamDam's own production/staging infrastructure (§11.1/§11.2), which
+already runs Ibrahim's personal automation stack (a Docker container,
+LinkedIn-login VNC/Xvfb, a Gemini Live voice relay, Zoho Calendar
+integration). It is **not** the DamDam OCI production instance.
+
+**Isolation from Hermes' own services — verified, not assumed:**
+- Dedicated unprivileged user `gha-runner` (uid 1002), home directory
+  mode `750`, no membership in `sudo` or `docker` groups.
+- Confirmed by direct test as `gha-runner`: cannot list `/home/ubuntu`
+  (permission denied), cannot read Hermes' `.env`
+  (`/home/ubuntu/.hermes/.env`), cannot read the voice-relay TLS
+  private key (`relay_certs/key.pem`), cannot reach the system Docker
+  socket (`/var/run/docker.sock`, group `docker`, `gha-runner` not a
+  member), cannot read Tailscale's state file
+  (`/var/lib/tailscale/tailscaled.state`), has no sudo access
+  (`sudo -n true` prompts for a password it doesn't have). The one
+  narrow exception: `tailscale status` returns the tailnet peer list
+  to any local user — expected Tailscale CLI behavior, not a
+  credential or identity leak (the actual node key/state file is
+  blocked).
+- **Docker: rootless, not group membership.** `gha-runner` runs its
+  own rootless Docker daemon (`systemctl --user`, lingering enabled
+  so it survives without an active login session) rather than being
+  added to the system `docker` group — group membership is
+  root-equivalent (bind-mount the host root, escalate trivially), and
+  granting it here would defeat the isolation goal above given
+  Hermes' primary account already has passwordless sudo. `buildx` is
+  configured with a dedicated builder (multi-arch: `linux/amd64` +
+  `linux/arm64`, via `tonistiigi/binfmt`-registered QEMU emulation)
+  scoped to this rootless daemon.
+
+**Resource headroom — checked, not assumed.** At install time: load
+average 0.11, 8.8GB of 11GB in buff/cache, 9.3GB available, 29GB of
+45GB disk free. The real risk isn't install-time headroom, it's
+*build-time* CPU contention against the voice-relay's real-time
+audio path on a 2-vCPU box. Mitigation: `gha-runner`'s systemd user
+slice (`user-1002.slice`) is capped at `CPUQuota=100%` (1 of 2 vCPUs)
+and `MemoryHigh=6G`/`MemoryMax=8G` — Hermes keeps a guaranteed full
+core and the bulk of memory even under a maximal Android/Docker
+build. The Android SDK toolchain (build-tools 36.0.0, platform 36,
+NDK 27.1.12297006) added ~4GB disk; 25GB remains free.
+
+**Toolchain (scoped to `gha-runner`, not installed system-wide):**
+JDK 17 Temurin, Android SDK cmdline-tools + platform 36 + build-tools
+36.0.0 + NDK 27.1.12297006 (versions read directly from
+`apps/mobile/android/build.gradle`, not assumed), Node 20 via `nvm`
+(matching `ci.yml`'s `setup-node` pin), Python 3.12 (already present
+system-wide at the correct version, matching `apps/api`'s
+`mypy`/CI pin — no separate install needed).
+
+**Registered as:** a systemd service (`svc.sh install`/`start`)
+running as `gha-runner`, labels `self-hosted, linux, arm64, damdam`
+— specific enough that workflows target this runner precisely,
+rather than any self-hosted runner GitHub might see account-wide
+later. `ci.yml`'s four CI jobs (API, Dashboard, Mobile, Docker) plus
+the path-filter `changes` job they depend on now target
+`[self-hosted, linux, arm64, damdam]`; `deploy.yml` is untouched and
+stays on GitHub-hosted runners (it targets production/staging
+infrastructure that doesn't exist yet, per the recent audit, and was
+never blocked by the minutes issue since it has never run).
+
 ---
 
 ## 11.5 Monitoring & Alerting
