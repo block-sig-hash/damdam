@@ -30,6 +30,14 @@ class PackageStatus(str, Enum):
 
 class Package(SQLModel, table=True):
     __tablename__ = "packages"
+    __table_args__ = (
+        Index(
+            "ix_packages_user_destination_status",
+            "user_id",
+            "destination_country",
+            "status",
+        ),
+    )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     user_id: UUID = Field(
@@ -83,6 +91,15 @@ class Package(SQLModel, table=True):
     expires_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+
+
+class DestinationGeofence(SQLModel, table=True):
+    __tablename__ = "destination_geofences"
+
+    destination_country: str = Field(primary_key=True, max_length=2)
+    latitude: float
+    longitude: float
+    radius_meters: float
 
 
 class PaymentProcessor(str, Enum):

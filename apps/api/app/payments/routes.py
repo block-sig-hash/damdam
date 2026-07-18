@@ -7,6 +7,7 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.db import SessionFactory
 from app.payments.schemas import (
+    PackageGeofenceResponse,
     PackageStatusResponse,
     PurchaseRequest,
     PurchaseResponse,
@@ -53,6 +54,26 @@ async def package_status(
             data_gb_remaining=float(package.data_gb_remaining),
             pstn_minutes_total=package.pstn_minutes_total,
             pstn_minutes_remaining=float(package.pstn_minutes_remaining),
+        )
+
+
+@router.get(
+    "/packages/{package_id}/geofence", response_model=PackageGeofenceResponse
+)
+async def package_geofence(
+    package_id: UUID,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+) -> PackageGeofenceResponse:
+    factory = cast(SessionFactory, request.app.state.session_factory)
+    service = cast(PaymentService, request.app.state.payment_service)
+    with factory() as session:
+        geofence, request_id = service.package_geofence(session, user, package_id)
+        return PackageGeofenceResponse(
+            latitude=geofence.latitude,
+            longitude=geofence.longitude,
+            radius_meters=geofence.radius_meters,
+            request_id=request_id,
         )
 
 

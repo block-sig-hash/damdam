@@ -550,6 +550,7 @@ def create_app(
             "invalid_webhook_signature": 401,
             "invalid_webhook_payload": 400,
             "package_not_found": 404,
+            "destination_geofence_not_configured": 404,
         }
         messages = {
             "pricing_tier_not_found": "The selected pricing tier is unavailable.",
@@ -561,6 +562,9 @@ def create_app(
             "invalid_webhook_signature": "Webhook signature is invalid.",
             "invalid_webhook_payload": "Webhook payload is invalid.",
             "package_not_found": "The package was not found.",
+            "destination_geofence_not_configured": (
+                "Arrival alerts are not configured for this destination."
+            ),
         }
         return JSONResponse(
             status_code=statuses[exc.code],

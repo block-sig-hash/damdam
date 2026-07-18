@@ -1,5 +1,6 @@
 import { Linking, NativeModules, PermissionsAndroid, Platform } from 'react-native';
 import { registerDeviceToken } from '../api/pushClient';
+import { getPackageGeofence } from '../api/paymentClient';
 
 export const ARRIVAL_NOTIFICATION_COPY =
   "You've arrived in Saudi Arabia. Tap to activate your DamDam data — takes 30 seconds.";
@@ -7,7 +8,13 @@ export const ARRIVAL_DEEP_LINK_PREFIX = 'damdam://esim/activate';
 
 interface ArrivalPromptNativeModule {
   getFcmToken(): Promise<string>;
-  registerJeddahGeofence(packageId: string): Promise<void>;
+  registerArrivalGeofence(
+    packageId: string,
+    latitude: number,
+    longitude: number,
+    radiusMeters: number,
+    requestId: string,
+  ): Promise<void>;
 }
 
 function nativeModule(): ArrivalPromptNativeModule | undefined {
@@ -66,6 +73,7 @@ export async function registerPushInstallation(
 }
 
 export async function optIntoArrivalGeofence(
+  accessToken: string,
   packageId: string,
 ): Promise<'registered' | 'denied' | 'unsupported'> {
   const native = nativeModule();
@@ -89,7 +97,14 @@ export async function optIntoArrivalGeofence(
     }
   }
   try {
-    await native.registerJeddahGeofence(packageId);
+    const config = await getPackageGeofence(accessToken, packageId);
+    await native.registerArrivalGeofence(
+      packageId,
+      config.latitude,
+      config.longitude,
+      config.radius_meters,
+      config.request_id,
+    );
     return 'registered';
   } catch {
     return 'unsupported';

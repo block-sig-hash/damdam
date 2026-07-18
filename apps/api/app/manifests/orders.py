@@ -71,12 +71,15 @@ class ManifestOrderService:
         self.clock = clock
         self.pdf_generator = pdf_generator or InvoicePDFGenerator()
 
-    def list_pricing(self, session: Session) -> list[PricingTierResponse]:
-        tiers = session.exec(
-            select(PricingTier)
-            .where(col(PricingTier.active).is_(True))
-            .order_by(col(PricingTier.name))
-        ).all()
+    def list_pricing(
+        self, session: Session, destination_country: str | None = None
+    ) -> list[PricingTierResponse]:
+        statement = select(PricingTier).where(col(PricingTier.active).is_(True))
+        if destination_country is not None:
+            statement = statement.where(
+                PricingTier.destination_country == destination_country
+            )
+        tiers = session.exec(statement.order_by(col(PricingTier.name))).all()
         result: list[PricingTierResponse] = []
         for tier in tiers:
             retail = self._latest_price(tier)
@@ -95,14 +98,15 @@ class ManifestOrderService:
             )
         return result
 
-    def list_admin_pricing_tiers(self, session: Session) -> list[PricingTier]:
-        return list(
-            session.exec(
-                select(PricingTier)
-                .where(col(PricingTier.active).is_(True))
-                .order_by(col(PricingTier.name))
-            ).all()
-        )
+    def list_admin_pricing_tiers(
+        self, session: Session, destination_country: str | None = None
+    ) -> list[PricingTier]:
+        statement = select(PricingTier).where(col(PricingTier.active).is_(True))
+        if destination_country is not None:
+            statement = statement.where(
+                PricingTier.destination_country == destination_country
+            )
+        return list(session.exec(statement.order_by(col(PricingTier.name))).all())
 
     def update_tier_price(
         self,

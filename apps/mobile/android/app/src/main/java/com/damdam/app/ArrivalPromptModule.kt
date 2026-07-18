@@ -27,10 +27,17 @@ class ArrivalPromptModule(private val context: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun registerJeddahGeofence(packageId: String, promise: Promise) {
+  fun registerArrivalGeofence(
+    packageId: String,
+    latitude: Double,
+    longitude: Double,
+    radiusMeters: Float,
+    requestId: String,
+    promise: Promise,
+  ) {
     val geofence = Geofence.Builder()
-      .setRequestId("jeddah-arrival-$packageId")
-      .setCircularRegion(JEDDAH_LATITUDE, JEDDAH_LONGITUDE, JEDDAH_RADIUS_METRES)
+      .setRequestId(requestId)
+      .setCircularRegion(latitude, longitude, radiusMeters)
       .setExpirationDuration(Geofence.NEVER_EXPIRE)
       .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER)
       .build()
@@ -54,10 +61,4 @@ class ArrivalPromptModule(private val context: ReactApplicationContext) :
     Intent(context, ArrivalGeofenceReceiver::class.java).putExtra("package_id", packageId),
     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
   )
-
-  companion object {
-    private const val JEDDAH_LATITUDE = 21.4858
-    private const val JEDDAH_LONGITUDE = 39.1925
-    private const val JEDDAH_RADIUS_METRES = 150_000f
-  }
 }

@@ -1,5 +1,6 @@
 import { Linking, NativeModules, PermissionsAndroid, Platform } from 'react-native';
 import { registerDeviceToken } from '../api/pushClient';
+import { getPackageGeofence } from '../api/paymentClient';
 import {
   ARRIVAL_NOTIFICATION_COPY,
   optIntoArrivalGeofence,
@@ -10,6 +11,7 @@ import {
 } from './arrivalPrompts';
 
 jest.mock('../api/pushClient', () => ({ registerDeviceToken: jest.fn() }));
+jest.mock('../api/paymentClient', () => ({ getPackageGeofence: jest.fn() }));
 
 const originalOs = Platform.OS;
 const originalVersion = Platform.Version;
@@ -18,6 +20,7 @@ afterEach(() => {
   Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOs });
   Object.defineProperty(Platform, 'Version', { configurable: true, value: originalVersion });
   delete NativeModules.ArrivalPromptModule;
+  jest.clearAllMocks();
   jest.restoreAllMocks();
 });
 
@@ -56,26 +59,36 @@ it('AC-13.1: registers the native FCM token and opt-in geofence after permission
   Object.defineProperty(Platform, 'Version', { configurable: true, value: 35 });
   NativeModules.ArrivalPromptModule = {
     getFcmToken: jest.fn().mockResolvedValue('fcm-token-long-enough-for-validation'),
-    registerJeddahGeofence: jest.fn().mockResolvedValue(undefined),
+    registerArrivalGeofence: jest.fn().mockResolvedValue(undefined),
   };
   jest.spyOn(PermissionsAndroid, 'request').mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
   (registerDeviceToken as jest.Mock).mockResolvedValue({ registered: true });
+  (getPackageGeofence as jest.Mock).mockResolvedValue({
+    latitude: 21.4858,
+    longitude: 39.1925,
+    radius_meters: 150000,
+    request_id: 'arrival-sa-package-1',
+  });
 
   await expect(registerPushInstallation('access')).resolves.toBe('registered');
-  await expect(optIntoArrivalGeofence('package-1')).resolves.toBe('registered');
+  await expect(optIntoArrivalGeofence('access', 'package-1')).resolves.toBe('registered');
   expect(registerDeviceToken).toHaveBeenCalledWith(
     'access',
     'fcm-token-long-enough-for-validation',
     'android',
   );
-  expect(NativeModules.ArrivalPromptModule.registerJeddahGeofence).toHaveBeenCalledWith('package-1');
+  expect(getPackageGeofence).toHaveBeenCalledWith('access', 'package-1');
+  expect(NativeModules.ArrivalPromptModule.registerArrivalGeofence).toHaveBeenCalledWith(
+    'package-1', 21.4858, 39.1925, 150000, 'arrival-sa-package-1',
+  );
 });
 
 it('AC-13.7: denied geofence permission stops only the optional geofence registration', async () => {
   Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
-  NativeModules.ArrivalPromptModule = { registerJeddahGeofence: jest.fn() };
+  NativeModules.ArrivalPromptModule = { registerArrivalGeofence: jest.fn() };
   jest.spyOn(PermissionsAndroid, 'request').mockResolvedValue(PermissionsAndroid.RESULTS.DENIED);
-  await expect(optIntoArrivalGeofence('package-1')).resolves.toBe('denied');
+  await expect(optIntoArrivalGeofence('access', 'package-1')).resolves.toBe('denied');
   expect(shouldShowDateActivationBanner('2026-07-20', 'downloaded', new Date('2026-07-15T00:00:00Z'))).toBe(true);
-  expect(NativeModules.ArrivalPromptModule.registerJeddahGeofence).not.toHaveBeenCalled();
+  expect(getPackageGeofence).not.toHaveBeenCalled();
+  expect(NativeModules.ArrivalPromptModule.registerArrivalGeofence).not.toHaveBeenCalled();
 });

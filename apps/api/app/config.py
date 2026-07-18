@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     esim_access_base_url: str = "https://api.esimaccess.com"
     esim_access_access_code: str = ""
     esim_access_secret_key: str = ""
-    esim_access_package_codes: dict[int, str] = Field(default_factory=dict)
+    esim_access_package_codes: dict[str, str] = Field(default_factory=dict)
     esim_access_allocation_timeout_seconds: int = 35
     oneglobal_base_url: str = ""
     oneglobal_api_key: str = ""

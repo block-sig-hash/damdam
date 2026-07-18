@@ -96,6 +96,7 @@ class EsimProfileService:
             package_id=package.id,
             user_id=user.id,
             data_gb=package.data_gb_total,
+            destination_country=package.destination_country,
         )
         last_error = "No eSIM vendor is configured"
         for vendor_name in self._vendor_order():

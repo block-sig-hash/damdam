@@ -1519,3 +1519,86 @@ honor even if that were fixed. US-12's bundled Arabic emergency phrasebook
 (`apps/mobile/src/content/emergencyEssentials.ts`) was already correctly
 identified in §6.20 as an intentional MVP-scoped decision with its own
 documented multi-country trigger condition, and needs no change here.
+
+## 6.33 Amendment — Package Destination/Status Lookup Index
+
+`packages` now has the composite non-unique index
+`ix_packages_user_destination_status` over
+`(user_id, destination_country, status)`. This is the exact equality-filter
+prefix used by `PackageChainingService.chain()`'s locked active-package lookup
+and both voice-billing active-package lookups (`_remaining_balance` and hangup
+billing). The index closes the performance half of §6.32: those queries became
+destination-correct there, but would otherwise scan a user's package history
+as the table grows. It does not add a uniqueness constraint; concurrency and
+the one-active-package-per-(user,destination) lifecycle invariant remain
+service/transaction concerns.
+
+No destination catalogue or second product destination is introduced. Synthetic
+KE rows are used only in query-plan verification to prove selectivity across the
+destination column.
+
+## 6.34 Amendment — US-13 `destination_geofences`
+
+US-13's Android arrival trigger is now backed by a destination-keyed table:
+
+```
+destination_geofences
+  destination_country  VARCHAR(2) PK
+  latitude             DOUBLE PRECISION NOT NULL
+  longitude            DOUBLE PRECISION NOT NULL
+  radius_meters         DOUBLE PRECISION NOT NULL
+```
+
+The migration inserts exactly one real row: `SA` → Jeddah (`21.4858`,
+`39.1925`, `150000`). `GET /packages/{id}/geofence` ownership-checks the
+package, then resolves this row from the package's immutable
+`destination_country` snapshot (§6.32). Missing destinations return a clear
+404 and never fall back to SA; the Android native bridge is parameterized with
+the returned coordinates, radius, and request ID rather than compiling Jeddah
+into the registration method.
+
+Still out of scope: a second destination's coordinates, destination-specific
+arrival copy, and an iOS native geofencing implementation. AC-13.7's date banner
+is unchanged.
+
+## 6.35 Amendment — `pricing_tiers.destination_country`
+
+`pricing_tiers.destination_country` (`VARCHAR(2) NOT NULL DEFAULT 'SA'`) adds
+the missing destination dimension to mutable catalogue pricing. The migration
+uses the same PostgreSQL fast-default/backfill pattern as
+`packages.destination_country` (§6.32); because SA is the only destination ever
+sold, SA is the historically correct value for every pre-existing tier.
+
+Retail and manifest/admin pricing service reads accept an optional destination
+filter and preserve their existing all-active-tiers behavior when it is absent.
+The public unauthenticated `GET /pricing/tiers` intentionally supplies no
+filter: there is no trustworthy anonymous destination signal or approved
+destination-selection UX yet. Purchase paths still bind an explicit
+`pricing_tier_id`; group-tier resolution remains destination-unaware until a
+real second destination creates product requirements and data for resolving
+otherwise ambiguous active group tiers.
+
+No KE or other second-destination tier is seeded; synthetic rows exist only in
+tests proving that the query filter discriminates by destination.
+
+## 6.36 Amendment — Destination-Aware eSIM Vendor Configuration
+
+The internal `EsimIssueRequest` vendor-abstraction contract now carries
+`destination_country`, sourced from the immutable package snapshot (§6.32).
+`HttpEsimProvider` forwards that value instead of a literal SA vendor payload.
+eSIM Access package-code configuration is now a JSON string map keyed as
+`"COUNTRY:GB"` (for example `{"SA:5": "SA_5GB"}`), replacing the prior
+data-only integer key. String composite keys deliberately preserve native
+`pydantic-settings` JSON environment parsing.
+
+Only existing SA vendor codes may be configured. A missing
+`(destination_country, data_gb)` combination raises the existing clear
+`EsimProviderError` and may proceed through the configured provider cascade; it
+never reuses an SA code for another destination. No second destination, package
+code, or provider-specific product data is invented here.
+
+§6.20 remains correct without change: US-12 explicitly requires the Arabic
+emergency essentials to be bundled offline, and already names onboarding a real
+second destination as the trigger for revisiting country-keyed content. That
+trigger has not occurred, so `apps/mobile/src/content/emergencyEssentials.ts`
+is intentionally untouched.

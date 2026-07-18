@@ -35,13 +35,18 @@ def test_http_adapter_sends_package_id_as_vendor_idempotency_key(monkeypatch) ->
     monkeypatch.setattr(httpx, "post", post)
     provider = HttpEsimProvider("monty_mobile", "https://vendor.example", "key", 20)
 
-    issued = provider.issue(EsimIssueRequest(package_id, uuid4(), 5))
+    issued = provider.issue(EsimIssueRequest(package_id, uuid4(), 5, "SA"))
 
     assert issued.iccid == "8944501234567890123456"
     assert captured["url"] == "https://vendor.example/esims"
     assert captured["headers"] == {
         "Authorization": "Bearer key",
         "Idempotency-Key": str(package_id),
+    }
+    assert captured["json"] == {
+        "package_reference": str(package_id),
+        "destination_country": "SA",
+        "data_gb": 5,
     }
 
 
@@ -56,7 +61,7 @@ def test_http_adapter_normalizes_configuration_and_vendor_failures(monkeypatch) 
     assert set(providers) == {"monty_mobile", "esim_access", "1global"}
 
     with pytest.raises(EsimProviderError, match="not configured"):
-        providers["esim_access"].issue(EsimIssueRequest(uuid4(), uuid4(), 5))
+        providers["esim_access"].issue(EsimIssueRequest(uuid4(), uuid4(), 5, "SA"))
 
     def unavailable(*args: object, **kwargs: object) -> object:
         del args, kwargs
@@ -64,7 +69,7 @@ def test_http_adapter_normalizes_configuration_and_vendor_failures(monkeypatch) 
 
     monkeypatch.setattr(httpx, "post", unavailable)
     with pytest.raises(EsimProviderError, match="issuance failed"):
-        providers["monty_mobile"].issue(EsimIssueRequest(uuid4(), uuid4(), 5))
+        providers["monty_mobile"].issue(EsimIssueRequest(uuid4(), uuid4(), 5, "SA"))
 
 
 def test_esim_access_uses_signed_order_then_query_contract(monkeypatch) -> None:
@@ -100,11 +105,11 @@ def test_esim_access_uses_signed_order_then_query_contract(monkeypatch) -> None:
         jwt_secret="test-secret-at-least-32-characters-long",
         esim_access_access_code="access",
         esim_access_secret_key="secret",
-        esim_access_package_codes={5: "SA_5GB"},
+        esim_access_package_codes={"SA:5": "SA_5GB"},
     )
     provider = EsimAccessProvider(settings, monotonic=lambda: 0, sleeper=lambda _: None)
 
-    issued = provider.issue(EsimIssueRequest(package_id, uuid4(), 5))
+    issued = provider.issue(EsimIssueRequest(package_id, uuid4(), 5, "SA"))
 
     assert issued.qr_code_url == "https://p.qrsim.net/qr.png"
     assert requests[0][0].endswith("/api/v1/open/esim/order")
@@ -138,11 +143,39 @@ def test_esim_access_query_error_after_accepted_order_is_pending(monkeypatch) ->
         jwt_secret="test-secret-at-least-32-characters-long",
         esim_access_access_code="access",
         esim_access_secret_key="secret",
-        esim_access_package_codes={5: "SA_5GB"},
+        esim_access_package_codes={"SA:5": "SA_5GB"},
     )
     provider = EsimAccessProvider(settings, monotonic=lambda: 0, sleeper=lambda _: None)
 
     with pytest.raises(EsimProviderPending, match="status is temporarily unavailable"):
-        provider.issue(EsimIssueRequest(uuid4(), uuid4(), 5))
+        provider.issue(EsimIssueRequest(uuid4(), uuid4(), 5, "SA"))
 
     assert calls == 2
+
+
+def test_esim_access_rejects_unconfigured_destination_tier() -> None:
+    settings = Settings(
+        app_env="test",
+        jwt_secret="test-secret-at-least-32-characters-long",
+        esim_access_access_code="access",
+        esim_access_secret_key="secret",
+        esim_access_package_codes={"SA:5": "SA_5GB"},
+    )
+
+    with pytest.raises(EsimProviderError, match="not configured for this tier"):
+        EsimAccessProvider(settings).issue(
+            EsimIssueRequest(uuid4(), uuid4(), 5, "KE")
+        )
+
+
+def test_settings_parses_destination_package_codes_from_environment(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ESIM_ACCESS_PACKAGE_CODES", '{"SA:5":"SA_5GB"}')
+
+    settings = Settings(
+        app_env="test",
+        jwt_secret="test-secret-at-least-32-characters-long",
+    )
+
+    assert settings.esim_access_package_codes == {"SA:5": "SA_5GB"}

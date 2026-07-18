@@ -14,6 +14,7 @@ def _tier(
     *,
     group: bool = False,
     active: bool = True,
+    destination_country: str = "SA",
 ) -> PricingTier:
     return PricingTier(
         name=name,
@@ -26,6 +27,7 @@ def _tier(
         wholesale_usd_price=Decimal("80.00"),
         active=active,
         ngn_price=Decimal(price),
+        destination_country=destination_country,
     )
 
 
@@ -88,3 +90,26 @@ def test_public_pricing_is_unauthenticated_and_handles_no_active_tiers(api) -> N
 
     assert response.status_code == 200
     assert response.json() == {"tiers": []}
+
+
+def test_pricing_service_filters_by_destination_and_no_filter_is_unchanged(
+    session_factory,
+) -> None:
+    from app.pricing.service import RetailPricingService
+
+    with session_factory() as session:
+        session.add_all(
+            [
+                _tier("Saudi", "100.00", 5, 10, destination_country="SA"),
+                _tier("Kenya", "200.00", 5, 10, destination_country="KE"),
+            ]
+        )
+        session.commit()
+
+        service = RetailPricingService()
+        assert [tier.name for tier in service.list_active(session, "SA")] == ["Saudi"]
+        assert [tier.name for tier in service.list_active(session, "KE")] == ["Kenya"]
+        assert {tier.name for tier in service.list_active(session)} == {
+            "Saudi",
+            "Kenya",
+        }

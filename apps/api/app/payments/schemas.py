@@ -24,5 +24,12 @@ class PackageStatusResponse(BaseModel):
     pstn_minutes_remaining: float
 
 
+class PackageGeofenceResponse(BaseModel):
+    latitude: float
+    longitude: float
+    radius_meters: float
+    request_id: str
+
+
 class WebhookResponse(BaseModel):
     processed: bool

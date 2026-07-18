@@ -25,6 +25,7 @@ class EsimIssueRequest:
     package_id: UUID
     user_id: UUID
     data_gb: int
+    destination_country: str
 
 
 @dataclass(frozen=True)
@@ -66,7 +67,7 @@ class HttpEsimProvider:
                 },
                 json={
                     "package_reference": str(request.package_id),
-                    "destination_country": "SA",
+                    "destination_country": request.destination_country,
                     "data_gb": request.data_gb,
                 },
                 timeout=self.timeout,
@@ -106,7 +107,8 @@ class EsimAccessProvider:
         self.sleeper = sleeper
 
     def issue(self, request: EsimIssueRequest) -> EsimIssuedProfile:
-        package_code = self.settings.esim_access_package_codes.get(request.data_gb)
+        package_key = f"{request.destination_country}:{request.data_gb}"
+        package_code = self.settings.esim_access_package_codes.get(package_key)
         if not all(
             (
                 self.settings.esim_access_base_url,

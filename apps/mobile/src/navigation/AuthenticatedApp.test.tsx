@@ -117,7 +117,7 @@ it('wires authenticated bootstrap, date banner, and activation navigation', asyn
 
   await waitFor(() => {
     expect(mockRegisterPush).toHaveBeenCalledWith('access-token');
-    expect(mockGeofence).toHaveBeenCalledWith('package-1');
+    expect(mockGeofence).toHaveBeenCalledWith('access-token', 'package-1');
     expect(mockGetEsim).toHaveBeenCalledWith('access-token', 'package-1');
   });
   expect(screen.getByTestId('esim-activation-banner')).toBeTruthy();
@@ -138,7 +138,7 @@ it('deep-links an authenticated pilgrim directly into activation', async () => {
 
   await act(async () => openPackage?.('linked-package'));
   expect(screen.getByTestId('wired-activation-flow')).toBeTruthy();
-  expect(mockGeofence).toHaveBeenCalledWith('linked-package');
+  expect(mockGeofence).toHaveBeenCalledWith('access-token', 'linked-package');
 });
 
 it('AC-14.7: refreshes the displayed PSTN balance after a completed call', async () => {

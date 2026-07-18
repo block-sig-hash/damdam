@@ -17,6 +17,7 @@ from app.esim.models import EsimIssuanceJob, EsimProfile
 from app.esim.service import EsimIssuanceScheduler
 from app.notifications.service import NotificationError, NotificationService
 from app.packages.models import (
+    DestinationGeofence,
     Package,
     PackageSource,
     PackageStatus,
@@ -285,6 +286,15 @@ class PaymentService:
         if package is None:
             raise PaymentError("package_not_found")
         return package
+
+    def package_geofence(
+        self, session: Session, user: User, package_id: UUID
+    ) -> tuple[DestinationGeofence, str]:
+        package = self.package_status(session, user, package_id)
+        geofence = session.get(DestinationGeofence, package.destination_country)
+        if geofence is None:
+            raise PaymentError("destination_geofence_not_configured")
+        return geofence, f"arrival-{package.destination_country.lower()}-{package.id}"
 
     def _initialize_with_failover(
         self, initialization: PaymentInitialization

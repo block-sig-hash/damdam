@@ -7,10 +7,15 @@ TIER_ORDER = {"Starter": 0, "Basic": 1, "Standard": 2, "Family": 3}
 
 
 class RetailPricingService:
-    def list_active(self, session: Session) -> list[RetailPricingTierResponse]:
-        tiers = session.exec(
-            select(PricingTier).where(col(PricingTier.active).is_(True))
-        ).all()
+    def list_active(
+        self, session: Session, destination_country: str | None = None
+    ) -> list[RetailPricingTierResponse]:
+        statement = select(PricingTier).where(col(PricingTier.active).is_(True))
+        if destination_country is not None:
+            statement = statement.where(
+                PricingTier.destination_country == destination_country
+            )
+        tiers = session.exec(statement).all()
         ordered = sorted(
             tiers,
             key=lambda tier: (TIER_ORDER.get(tier.name, len(TIER_ORDER)), tier.name),
