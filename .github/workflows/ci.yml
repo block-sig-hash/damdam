@@ -168,10 +168,37 @@ jobs:
         run: npm run type-check
       - if: ${{ hashFiles('apps/mobile/package.json') != '' }}
         run: npm run test
-      - name: Compile Android debug app
+      - name: Build Android build image (x86_64, cached across runs)
         if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
-        working-directory: apps/mobile/android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --load \
+            -t damdam-android-build:ci \
+            -f .github/docker/android-build.Dockerfile \
+            .github/docker
+      - name: Compile Android debug app (emulated x86_64 container)
+        # Google publishes no native linux-aarch64 aapt2 at any current
+        # stable AGP version (checked 8.12.3 through 9.3.0 directly
+        # against dl.google.com/maven2 -- all 404) -- direct host exec
+        # fails even with binfmt QEMU registered, since aapt2 also needs
+        # an x86_64 sysroot the bare arm64 host doesn't have. Building
+        # inside an x86_64 container reuses the same QEMU/BuildKit path
+        # already proven working by the Docker build-check job, without
+        # touching the host's own architecture. This runs meaningfully
+        # slower than native compilation under full emulation -- expect
+        # this to be the long pole in the Mobile job now.
+        if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          mkdir -p "$HOME/.gradle-docker-cache"
+          docker run --rm --platform linux/amd64 \
+            -v "$GITHUB_WORKSPACE":/workspace \
+            -v "$HOME/.gradle-docker-cache":/root/.gradle \
+            -w /workspace/apps/mobile/android \
+            damdam-android-build:ci \
+            ./gradlew assembleDebug --no-daemon --stacktrace
 
   build-check:
     name: Docker build check (multi-arch)
