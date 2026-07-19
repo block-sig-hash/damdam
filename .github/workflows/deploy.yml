@@ -12,23 +12,126 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy to OCI via SSH
+      - name: Validate production deployment secrets
+        env:
+          OCI_HOST: ${{ secrets.OCI_HOST }}
+          OCI_DEPLOY_USER: ${{ secrets.OCI_DEPLOY_USER }}
+          OCI_SSH_KEY: ${{ secrets.OCI_SSH_KEY }}
+        run: |
+          missing=""
+          for name in OCI_HOST OCI_DEPLOY_USER OCI_SSH_KEY; do
+            if [ -z "$(printenv "$name")" ]; then
+              missing="$missing $name"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Production deploy cannot run. Add these secrets to the production GitHub Environment:$missing"
+            exit 1
+          fi
+
+      - name: Deploy tagged API stack to OCI
+        id: production-deploy
+        continue-on-error: true
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.OCI_HOST }}
           username: ${{ secrets.OCI_DEPLOY_USER }}
           key: ${{ secrets.OCI_SSH_KEY }}
           script: |
+            set -eu
             cd /opt/damdam
-            git pull origin main
-            docker compose build
-            docker compose up -d
-            docker compose exec -T api alembic upgrade head
+            git fetch origin main
+            previous_commit=$(git rev-parse HEAD)
+            target_commit=$(git rev-parse origin/main)
+            mkdir -p .deploy
+            rm -f .deploy/production_previous_commit
+            current_container=$(docker ps -q \
+              --filter label=com.docker.compose.project=damdam \
+              --filter label=com.docker.compose.service=api | head -n 1)
+            if [ -n "$current_container" ]; then
+              current_image=$(docker inspect --format '{{.Image}}' "$current_container")
+              docker tag "$current_image" "damdam-api:$previous_commit"
+            elif ! docker image inspect "damdam-api:$previous_commit" >/dev/null 2>&1; then
+              echo "No running API image exists to tag as a rollback target. Bootstrap production manually before enabling automated deploys."
+              exit 1
+            fi
+            printf '%s\n' "$previous_commit" > .deploy/production_previous_commit
+            git checkout --detach "$target_commit"
+            DAMDAM_ENV_FILE=.env.production \
+              DAMDAM_API_IMAGE="damdam-api:$target_commit" \
+              docker compose --env-file .env.production build api
+            DAMDAM_ENV_FILE=.env.production \
+              DAMDAM_API_IMAGE="damdam-api:$target_commit" \
+              docker compose --env-file .env.production up -d --remove-orphans
+            DAMDAM_ENV_FILE=.env.production \
+              DAMDAM_API_IMAGE="damdam-api:$target_commit" \
+              docker compose --env-file .env.production exec -T api alembic upgrade head
 
-      - name: Health check
+      - name: Check production readiness
+        id: production-health
+        if: steps.production-deploy.outcome == 'success'
+        continue-on-error: true
         run: |
-          sleep 15
-          curl --fail https://api.damdam.app/health || exit 1
+          curl --fail --silent --show-error \
+            --connect-timeout 5 --max-time 10 \
+            --retry 12 --retry-delay 5 --retry-all-errors \
+            https://api.damdam.app/health
+
+      - name: Roll back failed production release
+        id: production-rollback
+        if: steps.production-deploy.outcome == 'failure' || steps.production-health.outcome == 'failure'
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_DEPLOY_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          script: |
+            set -eu
+            cd /opt/damdam
+            if [ ! -s .deploy/production_previous_commit ]; then
+              echo "Rollback metadata is missing; stop and follow the production recovery runbook."
+              exit 1
+            fi
+            previous_commit=$(cat .deploy/production_previous_commit)
+            docker image inspect "damdam-api:$previous_commit" >/dev/null
+            DAMDAM_ENV_FILE=.env.production \
+              DAMDAM_API_IMAGE="damdam-api:$previous_commit" \
+              docker compose --env-file .env.production up -d --no-build --remove-orphans
+            git checkout --detach "$previous_commit"
+
+      - name: Verify rollback readiness
+        id: production-rollback-verify
+        if: >-
+          always() &&
+          (steps.production-deploy.outcome == 'failure' ||
+          steps.production-health.outcome == 'failure')
+        continue-on-error: true
+        run: |
+          curl --fail --silent --show-error \
+            --connect-timeout 5 --max-time 10 \
+            --retry 12 --retry-delay 5 --retry-all-errors \
+            https://api.damdam.app/health
+
+      - name: Fail unsuccessful production deployment
+        if: >-
+          always() &&
+          (steps.production-deploy.outcome == 'failure' ||
+          steps.production-health.outcome == 'failure')
+        run: |
+          # The exact restoration message depends on how far the rollback
+          # actually got -- a flat "the previous image was restored" claim
+          # would be false in the hard-stop cases (missing metadata, missing
+          # tagged image) where the rollback script exits before touching
+          # the running containers at all.
+          if [ "${{ steps.production-rollback.outcome }}" != "success" ]; then
+            echo "::error::Production deployment failed and automated rollback did NOT complete (see the 'Roll back failed production release' step's logs). The previous application image was NOT confirmed restored -- stop and follow the production recovery runbook."
+          elif [ "${{ steps.production-rollback-verify.outcome }}" != "success" ]; then
+            echo "::error::Production deployment failed. The previous application image was redeployed, but post-rollback readiness could not be confirmed -- verify manually before assuming service is restored."
+          else
+            echo "::error::Production deployment failed and the previous application image was restored and confirmed ready. Database migrations are not automatically downgraded."
+          fi
+          exit 1
 
       - name: Deploy dashboard to Cloudflare Workers
         working-directory: apps/dashboard

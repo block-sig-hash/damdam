@@ -55,6 +55,8 @@ jobs:
               - '.github/workflows/ci.yml'
             docker:
               - 'apps/api/**'
+              - 'docker-compose.yml'
+              - 'compose.env.example'
               - '.github/workflows/ci.yml'
 
   lint-and-test-api:
@@ -179,6 +181,24 @@ jobs:
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+      - name: Validate six-service Compose configuration
+        run: docker compose --env-file compose.env.example config --quiet
+      - name: Build API from the Compose configuration
+        run: docker compose --env-file compose.env.example build api
+      - name: Smoke-test readiness with real Postgres and Redis
+        run: |
+          cleanup() {
+            docker compose --env-file compose.env.example down --volumes
+          }
+          trap cleanup EXIT
+          docker compose --env-file compose.env.example up -d --wait postgres redis api
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8000/health
+          docker compose --env-file compose.env.example stop redis
+          status=$(curl --silent --show-error --max-time 10 \
+            --output /tmp/readiness.json --write-out '%{http_code}' \
+            http://127.0.0.1:8000/health)
+          test "$status" = "503"
+          grep --quiet '"redis":"unavailable"' /tmp/readiness.json
       - name: Build API image for both architectures
         # Catches aarch64 wheel/dependency availability issues in
         # CI rather than at OCI deploy time — see
@@ -193,3 +213,119 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             -t damdam-api:ci \
             ./apps/api
+
+  deploy-staging:
+    name: Deploy develop to staging
+    needs:
+      - lint-and-test-api
+      - lint-and-test-dashboard
+      - lint-and-test-mobile
+      - build-check
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/develop' &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-latest
+    environment: staging
+    concurrency:
+      group: staging-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate staging deployment secrets
+        env:
+          STAGING_OCI_HOST: ${{ secrets.STAGING_OCI_HOST }}
+          STAGING_OCI_DEPLOY_USER: ${{ secrets.STAGING_OCI_DEPLOY_USER }}
+          STAGING_OCI_SSH_KEY: ${{ secrets.STAGING_OCI_SSH_KEY }}
+          STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+        run: |
+          missing=""
+          for name in STAGING_OCI_HOST STAGING_OCI_DEPLOY_USER STAGING_OCI_SSH_KEY STAGING_API_BASE_URL; do
+            if [ -z "$(printenv "$name")" ]; then
+              missing="$missing $name"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Staging deploy is configured but cannot run. Add these secrets to the staging GitHub Environment:$missing"
+            exit 1
+          fi
+
+      - name: Deploy API stack to staging
+        id: staging-deploy
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_OCI_HOST }}
+          username: ${{ secrets.STAGING_OCI_DEPLOY_USER }}
+          key: ${{ secrets.STAGING_OCI_SSH_KEY }}
+          script: |
+            set -eu
+            cd /opt/damdam
+            git fetch origin develop
+            previous_commit=$(git rev-parse HEAD)
+            target_commit=$(git rev-parse origin/develop)
+            mkdir -p .deploy
+            rm -f .deploy/staging_previous_commit
+            current_container=$(docker ps -q \
+              --filter label=com.docker.compose.project=damdam \
+              --filter label=com.docker.compose.service=api | head -n 1)
+            if [ -n "$current_container" ]; then
+              current_image=$(docker inspect --format '{{.Image}}' "$current_container")
+              docker tag "$current_image" "damdam-api:$previous_commit"
+              printf '%s\n' "$previous_commit" > .deploy/staging_previous_commit
+            fi
+            git checkout --detach "$target_commit"
+            DAMDAM_ENV_FILE=.env.staging \
+              DAMDAM_API_IMAGE="damdam-api:$target_commit" \
+              docker compose --env-file .env.staging build api
+            DAMDAM_ENV_FILE=.env.staging \
+              DAMDAM_API_IMAGE="damdam-api:$target_commit" \
+              docker compose --env-file .env.staging up -d --remove-orphans
+            DAMDAM_ENV_FILE=.env.staging \
+              DAMDAM_API_IMAGE="damdam-api:$target_commit" \
+              docker compose --env-file .env.staging exec -T api alembic upgrade head
+
+      - name: Check staging readiness
+        id: staging-health
+        if: steps.staging-deploy.outcome == 'success'
+        continue-on-error: true
+        env:
+          STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+        run: |
+          curl --fail --silent --show-error \
+            --connect-timeout 5 --max-time 10 \
+            --retry 12 --retry-delay 5 --retry-all-errors \
+            "${STAGING_API_BASE_URL%/}/health"
+
+      - name: Roll back failed staging release
+        if: steps.staging-deploy.outcome == 'failure' || steps.staging-health.outcome == 'failure'
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_OCI_HOST }}
+          username: ${{ secrets.STAGING_OCI_DEPLOY_USER }}
+          key: ${{ secrets.STAGING_OCI_SSH_KEY }}
+          script: |
+            set -eu
+            cd /opt/damdam
+            if [ ! -s .deploy/staging_previous_commit ]; then
+              echo "No previous staging release exists; this was the bootstrap deploy and cannot be rolled back automatically."
+              exit 0
+            fi
+            previous_commit=$(cat .deploy/staging_previous_commit)
+            DAMDAM_ENV_FILE=.env.staging \
+              DAMDAM_API_IMAGE="damdam-api:$previous_commit" \
+              docker compose --env-file .env.staging up -d --no-build --remove-orphans
+            git checkout --detach "$previous_commit"
+
+      - name: Fail unsuccessful staging deployment
+        if: >-
+          always() &&
+          (steps.staging-deploy.outcome == 'failure' ||
+          steps.staging-health.outcome == 'failure')
+        run: |
+          echo "::error::Staging deployment failed. The previous release was restored when one existed; inspect the deploy logs."
+          exit 1

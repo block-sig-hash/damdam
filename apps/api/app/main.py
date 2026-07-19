@@ -47,6 +47,7 @@ from app.esim.service import (
     HtoPilgrimService,
     NoopEsimIssuanceScheduler,
 )
+from app.health import LivenessResponse, ReadinessResponse, check_readiness
 from app.manifests.invoices import InvoiceStorage, build_invoice_storage
 from app.manifests.orders import ManifestOrderService, ProvisioningScheduler
 from app.manifests.routes import pricing_router
@@ -137,6 +138,7 @@ def create_app(
     api.state.settings = resolved_settings
     api.state.clock = clock
     api.state.session_factory = session_factory
+    api.state.redis_client = redis_client
     api.state.otp_service = build_otp_service(
         resolved_settings,
         cast(RedisClient, redis_client),
@@ -624,9 +626,24 @@ def create_app(
             },
         )
 
-    @api.get("/health", tags=["system"])
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    @api.get("/health/live", tags=["system"])
+    def liveness() -> LivenessResponse:
+        return LivenessResponse()
+
+    @api.get(
+        "/health",
+        tags=["system"],
+        response_model=ReadinessResponse,
+        responses={503: {"model": ReadinessResponse, "description": "Not Ready"}},
+    )
+    def health() -> ReadinessResponse | JSONResponse:
+        result = check_readiness(
+            api.state.session_factory,
+            api.state.redis_client,
+        )
+        if result.status == "not_ready":
+            return JSONResponse(status_code=503, content=result.model_dump())
+        return result
 
     api.include_router(auth_router, prefix="/v1")
     api.include_router(admin_router, prefix="/v1")

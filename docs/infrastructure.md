@@ -86,6 +86,21 @@ component beyond the API it calls.
 
 ## 11.3 Docker Compose — Production Reference
 
+**Implementation status (July 2026):** the executable source is now
+[`/docker-compose.yml`](../docker-compose.yml). The block below is the original
+six-service architecture sketch; the root file is authoritative. During
+extraction, four omissions in this sketch were corrected rather than copied:
+`depends_on` now waits for healthy Postgres/Redis instead of only container
+startup, Postgres and Redis have real health checks, Redis uses AOF persistence,
+and the API/worker/beat receive container-network database and Redis URLs. The
+root file also gives all three Python services the same commit-tagged image so
+deployment rollback can atomically restore the prior application version.
+
+For local validation, copy `compose.env.example` to an untracked environment
+file or pass it with `docker compose --env-file compose.env.example ...`.
+Production and staging use `.env.production` and `.env.staging` respectively on
+their hosts; neither file is committed.
+
 ```yaml
 services:
   api:
@@ -223,8 +238,13 @@ the API service itself.
 **On merge to `develop`:**
 ```yaml
 - All of the above, plus:
-- Deploy to staging environment
-- Run integration test suite against staging
+- Validate that the separate `staging` GitHub Environment contains
+  STAGING_OCI_HOST, STAGING_OCI_DEPLOY_USER, STAGING_OCI_SSH_KEY, and
+  STAGING_API_BASE_URL; fail with a named missing-secret error until it does
+- SSH deploy the commit-tagged six-service Compose stack to staging
+- Poll the dependency-aware `/health` readiness endpoint
+- Restore the prior application image if deploy/readiness fails and a prior
+  staging release exists (the first bootstrap has no prior image)
 ```
 
 **On merge to `main` (production release):**
@@ -232,16 +252,28 @@ the API service itself.
 - All of the above, plus:
 - Tag release (semver, driven by Conventional Commits)
 - SSH deploy to OCI production instance:
-    - git pull
-    - docker compose build
+    - fetch and detach at the exact `origin/main` commit
+    - tag the currently running application image with its source commit
+    - build the target commit-tagged image
     - docker compose up -d (rolling restart; brief downtime
       acceptable at MVP scale — zero-downtime deploys are a
       post-MVP concern, not Kubernetes territory yet)
     - run Alembic migrations
-    - health check (/health endpoint) before marking deploy
-      successful; auto-rollback to previous image tag on
-      failure
+    - dependency-aware health check (`/health`) before marking deploy
+      successful
+    - on deploy, migration, or readiness failure, restore the previous
+      commit-tagged API/worker/beat image and source checkout, verify readiness,
+      and fail the workflow visibly
 ```
+
+Application rollback intentionally does **not** run `alembic downgrade`: an
+automatic schema downgrade can destroy data and is less trustworthy than
+requiring backward-compatible migrations. Every production migration must
+therefore remain compatible with the previous application release. If a failed
+release requires a data/schema restore, stop automation and use §11.7's backup
+recovery procedure. The very first production Compose bootstrap is also a
+manual Ibrahim-owned operation: the workflow refuses to deploy without a
+running/prior image it can tag as a rollback target.
 
 **Mobile app release — two parallel tracks, both built via EAS
 (see §11.9 for why EAS rather than local/runner-side compilation):**
@@ -276,7 +308,8 @@ the API service itself.
 
 | Metric | Tool | Alert threshold |
 |---|---|---|
-| API uptime/health | Uptime Robot (free tier) pinging `/health` | 2 consecutive failures (avoids false alarms from transient blips) |
+| API readiness | Uptime Robot (free tier) pinging `/health`, which probes Postgres and Redis | 2 consecutive failures (avoids false alarms from transient blips) |
+| API process liveness | Container health diagnostics can use `/health/live` when dependency state must be excluded | Restart/inspect only when the process itself is unresponsive; dependency outages are reported by readiness instead |
 | Error rate | Sentry (free tier), covering the FastAPI backend and both React Native app builds | Alert on error rate spike, not absolute count |
 | Failed SOS notifications | Direct DB query, surfaced in Admin Dashboard (Failed Notification Queue) — doubles as both the fix screen and the monitoring signal | Real-time, visible on the screen itself |
 | Celery worker/beat health | `docker stats` + `restart: unless-stopped` | Container restart loops flagged via Uptime Robot detecting sustained task backlog symptoms (e.g., stale usage_polls) |
@@ -515,3 +548,36 @@ as the primary consumer zone, `damdam.im` as a secondary zone for
 business-facing subdomains and email. `.com`/`.net` acquisition is
 deferred until revenue allows, per the founder's own framing —
 not a blocker to launch.
+
+---
+
+## 11.11 Amendment — Executable Compose and Deployment Safety
+
+**What changed:** §11.3's six-service design now exists as the executable root
+`docker-compose.yml`; `/health` is a real Postgres+Redis readiness probe and
+`/health/live` is the cheap process-only probe; `ci.yml` now deploys successful
+`develop` pushes to the isolated staging environment; and `deploy.yml` tags and
+restores the previous application image and checkout when production deploy or
+readiness verification fails. Both deployment workflows validate their named
+environment secrets before entering an SSH action.
+
+**Why:** the earlier document and workflows described these controls but did
+not implement them. A fixed sleep followed by a liveness-only response could
+mark a release healthy while its database or task broker was unreachable, and
+there was no executable rollback path.
+
+**What is real and locally/CI verifiable:** Compose parsing and API image builds,
+dependency health ordering, a Compose smoke test against real Postgres and
+Redis (including a forced Redis outage returning 503), staging secret preflight,
+exact commit image tagging, readiness polling, and application-image rollback logic.
+Legacy GB-only eSIM package-code configuration remains subject to §6.36's
+separate deploy migration warning.
+
+**What still requires Ibrahim and real infrastructure:** provision the isolated
+staging OCI host, create `/opt/damdam/.env.staging`, configure the four named
+staging GitHub Environment secrets, manually bootstrap the first production
+Compose release so an initial rollback target exists, configure Cloudflare
+tunnel/DNS, and supply production secrets. No OCI instance, DNS record, or real
+secret is provisioned or injected by this amendment. Database downgrade remains
+a deliberate manual recovery decision under §11.7 rather than an automated
+rollback action.

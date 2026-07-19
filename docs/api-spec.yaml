@@ -3,6 +3,19 @@ info:
   title: DamDam API
   version: 0.1.0
 paths:
+  /health/live:
+    get:
+      tags:
+      - system
+      summary: Liveness
+      operationId: liveness_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
   /health:
     get:
       tags:
@@ -15,10 +28,13 @@ paths:
           content:
             application/json:
               schema:
-                additionalProperties:
-                  type: string
-                type: object
-                title: Response Health Health Get
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: Not Ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
   /v1/auth/otp/request:
     post:
       tags:
@@ -1875,6 +1891,49 @@ paths:
       - HTTPBearer: []
 components:
   schemas:
+    DependencyChecks:
+      properties:
+        postgres:
+          type: string
+          enum:
+          - ok
+          - unavailable
+          title: Postgres
+        redis:
+          type: string
+          enum:
+          - ok
+          - unavailable
+          title: Redis
+      type: object
+      required:
+      - postgres
+      - redis
+      title: DependencyChecks
+    LivenessResponse:
+      properties:
+        status:
+          type: string
+          const: alive
+          title: Status
+          default: alive
+      type: object
+      title: LivenessResponse
+    ReadinessResponse:
+      properties:
+        status:
+          type: string
+          enum:
+          - ready
+          - not_ready
+          title: Status
+        checks:
+          $ref: '#/components/schemas/DependencyChecks'
+      type: object
+      required:
+      - status
+      - checks
+      title: ReadinessResponse
     ActivationPreviewResponse:
       properties:
         valid:
