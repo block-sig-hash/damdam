@@ -8,12 +8,25 @@ x-api-service: &api-service
   environment:
     DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-damdam}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-damdam}
     REDIS_URL: redis://redis:6379/0
+    # The shared application env file must not expose backup credentials to
+    # API/worker/beat; only postgres and the WAL-G companion receive them.
+    WALG_R2_ACCESS_KEY_ID: ""
+    WALG_R2_SECRET_ACCESS_KEY: ""
   networks: [damdam]
   logging:
     driver: json-file
     options:
       max-size: "10m"
       max-file: "3"
+
+x-walg-environment: &walg-environment
+  WALG_S3_PREFIX: s3://${WALG_R2_BUCKET:?WALG_R2_BUCKET must be set}/${WALG_R2_PREFIX:-postgres}
+  AWS_ACCESS_KEY_ID: ${WALG_R2_ACCESS_KEY_ID:?WALG_R2_ACCESS_KEY_ID must be set}
+  AWS_SECRET_ACCESS_KEY: ${WALG_R2_SECRET_ACCESS_KEY:?WALG_R2_SECRET_ACCESS_KEY must be set}
+  AWS_ENDPOINT: ${WALG_R2_ENDPOINT:?WALG_R2_ENDPOINT must be set}
+  AWS_REGION: ${WALG_R2_REGION:-auto}
+  AWS_S3_FORCE_PATH_STYLE: ${WALG_S3_FORCE_PATH_STYLE:-true}
+  WALG_COMPRESSION_METHOD: zstd
 
 services:
   api:
@@ -44,12 +57,26 @@ services:
           memory: 2G
 
   postgres:
-    image: postgres:16-alpine
+    build:
+      context: .
+      dockerfile: docker/postgres-walg/Dockerfile
+      args:
+        WALG_VERSION: v3.0.8
+    image: ${DAMDAM_POSTGRES_IMAGE:-damdam-postgres-walg:local}
     restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=wal-g wal-push %p
+      - -c
+      - archive_timeout=60s
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-damdam}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: ${POSTGRES_DB:-damdam}
+      <<: *walg-environment
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -64,6 +91,37 @@ services:
       resources:
         limits:
           memory: 1536M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks: [damdam]
+
+  walg:
+    build:
+      context: .
+      dockerfile: docker/postgres-walg/Dockerfile
+      args:
+        WALG_VERSION: v3.0.8
+    image: ${DAMDAM_POSTGRES_IMAGE:-damdam-postgres-walg:local}
+    user: postgres
+    command: ["walg-backup-loop"]
+    restart: unless-stopped
+    environment:
+      <<: *walg-environment
+      PGDATA: /var/lib/postgresql/data
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-damdam}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      PGDATABASE: ${POSTGRES_DB:-damdam}
+      WALG_BACKUP_INTERVAL_SECONDS: ${WALG_BACKUP_INTERVAL_SECONDS:-86400}
+      WALG_RETENTION_DAYS: "30"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     logging:
       driver: json-file
       options:

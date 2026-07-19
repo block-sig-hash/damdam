@@ -1,0 +1,42 @@
+# Local/CI-only overlay. It replaces Cloudflare R2 with MinIO while exercising
+# the same WAL-G S3-compatible code path and the same Postgres image/config.
+services:
+  postgres:
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+  walg:
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+
+  minio:
+    image: minio/minio:RELEASE.2024-11-07T00-52-20Z
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: minio-test-access-key
+      MINIO_ROOT_PASSWORD: minio-test-secret-key
+    volumes:
+      - walg_test_objects:/data
+    networks: [damdam]
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - >-
+        until mc alias set local http://minio:9000
+        minio-test-access-key minio-test-secret-key; do sleep 1; done;
+        mc mb --ignore-existing local/walg-test
+    networks: [damdam]
+
+volumes:
+  walg_test_objects:
+

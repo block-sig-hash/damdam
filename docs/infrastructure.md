@@ -88,13 +88,17 @@ component beyond the API it calls.
 
 **Implementation status (July 2026):** the executable source is now
 [`/docker-compose.yml`](../docker-compose.yml). The block below is the original
-six-service architecture sketch; the root file is authoritative. During
+six-service architecture sketch; the root file is authoritative and now has a
+seventh `walg` backup companion. During
 extraction, four omissions in this sketch were corrected rather than copied:
 `depends_on` now waits for healthy Postgres/Redis instead of only container
 startup, Postgres and Redis have real health checks, Redis uses AOF persistence,
 and the API/worker/beat receive container-network database and Redis URLs. The
 root file also gives all three Python services the same commit-tagged image so
 deployment rollback can atomically restore the prior application version.
+The production Postgres image includes WAL-G because `archive_command` runs
+inside the database container; the separate `walg` container uses that same
+image and data volume for daily physical base backups and retention.
 
 For local validation, copy `compose.env.example` to an untracked environment
 file or pass it with `docker compose --env-file compose.env.example ...`.
@@ -207,7 +211,7 @@ volumes:
   redis_data:
 ```
 
-**Six containers in production:** `api`, `postgres`, `redis`,
+**Seven containers in production:** `api`, `postgres`, `walg`, `redis`,
 `worker`, `beat`, `tunnel` — Postgres added as a self-hosted
 container rather than a managed service (Supabase was considered
 and dropped; see the reasoning this replaced, previously in this
@@ -338,14 +342,32 @@ real-world consequence.
   immediate rotation on any suspected exposure
 - No secrets baked into Docker image layers — environment
   variables at runtime only
+- WAL-G uses a dedicated Cloudflare R2 bucket and credentials, separate from
+  any application object-storage identity: `WALG_R2_BUCKET`,
+  `WALG_R2_PREFIX`, `WALG_R2_ENDPOINT`, `WALG_R2_REGION`,
+  `WALG_R2_ACCESS_KEY_ID`, and `WALG_R2_SECRET_ACCESS_KEY`. The R2 token must
+  be scoped only to read/write the backup bucket. The committed
+  `compose.env.example` values are placeholders; Ibrahim creates the bucket
+  and injects real staging/production values into their host-only env files.
 
 ---
 
 ## 11.7 Backup & Disaster Recovery
 
+**Implementation status (July 2026): implemented and restore-tested.** The
+custom multi-architecture Postgres image in `docker/postgres-walg/` pins WAL-G
+v3.0.8, while the executable root Compose file applies
+`archive_mode=on`, `archive_command=wal-g wal-push %p`, and
+`archive_timeout=60s`. The adjacent `walg` service takes a physical
+`backup-push` immediately when it starts and every 86,400 seconds thereafter.
+After each successful base backup it runs WAL-G's native
+`delete retain FULL 1 --after <30-day-cutoff> --confirm`, which removes older
+base backups and obsolete WAL while retaining at least one usable full backup
+chain. There is no custom R2 object-pruning code.
+
 | Data | Backup method | RPO | Retention |
 |---|---|---|---|
-| Postgres | **WAL-G** — continuous WAL archiving to Cloudflare R2, plus a daily base backup, run from day one (self-hosted from the start, no managed-service phase to migrate away from — see §11.2/§11.3) | ~1–5 minutes (governed by `archive_timeout`), true point-in-time recovery — not "nearest snapshot" | 30 days, pruned automatically by WAL-G's retention policy |
+| Postgres | **WAL-G** — continuous WAL archiving to Cloudflare R2, plus a daily base backup, run from day one (self-hosted from the start, no managed-service phase to migrate away from — see §11.2/§11.3) | ~1 minute (governed by `archive_timeout`), true point-in-time recovery — not "nearest snapshot" | 30 days, pruned automatically by WAL-G's retention policy |
 | R2-stored files | R2's own durability | N/A | N/A |
 | Docker Compose configuration | Version-controlled in GitHub | N/A | Indefinite |
 
@@ -359,7 +381,7 @@ this system handles safety-critical check-in/SOS data, closing a
 known data-loss risk now is worth the modest setup cost rather than
 carrying it as accepted debt into the highest-stakes period.
 
-**Implementation shape:**
+**Implemented shape:**
 1. Postgres config: `archive_mode = on`, `archive_command` set to
    WAL-G's push command, targeting an R2 bucket via WAL-G's native
    S3-compatible storage support
@@ -375,8 +397,54 @@ carrying it as accepted debt into the highest-stakes period.
    (`recovery_target_time`) — genuine point-in-time recovery to any
    moment, not just the nearest scheduled dump
 5. WAL-G runs as a lightweight process alongside the `postgres`
-   container (§11.3) — implementation detail for the build phase,
-   not a new service to provision separately
+   container (§11.3), using the same image and Postgres data volume — it is
+   not separately provisioned infrastructure
+
+`scripts/test-walg-pitr.sh` is the executable disaster-recovery proof. Its
+local/CI-only Compose overlay starts MinIO as an S3-compatible R2 substitute,
+asserts the three live Postgres settings, takes a real physical base backup,
+waits for a low-traffic segment to be archived by the 60-second timeout,
+deletes the isolated Postgres volume, fetches the latest base backup, replays
+WAL to a recorded `recovery_target_time`, and verifies both sides of the PITR
+boundary: a post-backup/pre-target row exists and a post-target row does not.
+Run it from the repository root with `./scripts/test-walg-pitr.sh`. Its
+committed MinIO credentials are deliberately fake and local-only.
+
+**Incident restore runbook (production):**
+
+1. Record the desired recovery timestamp in UTC and stop all traffic/writers:
+   `docker compose --env-file .env.production stop tunnel api worker beat walg postgres`.
+   Preserve/snapshot the damaged `postgres_data` volume before changing it;
+   never destroy the only copy during diagnosis.
+2. Confirm `.env.production` contains the dedicated WAL-G R2 values and that
+   the target is within the 30-day retention window. Inspect available backups
+   with `docker compose --env-file .env.production run --rm --no-deps walg wal-g backup-list`.
+3. After the damaged volume has been preserved and the incident commander has
+   approved replacement, run
+   `docker compose --env-file .env.production rm -f postgres walg`, then
+   `docker volume rm damdam_postgres_data` and
+   `docker volume create damdam_postgres_data`. These commands replace only
+   the Compose Postgres volume and make the restore destination empty. Do not
+   run the helper against a non-empty directory; it refuses that condition
+   deliberately.
+4. Prepare PITR with
+   `docker compose --env-file .env.production run --rm --no-deps walg walg-restore 2026-07-19T21:15:00Z`.
+   Omit the timestamp only when the incident decision is to replay all
+   available WAL. This fetches `LATEST`, writes
+   `restore_command='wal-g wal-fetch %f %p'`, creates `recovery.signal`, and
+   configures promotion at the target.
+5. Start only Postgres, follow its logs through recovery, and validate the
+   selected business records and `SELECT pg_is_in_recovery()` (must be false):
+   `docker compose --env-file .env.production up -d postgres` followed by
+   `docker compose --env-file .env.production logs -f postgres`.
+6. Once the incident owner accepts the recovered boundary, run
+   `docker compose --env-file .env.production up -d redis api worker beat walg`,
+   verify `/health`, and only then start `tunnel` to reopen traffic. Retain the
+   preserved damaged volume until the incident review is complete.
+
+The code and MinIO proof are real; the production R2 bucket, restricted token,
+host env values, and first live restore drill still require Ibrahim. No real
+Cloudflare credentials or production data are present in this repository.
 
 **Disaster recovery target:** For MVP, an acceptable RTO (time to
 actually restore and be back online) is a few hours — not a system
@@ -557,9 +625,9 @@ not a blocker to launch.
 `docker-compose.yml`; `/health` is a real Postgres+Redis readiness probe and
 `/health/live` is the cheap process-only probe; `ci.yml` now deploys successful
 `develop` pushes to the isolated staging environment; and `deploy.yml` tags and
-restores the previous application image and checkout when production deploy or
-readiness verification fails. Both deployment workflows validate their named
-environment secrets before entering an SSH action.
+restores the previous application/Postgres images and checkout when production
+deploy or readiness verification fails. Both deployment workflows validate
+their named environment secrets before entering an SSH action.
 
 **Why:** the earlier document and workflows described these controls but did
 not implement them. A fixed sleep followed by a liveness-only response could
@@ -569,7 +637,7 @@ there was no executable rollback path.
 **What is real and locally/CI verifiable:** Compose parsing and API image builds,
 dependency health ordering, a Compose smoke test against real Postgres and
 Redis (including a forced Redis outage returning 503), staging secret preflight,
-exact commit image tagging, readiness polling, and application-image rollback logic.
+exact commit image tagging, readiness polling, and API/Postgres-image rollback logic.
 Legacy GB-only eSIM package-code configuration remains subject to §6.36's
 separate deploy migration warning.
 
@@ -581,3 +649,33 @@ tunnel/DNS, and supply production secrets. No OCI instance, DNS record, or real
 secret is provisioned or injected by this amendment. Database downgrade remains
 a deliberate manual recovery decision under §11.7 rather than an automated
 rollback action.
+
+---
+
+## 11.12 Amendment — WAL-G Continuous Archiving and PITR
+
+**What changed:** the production Postgres image now contains pinned,
+multi-architecture WAL-G; Postgres continuously archives WAL to its configured
+Cloudflare R2 bucket with a 60-second archive timeout; the adjacent Compose
+service takes daily physical base backups and applies native 30-day retention;
+and `walg-restore` prepares timestamp-targeted WAL replay from the latest base.
+Both API and Postgres/WAL-G images are tagged with the deployed commit and are
+built/restored together by the staging and production rollback workflows.
+
+**Why:** the earlier §11.7 decision was fully specified but had no executable
+configuration, scheduler, credential contract, or proven recovery path. A
+logical dump or nearest snapshot would not meet the safety-data RPO or genuine
+point-in-time recovery requirement.
+
+**What it is for:** `scripts/test-walg-pitr.sh` provides repeatable evidence
+against local MinIO that the active Postgres settings archive real WAL, loss of
+the database volume is recoverable, and `recovery_target_time` includes the
+intended transaction while excluding a later one. The same S3-compatible
+contract targets R2 in staging/production.
+
+**Explicitly still out of scope:** provisioning the R2 bucket, issuing or
+injecting its restricted credentials, selecting a real incident recovery
+timestamp, and authorising replacement of a damaged production volume all
+require Ibrahim/the incident owner. This amendment does not claim a production
+restore drill has occurred; it supplies the tested mechanism and pressure-ready
+runbook for one.
