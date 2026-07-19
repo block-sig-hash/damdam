@@ -1,8 +1,11 @@
+import re
 from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_ESIM_ACCESS_PACKAGE_CODE_KEY = re.compile(r"^[A-Z]{2}:\d+$")
 
 
 class Settings(BaseSettings):
@@ -150,6 +153,50 @@ class Settings(BaseSettings):
         if len(vendors) != 3:
             raise ValueError(
                 "eSIM primary, secondary, and tertiary vendors must differ"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def esim_access_package_codes_must_use_composite_keys(self) -> "Settings":
+        # data-model.md §6.36: keys changed from a bare data_gb integer
+        # (e.g. "5") to a "COUNTRY:GB" composite (e.g. "SA:5") so eSIM
+        # Access can be destination-aware. The old integer-style key is
+        # still valid JSON (JSON object keys are always strings), so an
+        # un-updated production env var parses without error and simply
+        # never matches EsimAccessProvider's lookup -- every tier quietly
+        # reports "not configured", and the vendor cascade to Monty
+        # Mobile/1GLOBAL masks the failure from anyone not reading the
+        # per-attempt log. Failing at startup instead of at first request
+        # turns that into an immediate, unmissable deploy failure.
+        if not self.esim_access_package_codes:
+            return self
+        bad_keys = sorted(
+            key
+            for key in self.esim_access_package_codes
+            if not _ESIM_ACCESS_PACKAGE_CODE_KEY.match(key)
+        )
+        if bad_keys:
+            raise ValueError(
+                "ESIM_ACCESS_PACKAGE_CODES keys must use the 'COUNTRY:GB' "
+                "composite format introduced by data-model.md §6.36 (e.g. "
+                f"'SA:5'), not a bare data_gb key. Invalid key(s): {bad_keys}"
+            )
+        # The "at least one SA: entry" rule below bakes in today's real
+        # business fact -- SA is the only destination ever sold -- the
+        # same trigger data-model.md §6.20 names for revisiting bundled
+        # single-destination content elsewhere in the codebase. When a
+        # real second destination is onboarded, this check needs to
+        # change from "must contain SA:" to something destination-aware
+        # (e.g. "must contain an entry for the purchasing user's
+        # destination"), not be silently satisfied or removed.
+        if not any(
+            key.startswith("SA:") for key in self.esim_access_package_codes
+        ):
+            raise ValueError(
+                "ESIM_ACCESS_PACKAGE_CODES is configured but has no 'SA:' "
+                "entries; SA is the only real destination sold today, so "
+                "eSIM Access would have no usable package code and would "
+                "silently report every tier as unconfigured"
             )
         return self
 
