@@ -78,6 +78,7 @@ jobs:
             https://api.damdam.app/health
 
       - name: Roll back failed production release
+        id: production-rollback
         if: steps.production-deploy.outcome == 'failure' || steps.production-health.outcome == 'failure'
         continue-on-error: true
         uses: appleboy/ssh-action@v1
@@ -100,6 +101,7 @@ jobs:
             git checkout --detach "$previous_commit"
 
       - name: Verify rollback readiness
+        id: production-rollback-verify
         if: >-
           always() &&
           (steps.production-deploy.outcome == 'failure' ||
@@ -117,7 +119,18 @@ jobs:
           (steps.production-deploy.outcome == 'failure' ||
           steps.production-health.outcome == 'failure')
         run: |
-          echo "::error::Production deployment failed and the previous application image was restored. Database migrations are not automatically downgraded."
+          # The exact restoration message depends on how far the rollback
+          # actually got -- a flat "the previous image was restored" claim
+          # would be false in the hard-stop cases (missing metadata, missing
+          # tagged image) where the rollback script exits before touching
+          # the running containers at all.
+          if [ "${{ steps.production-rollback.outcome }}" != "success" ]; then
+            echo "::error::Production deployment failed and automated rollback did NOT complete (see the 'Roll back failed production release' step's logs). The previous application image was NOT confirmed restored -- stop and follow the production recovery runbook."
+          elif [ "${{ steps.production-rollback-verify.outcome }}" != "success" ]; then
+            echo "::error::Production deployment failed. The previous application image was redeployed, but post-rollback readiness could not be confirmed -- verify manually before assuming service is restored."
+          else
+            echo "::error::Production deployment failed and the previous application image was restored and confirmed ready. Database migrations are not automatically downgraded."
+          fi
           exit 1
 
       - name: Deploy dashboard to Cloudflare Workers
