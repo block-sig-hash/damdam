@@ -99,9 +99,9 @@ Source: `testing-qa.md` §14.3, referenced by nearly every item above.
 ## 8. Infrastructure / deploy pipeline pre-promotion
 
 Source: PR #79 ("feat: implement deploy pipeline and readiness checks") —
-**currently open, not yet merged**, so `infrastructure.md` §11.11 (cited
-below) does not yet exist on `develop`. Track this PR's merge as a
-prerequisite in its own right, separate from the items it documents.
+merged 2026-07-19, so `infrastructure.md` §11.11 (cited below) is on
+`develop`. The items in this section are still real, unfinished pre-launch
+work; only the PR-merge prerequisite itself is closed.
 
 | Item | Done looks like |
 |---|---|
@@ -112,6 +112,7 @@ prerequisite in its own right, separate from the items it documents.
 | Cloudflare tunnel / DNS configured for production | Real tunnel token and DNS records in place — `compose.env.example`'s `CF_TUNNEL_TOKEN` is a placeholder (`replace-with-a-real-cloudflare-tunnel-token`) |
 | Production secrets supplied | Real values for every secret currently placeholder/example-only across `.env.example` and `compose.env.example` |
 | `ESIM_ACCESS_PACKAGE_CODES` format migration | **From PR #78 (merged 2026-07-18), deploy-safety fix landed separately:** the eSIM Access package-code config changed from integer keys (`{"5":"SA_5GB"}`) to destination-composite keys (`{"SA:5":"SA_5GB"}`). `Settings` now validates this at app boot (`esim_access_package_codes_must_use_composite_keys` in `app/config.py`) — an old-format or SA-less env var now crashes the app on startup instead of silently degrading eSIM Access into "every tier unconfigured" behind the vendor cascade. **Done:** production/staging's `ESIM_ACCESS_PACKAGE_CODES` env var is confirmed in the `"COUNTRY:GB"` composite format with at least one `SA:` entry, and a real deploy (or `Settings()` construction against the real production env values) boots cleanly — i.e. the startup validator has actually run against the real value, not just against a test fixture |
+| Kuma monitoring configured and alerting confirmed working | **From `infrastructure.md` §11.13:** self-hosted Uptime Kuma is deployed and isolated on Hermes, with the API readiness monitor and the WAL-G push/heartbeat monitor both configured, and a deliberately-triggered test alert (real induced Down/Up transition, or a real withheld heartbeat) was received via the real configured Telegram channel — not just "the monitor exists in Kuma's dashboard." The production readiness monitor will legitimately show Down until `api.damdam.app` actually resolves (tracked by the staging/production rows above); that is not this item's blocker. This item's blocker is confirming the *alert path itself* fires end to end, which was proven once during setup (see §11.13) but should be re-confirmed by Ibrahim after real production/staging deploys land, since that is the first time the readiness monitor will exercise a real transition rather than a substitute test target |
 
 ## 9. Compliance (cross-reference, not duplicated)
 
@@ -134,7 +135,7 @@ processor DPAs, NDPA filing, retention automation).
 
 ## Summary
 
-**36 distinct checklist rows** consolidated across 8 stories/PRs and 3 spec
+**37 distinct checklist rows** consolidated across 8 stories/PRs and 4 spec
 documents into the 9 categories above (counted directly from this
 document's tables). §6's 2 rows are the physical device roster itself —
 cross-cutting infrastructure that §2–§5's "real device" items depend on,
@@ -145,9 +146,10 @@ Sources pulled from, directly:
   chaos scenarios + real-device boundaries), §14.5 (HTO usability), §14.9
   (voice real-device/real-account evidence)
 - `security.md` §10.10 (compliance — cross-referenced, not duplicated)
+- `infrastructure.md` §11.13 (self-hosted Uptime Kuma replacing UptimeRobot)
 - PR descriptions: #62 (US-10), #64 (US-13), #66 (US-14), #67 (US-15), #68
   (US-16), #70 (US-18/19/22), #78 (destination-country Phase 3, merged
-  2026-07-18), #79 (deploy pipeline, open)
+  2026-07-18), #79 (deploy pipeline, merged 2026-07-19)
 - `frontend-mobile.md` (Android screenshot content-production note)
 
 **One item newly surfaced while compiling this document, not previously

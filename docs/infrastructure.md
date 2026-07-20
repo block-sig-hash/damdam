@@ -312,11 +312,12 @@ running/prior image it can tag as a rollback target.
 
 | Metric | Tool | Alert threshold |
 |---|---|---|
-| API uptime/health | UptimeRobot (free tier) sending `GET https://api.damdam.app/health` (readiness, not a liveness-only route) | 2 consecutive failed checks for network failures via UptimeRobot's built-in confirmation; see the HTTP-error caveat below |
+| API uptime/health | Self-hosted Uptime Kuma sending `GET https://api.damdam.app/health` (readiness, not a liveness-only route) | 2 consecutive failed checks (Kuma's own configurable retries), Telegram notification on the Down/Up transition |
 | API process liveness | Container health diagnostics can use `/health/live` when dependency state must be excluded | Restart/inspect only when the process itself is unresponsive; dependency outages are reported by readiness instead |
+| WAL-G backup completion | Self-hosted Uptime Kuma, push/heartbeat monitor called by `docker/postgres-walg/backup-loop.sh` on each successful `wal-g backup-push` | No heartbeat within ~30 hours of the last one (daily backups have a 24h cadence; the ~6h slack absorbs normal timing jitter without false alarms) |
 | Error rate | PostHog Error Tracking (free tier), covering the FastAPI backend and both React Native app builds | Alert on an error-rate spike, not absolute count |
 | Failed SOS notifications | Direct DB query, surfaced in Admin Dashboard (Failed Notification Queue) — doubles as both the fix screen and the monitoring signal | Real-time, visible on the screen itself |
-| Celery worker/beat health | `docker stats` + `restart: unless-stopped` | Container restart loops flagged via Uptime Robot detecting sustained task backlog symptoms (e.g., stale usage_polls) |
+| Celery worker/beat health | `docker stats` + `restart: unless-stopped` | Container restart loops flagged via Uptime Kuma detecting sustained task backlog symptoms (e.g., stale usage_polls) |
 | OCI instance resource usage | OCI's built-in monitoring console | Alert if sustained >85% memory or CPU |
 | Postgres health/disk usage | OCI's built-in monitoring console + `docker stats` on the `postgres` container | Alert if disk usage sustained >80% of allocated volume, or connection count approaching pool limits |
 | App Store / Play Store crash reports | Native platform crash reporting (Play Console, Xcode Organizer / App Store Connect) alongside PostHog | Review both — platform-native reports can surface issues a cross-platform SDK misses |
@@ -347,26 +348,83 @@ disable capture in local and test environments. Placeholder values
 are recorded in `compose.env.example`, `apps/api/.env.example`, and
 `apps/mobile/.env.example`; never commit Ibrahim's real value.
 
-**Exact UptimeRobot free-tier setup for Ibrahim:**
+**Why self-hosted Uptime Kuma rather than UptimeRobot:** a single
+tool covers both monitoring needs this document lists above (API
+readiness *and* the WAL-G backup heartbeat, the latter a genuinely
+new capability UptimeRobot's free tier has no equivalent for — it
+has no push/heartbeat monitor type), at zero incremental cost, on
+infrastructure the team is already comfortable self-hosting given
+this session's WAL-G/Postgres/Compose work. UptimeRobot's free tier
+was the original MVP plan and remains a reasonable fallback if
+Hermes (below) ever becomes unavailable, but Kuma's push-monitor
+type is the deciding factor: UptimeRobot can only poll a URL, it
+cannot receive a heartbeat, so it structurally cannot cover the
+backup-completion signal at all.
 
-1. Create an **API monitor** named `DamDam API readiness`, method
-   `GET`, URL `https://api.damdam.app/health`, with the free-tier
-   interval of 5 minutes. Do not use `/health/live`.
-2. Require HTTP `200` and add the JSON assertion `$.status` equals
-   `ok`; attach Ibrahim's verified email alert contact for both Down
-   and Up/recovery notifications.
-3. Leave authentication, request body, and custom headers empty;
-   enable redirect following and use the default request timeout.
-4. Treat Down as confirmed only after UptimeRobot's built-in retry
-   flow: its free tier retries an initial network failure before
-   opening an incident, satisfying the intent of the existing
-   two-consecutive-failures rule for transient connection failures.
-   UptimeRobot does **not** expose a configurable consecutive-failure
-   count or notification delay on the free plan, and an explicit HTTP
-   error response may be marked Down immediately. If an exact,
-   configurable two-check threshold is mandatory for every failure
-   mode, that requires a paid notification delay or a different
-   monitor; do not claim the free-tier UI has a threshold field.
+**Deployment — isolation is the non-negotiable requirement.** Kuma
+runs on Hermes (`88.96.53.229`, the founder's existing Ampere A1
+host — `scaling-infrastructure.md` §12.1), a separate host from
+DamDam's own API/Postgres/Redis stack, not a container alongside
+them. **Monitoring must never share a host with the thing it
+monitors** — this is a known, well-documented failure pattern (the
+monitor going dark in exactly the same outage it exists to catch,
+rather than surviving to report it), not a stylistic preference.
+Concretely on Hermes:
+
+- Own Docker container (`uptime-kuma`, image `louislam/uptime-kuma:1`),
+  its own bridge network (not `network_mode: host`, unlike the
+  `hermes` gateway container), and its own bind-mounted volume
+  (`/opt/kuma-data`) for its embedded SQLite database — no shared
+  state with Hermes' existing 5 services (the `hermes` gateway
+  container, `hermes-vnc`, `hermes-voice-relay`, `hermes-xvfb`, and
+  `tailscaled`).
+- Published **only** on Hermes' Tailscale interface
+  (`100.72.59.74:3001`), not on the public interface
+  (`88.96.53.229`) and not behind new public DNS/TLS. Hermes is
+  already on Ibrahim's tailnet (confirmed via `tailscale status`
+  listing both `hermes` and his phone), so this reaches the
+  dashboard privately with zero new infrastructure — deliberately
+  not a Cloudflare Tunnel hostname, since none of Hermes' existing
+  services use one and adding one is unjustified extra surface area
+  for an internal-only dashboard.
+- **Access for Ibrahim:** `http://100.72.59.74:3001` from any device
+  on the tailnet. To add a further monitor later: log in, "Add New
+  Monitor," pick a type (HTTP(s), Keyword, Push, etc.) — no
+  redeploy needed, Kuma's own UI is the ongoing interface.
+
+**What's configured:**
+
+1. **`DamDam API readiness`** — HTTP(s)-Keyword monitor, `GET
+   https://api.damdam.app/health`, keyword `"status":"ready"` (the
+   real field the endpoint returns — not `"status":"ok"`, which was
+   never what `app/health.py`'s `ReadinessResponse` actually sends;
+   corrected here rather than propagated forward). 60-second
+   interval, 2 retries at 30-second spacing before Down is
+   confirmed. Do not use `/health/live`. This monitor will
+   legitimately show Down/Pending until production (and later
+   staging) actually resolve — that's accurate, not a
+   misconfiguration, until deployment happens.
+2. **`WAL-G backup heartbeat`** — Push monitor. `backup-loop.sh`
+   calls its push URL after every successful `wal-g backup-push`
+   (`KUMA_PUSH_URL` in `docker-compose.yml`/`compose.env.example`,
+   optional and a no-op when unset, e.g. in local/dev/test).
+   Heartbeat window set to 30 hours against a 24-hour backup
+   cadence — deliberately more than 24h so ordinary timing jitter
+   never false-alarms, deliberately less than 48h so a genuinely
+   silently-dead backup loop is caught well before a second cycle
+   would also be missed.
+3. **Notification channel: Telegram**, reusing the same
+   `TELEGRAM_BOT_TOKEN`/`TELEGRAM_HOME_CHANNEL` already configured
+   and in active use on Hermes for the `hermes` gateway's own
+   messages to Ibrahim — not a new credential. Email/SMTP was the
+   original plan, but no SMTP or transactional-email credential
+   exists anywhere on Hermes or in DamDam's committed config (only
+   placeholders in `apps/api/.env.example`'s Resend variables);
+   Telegram is real, already working, and already how Ibrahim
+   receives messages from this same host, so it was used instead
+   of blocking on a new credential he'd have to supply. Adding a
+   second (e.g. email) notification method later is a five-minute
+   change in Kuma's own UI once real SMTP credentials exist.
 
 Failed SOS notifications remain owned by the existing Admin
 Dashboard Failed Notification Queue. Celery worker/beat health
@@ -485,10 +543,10 @@ trusting this document blindly.
    payments) that were committed after the target; recovering too late may
    restore the corruption or incident itself. Do not guess; triangulate from
    at least two independent signals before committing to a timestamp:
-   - **Application error signal:** check Sentry (§11.5) for the first
-     occurrence of whatever error/anomaly triggered this incident — its
-     first-seen timestamp is a strong upper bound on "last known good."
-   - **Uptime/availability signal:** cross-reference Uptime Robot's (§11.5)
+   - **Application error signal:** check PostHog Error Tracking (§11.5) for
+     the first occurrence of whatever error/anomaly triggered this incident
+     — its first-seen timestamp is a strong upper bound on "last known good."
+   - **Uptime/availability signal:** cross-reference Uptime Kuma's (§11.5)
      alert history for when `/health` first started failing or degrading, if
      the incident correlates with an outage rather than silent corruption.
    - **WAL archive bound:** recovery cannot go past the last successfully
@@ -567,7 +625,7 @@ carries real safety weight.
 | OCI Always Free (2 OCPU/12GB) | $0 |
 | Cloudflare (Workers paid tier if free limits exceeded) | $0–5 |
 | Cloudflare R2 | $0 (within free tier at MVP volume) |
-| Uptime Robot | $0 |
+| Uptime Kuma | $0 (self-hosted on Hermes, existing infrastructure — no new hosting cost) |
 | PostHog | $0 (free tier sufficient for MVP error tracking and initial product analytics) |
 | Resend | $0 (within 3,000 emails/month free tier) |
 | **Fixed infrastructure subtotal** | **~$0–5/month** — Postgres self-hosted on the already-free OCI instance means no managed-DB line item at all |
@@ -783,3 +841,59 @@ timestamp, and authorising replacement of a damaged production volume all
 require Ibrahim/the incident owner. This amendment does not claim a production
 restore drill has occurred; it supplies the tested mechanism and pressure-ready
 runbook for one.
+
+---
+
+## 11.13 Amendment — Self-Hosted Uptime Kuma Replaces the UptimeRobot Plan
+
+**What changed:** §11.5's monitoring plan now uses self-hosted Uptime Kuma
+instead of UptimeRobot, deployed on Hermes (`88.96.53.229`) as its own
+isolated Docker container — separate bridge network and volume from Hermes'
+existing 5 services, published only on Hermes' Tailscale interface
+(`100.72.59.74:3001`), never on the public interface. It covers two monitors:
+the API readiness check §11.5's UptimeRobot plan already specified, and a new
+push/heartbeat monitor for the WAL-G backup loop that UptimeRobot's free tier
+had no mechanism for at all. `docker/postgres-walg/backup-loop.sh` calls the
+heartbeat's push URL after each successful `wal-g backup-push`, via the
+optional `KUMA_PUSH_URL` (`docker-compose.yml`/`compose.env.example`) — a
+no-op, not an error, when unset. Notifications go to Telegram, reusing
+Hermes' existing `TELEGRAM_BOT_TOKEN`/`TELEGRAM_HOME_CHANNEL`, since no
+SMTP/email credential exists anywhere on Hermes or in DamDam's committed
+config to satisfy the original email-notification plan.
+
+**Why:** one tool instead of two closes the WAL-G heartbeat gap (nothing
+previously would have alerted if the backup loop silently died) at zero
+incremental cost, on infrastructure the team is already comfortable
+self-hosting. The isolation requirement is not a preference: a monitor
+sharing a host with what it monitors goes dark in exactly the outage it
+exists to catch.
+
+**What is real and directly verified, not just configured:** Hermes' 5
+pre-existing services (the `hermes` gateway container, `hermes-vnc`,
+`hermes-voice-relay`, `hermes-xvfb`, `tailscaled`) were confirmed unaffected
+before and after deployment via direct process/resource checks (`systemctl
+is-active`, `docker stats`, `free`, `df`) — resource headroom was 9.2GB RAM
+and 28GB disk free both before and after, Kuma itself uses ~115MB.
+Both alert paths were proven with real induced failures, not configuration
+review: a real HTTP monitor was pointed at a controllable test target,
+stopped, and confirmed to transition to Down with Kuma's `important` flag
+set (its actual internal notification trigger) and zero errors in Kuma's
+logs, while the exact same Telegram bot token/chat ID Kuma is configured
+with was independently confirmed to deliver a real message
+(`{"ok":true}`, real `message_id`). A push monitor was left to time out
+with no heartbeat and confirmed to transition Up → Pending → Down
+(`important=true`, "No heartbeat in the time window") on the same
+mechanism the real 30-hour WAL-G monitor uses, just at a shorter interval
+so the test didn't require waiting 30 real hours. The exact
+`backup-loop.sh` heartbeat call was extracted and run for real against the
+live push monitor from Hermes (where it is genuinely reachable) and
+confirmed to register. All temporary test monitors/containers were removed
+afterward; only the 2 real monitors remain.
+
+**What still requires Ibrahim:** the production/staging `DamDam API
+readiness` monitor will show Down/Pending until `api.damdam.app` actually
+resolves — that reflects reality (per §11.11, staging still needs to be
+provisioned), not a Kuma misconfiguration. A second notification channel
+(e.g. email) can be added once real SMTP credentials exist; none are
+required for this amendment, since Telegram already satisfies "Ibrahim
+receives alerts" with a channel that was already live.
