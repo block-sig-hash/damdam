@@ -312,14 +312,68 @@ running/prior image it can tag as a rollback target.
 
 | Metric | Tool | Alert threshold |
 |---|---|---|
-| API readiness | Uptime Robot (free tier) pinging `/health`, which probes Postgres and Redis | 2 consecutive failures (avoids false alarms from transient blips) |
+| API uptime/health | UptimeRobot (free tier) sending `GET https://api.damdam.app/health` (readiness, not a liveness-only route) | 2 consecutive failed checks for network failures via UptimeRobot's built-in confirmation; see the HTTP-error caveat below |
 | API process liveness | Container health diagnostics can use `/health/live` when dependency state must be excluded | Restart/inspect only when the process itself is unresponsive; dependency outages are reported by readiness instead |
-| Error rate | Sentry (free tier), covering the FastAPI backend and both React Native app builds | Alert on error rate spike, not absolute count |
+| Error rate | PostHog Error Tracking (free tier), covering the FastAPI backend and both React Native app builds | Alert on an error-rate spike, not absolute count |
 | Failed SOS notifications | Direct DB query, surfaced in Admin Dashboard (Failed Notification Queue) — doubles as both the fix screen and the monitoring signal | Real-time, visible on the screen itself |
 | Celery worker/beat health | `docker stats` + `restart: unless-stopped` | Container restart loops flagged via Uptime Robot detecting sustained task backlog symptoms (e.g., stale usage_polls) |
 | OCI instance resource usage | OCI's built-in monitoring console | Alert if sustained >85% memory or CPU |
 | Postgres health/disk usage | OCI's built-in monitoring console + `docker stats` on the `postgres` container | Alert if disk usage sustained >80% of allocated volume, or connection count approaching pool limits |
-| App Store / Play Store crash reports | Native platform crash reporting (Play Console, Xcode Organizer / App Store Connect) alongside Sentry | Review both — platform-native reports sometimes surface issues Sentry's React Native SDK misses |
+| App Store / Play Store crash reports | Native platform crash reporting (Play Console, Xcode Organizer / App Store Connect) alongside PostHog | Review both — platform-native reports can surface issues a cross-platform SDK misses |
+
+**Why PostHog rather than Sentry:** this is a deliberate
+consolidation decision. PostHog provides dedicated error tracking
+now and can provide mobile/product analytics later through the same
+SDK and project, avoiding a second analytics vendor and integration;
+its free tier is also more generous for the expected MVP volume.
+The trade-off is real: PostHog's dedicated error-tracking UI is less
+mature than Sentry's, and PostHog has a documented incident history,
+including a [February 2026 US Logs database-corruption incident](https://isdown.app/status/posthog-us/incidents/538631-logs-ingestion-delayed-in-us-cloud)
+that caused customer log data loss. That incident affected the newer,
+isolated Logs product rather than analytics events or replays, but it
+is still relevant evidence about operational maturity and is an
+accepted consolidation trade-off, not a risk to omit from the vendor
+record. Keep native Play Console and App Store Connect crash reports
+enabled as an independent signal.
+
+**PostHog configuration:** create one PostHog Cloud project in the
+chosen data-residency region, enable Error Tracking in that project's
+settings, and copy its project API key into `POSTHOG_API_KEY`. Set
+`POSTHOG_HOST` to the matching ingestion host
+(`https://us.i.posthog.com` or `https://eu.i.posthog.com`). The API
+reads both values at runtime from `.env.production`; mobile release
+builds read the same names at bundle time. Blank keys deliberately
+disable capture in local and test environments. Placeholder values
+are recorded in `compose.env.example`, `apps/api/.env.example`, and
+`apps/mobile/.env.example`; never commit Ibrahim's real value.
+
+**Exact UptimeRobot free-tier setup for Ibrahim:**
+
+1. Create an **API monitor** named `DamDam API readiness`, method
+   `GET`, URL `https://api.damdam.app/health`, with the free-tier
+   interval of 5 minutes. Do not use `/health/live`.
+2. Require HTTP `200` and add the JSON assertion `$.status` equals
+   `ok`; attach Ibrahim's verified email alert contact for both Down
+   and Up/recovery notifications.
+3. Leave authentication, request body, and custom headers empty;
+   enable redirect following and use the default request timeout.
+4. Treat Down as confirmed only after UptimeRobot's built-in retry
+   flow: its free tier retries an initial network failure before
+   opening an incident, satisfying the intent of the existing
+   two-consecutive-failures rule for transient connection failures.
+   UptimeRobot does **not** expose a configurable consecutive-failure
+   count or notification delay on the free plan, and an explicit HTTP
+   error response may be marked Down immediately. If an exact,
+   configurable two-check threshold is mandatory for every failure
+   mode, that requires a paid notification delay or a different
+   monitor; do not claim the free-tier UI has a threshold field.
+
+Failed SOS notifications remain owned by the existing Admin
+Dashboard Failed Notification Queue. Celery worker/beat health
+remains `docker stats` plus container restart behavior, OCI resource
+usage remains in the OCI console, and Postgres health/disk usage
+remains OCI-console-native plus `docker stats`; none of those signals
+belongs in this application integration.
 
 **Hajj-season-specific monitoring note:** During the actual travel
 season (May 2027), tighten alert thresholds and increase check
@@ -514,7 +568,7 @@ carries real safety weight.
 | Cloudflare (Workers paid tier if free limits exceeded) | $0–5 |
 | Cloudflare R2 | $0 (within free tier at MVP volume) |
 | Uptime Robot | $0 |
-| Sentry | $0 (free tier sufficient at MVP volume) |
+| PostHog | $0 (free tier sufficient for MVP error tracking and initial product analytics) |
 | Resend | $0 (within 3,000 emails/month free tier) |
 | **Fixed infrastructure subtotal** | **~$0–5/month** — Postgres self-hosted on the already-free OCI instance means no managed-DB line item at all |
 | Apple Developer Program | **$99/year (~$8.25/month amortised)** — new line item from dual-platform decision |

@@ -53,6 +53,7 @@ from app.manifests.orders import ManifestOrderService, ProvisioningScheduler
 from app.manifests.routes import pricing_router
 from app.manifests.routes import router as manifest_router
 from app.manifests.service import ManifestError, ManifestService
+from app.monitoring import PostHogExceptionMiddleware, build_exception_tracker
 from app.notifications.providers import FirebasePushSender
 from app.notifications.service import EmailSender, SMSNotificationSender, WhatsAppSender
 from app.otp.providers.base import OTPProvider
@@ -135,6 +136,13 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    exception_tracker = build_exception_tracker(resolved_settings)
+    if exception_tracker is not None:
+        api.add_middleware(
+            PostHogExceptionMiddleware,
+            tracker=exception_tracker,
+            environment=resolved_settings.app_env,
+        )
     api.state.settings = resolved_settings
     api.state.clock = clock
     api.state.session_factory = session_factory
