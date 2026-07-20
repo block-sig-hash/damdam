@@ -17,6 +17,7 @@ import {
 } from '../../api/voiceClient';
 import { Banner } from '../../components/Banner/Banner';
 import { useNetworkQuality } from '../../hooks/useNetworkQuality';
+import { ensureAndroidCallingReady } from '../../services/callKit';
 import { loadDialContacts, type DialContact } from '../../services/deviceContacts';
 import { telnyxVoiceGateway, type VoiceCallSession, type VoiceGateway } from '../../services/voiceGateway';
 import { color, minTouchTarget, radius, space, typography } from '../../theme/tokens';
@@ -58,6 +59,13 @@ export function DialPadScreen({
   useEffect(() => {
     getCallHistory(accessToken, 20).then(setHistory).catch(() => undefined);
   }, [accessToken]);
+
+  // Android only (no-op on iOS): contextual, not at app launch, matching
+  // this screen's own Contacts-permission convention below -- shows a real
+  // native permission Alert the first time Dial Pad is opened, not before.
+  useEffect(() => {
+    ensureAndroidCallingReady().catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     setEligibility(undefined);

@@ -1,27 +1,44 @@
 import { Platform } from 'react-native';
 import RNCallKeep from 'react-native-callkeep';
 import VoipPushNotification from 'react-native-voip-push-notification';
-import { createCallKitVoiceGateway, initializeCallKit } from './callKit';
+import {
+  __resetCallKitStateForTests,
+  createCallKitVoiceGateway,
+  handleAndroidIncomingCallPayload,
+  initializeCallKit,
+} from './callKit';
 import { loginTelnyxClientForIncomingCalls } from './voiceGateway';
 import type { VoiceCallSession, VoiceCallState } from './voiceGateway';
+import { loadSession } from './sessionStore';
 
 jest.mock('./voiceGateway', () => ({
   ...jest.requireActual('./voiceGateway'),
   loginTelnyxClientForIncomingCalls: jest.fn(),
 }));
 
+jest.mock('./sessionStore', () => ({
+  ...jest.requireActual('./sessionStore'),
+  loadSession: jest.fn(),
+}));
+
 const mockLoginForIncoming = loginTelnyxClientForIncomingCalls as jest.MockedFunction<
   typeof loginTelnyxClientForIncomingCalls
 >;
+const mockLoadSession = loadSession as jest.MockedFunction<typeof loadSession>;
 const mockAddEventListener = RNCallKeep.addEventListener as jest.Mock;
 const mockVoipAddEventListener = VoipPushNotification.addEventListener as jest.Mock;
 const mockVoipRemoveEventListener = VoipPushNotification.removeEventListener as jest.Mock;
 
 const originalOs = Platform.OS;
 
+beforeEach(() => {
+  mockLoadSession.mockResolvedValue(null);
+});
+
 afterEach(() => {
   Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOs });
   jest.clearAllMocks();
+  __resetCallKitStateForTests();
 });
 
 function setPlatform(os: 'ios' | 'android'): void {
@@ -49,17 +66,44 @@ function fakeSession(
 }
 
 describe('createCallKitVoiceGateway on Android', () => {
-  it('returns the base gateway completely unmodified', async () => {
-    setPlatform('android');
+  beforeEach(() => setPlatform('android'));
+
+  it('registers the outbound call with ConnectionService via the same react-native-callkeep call as iOS', async () => {
     const { session } = fakeSession();
     const base = { startCall: jest.fn().mockResolvedValue(session) };
 
     const gateway = createCallKitVoiceGateway(base);
-    expect(gateway).toBe(base);
+    await gateway.startCall('token', '08011112222', 'Amina');
+
+    expect(RNCallKeep.startCall).toHaveBeenCalledWith(
+      expect.any(String),
+      '08011112222',
+      'Amina',
+      'number',
+      false,
+    );
+  });
+
+  it('calls setCurrentCallActive (Android-specific) rather than reportConnectedOutgoingCallWithUUID (iOS-only, a no-op there) on connect', async () => {
+    const { session, stateListeners } = fakeSession();
+    const base = { startCall: jest.fn().mockResolvedValue(session) };
+    const gateway = createCallKitVoiceGateway(base);
+
+    const wrapped = await gateway.startCall('token', '08011112222');
+    wrapped.subscribeState(() => undefined);
+    stateListeners[0]('connected');
+
+    expect(RNCallKeep.setCurrentCallActive).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not pass a push notification device token to the base gateway (Android has no VoIP-push-style token here)', async () => {
+    const { session } = fakeSession();
+    const base = { startCall: jest.fn().mockResolvedValue(session) };
+    const gateway = createCallKitVoiceGateway(base);
 
     await gateway.startCall('token', '08011112222');
-    expect(mockAddEventListener).not.toHaveBeenCalled();
-    expect(RNCallKeep.startCall).not.toHaveBeenCalled();
+
+    expect(base.startCall).toHaveBeenCalledWith('token', '08011112222', undefined, undefined);
   });
 });
 
@@ -170,14 +214,100 @@ describe('createCallKitVoiceGateway on iOS', () => {
   });
 });
 
+describe('handleAndroidIncomingCallPayload (Headless JS Task entry point)', () => {
+  it('displays the incoming call natively immediately, before checking for a session', async () => {
+    mockLoadSession.mockImplementation(() => new Promise(() => undefined)); // never resolves
+
+    handleAndroidIncomingCallPayload({ uuid: 'call-1', handle: '08099998888', callerName: 'Amina' });
+    await Promise.resolve();
+
+    expect(RNCallKeep.displayIncomingCall).toHaveBeenCalledWith(
+      'call-1',
+      '08099998888',
+      'Amina',
+      'number',
+      false,
+    );
+  });
+
+  it('ends the call if no session is persisted (app was killed with no prior login)', async () => {
+    mockLoadSession.mockResolvedValue(null);
+
+    await handleAndroidIncomingCallPayload({ uuid: 'call-2', handle: '08099998888' });
+
+    expect(RNCallKeep.endCall).toHaveBeenCalledWith('call-2');
+    expect(mockLoginForIncoming).not.toHaveBeenCalled();
+  });
+
+  it('logs in with the persisted session and processes the push when one exists', async () => {
+    const mockClient = {
+      setPushNotificationCallKitUUID: jest.fn(),
+      processVoIPNotification: jest.fn(),
+      queueAnswerFromCallKit: jest.fn(),
+      queueEndFromCallKit: jest.fn(),
+      onIncomingCall: jest.fn(),
+    };
+    mockLoginForIncoming.mockResolvedValue(mockClient as never);
+    mockLoadSession.mockResolvedValue({
+      accessToken: 'persisted-access',
+      refreshToken: 'persisted-refresh',
+      phoneNumber: '08012340000',
+      departureDate: null,
+      lastActiveAt: new Date().toISOString(),
+    });
+
+    const payload = { uuid: 'call-3', handle: '08099998888' };
+    await handleAndroidIncomingCallPayload(payload);
+
+    expect(mockLoginForIncoming).toHaveBeenCalledWith(
+      'persisted-access',
+      '08099998888',
+      undefined,
+      expect.any(Function),
+    );
+    expect(mockClient.setPushNotificationCallKitUUID).toHaveBeenCalledWith('call-3');
+    expect(mockClient.processVoIPNotification).toHaveBeenCalledWith(payload);
+    expect(RNCallKeep.endCall).not.toHaveBeenCalled();
+  });
+});
+
 describe('initializeCallKit on Android', () => {
-  it('registers no listeners and returns a no-op cleanup', () => {
-    setPlatform('android');
+  beforeEach(() => setPlatform('android'));
+
+  it('registers CallKeep answerCall/endCall listeners but no VoipPushNotification listeners (no Android equivalent library)', () => {
     const cleanup = initializeCallKit('token', { onIncomingCallReady: jest.fn() });
 
-    expect(mockAddEventListener).not.toHaveBeenCalled();
+    expect(mockAddEventListener).toHaveBeenCalledWith('answerCall', expect.any(Function));
+    expect(mockAddEventListener).toHaveBeenCalledWith('endCall', expect.any(Function));
     expect(mockVoipAddEventListener).not.toHaveBeenCalled();
     expect(() => cleanup()).not.toThrow();
+  });
+
+  it('re-attaches onIncomingCallReady to a pendingClient already logged in by a Headless JS Task', async () => {
+    const mockClient = {
+      setPushNotificationCallKitUUID: jest.fn(),
+      processVoIPNotification: jest.fn(),
+      queueAnswerFromCallKit: jest.fn(),
+      queueEndFromCallKit: jest.fn(),
+      onIncomingCall: jest.fn(),
+    };
+    mockLoginForIncoming.mockResolvedValue(mockClient as never);
+    mockLoadSession.mockResolvedValue({
+      accessToken: 'persisted-access',
+      refreshToken: 'persisted-refresh',
+      phoneNumber: '08012340000',
+      departureDate: null,
+      lastActiveAt: new Date().toISOString(),
+    });
+
+    // Simulates the Headless JS Task path: a call already logged in before
+    // AuthenticatedApp (and this initializeCallKit call) ever mounted.
+    await handleAndroidIncomingCallPayload({ uuid: 'call-1', handle: '08099998888' });
+
+    const onIncomingCallReady = jest.fn();
+    initializeCallKit('token', { onIncomingCallReady });
+
+    expect(mockClient.onIncomingCall).toHaveBeenCalledWith(onIncomingCallReady);
   });
 });
 

@@ -164,17 +164,36 @@ export const telnyxVoiceGateway: VoiceGateway = {
  * backend behavior used for a purpose the endpoint's own doc comment
  * doesn't quite describe.
  */
+export interface IncomingCallClient {
+  setPushNotificationCallKitUUID(uuid: string | null): void;
+  processVoIPNotification(payload: Record<string, unknown>): void;
+  queueAnswerFromCallKit(customHeaders?: Record<string, string>): void;
+  queueEndFromCallKit(): void;
+  /** Registers an additional listener for when the SIP invite this login
+   * was opened for actually arrives, already wrapped as a VoiceCallSession
+   * -- used to re-attach a caller's onIncomingCallReady handler after the
+   * fact (Android: a Headless JS Task may have logged in before
+   * AuthenticatedApp ever mounted, see callKit.ts). Multiple listeners are
+   * all invoked, not replaced -- the underlying SDK client is an
+   * EventEmitter, confirmed against @telnyx/react-native-voice-sdk's
+   * client.ts source. */
+  onIncomingCall(handler: (session: VoiceCallSession) => void): void;
+}
+
 export async function loginTelnyxClientForIncomingCalls(
   accessToken: string,
   callerNumberHint: string,
   pushNotificationDeviceToken: string | undefined,
   onIncomingCall: (session: VoiceCallSession) => void,
-): Promise<TelnyxClient> {
+): Promise<IncomingCallClient> {
   const credential = await getVoiceToken(accessToken, callerNumberHint);
   const { telnyx, client } = createTelnyxClient(pushNotificationDeviceToken);
-  client.on('telnyx.call.incoming', (call) => {
-    onIncomingCall(new TelnyxCallSession(call, credential.call_type, callerNumberHint));
-  });
+  const subscribeIncoming = (handler: (session: VoiceCallSession) => void): void => {
+    client.on('telnyx.call.incoming', (call) => {
+      handler(new TelnyxCallSession(call, credential.call_type, callerNumberHint));
+    });
+  };
+  subscribeIncoming(onIncomingCall);
   await client.loginWithToken(
     telnyx.createTokenConfig(credential.token, {
       enableCallReports: true,
@@ -182,5 +201,11 @@ export async function loginTelnyxClientForIncomingCalls(
       useTrickleIce: true,
     }),
   );
-  return client;
+  return {
+    setPushNotificationCallKitUUID: (uuid) => client.setPushNotificationCallKitUUID(uuid),
+    processVoIPNotification: (payload) => client.processVoIPNotification(payload),
+    queueAnswerFromCallKit: (headers) => client.queueAnswerFromCallKit(headers),
+    queueEndFromCallKit: () => client.queueEndFromCallKit(),
+    onIncomingCall: subscribeIncoming,
+  };
 }

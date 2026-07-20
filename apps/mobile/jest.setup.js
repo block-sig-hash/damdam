@@ -55,6 +55,7 @@ jest.mock('react-native-callkeep', () => ({
     reportEndCallWithUUID: jest.fn(),
     reportConnectingOutgoingCallWithUUID: jest.fn(),
     reportConnectedOutgoingCallWithUUID: jest.fn(),
+    setCurrentCallActive: jest.fn(),
     setMutedCall: jest.fn(),
     CONSTANTS: {END_CALL_REASONS: {FAILED: 1, REMOTE_ENDED: 2, UNANSWERED: 3}},
   },

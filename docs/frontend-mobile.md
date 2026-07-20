@@ -412,17 +412,23 @@ quality indicator, mute/speaker/end-call controls.
 - *Connectivity lost mid-call:* graceful termination, "Call ended
   — connectivity lost", auto-navigates back to Dial Pad after 3s
 
-**Platform note:** CallKit (iOS) is implemented --
-`apps/mobile/ios/DamDam/AppDelegate.swift` +
-`src/services/callKit.ts` -- so incoming and outgoing DamDam calls
-report to the native call UI (lock screen, Control Center, connected
-Bluetooth/CarPlay), not only within the app; PushKit wakes the app
-for an incoming call even when it's backgrounded or killed. **Android
-ConnectionService integration remains unbuilt** -- Android still uses
-the in-app-only call screen this section otherwise describes. This is
-a real, tracked platform gap, not an oversight: closing it is
-separate follow-up work, not bundled into the iOS-focused PR that
-built the CallKit side.
+**Platform note:** Both platforms report calls to their native call UI,
+implemented in two separate PRs against this same spec --
+`apps/mobile/ios/DamDam/AppDelegate.swift` (iOS, CallKit + PushKit)
+and `apps/mobile/android/app/src/main/java/com/damdam/app/
+CallHeadlessTaskService.kt` (Android, ConnectionService), both wired
+through the shared `src/services/callKit.ts`. On iOS, PushKit wakes
+the app for an incoming call even when backgrounded or killed; on
+Android the equivalent is FCM detecting an incoming-call-shaped data
+message and starting a Headless JS Task, per react-native-callkeep's
+own documented recommendation for this exact scenario. **A real,
+disclosed limitation specific to Android**: `RNCallKeep.setup()` (and
+the phone-account permission it requests) only runs once the user has
+opened Dial Pad at least once (`DialPadScreen.tsx`'s mount effect,
+matching this app's existing contextual-permission convention) --
+until then, an incoming call cannot display via ConnectionService on
+that device at all. iOS has no equivalent gap; CallKit setup happens
+unconditionally and silently at session start.
 
 ---
 
@@ -560,6 +566,6 @@ infrastructure.md §11.4/§11.8).
 | Background sync (offline queue) | WorkManager | BGTaskScheduler |
 | Push notifications | FCM native | FCM via APNs bridge, requires Apple Push key |
 | Contacts permission | `READ_CONTACTS` | `Contacts` framework authorization |
-| Native call UI integration | ConnectionService -- **not yet built**, in-app-only call screen | CallKit + PushKit -- **built**, `src/services/callKit.ts` |
+| Native call UI integration | ConnectionService -- **built** (Headless JS Task + FCM wake), `CallHeadlessTaskService.kt` -- higher residual uncertainty, unverified without a physical device | CallKit + PushKit -- **built**, `src/services/callKit.ts` |
 | Distribution | Google Play (internal testing → production track) | TestFlight (pilot) → App Store (production) |
 | Review process predictability | Generally faster, more predictable | Can be slower and less predictable — build extra buffer into the timeline, see prd.md §6 |
