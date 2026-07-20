@@ -135,6 +135,21 @@ export function initializeCallKit(accessToken: string, handlers: CallKitHandlers
 
 function reportSessionToCallKit(session: VoiceCallSession, callUuid: string): VoiceCallSession {
   let reportedConnected = false;
+  // Independent review finding: ActiveCallScreen's hangup button calls
+  // call.hangup() directly *and* keeps an active subscribeState listener
+  // watching for 'ended' -- the hangup completing is exactly what drives
+  // the underlying call into the 'ended' state, so both branches below
+  // would otherwise fire RNCallKeep.endCall() for the same callUuid on
+  // the single most common hangup path. Guarded so it fires exactly once
+  // regardless of which path (explicit hangup, or observing a remote
+  // hangup/drop via the state listener) reports it first.
+  let reportedEnded = false;
+  const reportEndedOnce = () => {
+    if (!reportedEnded) {
+      reportedEnded = true;
+      RNCallKeep.endCall(callUuid);
+    }
+  };
   return {
     callType: session.callType,
     displayNumber: session.displayNumber,
@@ -146,7 +161,7 @@ function reportSessionToCallKit(session: VoiceCallSession, callUuid: string): Vo
           reportedConnected = true;
           RNCallKeep.reportConnectedOutgoingCallWithUUID(callUuid);
         } else if (state === 'ended' || state === 'dropped') {
-          RNCallKeep.endCall(callUuid);
+          reportEndedOnce();
         }
         listener(state);
       });
@@ -162,7 +177,7 @@ function reportSessionToCallKit(session: VoiceCallSession, callUuid: string): Vo
     },
     async hangup() {
       await session.hangup();
-      RNCallKeep.endCall(callUuid);
+      reportEndedOnce();
     },
   };
 }

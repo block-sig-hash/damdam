@@ -121,6 +121,28 @@ describe('createCallKitVoiceGateway on iOS', () => {
     expect(RNCallKeep.endCall).toHaveBeenCalledTimes(1);
   });
 
+  it('reports CallKit end exactly once when hangup() is called explicitly and the resulting state transition also fires (matches ActiveCallScreen\'s actual usage: it calls hangup() directly AND keeps an active subscribeState listener watching for \'ended\')', async () => {
+    const { session, stateListeners } = fakeSession({
+      hangup: jest.fn(async () => {
+        // The real TelnyxCallSession's hangup() causes the underlying call
+        // to transition to 'ended', which fires the *same* state listener
+        // ActiveCallScreen is already subscribed to -- simulated here by
+        // firing it synchronously as part of hangup() resolving, matching
+        // how the double-invocation was actually reproduced.
+        stateListeners[0]('ended');
+      }),
+    });
+    const base = { startCall: jest.fn().mockResolvedValue(session) };
+    const gateway = createCallKitVoiceGateway(base);
+
+    const wrapped = await gateway.startCall('token', '08011112222');
+    wrapped.subscribeState(() => undefined);
+
+    await wrapped.hangup();
+
+    expect(RNCallKeep.endCall).toHaveBeenCalledTimes(1);
+  });
+
   it('reports a failed CallKit call and rethrows when the underlying startCall rejects', async () => {
     const base = { startCall: jest.fn().mockRejectedValue(new Error('no eligibility')) };
     const gateway = createCallKitVoiceGateway(base);
