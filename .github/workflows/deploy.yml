@@ -48,6 +48,9 @@ jobs:
             current_container=$(docker ps -q \
               --filter label=com.docker.compose.project=damdam \
               --filter label=com.docker.compose.service=api | head -n 1)
+            current_postgres_container=$(docker ps -q \
+              --filter label=com.docker.compose.project=damdam \
+              --filter label=com.docker.compose.service=postgres | head -n 1)
             if [ -n "$current_container" ]; then
               current_image=$(docker inspect --format '{{.Image}}' "$current_container")
               docker tag "$current_image" "damdam-api:$previous_commit"
@@ -55,16 +58,26 @@ jobs:
               echo "No running API image exists to tag as a rollback target. Bootstrap production manually before enabling automated deploys."
               exit 1
             fi
+            if [ -n "$current_postgres_container" ]; then
+              current_postgres_image=$(docker inspect --format '{{.Image}}' "$current_postgres_container")
+              docker tag "$current_postgres_image" "damdam-postgres-walg:$previous_commit"
+            elif ! docker image inspect "damdam-postgres-walg:$previous_commit" >/dev/null 2>&1; then
+              echo "No running Postgres image exists to tag as a rollback target. Bootstrap production manually before enabling automated deploys."
+              exit 1
+            fi
             printf '%s\n' "$previous_commit" > .deploy/production_previous_commit
             git checkout --detach "$target_commit"
             DAMDAM_ENV_FILE=.env.production \
               DAMDAM_API_IMAGE="damdam-api:$target_commit" \
-              docker compose --env-file .env.production build api
+              DAMDAM_POSTGRES_IMAGE="damdam-postgres-walg:$target_commit" \
+              docker compose --env-file .env.production build api postgres
             DAMDAM_ENV_FILE=.env.production \
               DAMDAM_API_IMAGE="damdam-api:$target_commit" \
+              DAMDAM_POSTGRES_IMAGE="damdam-postgres-walg:$target_commit" \
               docker compose --env-file .env.production up -d --remove-orphans
             DAMDAM_ENV_FILE=.env.production \
               DAMDAM_API_IMAGE="damdam-api:$target_commit" \
+              DAMDAM_POSTGRES_IMAGE="damdam-postgres-walg:$target_commit" \
               docker compose --env-file .env.production exec -T api alembic upgrade head
 
       - name: Check production readiness
@@ -95,10 +108,12 @@ jobs:
             fi
             previous_commit=$(cat .deploy/production_previous_commit)
             docker image inspect "damdam-api:$previous_commit" >/dev/null
+            docker image inspect "damdam-postgres-walg:$previous_commit" >/dev/null
+            git checkout --detach "$previous_commit"
             DAMDAM_ENV_FILE=.env.production \
               DAMDAM_API_IMAGE="damdam-api:$previous_commit" \
+              DAMDAM_POSTGRES_IMAGE="damdam-postgres-walg:$previous_commit" \
               docker compose --env-file .env.production up -d --no-build --remove-orphans
-            git checkout --detach "$previous_commit"
 
       - name: Verify rollback readiness
         id: production-rollback-verify
