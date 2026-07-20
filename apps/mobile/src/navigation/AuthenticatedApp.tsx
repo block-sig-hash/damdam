@@ -13,6 +13,7 @@ import {useHomePackageStatus} from '../screens/HomeDashboard/useHomePackageStatu
 import { ActiveCallScreen } from '../screens/ActiveCall/ActiveCallScreen';
 import { DialPadScreen } from '../screens/DialPad/DialPadScreen';
 import type { VoiceCallSession } from '../services/voiceGateway';
+import { createCallKitVoiceGateway, initializeCallKit } from '../services/callKit';
 import {configureCheckInBackgroundSync} from '../services/checkInBackground';
 import {optionalCheckInLocation} from '../services/checkInLocation';
 import {CheckInSyncService, NitroCheckInOutbox} from '../services/checkInOutbox';
@@ -106,6 +107,9 @@ export function AuthenticatedApp({
     ),
     [accessToken],
   );
+  // iOS only (frontend-mobile.md §8.3); createCallKitVoiceGateway returns
+  // the unmodified default gateway on Android, so this has no effect there.
+  const voiceGateway = useMemo(() => createCallKitVoiceGateway(), []);
 
   useEffect(() => {
     let active = true;
@@ -165,6 +169,18 @@ export function AuthenticatedApp({
       setScreen('activation');
     });
   }, [accessToken]);
+
+  useEffect(
+    () =>
+      initializeCallKit(accessToken, {
+        onIncomingCallReady: (session) => {
+          setActiveCall(session);
+          setRecipientName(session.displayNumber);
+          setScreen('active-call');
+        },
+      }),
+    [accessToken],
+  );
 
   useEffect(() => {
     if (!packageId) return;
@@ -247,6 +263,7 @@ export function AuthenticatedApp({
       <DialPadScreen
         accessToken={accessToken}
         pstnMinutesRemaining={pstnMinutesRemaining}
+        voiceGateway={voiceGateway}
         onCallStarted={(call, name) => {
           setActiveCall(call);
           setRecipientName(name);

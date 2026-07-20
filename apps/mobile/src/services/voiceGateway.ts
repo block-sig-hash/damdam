@@ -16,11 +16,28 @@ type TelnyxCall = {
   toggleMute(): Promise<void>;
   hangup(): Promise<void>;
 };
+type TelnyxClient = {
+  loginWithToken(config: Record<string, unknown>): Promise<void>;
+  newCall(destination: string, callerName?: string): Promise<TelnyxCall>;
+  connect(): Promise<void>;
+  /** iOS CallKit/PushKit only -- verified directly against
+   * @telnyx/react-native-voice-sdk's client.ts source (frontend-mobile.md
+   * §8.3): tells the SDK which CallKit UUID a woken-from-push call
+   * corresponds to, and hands it the raw push payload so the actual SIP
+   * invite (arriving once this client's socket connects) gets linked to
+   * that UUID automatically. */
+  setPushNotificationCallKitUUID(uuid: string | null): void;
+  processVoIPNotification(payload: Record<string, unknown>): void;
+  /** Queues an answer/end action for the call the push notification
+   * announced, executed immediately if the invite has already arrived, or
+   * as soon as it does otherwise -- see client.ts's queueAnswerFromCallKit/
+   * queueEndFromCallKit doc comments ("matching iOS SDK behavior"). */
+  queueAnswerFromCallKit(customHeaders?: Record<string, string>): void;
+  queueEndFromCallKit(): void;
+  on(event: 'telnyx.call.incoming', handler: (call: TelnyxCall) => void): void;
+};
 type TelnyxRuntime = {
-  createTelnyxVoipClient(options: Record<string, unknown>): {
-    loginWithToken(config: Record<string, unknown>): Promise<void>;
-    newCall(destination: string, callerName?: string): Promise<TelnyxCall>;
-  };
+  createTelnyxVoipClient(options: Record<string, unknown>): TelnyxClient;
   createTokenConfig(token: string, options: Record<string, unknown>): Record<string, unknown>;
   VoicePnBridge: { toggleSpeaker(): Promise<boolean> };
 };
@@ -42,7 +59,18 @@ export interface VoiceCallSession {
 }
 
 export interface VoiceGateway {
-  startCall(accessToken: string, phoneNumber: string, contactName?: string): Promise<VoiceCallSession>;
+  startCall(
+    accessToken: string,
+    phoneNumber: string,
+    contactName?: string,
+    /** AC-23.1-adjacent (iOS CallKit/PushKit): keeps the account's VoIP push
+     * token current with Telnyx even on an outbound call, not just at
+     * incoming-call setup time. Omitted entirely on Android -- Telnyx's
+     * login-handler code (login-handler.ts) only forwards this field when
+     * present, so a call with no token behaves exactly as it did before
+     * this parameter existed. */
+    pushNotificationDeviceToken?: string,
+  ): Promise<VoiceCallSession>;
 }
 
 function mapState(state: string): VoiceCallState {
@@ -52,7 +80,7 @@ function mapState(state: string): VoiceCallState {
   return 'connecting';
 }
 
-class TelnyxCallSession implements VoiceCallSession {
+export class TelnyxCallSession implements VoiceCallSession {
   private muted = false;
 
   constructor(
@@ -88,15 +116,23 @@ class TelnyxCallSession implements VoiceCallSession {
   }
 }
 
-export const telnyxVoiceGateway: VoiceGateway = {
-  async startCall(accessToken, phoneNumber, contactName) {
-    const credential = await getVoiceToken(accessToken, phoneNumber);
-    const telnyx = telnyxRuntime();
-    const client = telnyx.createTelnyxVoipClient({
+function createTelnyxClient(pushNotificationDeviceToken?: string) {
+  const telnyx = telnyxRuntime();
+  return {
+    telnyx,
+    client: telnyx.createTelnyxVoipClient({
       enableAppStateManagement: true,
       useTrickleIce: true,
       debug: false,
-    });
+      ...(pushNotificationDeviceToken ? { pushNotificationDeviceToken } : {}),
+    }),
+  };
+}
+
+export const telnyxVoiceGateway: VoiceGateway = {
+  async startCall(accessToken, phoneNumber, contactName, pushNotificationDeviceToken) {
+    const credential = await getVoiceToken(accessToken, phoneNumber);
+    const { telnyx, client } = createTelnyxClient(pushNotificationDeviceToken);
     await client.loginWithToken(
       telnyx.createTokenConfig(credential.token, {
         enableCallReports: true,
@@ -108,3 +144,43 @@ export const telnyxVoiceGateway: VoiceGateway = {
     return new TelnyxCallSession(call, credential.call_type, phoneNumber);
   },
 };
+
+/**
+ * iOS CallKit/PushKit only (frontend-mobile.md §8.3) -- logs in a Telnyx
+ * client suitable for *receiving* a call, distinct from telnyxVoiceGateway's
+ * outbound-only startCall: a client must already be connected before the
+ * SIP invite for an incoming call can arrive at all.
+ *
+ * Disclosed workaround, not hidden: docs/api-spec.md's POST /voice/token
+ * is documented as "requests a token only when starting a call" and
+ * requires a `to_number`. There is no dedicated "log in to receive calls"
+ * endpoint. Since the same doc also states each user has one distinct
+ * Telnyx telephony credential regardless of destination, this passes the
+ * *caller's* number (from the push payload) as that required field purely
+ * to obtain the callee's own login token -- the call_type/destination
+ * fields in the response are unused here. A cleaner contract (e.g. an
+ * explicit registration endpoint) is real, separate follow-up work; this
+ * is not silently invented backend behavior, it is documented, real
+ * backend behavior used for a purpose the endpoint's own doc comment
+ * doesn't quite describe.
+ */
+export async function loginTelnyxClientForIncomingCalls(
+  accessToken: string,
+  callerNumberHint: string,
+  pushNotificationDeviceToken: string | undefined,
+  onIncomingCall: (session: VoiceCallSession) => void,
+): Promise<TelnyxClient> {
+  const credential = await getVoiceToken(accessToken, callerNumberHint);
+  const { telnyx, client } = createTelnyxClient(pushNotificationDeviceToken);
+  client.on('telnyx.call.incoming', (call) => {
+    onIncomingCall(new TelnyxCallSession(call, credential.call_type, callerNumberHint));
+  });
+  await client.loginWithToken(
+    telnyx.createTokenConfig(credential.token, {
+      enableCallReports: true,
+      callReportInterval: 5,
+      useTrickleIce: true,
+    }),
+  );
+  return client;
+}
