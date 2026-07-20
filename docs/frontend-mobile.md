@@ -480,12 +480,15 @@ in that screen's implementation.
   AC-23.4) routes straight to OTP recovery instead of showing a PIN
   box with no possible correct answer
 
-**Not built as part of this screen:** the session-persistence
-layer that decides *when* to show this screen (AC-23.1 secure
-token storage, AC-23.2 30-day session, background-timer detection)
-— those remain open under issue #24/US-23. This screen is a
-self-contained, testable unit ready to be wired into that
-navigator once it exists.
+**Session-persistence wiring:** the layer that decides *when* to
+show this screen — AC-23.1 secure token storage, AC-23.2 30-day
+session, background-timer detection — is `useSessionGate`
+(`apps/mobile/src/hooks/useSessionGate.ts`), wired into `App.tsx`
+above `OnboardingNavigator`/`AuthenticatedApp`. This screen remains
+a self-contained, testable unit; `useSessionGate` is what actually
+invokes it, on both a cold start with a still-valid persisted
+session and a foreground resume past the 5-minute background
+threshold.
 
 ---
 

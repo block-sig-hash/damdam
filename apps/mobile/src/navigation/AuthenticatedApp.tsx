@@ -28,6 +28,11 @@ import {
 } from '../services/arrivalPrompts';
 import type { AuthenticatedMobileSession } from './OnboardingNavigator';
 
+type AuthenticatedAppProps = Pick<
+  AuthenticatedMobileSession,
+  'accessToken' | 'departureDate' | 'packageId'
+>;
+
 type Screen = 'home' | 'activation' | 'qr' | 'dial' | 'active-call' | 'sos-confirm' | 'sos-sent';
 
 /**
@@ -39,7 +44,7 @@ export function AuthenticatedApp({
   accessToken,
   departureDate,
   packageId: initialPackageId,
-}: AuthenticatedMobileSession): React.JSX.Element {
+}: AuthenticatedAppProps): React.JSX.Element {
   const [screen, setScreen] = useState<Screen>('home');
   const [packageId, setPackageId] = useState(initialPackageId);
   const [esimStatus, setEsimStatus] = useState<

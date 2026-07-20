@@ -15,6 +15,7 @@ export type OtpErrorCode =
   | 'invalid_otp'
   | 'otp_expired'
   | 'locked'
+  | 'invalid_refresh_token'
   | 'validation_error'
   | 'network_error';
 
@@ -63,6 +64,7 @@ const KNOWN_CODES: OtpErrorCode[] = [
   'invalid_otp',
   'otp_expired',
   'locked',
+  'invalid_refresh_token',
   'validation_error',
 ];
 
@@ -127,4 +129,20 @@ export function verifyPinRecovery(
   platform: Platform,
 ): Promise<AuthResponse> {
   return post('/auth/pin/recovery/verify', { phone_number: phoneNumber, otp, platform });
+}
+
+export interface RefreshResponse {
+  access_token: string;
+  refresh_token: string;
+}
+
+/**
+ * AC-23.2: exchanges the persisted refresh token for a fresh access/
+ * refresh pair, per docs/api-spec.md's `POST /auth/token/refresh`. A
+ * 401 here (`invalid_refresh_token`) means the refresh token itself is
+ * no longer valid server-side (e.g. revoked) -- the caller must treat
+ * that as "no valid session," not a transient failure.
+ */
+export function refreshSession(refreshToken: string): Promise<RefreshResponse> {
+  return post('/auth/token/refresh', { refresh_token: refreshToken });
 }
