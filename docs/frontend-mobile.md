@@ -412,12 +412,17 @@ quality indicator, mute/speaker/end-call controls.
 - *Connectivity lost mid-call:* graceful termination, "Call ended
   — connectivity lost", auto-navigates back to Dial Pad after 3s
 
-**Platform note:** CallKit (iOS) and ConnectionService (Android)
-integration is recommended so incoming/in-progress DamDam calls
-appear in the native call UI rather than only within the app —
-this is a real UX quality difference between platforms worth
-budgeting engineering time for on both, not just building a
-bare in-app-only call screen.
+**Platform note:** CallKit (iOS) is implemented --
+`apps/mobile/ios/DamDam/AppDelegate.swift` +
+`src/services/callKit.ts` -- so incoming and outgoing DamDam calls
+report to the native call UI (lock screen, Control Center, connected
+Bluetooth/CarPlay), not only within the app; PushKit wakes the app
+for an incoming call even when it's backgrounded or killed. **Android
+ConnectionService integration remains unbuilt** -- Android still uses
+the in-app-only call screen this section otherwise describes. This is
+a real, tracked platform gap, not an oversight: closing it is
+separate follow-up work, not bundled into the iOS-focused PR that
+built the CallKit side.
 
 ---
 
@@ -555,6 +560,6 @@ infrastructure.md §11.4/§11.8).
 | Background sync (offline queue) | WorkManager | BGTaskScheduler |
 | Push notifications | FCM native | FCM via APNs bridge, requires Apple Push key |
 | Contacts permission | `READ_CONTACTS` | `Contacts` framework authorization |
-| Native call UI integration | ConnectionService | CallKit |
+| Native call UI integration | ConnectionService -- **not yet built**, in-app-only call screen | CallKit + PushKit -- **built**, `src/services/callKit.ts` |
 | Distribution | Google Play (internal testing → production track) | TestFlight (pilot) → App Store (production) |
 | Review process predictability | Generally faster, more predictable | Can be slower and less predictable — build extra buffer into the timeline, see prd.md §6 |
