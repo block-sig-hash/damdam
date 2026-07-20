@@ -258,6 +258,115 @@ describe('background/foreground PIN gating end-to-end (AC-23.3)', () => {
   });
 });
 
+describe('periodic in-foreground refresh (AC-23.2: token must not go stale during a long continuous session)', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('refreshes the access token on a timer without ever backgrounding or cold-starting', async () => {
+    mockRefreshSession.mockResolvedValue({
+      access_token: 'timer-refreshed-access',
+      refresh_token: 'timer-refreshed-refresh',
+    });
+    const { result } = await renderHook(() => useSessionGate());
+    await waitFor(() => expect(result.current.phase).toBe('onboarding'));
+    await act(async () => {
+      await result.current.onOnboarded(BASE_SESSION);
+    });
+    expect(result.current.session?.accessToken).toBe('access-1');
+
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(12 * 60 * 1000);
+    });
+
+    expect(mockRefreshSession).toHaveBeenCalledWith('refresh-1');
+    expect(result.current.phase).toBe('authenticated');
+    expect(result.current.session?.accessToken).toBe('timer-refreshed-access');
+    expect(result.current.session?.refreshToken).toBe('timer-refreshed-refresh');
+  });
+
+  it('does not refresh before the interval elapses', async () => {
+    mockRefreshSession.mockResolvedValue({ access_token: 'a', refresh_token: 'b' });
+    const { result } = await renderHook(() => useSessionGate());
+    await waitFor(() => expect(result.current.phase).toBe('onboarding'));
+    await act(async () => {
+      await result.current.onOnboarded(BASE_SESSION);
+    });
+
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(5 * 60 * 1000);
+    });
+
+    expect(mockRefreshSession).not.toHaveBeenCalled();
+    expect(result.current.session?.accessToken).toBe('access-1');
+  });
+
+  it('a transient failure on the timer does not log the user out', async () => {
+    mockRefreshSession.mockRejectedValue(new Error('network down'));
+    const { result } = await renderHook(() => useSessionGate());
+    await waitFor(() => expect(result.current.phase).toBe('onboarding'));
+    await act(async () => {
+      await result.current.onOnboarded(BASE_SESSION);
+    });
+
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(12 * 60 * 1000);
+    });
+
+    expect(result.current.phase).toBe('authenticated');
+    expect(result.current.session?.accessToken).toBe('access-1');
+  });
+
+  it('a definitively invalid refresh token on the timer logs the user out to onboarding', async () => {
+    const { OtpApiError } = jest.requireActual('../api/authClient');
+    mockRefreshSession.mockRejectedValue(
+      new OtpApiError('invalid_refresh_token', 'Refresh token is invalid.'),
+    );
+    const { result } = await renderHook(() => useSessionGate());
+    await waitFor(() => expect(result.current.phase).toBe('onboarding'));
+    await act(async () => {
+      await result.current.onOnboarded(BASE_SESSION);
+    });
+
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(12 * 60 * 1000);
+    });
+
+    expect(result.current.phase).toBe('onboarding');
+    expect(result.current.session).toBeNull();
+  });
+
+  it('stops ticking once the phase leaves authenticated (no refresh after PIN-gating)', async () => {
+    mockRefreshSession.mockResolvedValue({ access_token: 'a', refresh_token: 'b' });
+    const { result } = await renderHook(() => useSessionGate());
+    await waitFor(() => expect(result.current.phase).toBe('onboarding'));
+    await act(async () => {
+      await result.current.onOnboarded(BASE_SESSION);
+    });
+    const handler = latestAppStateHandler();
+
+    await act(async () => {
+      handler('background');
+    });
+    jest.setSystemTime(Date.now() + 20 * 60 * 1000);
+    await act(async () => {
+      handler('active');
+      await Promise.resolve();
+    });
+    expect(result.current.phase).toBe('pin-gate');
+
+    mockRefreshSession.mockClear();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(12 * 60 * 1000);
+    });
+    expect(mockRefreshSession).not.toHaveBeenCalled();
+  });
+});
+
 describe('onPinUnlocked (AC-23.2 refresh-on-resume, AC-23.4 recovery)', () => {
   it('touches lastActiveAt and refreshes the access token on a routine correct-PIN unlock', async () => {
     mockRefreshSession.mockResolvedValue({

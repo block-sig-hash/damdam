@@ -34,6 +34,19 @@ export interface UseSessionGateResult {
   onPinUnlocked: (recovered?: AuthResponse) => Promise<void>;
 }
 
+/**
+ * The server-side access token TTL is 15 minutes
+ * (apps/api/app/config.py's jwt_access_ttl_minutes). Refreshing well
+ * before that boundary, on a timer, is what keeps check-in/SOS sends
+ * from silently 401-ing (and retry-looping forever in their own
+ * outbox, per checkInOutbox.ts/sosOutbox.ts) during a session that
+ * stays continuously foregrounded for longer than 15 minutes without
+ * ever backgrounding or cold-starting -- neither of which otherwise
+ * triggers a refresh. Safety-critical enough (SOS delivery) that this
+ * is not optional polish.
+ */
+const FOREGROUND_REFRESH_INTERVAL_MS = 12 * 60 * 1000;
+
 function toActiveSession(persisted: PersistedSession): ActiveSession {
   return {
     accessToken: persisted.accessToken,
@@ -48,6 +61,34 @@ function toActiveSession(persisted: PersistedSession): ActiveSession {
  * background-duration threshold without going through AppState/React at all. */
 export function shouldRequirePinAfterBackground(elapsedMs: number): boolean {
   return elapsedMs >= BACKGROUND_PIN_THRESHOLD_MS;
+}
+
+type RefreshOutcome = 'refreshed' | 'unchanged' | 'invalid';
+
+/**
+ * Best-effort refresh: a transient failure (network down, server
+ * hiccup) must never strand or log out a user who otherwise still has
+ * a valid session -- only a definitive invalid_refresh_token (the
+ * session is truly dead server-side) is actionable. Shared between the
+ * PIN-unlock resume path and the periodic in-foreground timer so both
+ * apply the exact same success/transient/invalid handling.
+ */
+async function attemptRefresh(
+  refreshToken: string,
+): Promise<{ outcome: RefreshOutcome; session: PersistedSession | null }> {
+  try {
+    const refreshed = await refreshSession(refreshToken);
+    const touched = await touchSession({
+      accessToken: refreshed.access_token,
+      refreshToken: refreshed.refresh_token,
+    });
+    return { outcome: 'refreshed', session: touched };
+  } catch (error) {
+    if (error instanceof OtpApiError && error.code === 'invalid_refresh_token') {
+      return { outcome: 'invalid', session: null };
+    }
+    return { outcome: 'unchanged', session: null };
+  }
 }
 
 /**
@@ -125,27 +166,16 @@ export function useSessionGate(): UseSessionGateResult {
       setSession(toActiveSession(touched));
       setPhase('authenticated');
 
-      // Best-effort proactive refresh so a resumed session starts with a
-      // fresh access token rather than one that may be near its 15-minute
-      // server-side TTL. A transient failure here must never strand the
-      // user who just proved possession of the device via PIN -- only a
-      // definitive invalid_refresh_token (the session is truly dead
-      // server-side) forces a drop back to onboarding.
-      try {
-        const refreshed = await refreshSession(touched.refreshToken);
-        const withFreshTokens = await touchSession({
-          accessToken: refreshed.access_token,
-          refreshToken: refreshed.refresh_token,
-        });
-        if (withFreshTokens) {
-          setSession(toActiveSession(withFreshTokens));
-        }
-      } catch (error) {
-        if (error instanceof OtpApiError && error.code === 'invalid_refresh_token') {
-          await clearSession();
-          setSession(null);
-          setPhase('onboarding');
-        }
+      // Proactive refresh so a resumed session starts with a fresh
+      // access token rather than one that may be near its 15-minute
+      // server-side TTL.
+      const result = await attemptRefresh(touched.refreshToken);
+      if (result.outcome === 'invalid') {
+        await clearSession();
+        setSession(null);
+        setPhase('onboarding');
+      } else if (result.session) {
+        setSession(toActiveSession(result.session));
       }
     },
     [session],
@@ -190,6 +220,41 @@ export function useSessionGate(): UseSessionGateResult {
       },
     );
     return () => subscription.remove();
+  }, [phase]);
+
+  // AC-23.2 in spirit ("don't force re-login") extends to not letting the
+  // access token silently go stale during a long continuously-foregrounded
+  // session either -- see FOREGROUND_REFRESH_INTERVAL_MS. Only runs while
+  // authenticated; reads the persisted refresh token fresh each tick
+  // rather than closing over `session`, so it always uses the latest
+  // token even if something else touched/refreshed it in between ticks.
+  useEffect(() => {
+    if (phase !== 'authenticated') {
+      return undefined;
+    }
+    const timer = setInterval(() => {
+      (async () => {
+        const current = await loadSession();
+        if (!current) {
+          return;
+        }
+        if (isSessionExpired(current.lastActiveAt)) {
+          await clearSession();
+          setSession(null);
+          setPhase('onboarding');
+          return;
+        }
+        const result = await attemptRefresh(current.refreshToken);
+        if (result.outcome === 'invalid') {
+          await clearSession();
+          setSession(null);
+          setPhase('onboarding');
+        } else if (result.session) {
+          setSession(toActiveSession(result.session));
+        }
+      })();
+    }, FOREGROUND_REFRESH_INTERVAL_MS);
+    return () => clearInterval(timer);
   }, [phase]);
 
   return { phase, session, onOnboarded, onPinUnlocked };
