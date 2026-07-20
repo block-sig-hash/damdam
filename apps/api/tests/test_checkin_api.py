@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -18,6 +19,7 @@ from app.auth.models import (
     ManifestValidationStatus,
     Organization,
     OrganizationType,
+    PricingTier,
     User,
 )
 from app.auth.routes import request_otp, verify_otp
@@ -25,6 +27,7 @@ from app.auth.schemas import OTPRequest, OTPVerifyRequest
 from app.checkins.models import CheckIn, CheckInNotification
 from app.esim.service import HtoPilgrimService
 from app.main import create_app
+from app.packages.models import Package, PackageSource, PackageStatus
 from app.profile.models import FamilyContact
 
 
@@ -189,6 +192,30 @@ def test_checkin_records_tap_time_location_and_queues_one_notification(
     )
     client, user_id = _authenticated(api)
     with session_factory() as session:
+        tier = PricingTier(
+            name="Check-in retention",
+            usd_reference_price=Decimal("10.00"),
+            data_gb=1,
+            pstn_minutes=10,
+            wholesale_usd_price=Decimal("8.00"),
+            ngn_price=Decimal("1000.00"),
+        )
+        session.add(tier)
+        session.flush()
+        session.add(
+            Package(
+                user_id=user_id,
+                pricing_tier_id=tier.id,
+                source=PackageSource.RETAIL,
+                status=PackageStatus.ACTIVE,
+                data_gb_total=1,
+                data_gb_remaining=Decimal("1.00"),
+                pstn_minutes_total=10,
+                pstn_minutes_remaining=Decimal("10.00"),
+                purchased_at=clock(),
+                expires_at=clock() + timedelta(days=30),
+            )
+        )
         session.add(FamilyContact(user_id=user_id, phone_number="+2349012345678"))
         session.commit()
     client_id = uuid4()
@@ -215,6 +242,10 @@ def test_checkin_records_tap_time_location_and_queues_one_notification(
         if stored_timestamp.tzinfo is None:
             stored_timestamp = stored_timestamp.replace(tzinfo=timezone.utc)
         assert stored_timestamp == datetime(2026, 7, 13, 8, 5, tzinfo=timezone.utc)
+        retention_due = checkin.location_retention_due_at
+        if retention_due.tzinfo is None:
+            retention_due = retention_due.replace(tzinfo=timezone.utc)
+        assert retention_due == clock() + timedelta(days=120)
         assert float(checkin.latitude) == 21.422487
         assert float(checkin.longitude) == 39.826206
         assert notification.check_in_id == checkin.id

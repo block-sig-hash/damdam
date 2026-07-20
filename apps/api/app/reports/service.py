@@ -128,20 +128,24 @@ class ProvisioningReportService:
         sos_counts: dict[UUID, int] = {}
         esim_statuses: dict[UUID, str] = {}
         if user_ids:
-            checkin_counts = dict(
-                session.exec(
+            checkin_counts = {
+                user_id: count
+                for user_id, count in session.exec(
                     select(CheckIn.user_id, func.count())
                     .where(col(CheckIn.user_id).in_(user_ids))
                     .group_by(col(CheckIn.user_id))
                 ).all()
-            )
-            sos_counts = dict(
-                session.exec(
+                if user_id is not None
+            }
+            sos_counts = {
+                user_id: count
+                for user_id, count in session.exec(
                     select(SOSAlert.user_id, func.count())
                     .where(col(SOSAlert.user_id).in_(user_ids))
                     .group_by(col(SOSAlert.user_id))
                 ).all()
-            )
+                if user_id is not None
+            }
             profiles = session.exec(
                 select(EsimProfile)
                 .join(Package, col(Package.id) == col(EsimProfile.package_id))

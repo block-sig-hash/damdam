@@ -1049,6 +1049,21 @@ paths:
                   type: boolean
                 type: object
                 title: Response Termii Delivery Report V1 Webhooks Otp Termii Post
+  /v1/me/account:
+    delete:
+      tags:
+      - pilgrim-profile
+      summary: Request Account Deletion
+      operationId: request_account_deletion_v1_me_account_delete
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDeletionResponse'
+      security:
+      - HTTPBearer: []
   /v1/me/device-token:
     put:
       tags:
@@ -1891,49 +1906,21 @@ paths:
       - HTTPBearer: []
 components:
   schemas:
-    DependencyChecks:
-      properties:
-        postgres:
-          type: string
-          enum:
-          - ok
-          - unavailable
-          title: Postgres
-        redis:
-          type: string
-          enum:
-          - ok
-          - unavailable
-          title: Redis
-      type: object
-      required:
-      - postgres
-      - redis
-      title: DependencyChecks
-    LivenessResponse:
+    AccountDeletionResponse:
       properties:
         status:
           type: string
-          const: alive
+          const: pending_deletion
           title: Status
-          default: alive
-      type: object
-      title: LivenessResponse
-    ReadinessResponse:
-      properties:
-        status:
+          default: pending_deletion
+        deletion_scheduled_for:
           type: string
-          enum:
-          - ready
-          - not_ready
-          title: Status
-        checks:
-          $ref: '#/components/schemas/DependencyChecks'
+          format: date-time
+          title: Deletion Scheduled For
       type: object
       required:
-      - status
-      - checks
-      title: ReadinessResponse
+      - deletion_scheduled_for
+      title: AccountDeletionResponse
     ActivationPreviewResponse:
       properties:
         valid:
@@ -2237,6 +2224,25 @@ components:
       - latitude
       - longitude
       title: CheckInResponse
+    DependencyChecks:
+      properties:
+        postgres:
+          type: string
+          enum:
+          - ok
+          - unavailable
+          title: Postgres
+        redis:
+          type: string
+          enum:
+          - ok
+          - unavailable
+          title: Redis
+      type: object
+      required:
+      - postgres
+      - redis
+      title: DependencyChecks
     DeviceCompatibilityCreate:
       properties:
         platform:
@@ -2724,6 +2730,15 @@ components:
       required:
       - alerts
       title: HtoSOSAlertsResponse
+    LivenessResponse:
+      properties:
+        status:
+          type: string
+          const: alive
+          title: Status
+          default: alive
+      type: object
+      title: LivenessResponse
     ManifestConfirmResponse:
       properties:
         status:
@@ -3310,6 +3325,21 @@ components:
       required:
       - fcm_token
       title: PushSubscriptionCreate
+    ReadinessResponse:
+      properties:
+        status:
+          type: string
+          enum:
+          - ready
+          - not_ready
+          title: Status
+        checks:
+          $ref: '#/components/schemas/DependencyChecks'
+      type: object
+      required:
+      - status
+      - checks
+      title: ReadinessResponse
     RefreshRequest:
       properties:
         refresh_token:

@@ -6,6 +6,7 @@ from typing import Any, Protocol
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
@@ -23,6 +24,7 @@ from app.notifications.service import (
     WhatsAppSender,
 )
 from app.otp.service import RedisClient
+from app.packages.models import Package
 from app.profile.models import FamilyContact
 
 logger = logging.getLogger(__name__)
@@ -101,6 +103,16 @@ class CheckInService:
         if not acquired and not same_retry:
             raise CheckInError("checkin_rate_limited")
 
+        latest_trip_expiry = session.exec(
+            select(func.max(Package.expires_at)).where(Package.user_id == user.id)
+        ).one()
+        event_time = payload.timestamp
+        if event_time.tzinfo is None:
+            event_time = event_time.replace(tzinfo=timezone.utc)
+        if latest_trip_expiry is not None and latest_trip_expiry.tzinfo is None:
+            latest_trip_expiry = latest_trip_expiry.replace(tzinfo=timezone.utc)
+        trip_end = max(event_time, latest_trip_expiry or event_time)
+
         checkin = CheckIn(
             user_id=user.id,
             client_generated_id=payload.client_generated_id,
@@ -116,6 +128,7 @@ class CheckInService:
                 else None
             ),
             received_at=self.clock(),
+            location_retention_due_at=trip_end + timedelta(days=90),
         )
         session.add(checkin)
         try:

@@ -99,7 +99,8 @@ DeviceCompatibilityLog
 | departure_date | DATE | NULLABLE | Drives the eSIM banner timing |
 | destination_country | VARCHAR(2) | DEFAULT 'SA' | ISO code; hardcoded SA for MVP |
 | platform | ENUM | NOT NULL | `ios` \| `android` — set at registration |
-| status | ENUM | DEFAULT 'active' | `active` \| `suspended` |
+| status | ENUM | DEFAULT 'active' | `active` \| `suspended` \| `pending_deletion` |
+| deletion_requested_at | TIMESTAMPTZ | NULLABLE | Set by `DELETE /me/account`; hard-delete eligibility begins 30 days later |
 | last_login_at | TIMESTAMPTZ | NULLABLE | |
 
 **Indexes:** `phone_number` (unique), `departure_date`
@@ -315,9 +316,10 @@ one, rather than hardcoding a single vendor's identifier field.
 | status | ENUM | NOT NULL | `pending` \| `success` \| `failed` |
 | webhook_payload | JSONB | NULLABLE | Raw processor payload (Paystack or Flutterwave), audit trail |
 | receipt_sent_at | TIMESTAMPTZ | NULLABLE | Set after all applicable receipt channels succeed; permits safe retry after a notification outage |
+| created_at | TIMESTAMPTZ | NOT NULL | Starts the 6-year retention window in `security.md` §10.3 |
 
 **Indexes:** `processor_reference` (unique, partial index `WHERE
-processor_reference IS NOT NULL`)
+processor_reference IS NOT NULL`), `created_at`
 
 ---
 
@@ -342,13 +344,31 @@ processor_reference IS NOT NULL`)
 | Field | Type | Constraints | Notes |
 |---|---|---|---|
 | id | UUID | PK | |
-| esim_profile_id | UUID | FK → esim_profiles | |
+| esim_profile_id | UUID | NOT NULL | Pseudonymous source identifier; deliberately not an FK so account erasure cannot cascade-delete retained usage |
 | polled_at | TIMESTAMPTZ | NOT NULL | |
 | data_used_gb | DECIMAL(6,2) | NOT NULL | Cumulative, from aggregator |
 | poll_success | BOOLEAN | NOT NULL | |
 
 **Indexes:** `esim_profile_id`, `polled_at` — subject to the 30-day
 raw / daily-summary retention policy, see security.md §10.3
+
+### `daily_usage_summaries`
+
+| Field | Type | Constraints | Notes |
+|---|---|---|---|
+| id | UUID | PK | |
+| esim_profile_id | UUID | NOT NULL | Pseudonymous source identifier; deliberately not an FK so account erasure cannot cascade-delete the aggregate |
+| summary_date | DATE | NOT NULL | UTC calendar date |
+| first_polled_at | TIMESTAMPTZ | NOT NULL | Timestamp of the first represented reading |
+| last_polled_at | TIMESTAMPTZ | NOT NULL | Timestamp of the last represented reading |
+| first_data_used_gb | DECIMAL(6,2) | NOT NULL | Earliest cumulative reading that day |
+| last_data_used_gb | DECIMAL(6,2) | NOT NULL | Latest cumulative reading that day |
+| successful_poll_count | INTEGER | NOT NULL | Successful raw polls represented |
+| failed_poll_count | INTEGER | NOT NULL | Failed raw polls represented |
+
+**Unique constraint:** (`esim_profile_id`, `summary_date`). Raw polls older
+than 30 days are merged into this row before deletion, preserving daily usage
+movement and reliability analytics without row-level timing granularity.
 
 ---
 
@@ -357,12 +377,13 @@ raw / daily-summary retention policy, see security.md §10.3
 | Field | Type | Constraints | Notes |
 |---|---|---|---|
 | id | UUID | PK | |
-| user_id | UUID | FK → users | |
+| user_id | UUID | FK → users, NULLABLE, ON DELETE SET NULL | Identity link removed on account erasure; aggregate row retained |
 | client_generated_id | UUID | UNIQUE, NOT NULL | Set on-device; offline-retry idempotency key |
 | timestamp | TIMESTAMPTZ | NOT NULL | Client-side event time |
 | latitude | DECIMAL(9,6) | NULLABLE | |
 | longitude | DECIMAL(9,6) | NULLABLE | |
 | received_at | TIMESTAMPTZ | NOT NULL | Server receipt time |
+| location_retention_due_at | TIMESTAMPTZ | NOT NULL | Later of the event time or latest known package expiry, plus 90 days; drives location nulling without a heuristic join |
 
 **Indexes:** `user_id`, `client_generated_id` (unique)
 
@@ -401,7 +422,7 @@ WhatsApp-delivery checkpoint and SMS-fallback decision record for AC-15.10.
 | Field | Type | Constraints | Notes |
 |---|---|---|---|
 | id | UUID | PK | |
-| user_id | UUID | FK → users | |
+| user_id | UUID | FK → users, NULLABLE, ON DELETE SET NULL | Identity link removed on account erasure; alert remains until its 3-year mark |
 | client_generated_id | UUID | UNIQUE, NOT NULL | |
 | timestamp | TIMESTAMPTZ | NOT NULL | |
 | latitude | DECIMAL(9,6) | NULLABLE | |
@@ -446,7 +467,7 @@ the other four (§6.27).
 | Field | Type | Constraints | Notes |
 |---|---|---|---|
 | id | UUID | PK | |
-| user_id | UUID | FK → users | |
+| user_id | UUID | FK → users, NULLABLE, ON DELETE SET NULL | Identity link removed on account erasure; log remains until its 12-month mark |
 | telnyx_call_leg_id | VARCHAR(64) | UNIQUE, NOT NULL | Stable Telnyx call-leg correlation ID; `call_control_id` remains the command token and is not persisted as identity |
 | direction | ENUM | NOT NULL | `outbound` only for MVP |
 | call_type | ENUM | NOT NULL | `pstn` \| `app_to_app` |
@@ -1424,6 +1445,7 @@ audit_log
   reference       VARCHAR(255) NULL
   outcome         VARCHAR(64) NOT NULL, indexed
   details         VARCHAR(500) NULL
+  idempotency_key VARCHAR(255) NULL, unique, indexed
 ```
 
 `event_type` and `outcome` are deliberately plain `VARCHAR`, not
@@ -1437,6 +1459,9 @@ survives account deletion instead of disappearing with it. `reference` is
 deliberately untyped/unvalidated — a payment `processor_reference`, an
 activation code, or a package id, whichever is relevant to the event — this
 is a log, not a foreign key to any one of those tables.
+`idempotency_key` is optional for existing US-25 writers; retention tasks set
+it deterministically from the action and target row so rerunning a sweep cannot
+create a second audit record for the same mutation.
 
 Current write sites (`app/audit/service.py`, `AuditLogService.record()`,
 which never commits on its own — each caller commits it as part of its own
@@ -1607,3 +1632,46 @@ emergency essentials to be bundled offline, and already names onboarding a real
 second destination as the trigger for revisiting country-keyed content. That
 trigger has not occurred, so `apps/mobile/src/content/emergencyEssentials.ts`
 is intentionally untouched.
+
+---
+
+## 6.37 Amendment — Automated Data Retention State and Audit Idempotency
+
+The retention schedule in `security.md` §10.3 is now materialized by independent
+scheduled tasks. The schema gains only the state those tasks require:
+
+- `users.status` adds `pending_deletion`, and `users.deletion_requested_at`
+  records the start of the 30-day grace period initiated by
+  `DELETE /me/account`.
+- `usage_polls`, previously specified but not migrated, is materialized along
+  with `daily_usage_summaries`. The summary records the first and last
+  cumulative usage reading plus successful/failed poll counts for each UTC day.
+  Their `esim_profile_id` is retained as a pseudonymous source identifier but
+  deliberately has no foreign key, so deleting account-owned package/eSIM rows
+  cannot prematurely remove raw or summarized analytics.
+- `check_ins.location_retention_due_at` is persisted when the check-in is
+  accepted as the later of its event time or the latest known package expiry,
+  plus 90 days. Existing rows are backfilled the same way. This avoids relying
+  on a package-window timestamp join that offline delivery or client clock skew
+  could fail to match forever.
+- `transactions.created_at` supplies the start of the six-year financial
+  retention window for both existing and future records.
+- `audit_log.idempotency_key` is nullable and unique. Retention actions use a
+  deterministic action-and-row key, preventing duplicate audit entries if a
+  sweep is retried while leaving all pre-existing US-25 audit behavior
+  unchanged.
+
+All retention sweeps share a PostgreSQL transaction-level advisory lock. The
+jobs remain distinct and independently callable, but overlapping Beat/manual
+runs cannot split an aggregation group, race a cascade, or duplicate a
+destructive action.
+
+Account erasure must not silently shorten separately mandated retention.
+Accordingly, `check_ins.user_id`, `sos_alerts.user_id`, and `call_logs.user_id`
+become nullable with `ON DELETE SET NULL`: account hard deletion removes their
+identity link, while their own 90-day-location, three-year, and 12-month tasks
+continue to govern the retained rows. `transactions` already survive package
+deletion through their nullable `package_id`; the new six-year task is their
+only age-based deletion path. `device_compatibility_log` already uses the same
+nullable `ON DELETE SET NULL` relationship required by its 90-day PII-strip
+rule.

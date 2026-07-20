@@ -17,6 +17,7 @@ class AuditEventType(str, Enum):
     ACTIVATION_REDEMPTION = "activation_redemption"
     PACKAGE_PROVISIONING = "package_provisioning"
     ADMIN_ACTION = "admin_action"
+    DATA_RETENTION = "data_retention"
 
 
 class AuditOutcome(str, Enum):
@@ -26,6 +27,16 @@ class AuditOutcome(str, Enum):
     DUPLICATE_ACTIVATION_ATTEMPTED = "duplicate_activation_attempted"
     PACKAGE_CHAINED_ONTO_ACTIVE_WINDOW = "package_chained_onto_active_window"
     PACKAGE_CANCELLED_BY_ADMIN = "package_cancelled_by_admin"
+    CHECKIN_LOCATION_NULLED = "checkin_location_nulled"
+    SOS_ALERT_DELETED = "sos_alert_deleted"
+    USAGE_POLL_COLLAPSED = "usage_poll_collapsed"
+    CALL_LOG_DELETED = "call_log_deleted"
+    ACCOUNT_SOFT_DELETED = "account_soft_deleted"
+    ACCOUNT_HARD_DELETED = "account_hard_deleted"
+    ACCOUNT_CHECKIN_LOCATION_ERASED = "account_checkin_location_erased"
+    DEVICE_USER_LINK_STRIPPED = "device_user_link_stripped"
+    DEVICE_LOG_DELETED = "device_log_deleted"
+    TRANSACTION_DELETED = "transaction_deleted"
 
 
 class AuditLog(SQLModel, table=True):
@@ -58,4 +69,8 @@ class AuditLog(SQLModel, table=True):
     outcome: str = Field(sa_column=Column(String(64), nullable=False, index=True))
     details: str | None = Field(
         default=None, sa_column=Column(String(500), nullable=True)
+    )
+    idempotency_key: str | None = Field(
+        default=None,
+        sa_column=Column(String(255), nullable=True, unique=True, index=True),
     )

@@ -272,7 +272,7 @@ season is worth doing, not just a generic written plan.
 - [ ] All processor DPAs in §10.7 signed/accepted
 - [ ] Mandatory NDPC registration/compliance filing completed
 - [ ] Incident response plan reviewed and tabletop-tested
-- [ ] Data retention automation (the deletion jobs implied by
+- [x] Data retention automation (the deletion jobs implied by
       §10.3) built and tested, not just documented
 - [ ] Apple App Store and Google Play privacy label/data safety
       disclosures completed accurately (both platforms require
@@ -294,3 +294,30 @@ remain independent obligations, and changes §10.8's future tooling requirement
 to detect incidents that are *likely to lead to* unauthorized access, loss, or
 disclosure. No retention duration in §10.3 is amended; those periods already
 align with the storage-limitation principle.
+
+---
+
+## 10.12 Amendment — Data Retention Automation Implemented
+
+The §10.3 schedule is implemented as independent daily Celery Beat tasks for
+check-in location nulling, SOS deletion, usage-poll aggregation, call-log
+deletion, post-grace-period account deletion, device-link stripping, device-log
+deletion, and transaction deletion. Each changed top-level row writes an atomic
+`data_retention` audit entry with a deterministic idempotency key; an immediate
+rerun neither changes the row again nor duplicates its audit record. A shared
+PostgreSQL advisory lock serializes overlapping retention sweeps.
+
+Account deletion begins with `DELETE /me/account`, which revokes refresh tokens
+and starts the 30-day soft-delete grace period. Hard deletion removes the user
+link but does not prematurely delete SOS alerts, check-in aggregate rows, call
+logs, device compatibility analytics, or payment transactions; their own
+retention rules remain authoritative. Raw usage polls are collapsed into one
+UTC daily summary per pseudonymous eSIM-profile identifier before deletion;
+neither raw nor summarized usage cascades with account-owned eSIM rows. The
+device log uses two separate actions: remove `user_id` at 90 days and delete
+the row at 24 months.
+
+No WhatsApp retention task exists because Meta, not DamDam, governs those
+provider-side message logs. This amendment implements the existing periods
+exactly; it does not resolve or alter the founder/legal verification action for
+the 3-year SOS and 6-year financial defaults.

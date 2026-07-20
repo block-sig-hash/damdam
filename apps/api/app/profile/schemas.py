@@ -1,3 +1,5 @@
+from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -45,6 +47,11 @@ class DeviceTokenUpsert(BaseModel):
 
 class DeviceTokenResponse(BaseModel):
     registered: bool = True
+
+
+class AccountDeletionResponse(BaseModel):
+    status: Literal["pending_deletion"] = "pending_deletion"
+    deletion_scheduled_for: datetime
 
 
 class EmergencyContactResponse(BaseModel):

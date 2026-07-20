@@ -119,6 +119,15 @@ PATCH  /me
   Body: { first_name?, last_name?, email?, departure_date? }
   200: { ...updated user }
 
+DELETE /me/account
+  Auth required
+  202: { status: "pending_deletion", deletion_scheduled_for: datetime }
+  Starts the 30-day soft-delete grace period from security.md §10.3,
+  immediately revokes refresh tokens, and invalidates the account for normal
+  authentication. A scheduled retention task hard-deletes the account at the
+  deadline. Reversal during the grace period is an authenticated support/admin
+  operation for MVP; no public restore endpoint is introduced here.
+
 PUT    /me/device-token
   Auth required
   Body: { fcm_token: string, platform: "ios" | "android" }

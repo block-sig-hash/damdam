@@ -75,6 +75,7 @@ from app.profile.family_contacts import FamilyContactError, FamilyContactService
 from app.profile.routes import router as profile_router
 from app.reports.routes import router as reports_router
 from app.reports.service import ProvisioningReportService
+from app.retention.service import RetentionService
 from app.sos.notifications import (
     PushSubscriptionManager,
     PushSubscriptionService,
@@ -155,6 +156,7 @@ def create_app(
         clock,
     )
     api.state.pin_service = PINService(clock)
+    api.state.retention_service = RetentionService(clock)
     notification_service = build_notification_service(
         resolved_settings, email_sender, whatsapp_sender
     )

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid4
@@ -26,9 +26,10 @@ class CheckIn(SQLModel, table=True):
     __tablename__ = "check_ins"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    user_id: UUID = Field(
+    user_id: UUID | None = Field(
+        default=None,
         sa_column=Column(
-            ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+            ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
         )
     )
     client_generated_id: UUID = Field(
@@ -46,6 +47,10 @@ class CheckIn(SQLModel, table=True):
     received_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    location_retention_due_at: datetime = Field(
+        default_factory=lambda: utc_now() + timedelta(days=90),
+        sa_column=Column(DateTime(timezone=True), nullable=False, index=True),
     )
 
 
