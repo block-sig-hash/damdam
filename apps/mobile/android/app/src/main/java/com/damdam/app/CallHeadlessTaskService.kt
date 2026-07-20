@@ -9,7 +9,17 @@ import com.facebook.react.HeadlessJsTaskService
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.jstasks.HeadlessJsTaskConfig
 
-private const val CHANNEL_ID = "com.damdam.app.calls"
+// Deliberately distinct from the "com.damdam.app.calls" channel id passed to
+// RNCallKeep.setup()'s android.foregroundService.channelId (callKit.ts's
+// ensureAndroidCallingReady): Android NotificationChannel importance is
+// immutable after first creation, and react-native-callkeep's own
+// VoiceConnectionService.startForegroundService() creates that channel at
+// IMPORTANCE_NONE (confirmed by reading its native source) -- if that ran
+// first (e.g. the user makes an outbound call before ever receiving an
+// inbound one), a shared channel id here would permanently pin this
+// service's own notification to IMPORTANCE_NONE, silently making every
+// future incoming-call wake notification invisible with no error signal.
+private const val CHANNEL_ID = "com.damdam.app.calls.wake"
 private const val FOREGROUND_NOTIFICATION_ID = 8721
 private const val TASK_KEY = "DamDamIncomingCall"
 private const val TASK_TIMEOUT_MS = 30000L
@@ -54,8 +64,8 @@ class CallHeadlessTaskService : HeadlessJsTaskService() {
     startForeground(FOREGROUND_NOTIFICATION_ID, notification)
   }
 
-  override fun getTaskConfig(intent: Intent): HeadlessJsTaskConfig? {
-    val extras = intent.extras ?: return null
+  override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig? {
+    val extras = intent?.extras ?: return null
     return HeadlessJsTaskConfig(
       TASK_KEY,
       Arguments.fromBundle(extras),
