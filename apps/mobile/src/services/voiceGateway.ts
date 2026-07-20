@@ -20,12 +20,15 @@ type TelnyxClient = {
   loginWithToken(config: Record<string, unknown>): Promise<void>;
   newCall(destination: string, callerName?: string): Promise<TelnyxCall>;
   connect(): Promise<void>;
-  /** iOS CallKit/PushKit only -- verified directly against
-   * @telnyx/react-native-voice-sdk's client.ts source (frontend-mobile.md
-   * §8.3): tells the SDK which CallKit UUID a woken-from-push call
-   * corresponds to, and hands it the raw push payload so the actual SIP
-   * invite (arriving once this client's socket connects) gets linked to
-   * that UUID automatically. */
+  /** Originally iOS CallKit/PushKit only (frontend-mobile.md §8.3); now
+   * also used on Android via callKit.ts's handleAndroidIncomingCallPayload
+   * -- both platforms share the same handleIncomingPush code path. Verified
+   * directly against @telnyx/react-native-voice-sdk's client.ts source:
+   * these are plain TS methods with no platform gating, safe to call on
+   * either platform. Tells the SDK which CallKit/ConnectionService UUID a
+   * woken-from-push call corresponds to, and hands it the raw push payload
+   * so the actual SIP invite (arriving once this client's socket connects)
+   * gets linked to that UUID automatically. */
   setPushNotificationCallKitUUID(uuid: string | null): void;
   processVoIPNotification(payload: Record<string, unknown>): void;
   /** Queues an answer/end action for the call the push notification
@@ -164,17 +167,36 @@ export const telnyxVoiceGateway: VoiceGateway = {
  * backend behavior used for a purpose the endpoint's own doc comment
  * doesn't quite describe.
  */
+export interface IncomingCallClient {
+  setPushNotificationCallKitUUID(uuid: string | null): void;
+  processVoIPNotification(payload: Record<string, unknown>): void;
+  queueAnswerFromCallKit(customHeaders?: Record<string, string>): void;
+  queueEndFromCallKit(): void;
+  /** Registers an additional listener for when the SIP invite this login
+   * was opened for actually arrives, already wrapped as a VoiceCallSession
+   * -- used to re-attach a caller's onIncomingCallReady handler after the
+   * fact (Android: a Headless JS Task may have logged in before
+   * AuthenticatedApp ever mounted, see callKit.ts). Multiple listeners are
+   * all invoked, not replaced -- the underlying SDK client is an
+   * EventEmitter, confirmed against @telnyx/react-native-voice-sdk's
+   * client.ts source. */
+  onIncomingCall(handler: (session: VoiceCallSession) => void): void;
+}
+
 export async function loginTelnyxClientForIncomingCalls(
   accessToken: string,
   callerNumberHint: string,
   pushNotificationDeviceToken: string | undefined,
   onIncomingCall: (session: VoiceCallSession) => void,
-): Promise<TelnyxClient> {
+): Promise<IncomingCallClient> {
   const credential = await getVoiceToken(accessToken, callerNumberHint);
   const { telnyx, client } = createTelnyxClient(pushNotificationDeviceToken);
-  client.on('telnyx.call.incoming', (call) => {
-    onIncomingCall(new TelnyxCallSession(call, credential.call_type, callerNumberHint));
-  });
+  const subscribeIncoming = (handler: (session: VoiceCallSession) => void): void => {
+    client.on('telnyx.call.incoming', (call) => {
+      handler(new TelnyxCallSession(call, credential.call_type, callerNumberHint));
+    });
+  };
+  subscribeIncoming(onIncomingCall);
   await client.loginWithToken(
     telnyx.createTokenConfig(credential.token, {
       enableCallReports: true,
@@ -182,5 +204,11 @@ export async function loginTelnyxClientForIncomingCalls(
       useTrickleIce: true,
     }),
   );
-  return client;
+  return {
+    setPushNotificationCallKitUUID: (uuid) => client.setPushNotificationCallKitUUID(uuid),
+    processVoIPNotification: (payload) => client.processVoIPNotification(payload),
+    queueAnswerFromCallKit: (headers) => client.queueAnswerFromCallKit(headers),
+    queueEndFromCallKit: () => client.queueEndFromCallKit(),
+    onIncomingCall: subscribeIncoming,
+  };
 }
