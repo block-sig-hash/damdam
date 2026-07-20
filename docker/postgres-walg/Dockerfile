@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     && test -s ./main/pg/wal-g
 
 FROM postgres:16-alpine
-RUN apk add --no-cache ca-certificates coreutils
+RUN apk add --no-cache ca-certificates coreutils curl
 COPY --from=walg-builder /src/main/pg/wal-g /usr/local/bin/wal-g
 COPY docker/postgres-walg/backup-loop.sh /usr/local/bin/walg-backup-loop
 COPY docker/postgres-walg/restore.sh /usr/local/bin/walg-restore

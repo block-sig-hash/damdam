@@ -117,6 +117,9 @@ services:
       PGDATABASE: ${POSTGRES_DB:-damdam}
       WALG_BACKUP_INTERVAL_SECONDS: ${WALG_BACKUP_INTERVAL_SECONDS:-86400}
       WALG_RETENTION_DAYS: "30"
+      # Optional Uptime Kuma push-monitor URL (infrastructure.md §11.5) --
+      # unset in local/dev/test, where no monitoring stack exists.
+      KUMA_PUSH_URL: ${KUMA_PUSH_URL:-}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     depends_on:
