@@ -2,6 +2,7 @@ import * as Keychain from 'react-native-keychain';
 import { AppState } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { refreshSession } from '../api/authClient';
+import { getMyPackages } from '../api/packagesClient';
 import { SESSION_INACTIVITY_LIMIT_MS } from '../services/sessionStore';
 import { shouldRequirePinAfterBackground, useSessionGate } from './useSessionGate';
 
@@ -26,6 +27,11 @@ jest.mock('../api/authClient', () => ({
   refreshSession: jest.fn(),
 }));
 
+jest.mock('../api/packagesClient', () => ({
+  ...jest.requireActual('../api/packagesClient'),
+  getMyPackages: jest.fn(),
+}));
+
 const mockSet = Keychain.setGenericPassword as jest.MockedFunction<
   typeof Keychain.setGenericPassword
 >;
@@ -37,6 +43,7 @@ const mockReset = Keychain.resetGenericPassword as jest.MockedFunction<
 >;
 const mockAddEventListener = AppState.addEventListener as jest.Mock;
 const mockRefreshSession = refreshSession as jest.MockedFunction<typeof refreshSession>;
+const mockGetMyPackages = getMyPackages as jest.MockedFunction<typeof getMyPackages>;
 
 function installStatefulKeychainDouble() {
   let stored: string | null = null;
@@ -81,6 +88,8 @@ beforeEach(() => {
   mockAddEventListener.mockReset();
   mockAddEventListener.mockReturnValue({ remove: jest.fn() });
   mockRefreshSession.mockReset();
+  mockGetMyPackages.mockReset();
+  mockGetMyPackages.mockResolvedValue([]);
   installStatefulKeychainDouble();
 });
 
@@ -426,6 +435,22 @@ describe('onPinUnlocked (AC-23.2 refresh-on-resume, AC-23.4 recovery)', () => {
     expect(result.current.session?.accessToken).toBe('access-1');
   });
 
+  const RECOVERED_AUTH_RESPONSE = {
+    access_token: 'recovered-access',
+    refresh_token: 'recovered-refresh',
+    is_new_user: false,
+    user: {
+      id: 'u1',
+      phone_number: '08012345678',
+      first_name: 'A',
+      last_name: 'B',
+      email: null,
+      verified_cli: true,
+      platform: 'android',
+      status: 'active',
+    },
+  };
+
   it('persists fresh tokens from an OTP-recovery unlock (AC-23.4)', async () => {
     const { result } = await renderHook(() => useSessionGate());
     await waitFor(() => expect(result.current.phase).toBe('onboarding'));
@@ -434,27 +459,48 @@ describe('onPinUnlocked (AC-23.2 refresh-on-resume, AC-23.4 recovery)', () => {
     });
 
     await act(async () => {
-      await result.current.onPinUnlocked({
-        access_token: 'recovered-access',
-        refresh_token: 'recovered-refresh',
-        is_new_user: false,
-        user: {
-          id: 'u1',
-          phone_number: '08012345678',
-          first_name: 'A',
-          last_name: 'B',
-          email: null,
-          verified_cli: true,
-          platform: 'android',
-          status: 'active',
-        },
-      });
+      await result.current.onPinUnlocked(RECOVERED_AUTH_RESPONSE);
     });
 
     expect(result.current.phase).toBe('authenticated');
     expect(result.current.session?.accessToken).toBe('recovered-access');
     expect(result.current.session?.refreshToken).toBe('recovered-refresh');
-    // packageId carries forward from the previously known session.
+  });
+
+  it('re-fetches the current active package on OTP-recovery rather than trusting a stale one', async () => {
+    mockGetMyPackages.mockResolvedValue([
+      { id: 'old-package', status: 'superseded', expires_at: '2026-06-01T00:00:00Z' },
+      { id: 'new-active-package', status: 'active', expires_at: '2026-09-01T00:00:00Z' },
+    ]);
+    const { result } = await renderHook(() => useSessionGate());
+    await waitFor(() => expect(result.current.phase).toBe('onboarding'));
+    await act(async () => {
+      // BASE_SESSION's packageId ('package-1') is what a naive carry-forward would use.
+      await result.current.onOnboarded(BASE_SESSION);
+    });
+
+    await act(async () => {
+      await result.current.onPinUnlocked(RECOVERED_AUTH_RESPONSE);
+    });
+
+    expect(mockGetMyPackages).toHaveBeenCalledWith('recovered-access');
+    expect(result.current.session?.packageId).toBe('new-active-package');
+  });
+
+  it('falls back to the previously known packageId if the re-fetch fails, rather than blocking the unlock', async () => {
+    mockGetMyPackages.mockRejectedValue(new Error('offline'));
+    const { result } = await renderHook(() => useSessionGate());
+    await waitFor(() => expect(result.current.phase).toBe('onboarding'));
+    await act(async () => {
+      await result.current.onOnboarded(BASE_SESSION);
+    });
+
+    await act(async () => {
+      await result.current.onPinUnlocked(RECOVERED_AUTH_RESPONSE);
+    });
+
+    expect(result.current.phase).toBe('authenticated');
+    expect(result.current.session?.accessToken).toBe('recovered-access');
     expect(result.current.session?.packageId).toBe('package-1');
   });
 });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { AuthResponse, OtpApiError, refreshSession } from '../api/authClient';
+import { findActivePackageId, getMyPackages } from '../api/packagesClient';
 import {
   BACKGROUND_PIN_THRESHOLD_MS,
   clearSession,
@@ -142,12 +143,23 @@ export function useSessionGate(): UseSessionGateResult {
   const onPinUnlocked = useCallback(
     async (recovered?: AuthResponse) => {
       if (recovered) {
+        // Re-fetch the account's current active package rather than
+        // carrying forward whatever was previously persisted -- OTP
+        // recovery can span enough time that the active package has
+        // since changed (a new purchase, an expiry). Best-effort: a
+        // failure here must not block the recovery unlock itself, so
+        // it falls back to the previously known packageId rather than
+        // stranding the user at the PIN gate over a balance-display
+        // detail.
+        const packageId = await getMyPackages(recovered.access_token)
+          .then(findActivePackageId)
+          .catch(() => session?.packageId);
         const next: ActiveSession = {
           accessToken: recovered.access_token,
           refreshToken: recovered.refresh_token,
           phoneNumber: recovered.user.phone_number,
           departureDate: recovered.user.departure_date ?? null,
-          packageId: session?.packageId,
+          packageId,
         };
         await saveSession(next);
         setSession(next);
