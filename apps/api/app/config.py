@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     jwt_access_ttl_minutes: int = 15
     jwt_refresh_ttl_days: int = 30
 
+    posthog_api_key: str = ""
+    posthog_host: str = "https://us.i.posthog.com"
+
     otp_provider_primary: Literal["termii", "twilio"] = "termii"
     otp_provider_secondary: Literal["termii", "twilio"] = "twilio"
     otp_failover_threshold_seconds: int = 180

@@ -7,6 +7,15 @@
 export const API_BASE_URL: string = process.env.API_BASE_URL ?? 'http://localhost:8000/v1';
 
 /**
+ * PostHog's project API key is safe to embed in a mobile build, but must still
+ * be supplied per environment rather than committed. An empty key disables
+ * monitoring for local/test builds.
+ */
+export const POSTHOG_API_KEY: string = process.env.POSTHOG_API_KEY ?? '';
+export const POSTHOG_HOST: string =
+  process.env.POSTHOG_HOST ?? 'https://us.i.posthog.com';
+
+/**
  * DamDam's own support WhatsApp number, E.164 without the leading
  * "+". This constant *is* the source of truth (US-12 AC-12.3 bundles
  * it client-side rather than serving it from an endpoint or table —
