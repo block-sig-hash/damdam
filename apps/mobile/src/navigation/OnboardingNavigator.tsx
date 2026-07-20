@@ -17,6 +17,8 @@ type OnboardingStep =
   | {
       name: 'activated';
       accessToken: string;
+      refreshToken: string;
+      phoneNumber: string;
       isNewUser: boolean;
       departureDate: string | null;
       packageId: string;
@@ -25,6 +27,11 @@ type OnboardingStep =
 
 export interface AuthenticatedMobileSession {
   accessToken: string;
+  /** AC-23.1/AC-23.2: needed by the session-persistence layer (useSessionGate)
+   * to exchange for a fresh access token without forcing re-authentication. */
+  refreshToken: string;
+  /** AC-23.3: PinUnlockScreen's "forgot your PIN" OTP-recovery path needs this. */
+  phoneNumber: string;
   departureDate: string | null;
   packageId?: string;
 }
@@ -136,6 +143,8 @@ export function OnboardingNavigator({
               setStep({
                 name: 'activated',
                 accessToken: step.result.access_token,
+                refreshToken: step.result.refresh_token,
+                phoneNumber: step.result.user.phone_number,
                 isNewUser: step.result.is_new_user,
                 departureDate: step.result.user.departure_date ?? null,
                 packageId: redemption.package_id,
@@ -149,6 +158,8 @@ export function OnboardingNavigator({
           <AuthenticationHandoff
             session={{
               accessToken: step.result.access_token,
+              refreshToken: step.result.refresh_token,
+              phoneNumber: step.result.user.phone_number,
               departureDate: step.result.user.departure_date ?? null,
             }}
             onAuthenticated={onAuthenticated}
@@ -163,6 +174,8 @@ export function OnboardingNavigator({
             if (onAuthenticated) {
               onAuthenticated({
                 accessToken: step.result.access_token,
+                refreshToken: step.result.refresh_token,
+                phoneNumber: step.result.user.phone_number,
                 departureDate: step.result.user.departure_date ?? null,
               });
             } else {
@@ -181,6 +194,8 @@ export function OnboardingNavigator({
           <AuthenticationHandoff
             session={{
               accessToken: step.accessToken,
+              refreshToken: step.refreshToken,
+              phoneNumber: step.phoneNumber,
               departureDate: step.departureDate,
               packageId: step.packageId,
             }}
@@ -196,6 +211,8 @@ export function OnboardingNavigator({
             if (onAuthenticated) {
               onAuthenticated({
                 accessToken: step.accessToken,
+                refreshToken: step.refreshToken,
+                phoneNumber: step.phoneNumber,
                 departureDate: step.departureDate,
                 packageId: step.packageId,
               });

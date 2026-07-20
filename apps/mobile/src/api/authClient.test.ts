@@ -1,5 +1,6 @@
 import {
   OtpApiError,
+  refreshSession,
   requestOtp,
   requestPinRecovery,
   verifyOtp,
@@ -186,5 +187,34 @@ describe('verifyPinRecovery', () => {
 
     expect(error.code).toBe('locked');
     expect(error.retryAfter).toBe(60);
+  });
+});
+
+describe('refreshSession', () => {
+  it('posts the refresh token and returns a fresh access/refresh pair (AC-23.2)', async () => {
+    mockFetchOnce(200, { access_token: 'new-access', refresh_token: 'new-refresh' });
+
+    const result = await refreshSession('old-refresh');
+
+    expect(result).toEqual({ access_token: 'new-access', refresh_token: 'new-refresh' });
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/auth/token/refresh'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: 'old-refresh' }),
+      }),
+    );
+  });
+
+  it('maps a 401 to an invalid_refresh_token error the caller can distinguish from a transient failure', async () => {
+    mockFetchOnce(401, {
+      error: 'invalid_refresh_token',
+      message: 'Refresh token is invalid or has been revoked.',
+    });
+
+    const error = await refreshSession('stale-refresh').catch((err) => err);
+
+    expect(error).toBeInstanceOf(OtpApiError);
+    expect(error.code).toBe('invalid_refresh_token');
   });
 });
