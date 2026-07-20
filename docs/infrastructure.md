@@ -412,15 +412,65 @@ committed MinIO credentials are deliberately fake and local-only.
 
 **Incident restore runbook (production):**
 
-1. Record the desired recovery timestamp in UTC and stop all traffic/writers:
+**Volume naming is guaranteed, not assumed:** every command below that
+names `damdam_postgres_data` relies on the top-level `name: damdam` key in
+`docker-compose.yml` (present since the deploy pipeline's introduction),
+which pins the Compose project name for every invocation of this file
+regardless of the working directory's basename. Production and staging both
+happen to deploy from a directory literally named `damdam` (`/opt/damdam`,
+per `deploy.yml`/`ci.yml`'s `cd /opt/damdam`), so the two would agree even
+without this key — but the `name:` key is what makes that agreement a
+guarantee instead of a coincidence one directory rename away from breaking.
+If a future change ever restructures the deploy layout, confirm the actual
+volume name first with `docker volume ls | grep postgres_data` rather than
+trusting this document blindly.
+
+1. **Determine the recovery target and stop traffic.** This is the single
+   highest-consequence decision in this procedure — recovering too early
+   silently discards legitimate pilgrim data (check-ins, SOS events,
+   payments) that were committed after the target; recovering too late may
+   restore the corruption or incident itself. Do not guess; triangulate from
+   at least two independent signals before committing to a timestamp:
+   - **Application error signal:** check Sentry (§11.5) for the first
+     occurrence of whatever error/anomaly triggered this incident — its
+     first-seen timestamp is a strong upper bound on "last known good."
+   - **Uptime/availability signal:** cross-reference Uptime Robot's (§11.5)
+     alert history for when `/health` first started failing or degrading, if
+     the incident correlates with an outage rather than silent corruption.
+   - **WAL archive bound:** recovery cannot go past the last successfully
+     archived segment. Confirm what's actually available and gap-free with
+     `docker compose --env-file .env.production run --rm --no-deps walg wal-g wal-verify integrity timeline --json`
+     before committing to a target near the current time — this surfaces
+     archive gaps or timeline mismatches that `backup-list` alone won't
+     show. A clean result looks like
+     `{"integrity":{"status":"OK",...},"timeline":{"status":"OK",...}}`;
+     anything else means the WAL chain has a hole before it, and the
+     recovery target must be chosen to land before that hole, not after it.
+   - If the incident's actual start time is still ambiguous after checking
+     the above, prefer the earlier candidate timestamp: a small amount of
+     legitimate lost data is recoverable from the affected pilgrim/HTO
+     directly if needed; recovering into the incident is not.
+
+   Record the chosen timestamp in UTC, then stop all traffic/writers:
    `docker compose --env-file .env.production stop tunnel api worker beat walg postgres`.
-   Preserve/snapshot the damaged `postgres_data` volume before changing it;
-   never destroy the only copy during diagnosis.
+
+   **Preserve the damaged volume before changing anything** — never destroy
+   the only copy during diagnosis. This copies the live damaged volume into a
+   separate, independently named Docker volume that nothing else references:
+   ```
+   snapshot_ts="$(date -u +%Y%m%dT%H%M%SZ)"
+   docker volume create "damdam_postgres_data_incident_${snapshot_ts}"
+   docker run --rm \
+     -v damdam_postgres_data:/from:ro \
+     -v "damdam_postgres_data_incident_${snapshot_ts}:/to" \
+     alpine cp -a /from/. /to/
+   ```
+   Confirm the copy actually has content (`docker run --rm -v "damdam_postgres_data_incident_${snapshot_ts}:/d" alpine ls /d` should show `base`, `pg_wal`, etc.) before proceeding — an empty snapshot is worse than no snapshot, because it creates false confidence that a rollback path exists.
 2. Confirm `.env.production` contains the dedicated WAL-G R2 values and that
    the target is within the 30-day retention window. Inspect available backups
    with `docker compose --env-file .env.production run --rm --no-deps walg wal-g backup-list`.
-3. After the damaged volume has been preserved and the incident commander has
-   approved replacement, run
+3. After the damaged volume has been preserved and confirmed non-empty, and
+   the incident commander has approved replacement, run
    `docker compose --env-file .env.production rm -f postgres walg`, then
    `docker volume rm damdam_postgres_data` and
    `docker volume create damdam_postgres_data`. These commands replace only
