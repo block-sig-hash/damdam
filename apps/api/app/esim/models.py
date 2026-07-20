@@ -1,8 +1,20 @@
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlmodel import Field, SQLModel
 
@@ -128,6 +140,49 @@ class EsimProfile(SQLModel, table=True):
     activated_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+
+
+class UsagePoll(SQLModel, table=True):
+    __tablename__ = "usage_polls"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    esim_profile_id: UUID = Field(sa_column=Column(Uuid, nullable=False, index=True))
+    polled_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False, index=True)
+    )
+    data_used_gb: Decimal = Field(
+        sa_column=Column(Numeric(6, 2), nullable=False)
+    )
+    poll_success: bool = Field(sa_column=Column(Boolean(), nullable=False))
+
+
+class DailyUsageSummary(SQLModel, table=True):
+    __tablename__ = "daily_usage_summaries"
+    __table_args__ = (
+        UniqueConstraint(
+            "esim_profile_id",
+            "summary_date",
+            name="uq_daily_usage_summary_profile_date",
+        ),
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    esim_profile_id: UUID = Field(sa_column=Column(Uuid, nullable=False, index=True))
+    summary_date: date = Field(sa_column=Column(Date(), nullable=False, index=True))
+    first_polled_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    last_polled_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    first_data_used_gb: Decimal = Field(
+        sa_column=Column(Numeric(6, 2), nullable=False)
+    )
+    last_data_used_gb: Decimal = Field(
+        sa_column=Column(Numeric(6, 2), nullable=False)
+    )
+    successful_poll_count: int = Field(sa_column=Column(Integer(), nullable=False))
+    failed_poll_count: int = Field(sa_column=Column(Integer(), nullable=False))
 
 
 class EsimIssuanceJob(SQLModel, table=True):

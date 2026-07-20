@@ -355,17 +355,21 @@ class HtoPilgrimService:
                 select(CheckIn).where(col(CheckIn.user_id).in_(user_ids))
             ).all()
             for checkin in checkins:
+                if checkin.user_id is None:
+                    continue
                 current = last_checkins.get(checkin.user_id)
                 if current is None or checkin.timestamp > current:
                     last_checkins[checkin.user_id] = checkin.timestamp
-            active_sos_user_ids = set(
-                session.exec(
+            active_sos_user_ids = {
+                user_id
+                for user_id in session.exec(
                     select(SOSAlert.user_id).where(
                         col(SOSAlert.user_id).in_(user_ids),
                         SOSAlert.status == SOSStatus.ACTIVE,
                     )
                 ).all()
-            )
+                if user_id is not None
+            }
             profiles = session.exec(
                 select(EsimProfile)
                 .join(Package, col(Package.id) == col(EsimProfile.package_id))

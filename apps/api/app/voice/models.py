@@ -44,9 +44,10 @@ class CallLog(SQLModel, table=True):
     __tablename__ = "call_logs"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    user_id: UUID = Field(
+    user_id: UUID | None = Field(
+        default=None,
         sa_column=Column(
-            ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+            ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
         )
     )
     telnyx_call_leg_id: str = Field(

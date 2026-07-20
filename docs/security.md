@@ -19,6 +19,43 @@ treat this as a working draft to tighten rather than a finished
 artifact — flagged throughout where a legal professional's sign-off
 is the actual gating step.
 
+### 10.1.1 Compliance Strategy: GDPR Baseline + NDPA-Specific Requirements
+
+The NDPA 2023 is the law governing DamDam today: the controlling entity is
+Nigerian-incorporated and the current product serves Nigerian data subjects.
+GDPR does not currently apply extraterritorially because DamDam neither has EU
+data subjects nor offers goods or services to people in the EU.
+
+DamDam will nevertheless use GDPR's substantive rigor as its engineering
+baseline: data minimization, purpose limitation, storage limitation,
+lawfulness, fairness and transparency, and data-subject rights. The NDPA is
+explicitly modeled on GDPR and shares the great majority of those principles,
+so this baseline addresses nearly all of the NDPA's substantive requirements
+while preparing the product for possible international expansion.
+
+This decision does **not** adopt GDPR-exclusive administrative machinery before
+GDPR actually applies. DamDam will not speculatively appoint an EU
+representative under Article 27, adopt Standard Contractual Clauses or another
+EU cross-border transfer mechanism, or maintain formal Article 30 Records of
+Processing Activities. Revisit those deferrals only when either:
+
+1. DamDam begins serving EU-resident users, including Nigerian diaspora users
+   in Europe; or
+2. a real investor due-diligence requirement makes GDPR readiness a concrete
+   near-term need.
+
+Neither trigger currently exists. This follows the same implement-on-trigger
+discipline used for the IDT BYOC and Stripe/Adyen deferrals in
+`scaling-infrastructure.md` §12.9.1 and §12.6.
+
+GDPR alignment is not a substitute for NDPA-specific obligations. In
+particular, mandatory NDPC registration and the NDPA's broader breach
+notification threshold remain separate action items tracked in §10.10 and
+§10.8 respectively. This strategy does not change the retention periods in
+§10.3: the documented 90-day check-in location nulling, 3-year SOS retention,
+30-day account-deletion grace period, and the other stated periods already
+implement the storage-limitation principle.
+
 ---
 
 ## 10.2 Data Classification
@@ -182,7 +219,13 @@ expertise — left at framework level here, not a finished plan.**
 3. **Notify** — NDPA requires notification to the Nigeria Data
    Protection Commission within a specified window (confirm exact
    timeline — this is the kind of detail requiring direct
-   regulatory citation, not left as a draft assumption)
+   regulatory citation, not left as a draft assumption). **Build the
+   incident-response trigger to the NDPA's broader standard:** it covers an
+   incident leading to *or likely to lead to* unauthorized access, loss, or
+   disclosure. GDPR's (and the former NDPR's) breach definition lacks that
+   "likely to lead to" language. A narrower, GDPR-calibrated trigger could
+   under-report incidents that the NDPA requires DamDam to notify, so the
+   outstanding detection and notification tooling must not use it.
 4. **Notify affected users** — particularly urgent given the
    population may be traveling internationally with limited
    connectivity at notification time; WhatsApp is likely the most
@@ -227,13 +270,54 @@ season is worth doing, not just a generic written plan.
       who never directly consents to DamDam processing their
       number
 - [ ] All processor DPAs in §10.7 signed/accepted
-- [ ] NDPA registration/compliance filing completed if required at
-      DamDam's data volume (confirm threshold)
+- [ ] Mandatory NDPC registration/compliance filing completed
 - [ ] Incident response plan reviewed and tabletop-tested
-- [ ] Data retention automation (the deletion jobs implied by
+- [x] Data retention automation (the deletion jobs implied by
       §10.3) built and tested, not just documented
 - [ ] Apple App Store and Google Play privacy label/data safety
       disclosures completed accurately (both platforms require
       declaring data collection categories at submission — this
       needs to match §10.2's classification exactly, or app review
       can be rejected/delayed)
+
+---
+
+## 10.11 Amendment — GDPR Baseline Without Premature GDPR Administration
+
+This amendment formalizes the compliance strategy in §10.1.1: the NDPA governs
+DamDam's present Nigerian operations, while GDPR's substantive principles are
+the engineering baseline. GDPR-only administrative mechanisms remain deferred
+until an EU-resident-user or concrete investor-diligence trigger exists.
+
+It also clarifies that NDPC registration and the NDPA-specific breach threshold
+remain independent obligations, and changes §10.8's future tooling requirement
+to detect incidents that are *likely to lead to* unauthorized access, loss, or
+disclosure. No retention duration in §10.3 is amended; those periods already
+align with the storage-limitation principle.
+
+---
+
+## 10.12 Amendment — Data Retention Automation Implemented
+
+The §10.3 schedule is implemented as independent daily Celery Beat tasks for
+check-in location nulling, SOS deletion, usage-poll aggregation, call-log
+deletion, post-grace-period account deletion, device-link stripping, device-log
+deletion, and transaction deletion. Each changed top-level row writes an atomic
+`data_retention` audit entry with a deterministic idempotency key; an immediate
+rerun neither changes the row again nor duplicates its audit record. A shared
+PostgreSQL advisory lock serializes overlapping retention sweeps.
+
+Account deletion begins with `DELETE /me/account`, which revokes refresh tokens
+and starts the 30-day soft-delete grace period. Hard deletion removes the user
+link but does not prematurely delete SOS alerts, check-in aggregate rows, call
+logs, device compatibility analytics, or payment transactions; their own
+retention rules remain authoritative. Raw usage polls are collapsed into one
+UTC daily summary per pseudonymous eSIM-profile identifier before deletion;
+neither raw nor summarized usage cascades with account-owned eSIM rows. The
+device log uses two separate actions: remove `user_id` at 90 days and delete
+the row at 24 months.
+
+No WhatsApp retention task exists because Meta, not DamDam, governs those
+provider-side message logs. This amendment implements the existing periods
+exactly; it does not resolve or alter the founder/legal verification action for
+the 3-year SOS and 6-year financial defaults.

@@ -1,3 +1,4 @@
+from datetime import timedelta, timezone
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Request
@@ -8,6 +9,7 @@ from app.profile.device_tokens import DeviceTokenService
 from app.profile.emergency_contact import EmergencyContactService
 from app.profile.family_contacts import FamilyContactService
 from app.profile.schemas import (
+    AccountDeletionResponse,
     DeviceTokenResponse,
     DeviceTokenUpsert,
     EmergencyContactResponse,
@@ -15,6 +17,7 @@ from app.profile.schemas import (
     FamilyContactResponse,
     FamilyContactUpdate,
 )
+from app.retention.service import RetentionService
 
 router = APIRouter(prefix="/me", tags=["pilgrim-profile"])
 
@@ -30,6 +33,30 @@ def _device_token_service(request: Request) -> DeviceTokenService:
 def _emergency_contact_service(request: Request) -> EmergencyContactService:
     return cast(
         EmergencyContactService, request.app.state.emergency_contact_service
+    )
+
+
+def _retention_service(request: Request) -> RetentionService:
+    return cast(RetentionService, request.app.state.retention_service)
+
+
+@router.delete(
+    "/account", response_model=AccountDeletionResponse, status_code=202
+)
+def request_account_deletion(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+) -> AccountDeletionResponse:
+    with request.app.state.session_factory() as session:
+        deleted_user = _retention_service(request).request_account_deletion(
+            session, user.id
+    )
+    assert deleted_user.deletion_requested_at is not None
+    requested_at = deleted_user.deletion_requested_at
+    if requested_at.tzinfo is None:
+        requested_at = requested_at.replace(tzinfo=timezone.utc)
+    return AccountDeletionResponse(
+        deletion_scheduled_for=requested_at + timedelta(days=30)
     )
 
 

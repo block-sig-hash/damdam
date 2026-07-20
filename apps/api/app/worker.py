@@ -2,6 +2,7 @@ from typing import Any
 from uuid import UUID
 
 from celery import Celery
+from celery.schedules import crontab
 from redis import Redis
 from sqlmodel import col, select
 
@@ -27,6 +28,7 @@ from app.manifests.invoices import InvoicePDFGenerator, build_invoice_storage
 from app.manifests.orders import ManifestOrderService
 from app.notifications.providers import FirebasePushSender
 from app.packages.models import Package
+from app.retention.service import RetentionService
 from app.sos.models import SOSNotification
 from app.sos.notifications import (
     SOSNotificationService,
@@ -58,7 +60,91 @@ celery_app.conf.beat_schedule = {
         "task": "app.sos.enqueue_due_fallbacks",
         "schedule": 10.0,
     },
+    "retention-null-checkin-locations": {
+        "task": "app.retention.null_checkin_locations",
+        "schedule": crontab(hour=2, minute=0),
+    },
+    "retention-delete-sos-alerts": {
+        "task": "app.retention.delete_sos_alerts",
+        "schedule": crontab(hour=2, minute=10),
+    },
+    "retention-collapse-usage-polls": {
+        "task": "app.retention.collapse_usage_polls",
+        "schedule": crontab(hour=2, minute=20),
+    },
+    "retention-delete-call-logs": {
+        "task": "app.retention.delete_call_logs",
+        "schedule": crontab(hour=2, minute=30),
+    },
+    "retention-hard-delete-accounts": {
+        "task": "app.retention.hard_delete_accounts",
+        "schedule": crontab(hour=2, minute=40),
+    },
+    "retention-strip-device-user-links": {
+        "task": "app.retention.strip_device_user_links",
+        "schedule": crontab(hour=2, minute=50),
+    },
+    "retention-delete-device-logs": {
+        "task": "app.retention.delete_device_logs",
+        "schedule": crontab(hour=3, minute=0),
+    },
+    "retention-delete-transactions": {
+        "task": "app.retention.delete_transactions",
+        "schedule": crontab(hour=3, minute=10),
+    },
 }
+
+
+def _retention() -> RetentionService:
+    return RetentionService(utc_now)
+
+
+@celery_app.task(name="app.retention.null_checkin_locations")  # type: ignore[misc]
+def null_expired_checkin_locations() -> int:
+    with create_session_factory(settings)() as session:
+        return _retention().null_expired_checkin_locations(session)
+
+
+@celery_app.task(name="app.retention.delete_sos_alerts")  # type: ignore[misc]
+def delete_expired_sos_alerts() -> int:
+    with create_session_factory(settings)() as session:
+        return _retention().delete_expired_sos_alerts(session)
+
+
+@celery_app.task(name="app.retention.collapse_usage_polls")  # type: ignore[misc]
+def collapse_expired_usage_polls() -> int:
+    with create_session_factory(settings)() as session:
+        return _retention().collapse_expired_usage_polls(session)
+
+
+@celery_app.task(name="app.retention.delete_call_logs")  # type: ignore[misc]
+def delete_expired_call_logs() -> int:
+    with create_session_factory(settings)() as session:
+        return _retention().delete_expired_call_logs(session)
+
+
+@celery_app.task(name="app.retention.hard_delete_accounts")  # type: ignore[misc]
+def hard_delete_expired_accounts() -> int:
+    with create_session_factory(settings)() as session:
+        return _retention().hard_delete_expired_accounts(session)
+
+
+@celery_app.task(name="app.retention.strip_device_user_links")  # type: ignore[misc]
+def strip_expired_device_user_links() -> int:
+    with create_session_factory(settings)() as session:
+        return _retention().strip_expired_device_user_links(session)
+
+
+@celery_app.task(name="app.retention.delete_device_logs")  # type: ignore[misc]
+def delete_expired_device_logs() -> int:
+    with create_session_factory(settings)() as session:
+        return _retention().delete_expired_device_logs(session)
+
+
+@celery_app.task(name="app.retention.delete_transactions")  # type: ignore[misc]
+def delete_expired_transactions() -> int:
+    with create_session_factory(settings)() as session:
+        return _retention().delete_expired_transactions(session)
 
 
 def _sos_notifications() -> SOSNotificationService:

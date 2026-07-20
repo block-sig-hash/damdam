@@ -34,6 +34,7 @@ class Platform(str, Enum):
 class UserStatus(str, Enum):
     ACTIVE = "active"
     SUSPENDED = "suspended"
+    PENDING_DELETION = "pending_deletion"
 
 
 class HTOApprovalStatus(str, Enum):
@@ -124,6 +125,10 @@ class User(SQLModel, table=True):
     )
     last_login_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    deletion_requested_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True, index=True),
     )
     created_at: datetime = Field(
         default_factory=utc_now,
