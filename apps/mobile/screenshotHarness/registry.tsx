@@ -148,6 +148,7 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
         call={createFixtureCallSession()}
         recipientName="Amina Yusuf"
         onFinished={noop}
+        networkQualityOverride={{ connected: true, quality: 'excellent' }}
       />
     ),
   },

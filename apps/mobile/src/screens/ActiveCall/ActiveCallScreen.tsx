@@ -11,6 +11,7 @@ interface ActiveCallScreenProps {
   recipientName?: string;
   onFinished: () => void;
   connectivityReturnDelayMs?: number;
+  networkQualityOverride?: { connected: boolean; quality: NetworkQuality };
 }
 
 function formatDuration(seconds: number): string {
@@ -45,8 +46,10 @@ export function ActiveCallScreen({
   recipientName,
   onFinished,
   connectivityReturnDelayMs = 3000,
+  networkQualityOverride,
 }: ActiveCallScreenProps): React.JSX.Element {
-  const network = useNetworkQuality();
+  const liveNetwork = useNetworkQuality();
+  const network = networkQualityOverride ?? liveNetwork;
   const [state, setState] = useState<VoiceCallState>('connecting');
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
