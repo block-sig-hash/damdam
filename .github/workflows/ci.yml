@@ -300,12 +300,16 @@ jobs:
           for f in screenshots/*.png; do
             [ -e "$f" ] || continue
             name=$(basename "$f" .png)
-            thumb="screenshots/${name}.thumb.png"
-            convert "$f" -resize 160x thumb.png 2>/dev/null && mv thumb.png "$thumb" || thumb="$f"
+            thumb="screenshots/${name}.thumb.jpg"
+            mime="image/jpeg"
+            if ! convert "$f" -resize 120x -quality 55 "$thumb" 2>/dev/null; then
+              thumb="$f"
+              mime="image/png"
+            fi
             b64=$(base64 -w0 "$thumb")
             echo "**${name}**" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "![${name}](data:image/png;base64,${b64})" >> "$GITHUB_STEP_SUMMARY"
+            echo "![${name}](data:${mime};base64,${b64})" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
           done
 
@@ -426,12 +430,16 @@ jobs:
           for f in screenshots/*.png; do
             [ -e "$f" ] || continue
             name=$(basename "$f" .png)
-            thumb="screenshots/${name}.thumb.png"
-            sips -Z 160 "$f" --out "$thumb" >/dev/null 2>&1 || thumb="$f"
+            thumb="screenshots/${name}.thumb.jpg"
+            mime="image/jpeg"
+            if ! sips -s format jpeg -s formatOptions 55 -Z 120 "$f" --out "$thumb" >/dev/null 2>&1; then
+              thumb="$f"
+              mime="image/png"
+            fi
             b64=$(base64 -i "$thumb" | tr -d '\n')
             echo "**${name}**" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "![${name}](data:image/png;base64,${b64})" >> "$GITHUB_STEP_SUMMARY"
+            echo "![${name}](data:${mime};base64,${b64})" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
           done
 
