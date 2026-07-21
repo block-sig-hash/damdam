@@ -251,7 +251,16 @@ jobs:
           profile: pixel_6
           script: |
             adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
-            cd apps/mobile && maestro test maestro/screens --exclude-tags ios-only --format junit --output maestro-report.xml --debug-output maestro-debug
+            cd apps/mobile && maestro test maestro/screens --exclude-tags ios-only --format junit --output maestro-report.xml
+            # `--debug-output <path>` is documented as a `test`-subcommand
+            # option but produced zero files during initial verification
+            # (cause not yet understood); copying Maestro's own documented
+            # *default* debug location (~/.maestro/tests/<datetime>/,
+            # containing a screenshot taken at the moment of each flow
+            # failure) into the workspace is simpler and needs no flag at
+            # all, so use that instead of debugging the flag further.
+            mkdir -p maestro-debug
+            cp -r "$HOME/.maestro/tests/." maestro-debug/ 2>/dev/null || true
       - name: Collect screenshots
         if: always()
         run: |
@@ -384,13 +393,15 @@ jobs:
           xcrun simctl install "$DEVICE_ID" "ios/build/Build/Products/Release-iphonesimulator/DamDam.app"
       - name: Run Maestro flows
         run: |
-          maestro --device "$DEVICE_ID" test maestro/screens --exclude-tags android-only --format junit --output maestro-report.xml --debug-output maestro-debug
+          maestro --device "$DEVICE_ID" test maestro/screens --exclude-tags android-only --format junit --output maestro-report.xml
       - name: Collect screenshots
         if: always()
         run: |
           mkdir -p screenshots
           mv ./*.png screenshots/ 2>/dev/null || true
           ls -la screenshots
+          mkdir -p maestro-debug
+          cp -r "$HOME/.maestro/tests/." maestro-debug/ 2>/dev/null || true
       - name: Upload Maestro debug bundle
         if: always()
         uses: actions/upload-artifact@v4
