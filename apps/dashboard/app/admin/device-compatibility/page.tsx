@@ -8,6 +8,13 @@ import {
 } from "@/lib/api";
 
 type PlatformFilter = "" | "ios" | "android";
+// Known gap: no "Unknown" option, so a null esim_supported row can't be
+// isolated via this filter (it's still shown under "All outcomes").
+// Not fixed -- compatibility_check rows always populate esim_supported
+// in practice (DeviceCompatibilityCreate requires it), so the null case
+// exists only in outcomeLabel() below for defensive completeness against
+// the DB column's own nullability, not a real state this filter needs to
+// target.
 type OutcomeFilter = "" | "compatible" | "incompatible";
 
 function outcomeLabel(esimSupported: boolean | null): string {

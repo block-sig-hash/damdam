@@ -101,25 +101,8 @@ tier, eSIM status, last check-in, SOS status. Sorted by risk by
 default (unresolved SOS first, stale check-ins next, alphabetical
 last).
 
-**Implementation note (§9.7 amendment):** the cross-manifest roster
-this section describes is now built at `/home`
-(`apps/dashboard/app/home/page.tsx`), reusing the same risk-sort/
-highlight/search logic `/manifests/[id]` already used (`lib/
-pilgrimRisk.ts`), called with no `manifest_id` filter so it
-aggregates across every manifest the organization owns —
-`GET /hto/pilgrims` already supported this (api-spec.md §7.8), the
-only backend gap was that `HtoPilgrimSummary` had no field to label
-which manifest a row belonged to, closed by adding `manifest_id`/
-`manifest_name` (data-model.md §6.38). `/manifests/[id]` is
-unchanged — it remains the single-manifest view, useful when an
-operator has already navigated to a specific manifest. Two
-interactive elements below are **not** implemented, disclosed rather
-than silently dropped: "Sort column headers" (no clickable-header-sort
-pattern exists anywhere else in this dashboard to follow; the
-default risk-sort is the only ordering) and "Row click → Pilgrim
-Detail" (Screen 10, Pilgrim Detail, does not exist yet — see §9.1;
-`/sos-alerts` has the same pre-existing dangling link for the same
-reason).
+**Built** — `apps/dashboard/app/home/page.tsx` (§9.7 amendment).
+`/manifests/[id]` is unchanged and remains the single-manifest view.
 
 **Interactive elements:**
 - Filter by manifest (dropdown)
@@ -371,11 +354,8 @@ name, channel, failure reason, SOS timestamp, retry count.
 
 **Built** — `apps/dashboard/app/admin/device-compatibility/page.tsx`
 (§9.7 amendment). No per-screen spec existed for this screen before
-now — the same category of gap Screen 12 (Reports) had before US-20
-(§9.3 above); this fills it using this dashboard's own established
-conventions per that same precedent, plus the US-20-style acceptance
-criteria implied by api-spec.md §7.10's `GET
-/admin/device-compatibility-log` documentation.
+now, the same gap Screen 12 (Reports) had before US-20 — filled using
+this dashboard's own conventions, same as that precedent.
 
 **Data displayed:** `device_compatibility_log` rows, scoped to
 `event_type=compatibility_check` only (`issuance_attempt` rows share
@@ -458,58 +438,32 @@ a dedicated responsive rebuild.
 
 ## 9.7 Amendment — Failed Notification Queue, Cross-Manifest HTO Home, Device Compatibility Log
 
-Three screens this spec described but the dashboard didn't yet have
-a frontend for are now built, closing gaps against backend support
-that (for two of the three) already existed:
+Screens 4, 16, and 17 now have a frontend built against them.
 
 **Failed Notification Queue (Screen 16)** —
-`apps/dashboard/app/admin/sos-notifications/page.tsx`. Pure frontend
-work; `GET /admin/sos-notifications/failed`, `POST .../{id}/retry`,
-and `POST .../retry-bulk` (api-spec.md §7.10) were already fully
-implemented and tested. Both retry actions refetch the list rather
-than optimistically removing the retried row(s) — a row only
-disappears once the backend confirms it (status reset off `failed`,
-`admin_queued_at` cleared), so a retry that fails again immediately
-still shows as failed.
+`apps/dashboard/app/admin/sos-notifications/page.tsx`. Frontend only;
+the retry endpoints (api-spec.md §7.10) already existed. Retry
+actions refetch the list rather than removing rows locally, so a row
+that fails again immediately still shows as failed.
 
 **Cross-Manifest HTO Home (Screen 4)** —
-`apps/dashboard/app/home/page.tsx`, replacing the previous narrower
-unresolved-SOS-only banner described as a known gap in Screen 4's own
-spec text above before this amendment. `GET /hto/pilgrims` already
-aggregated across manifests when called with no `manifest_id`
-(`HtoPilgrimService.list_pilgrims`'s filter was always optional) —
-the one real backend gap was that `HtoPilgrimSummary` had no field
-to say *which* manifest a row belonged to, needed for the
-"manifest/batch" column this section's spec always called for.
-Closed by adding `manifest_id`/`manifest_name` to `HtoPilgrimSummary`
-(data-model.md §6.38, api-spec.md §7.8) — no migration, this is a
-response-shape addition over existing columns, not a schema change.
-Two originally-specified interactive elements are deliberately not
-built, disclosed above under Screen 4 rather than silently dropped:
-column-header sorting (no precedent pattern in this codebase) and
-row-click-to-Pilgrim-Detail (that screen, #10 in §9.1, doesn't exist
-yet).
+`apps/dashboard/app/home/page.tsx` replaces the narrower
+unresolved-SOS-only `/home` this section previously described as an
+open gap. `GET /hto/pilgrims` already aggregated across manifests
+with no `manifest_id` filter; `HtoPilgrimSummary` gained
+`manifest_id`/`manifest_name` (data-model.md §6.38) to label each
+row's manifest. Column-header sorting and row-click-to-Pilgrim-Detail
+are not implemented (Pilgrim Detail, Screen 10, doesn't exist yet;
+no sortable-header pattern exists elsewhere in this dashboard).
 
 **Device Compatibility Log (Screen 17)** —
-`apps/dashboard/app/admin/device-compatibility/page.tsx` plus a new
-backend endpoint, `GET /admin/device-compatibility-log`
-(`apps/api/app/admin/routes.py`), which api-spec.md §7.10 already
-documented but which did not actually exist in `apps/api` before
-this change — confirmed by grepping the router files directly, not
-assumed from the spec. Added `DeviceCompatibilityService.list_checks`
-and `DeviceCompatibilityLogEntry`/`DeviceCompatibilityLogListResponse`
-schemas (`apps/api/app/esim/service.py`, `apps/api/app/esim/
-schemas.py`). Scoped to `event_type=compatibility_check` rows only —
-`issuance_attempt` rows share the `device_compatibility_log` table
-(data-model.md §6.19) but populate a disjoint set of fields
-(`aggregator`, `attempt_succeeded`, no `device_model`/`platform`/
-`esim_supported`), so returning both event types in one table would
-produce rows whose columns don't mean the same thing.
-
-Test coverage: `apps/api/tests/test_device_compatibility_api.py`
-(5 new backend tests — endpoint auth, listing, both filters,
-issuance_attempt exclusion, plus 1 new test confirming the
-cross-manifest `HtoPilgrimSummary` fields), and a `page.test.tsx`
-per new dashboard page following this codebase's existing
-`vi.stubGlobal("fetch", ...)` convention (18 new frontend tests
-across the three screens).
+`apps/dashboard/app/admin/device-compatibility/page.tsx` and a new
+`GET /admin/device-compatibility-log` endpoint (`apps/api/app/admin/
+routes.py`, `DeviceCompatibilityService.list_checks`) — api-spec.md
+§7.10 documented this endpoint, but it didn't exist until now.
+Scoped to `event_type=compatibility_check` rows; `issuance_attempt`
+rows (data-model.md §6.19) share the table but have no
+device_model/platform/esim_supported to show. Known gap: the outcome
+filter can't isolate a null `esim_supported` value — not fixed here
+since compatibility-check rows always populate it in practice (see
+comment in `page.tsx`).
