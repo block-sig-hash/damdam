@@ -1,0 +1,8 @@
+appId: com.damdam.app
+---
+- launchApp
+- tapOn:
+    id: "harness-target-pin-setup"
+- assertVisible:
+    id: "pin-setup-input"
+- takeScreenshot: pin-setup

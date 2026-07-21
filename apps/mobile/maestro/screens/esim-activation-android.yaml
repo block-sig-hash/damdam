@@ -1,0 +1,10 @@
+appId: com.damdam.app
+tags:
+  - android-only
+---
+- launchApp
+- tapOn:
+    id: "harness-target-esim-activation-prompt-android"
+- assertVisible:
+    id: "esim-arrival-prompt"
+- takeScreenshot: esim-activation-prompt-android

@@ -1,0 +1,10 @@
+appId: com.damdam.app
+tags:
+  - ios-only
+---
+- launchApp
+- tapOn:
+    id: "harness-target-esim-activation-guide-ios"
+- assertVisible:
+    id: "confirm-esim-activated"
+- takeScreenshot: esim-activation-guide-ios

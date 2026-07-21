@@ -1,0 +1,8 @@
+appId: com.damdam.app
+---
+- launchApp
+- tapOn:
+    id: "harness-target-package-selection"
+- assertVisible:
+    id: "package-selection-screen"
+- takeScreenshot: package-selection

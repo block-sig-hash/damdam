@@ -1,0 +1,8 @@
+appId: com.damdam.app
+---
+- launchApp
+- tapOn:
+    id: "harness-target-active-call"
+- assertVisible:
+    id: "call-quality"
+- takeScreenshot: active-call
