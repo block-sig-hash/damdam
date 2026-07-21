@@ -456,3 +456,39 @@ export async function rejectHTOOperator(operatorId: string, reason: string): Pro
     }),
   );
 }
+
+export type FailedSOSNotification = {
+  id: string;
+  pilgrim_name: string;
+  channel: string;
+  failure_reason: string | null;
+  sos_timestamp: string;
+  retry_count: number;
+};
+
+export async function getFailedSOSNotifications(): Promise<FailedSOSNotification[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/sos-notifications/failed`, {
+    headers: adminHeaders(),
+  });
+  return (await parseResponse<{ notifications: FailedSOSNotification[] }>(response))
+    .notifications;
+}
+
+export async function retrySOSNotification(id: string): Promise<void> {
+  await parseResponse(
+    await fetch(`${API_BASE_URL}/admin/sos-notifications/${id}/retry`, {
+      method: "POST",
+      headers: adminHeaders(),
+    }),
+  );
+}
+
+export async function retrySOSNotificationsBulk(ids: string[]): Promise<void> {
+  await parseResponse(
+    await fetch(`${API_BASE_URL}/admin/sos-notifications/retry-bulk`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...adminHeaders() },
+      body: JSON.stringify({ notification_ids: ids }),
+    }),
+  );
+}
