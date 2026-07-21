@@ -30,6 +30,7 @@ interface DialPadScreenProps {
   onCallStarted: (call: VoiceCallSession, recipientName?: string) => void;
   voiceGateway?: VoiceGateway;
   contactsLoader?: () => Promise<DialContact[]>;
+  callingReadiness?: () => Promise<void>;
 }
 
 function isDialable(number: string): boolean {
@@ -42,6 +43,7 @@ export function DialPadScreen({
   onCallStarted,
   voiceGateway = telnyxVoiceGateway,
   contactsLoader = loadDialContacts,
+  callingReadiness = ensureAndroidCallingReady,
 }: DialPadScreenProps): React.JSX.Element {
   const network = useNetworkQuality();
   const [number, setNumber] = useState('');
@@ -64,8 +66,8 @@ export function DialPadScreen({
   // this screen's own Contacts-permission convention below -- shows a real
   // native permission Alert the first time Dial Pad is opened, not before.
   useEffect(() => {
-    ensureAndroidCallingReady().catch(() => undefined);
-  }, []);
+    callingReadiness().catch(() => undefined);
+  }, [callingReadiness]);
 
   useEffect(() => {
     setEligibility(undefined);

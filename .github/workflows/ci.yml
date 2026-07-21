@@ -268,7 +268,7 @@ jobs:
         if: always()
         run: |
           mkdir -p screenshots
-          find maestro-output -type f -name '*.png' -exec cp {} screenshots/ \; 2>/dev/null || true
+          find maestro-output -type f -path '*/takeScreenshot/*.png' -exec cp {} screenshots/ \; 2>/dev/null || true
           ls -la screenshots
       - name: Upload screenshots as CI artifacts
         if: always()
@@ -301,7 +301,7 @@ jobs:
             [ -e "$f" ] || continue
             name=$(basename "$f" .png)
             thumb="screenshots/${name}.thumb.png"
-            convert "$f" -resize 320x thumb.png 2>/dev/null && mv thumb.png "$thumb" || thumb="$f"
+            convert "$f" -resize 160x thumb.png 2>/dev/null && mv thumb.png "$thumb" || thumb="$f"
             b64=$(base64 -w0 "$thumb")
             echo "**${name}**" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -399,7 +399,7 @@ jobs:
         if: always()
         run: |
           mkdir -p screenshots
-          find maestro-output -type f -name '*.png' -exec cp {} screenshots/ \; 2>/dev/null || true
+          find maestro-output -type f -path '*/takeScreenshot/*.png' -exec cp {} screenshots/ \; 2>/dev/null || true
           ls -la screenshots
       - name: Upload Maestro output bundle
         if: always()
@@ -427,7 +427,7 @@ jobs:
             [ -e "$f" ] || continue
             name=$(basename "$f" .png)
             thumb="screenshots/${name}.thumb.png"
-            sips -Z 320 "$f" --out "$thumb" >/dev/null 2>&1 || thumb="$f"
+            sips -Z 160 "$f" --out "$thumb" >/dev/null 2>&1 || thumb="$f"
             b64=$(base64 -i "$thumb" | tr -d '\n')
             echo "**${name}**" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"

@@ -137,6 +137,7 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
         onCallStarted={noop}
         voiceGateway={{ startCall: () => Promise.reject(new Error('not used in harness')) }}
         contactsLoader={() => Promise.resolve([])}
+        callingReadiness={() => Promise.resolve()}
       />
     ),
   },

@@ -37,6 +37,20 @@ async function enterNumber(): Promise<void> {
   await waitFor(() => expect(eligibility).toHaveBeenCalled());
 }
 
+it('allows the screenshot harness to replace native calling setup', async () => {
+  const callingReadiness = jest.fn().mockResolvedValue(undefined);
+  await render(
+    <DialPadScreen
+      accessToken="access"
+      pstnMinutesRemaining={10}
+      onCallStarted={jest.fn()}
+      callingReadiness={callingReadiness}
+    />,
+  );
+
+  await waitFor(() => expect(callingReadiness).toHaveBeenCalledTimes(1));
+});
+
 it('AC-14.2/8: zero-minute users can pick a contact and place a free app-to-app call', async () => {
   const call = { callType: 'app_to_app', displayNumber: '08098765432' } as never;
   const gateway = { startCall: jest.fn().mockResolvedValue(call) };
