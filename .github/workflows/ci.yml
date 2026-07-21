@@ -329,14 +329,23 @@ jobs:
       - name: Install CocoaPods dependencies
         working-directory: apps/mobile/ios
         run: pod install
-      # Device model pinned here is runner-image-dependent -- Apple's
-      # simulator device lineup shifts with each Xcode/runner-image
-      # bump (verified during initial CI verification: this macos-15
-      # image's Xcode 16.4 no longer ships an "iPhone 15" simulator
-      # device at all, only iPhone 16/16e/17/Air/SE). If a future
-      # runner image drops "iPhone 16" too, `xcodebuild`'s own error
-      # output lists every currently available destination -- update
-      # both this and the `simctl create` line below to match.
+      # Building against a *named concrete device* destination
+      # (`-destination 'platform=iOS Simulator,name=iPhone 16'`) proved
+      # flaky during initial CI verification: which concrete simulator
+      # instances CoreSimulator reports as "currently available" varied
+      # run to run on freshly-booted runner VMs (one run listed dozens
+      # of iPhone/iPad devices at that exact destination-resolution
+      # moment, the next listed almost none, despite the same runner
+      # image and Xcode version) -- a likely CoreSimulator-daemon
+      # population race, not a real device-catalog gap. `generic/
+      # platform=iOS Simulator` builds an SDK-generic simulator binary
+      # without needing to resolve any concrete device instance at
+      # build time, sidestepping that race entirely. The concrete
+      # device only needs to exist for the *install/run* step below,
+      # via `simctl create`, which creates a fresh instance from
+      # Xcode's fixed device-*type* catalog rather than depending on
+      # what instances already happen to exist -- a more reliable
+      # operation than destination-matching proved to be.
       - name: Build harness-mode Release app for the simulator
         working-directory: apps/mobile/ios
         env:
@@ -348,8 +357,12 @@ jobs:
             -configuration Release \
             -sdk iphonesimulator \
             -derivedDataPath build \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -destination 'generic/platform=iOS Simulator' \
             build
+      # "iPhone 16" here is a device *type* from Xcode's fixed catalog,
+      # not a currently-existing instance -- if a future runner image
+      # drops this device type, `xcrun simctl list devicetypes` on that
+      # image will show what's available to update this to.
       - name: Boot simulator and install the app
         run: |
           DEVICE_ID=$(xcrun simctl create DamDamScreenshotCI "iPhone 16" 2>/dev/null || xcrun simctl list devices | grep DamDamScreenshotCI | grep -oE '[0-9A-F-]{36}')
