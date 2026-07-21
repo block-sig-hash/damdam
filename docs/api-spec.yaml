@@ -375,6 +375,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/device-compatibility-log:
+    get:
+      tags:
+      - admin
+      summary: List Device Compatibility Log
+      operationId: list_device_compatibility_log_v1_admin_device_compatibility_log_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: platform
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/Platform'
+          - type: 'null'
+          title: Platform
+      - name: esim_supported
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Esim Supported
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCompatibilityLogListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/admin/hto-operators:
     get:
       tags:
@@ -2264,6 +2302,55 @@ components:
       - device_model
       - esim_supported
       title: DeviceCompatibilityCreate
+    DeviceCompatibilityLogEntry:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        device_model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Device Model
+        platform:
+          anyOf:
+          - $ref: '#/components/schemas/Platform'
+          - type: 'null'
+        os_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Os Version
+        esim_supported:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Esim Supported
+        checked_at:
+          type: string
+          format: date-time
+          title: Checked At
+      type: object
+      required:
+      - id
+      - device_model
+      - platform
+      - os_version
+      - esim_supported
+      - checked_at
+      title: DeviceCompatibilityLogEntry
+    DeviceCompatibilityLogListResponse:
+      properties:
+        entries:
+          items:
+            $ref: '#/components/schemas/DeviceCompatibilityLogEntry'
+          type: array
+          title: Entries
+      type: object
+      required:
+      - entries
+      title: DeviceCompatibilityLogListResponse
     DeviceCompatibilityResponse:
       properties:
         logged:
@@ -2652,6 +2739,15 @@ components:
         phone_number:
           type: string
           title: Phone Number
+        manifest_id:
+          type: string
+          format: uuid
+          title: Manifest Id
+        manifest_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Manifest Name
         tier:
           anyOf:
           - type: string
@@ -2677,6 +2773,8 @@ components:
       - id
       - name
       - phone_number
+      - manifest_id
+      - manifest_name
       - tier
       - esim_status
       - activation_status

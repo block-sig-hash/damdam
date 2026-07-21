@@ -10,13 +10,24 @@ from pydantic import BaseModel
 from sqlmodel import col, select
 
 from app.auth.hto import HTOAuthError, HTOService
-from app.auth.models import AdminUser, HTOApprovalStatus, ManifestOrderStatus, User
+from app.auth.models import (
+    AdminUser,
+    HTOApprovalStatus,
+    ManifestOrderStatus,
+    Platform,
+    User,
+)
 from app.auth.schemas import (
     HTOApprovalResponse,
     HTOOperatorListResponse,
     HTOOperatorResponse,
     HTORejectionRequest,
 )
+from app.esim.schemas import (
+    DeviceCompatibilityLogEntry,
+    DeviceCompatibilityLogListResponse,
+)
+from app.esim.service import DeviceCompatibilityService
 from app.manifests.orders import ManifestOrderService
 from app.manifests.schemas import (
     AdminManifestOrderListResponse,
@@ -156,6 +167,42 @@ def retry_sos_notification(
 ) -> dict[str, int]:
     del admin
     return {"queued": _retry_sos_rows(request, [notification_id])}
+
+
+def _device_compatibility_service(request: Request) -> DeviceCompatibilityService:
+    return cast(
+        DeviceCompatibilityService, request.app.state.device_compatibility_service
+    )
+
+
+@router.get(
+    "/device-compatibility-log",
+    response_model=DeviceCompatibilityLogListResponse,
+)
+def list_device_compatibility_log(
+    request: Request,
+    admin: Annotated[AdminUser, Depends(current_admin)],
+    platform: Platform | None = None,
+    esim_supported: bool | None = None,
+) -> DeviceCompatibilityLogListResponse:
+    del admin
+    with request.app.state.session_factory() as session:
+        entries = _device_compatibility_service(request).list_checks(
+            session, platform, esim_supported
+        )
+        return DeviceCompatibilityLogListResponse(
+            entries=[
+                DeviceCompatibilityLogEntry(
+                    id=entry.id,
+                    device_model=entry.device_model,
+                    platform=entry.platform,
+                    os_version=entry.os_version,
+                    esim_supported=entry.esim_supported,
+                    checked_at=entry.checked_at,
+                )
+                for entry in entries
+            ]
+        )
 
 
 @router.get("/hto-operators", response_model=HTOOperatorListResponse)

@@ -101,28 +101,20 @@ tier, eSIM status, last check-in, SOS status. Sorted by risk by
 default (unresolved SOS first, stale check-ins next, alphabetical
 last).
 
-**Implementation note (US-18):** this spec describes a single
-cross-manifest roster at `/home`. The actual US-18 build instead
-implements the risk-sort/highlight/search table per-manifest at
-`/manifests/[id]`, deliberately leaving `/home`'s existing narrower
-unresolved-SOS-only banner (built earlier, still live) untouched
-rather than conflating the two. `/home` therefore does not yet show
-the "manifest/batch" column or a cross-manifest aggregate view — a
-pilgrim's risk state is only visible by opening their specific
-manifest. Reconciling this (either building the cross-manifest `/home`
-view this section describes, or updating this section to describe the
-per-manifest scope as the intended design) is open follow-up work, not
-resolved silently in either direction here.
+**Built** — `apps/dashboard/app/home/page.tsx` (§9.7 amendment).
+`/manifests/[id]` is unchanged and remains the single-manifest view.
 
 **Interactive elements:**
 - Filter by manifest (dropdown)
 - Search by name/phone
-- Sort column headers
-- Row click → Pilgrim Detail
+- ~~Sort column headers~~ — not implemented, see note above
+- ~~Row click → Pilgrim Detail~~ — not implemented, see note above
 - Manual refresh button alongside the 60s auto-refresh indicator
 
 **States:**
-- *Loading:* skeleton table
+- *Loading:* plain loading text, not a skeleton table — matches
+  this dashboard's existing convention elsewhere (§9.5 scope; no
+  skeleton-table pattern exists in this codebase to follow)
 - *Empty (no manifests yet):* CTA to create first manifest
 - *Unresolved SOS present:* red banner at top of page, persistent
   until resolved, **in addition to** the pinned red row —
@@ -338,6 +330,9 @@ pending (highlighted if >48h — an internal SLA flag).
 
 ### Screen: Admin — Failed Notification Queue (Screen 16)
 
+**Built** — `apps/dashboard/app/admin/sos-notifications/page.tsx`
+(§9.7 amendment).
+
 **Data displayed:** Failed `sos_notifications` rows — pilgrim
 name, channel, failure reason, SOS timestamp, retry count.
 
@@ -347,6 +342,37 @@ name, channel, failure reason, SOS timestamp, retry count.
   a systemic outage (e.g., WhatsApp API down for an hour) could
   produce many failed rows at once, and one-by-one retry would be
   painful during exactly the kind of incident where speed matters
+- After either action, the row's continued presence/absence reflects
+  a genuine refetch of `GET /admin/sos-notifications/failed`, not an
+  optimistic local removal — a retry that fails again quickly (e.g.
+  the vendor outage is still ongoing) must still show as failed, not
+  silently disappear because the button was clicked
+
+---
+
+### Screen: Admin — Device Compatibility Log (Screen 17)
+
+**Built** — `apps/dashboard/app/admin/device-compatibility/page.tsx`
+(§9.7 amendment). No per-screen spec existed for this screen before
+now, the same gap Screen 12 (Reports) had before US-20 — filled using
+this dashboard's own conventions, same as that precedent.
+
+**Data displayed:** `device_compatibility_log` rows, scoped to
+`event_type=compatibility_check` only (`issuance_attempt` rows share
+the table but have no device_model/platform/esim_supported to show,
+api-spec.md §7.10) — device model, platform, OS version,
+compatibility outcome (Compatible/Incompatible), checked-at
+timestamp.
+
+**Interactive elements:**
+- Filter by platform (iOS/Android/all)
+- Filter by outcome (Compatible/Incompatible/all)
+- Manual refresh button (no auto-poll, per §9.6)
+
+**States:**
+- *Loading:* plain loading text (see Screen 4's note on this
+  dashboard's loading-state convention)
+- *Empty:* "No device compatibility checks match these filters."
 
 ---
 
@@ -407,3 +433,37 @@ a dedicated responsive rebuild.
 | SOS Alerts | Polling | 15s (tighter, given urgency) |
 | Manifest Order status | Polling | 30s (only while status = awaiting_payment) |
 | Admin screens | Manual refresh only | No auto-poll |
+
+---
+
+## 9.7 Amendment — Failed Notification Queue, Cross-Manifest HTO Home, Device Compatibility Log
+
+Screens 4, 16, and 17 now have a frontend built against them.
+
+**Failed Notification Queue (Screen 16)** —
+`apps/dashboard/app/admin/sos-notifications/page.tsx`. Frontend only;
+the retry endpoints (api-spec.md §7.10) already existed. Retry
+actions refetch the list rather than removing rows locally, so a row
+that fails again immediately still shows as failed.
+
+**Cross-Manifest HTO Home (Screen 4)** —
+`apps/dashboard/app/home/page.tsx` replaces the narrower
+unresolved-SOS-only `/home` this section previously described as an
+open gap. `GET /hto/pilgrims` already aggregated across manifests
+with no `manifest_id` filter; `HtoPilgrimSummary` gained
+`manifest_id`/`manifest_name` (data-model.md §6.38) to label each
+row's manifest. Column-header sorting and row-click-to-Pilgrim-Detail
+are not implemented (Pilgrim Detail, Screen 10, doesn't exist yet;
+no sortable-header pattern exists elsewhere in this dashboard).
+
+**Device Compatibility Log (Screen 17)** —
+`apps/dashboard/app/admin/device-compatibility/page.tsx` and a new
+`GET /admin/device-compatibility-log` endpoint (`apps/api/app/admin/
+routes.py`, `DeviceCompatibilityService.list_checks`) — api-spec.md
+§7.10 documented this endpoint, but it didn't exist until now.
+Scoped to `event_type=compatibility_check` rows; `issuance_attempt`
+rows (data-model.md §6.19) share the table but have no
+device_model/platform/esim_supported to show. Known gap: the outcome
+filter can't isolate a null `esim_supported` value — not fixed here
+since compatibility-check rows always populate it in practice (see
+comment in `page.tsx`).

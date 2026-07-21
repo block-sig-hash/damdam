@@ -513,14 +513,19 @@ GET    /hto/manifests
 ```
 GET    /hto/pilgrims
   HTO auth required
-  Query: ?manifest_id= (filters to one manifest; risk-sort AC-18.1,
-         amber-highlight AC-18.3, and search AC-18.7 are all
-         implemented client-side against this same full-list
-         response, not as new server query params — a per-manifest
+  Query: ?manifest_id= (optional — omitted, this aggregates across
+         every manifest the calling organization owns, which is
+         what the cross-manifest HTO Home roster (frontend-
+         dashboard.md §9.3 Screen 4, data-model.md §6.38) calls
+         with no filter; risk-sort AC-18.1, amber-highlight
+         AC-18.3, and search AC-18.7 are all implemented
+         client-side against this same full-list response, not as
+         new server query params — a per-manifest or per-org
          roster is small enough that server-side pagination/sort
          isn't warranted yet)
-  200: { pilgrims: [{ id, name, phone_number, tier, esim_status,
-          last_checkin_at?, sos_status, activation_status }] }
+  200: { pilgrims: [{ id, name, phone_number, manifest_id,
+          manifest_name?, tier, esim_status, last_checkin_at?,
+          sos_status, activation_status }] }
 
 GET    /hto/pilgrims/{id}
   HTO auth required
@@ -667,8 +672,16 @@ POST   /admin/sos-notifications/retry-bulk
   Body: { notification_ids: [uuid] }
 
 GET    /admin/device-compatibility-log
+  Admin auth required
   Query: ?esim_supported=false&platform=ios
-  Used to build the "known incompatible devices" list
+  200: { entries: [{ id, device_model, platform, os_version,
+          esim_supported, checked_at }] }
+  Used to build the "known incompatible devices" list. Scoped to
+  device_compatibility_log rows with event_type=compatibility_check
+  only — issuance_attempt rows (data-model.md §6.19) share the same
+  table but populate a disjoint set of fields (aggregator,
+  attempt_succeeded, no device_model/platform/esim_supported) and
+  are not returned here.
 
 POST   /admin/packages/{id}/cancel
   Admin auth required

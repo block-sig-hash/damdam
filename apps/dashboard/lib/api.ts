@@ -268,6 +268,8 @@ export type HtoPilgrim = {
   id: string;
   name: string;
   phone_number: string;
+  manifest_id: string;
+  manifest_name: string | null;
   tier: string | null;
   esim_status: string;
   activation_status: string;
@@ -275,9 +277,13 @@ export type HtoPilgrim = {
   sos_status: string;
 };
 
-export async function getHtoPilgrims(manifestId: string): Promise<HtoPilgrim[]> {
-  const query = new URLSearchParams({ manifest_id: manifestId });
-  const response = await fetch(`${API_BASE_URL}/hto/pilgrims?${query}`, {
+// manifestId omitted (or undefined) aggregates across every manifest the
+// calling organization owns -- this is what the cross-manifest HTO Home
+// roster (frontend-dashboard.md §9.3 Screen 4) calls with no filter;
+// /manifests/[id] passes a specific id to scope to just that manifest.
+export async function getHtoPilgrims(manifestId?: string): Promise<HtoPilgrim[]> {
+  const query = manifestId ? `?${new URLSearchParams({ manifest_id: manifestId })}` : "";
+  const response = await fetch(`${API_BASE_URL}/hto/pilgrims${query}`, {
     headers: operatorHeaders(),
   });
   return (await parseResponse<{ pilgrims: HtoPilgrim[] }>(response)).pilgrims;
@@ -455,4 +461,70 @@ export async function rejectHTOOperator(operatorId: string, reason: string): Pro
       body: JSON.stringify({ reason }),
     }),
   );
+}
+
+export type FailedSOSNotification = {
+  id: string;
+  pilgrim_name: string;
+  channel: string;
+  failure_reason: string | null;
+  sos_timestamp: string;
+  retry_count: number;
+};
+
+export async function getFailedSOSNotifications(): Promise<FailedSOSNotification[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/sos-notifications/failed`, {
+    headers: adminHeaders(),
+  });
+  return (await parseResponse<{ notifications: FailedSOSNotification[] }>(response))
+    .notifications;
+}
+
+export async function retrySOSNotification(id: string): Promise<void> {
+  await parseResponse(
+    await fetch(`${API_BASE_URL}/admin/sos-notifications/${id}/retry`, {
+      method: "POST",
+      headers: adminHeaders(),
+    }),
+  );
+}
+
+export async function retrySOSNotificationsBulk(ids: string[]): Promise<void> {
+  await parseResponse(
+    await fetch(`${API_BASE_URL}/admin/sos-notifications/retry-bulk`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...adminHeaders() },
+      body: JSON.stringify({ notification_ids: ids }),
+    }),
+  );
+}
+
+export type DeviceCompatibilityLogEntry = {
+  id: string;
+  device_model: string | null;
+  platform: "ios" | "android" | null;
+  os_version: string | null;
+  esim_supported: boolean | null;
+  checked_at: string;
+};
+
+export type DeviceCompatibilityLogFilter = {
+  platform?: "ios" | "android";
+  esimSupported?: boolean;
+};
+
+export async function getDeviceCompatibilityLog(
+  filter: DeviceCompatibilityLogFilter = {},
+): Promise<DeviceCompatibilityLogEntry[]> {
+  const query = new URLSearchParams();
+  if (filter.platform) query.set("platform", filter.platform);
+  if (filter.esimSupported !== undefined) {
+    query.set("esim_supported", String(filter.esimSupported));
+  }
+  const suffix = query.toString() ? `?${query}` : "";
+  const response = await fetch(
+    `${API_BASE_URL}/admin/device-compatibility-log${suffix}`,
+    { headers: adminHeaders() },
+  );
+  return (await parseResponse<{ entries: DeviceCompatibilityLogEntry[] }>(response)).entries;
 }

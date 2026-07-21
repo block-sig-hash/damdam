@@ -10,6 +10,7 @@ from app.auth.models import (
     ManifestOrder,
     ManifestPilgrim,
     Organization,
+    Platform,
     PricingTier,
     User,
 )
@@ -310,6 +311,35 @@ class DeviceCompatibilityService:
         session.refresh(entry)
         return entry
 
+    def list_checks(
+        self,
+        session: Session,
+        platform: Platform | None,
+        esim_supported: bool | None,
+    ) -> list[DeviceCompatibilityLog]:
+        # Scoped to compatibility_check rows only (api-spec.md §7.10's
+        # "known incompatible devices" list purpose) -- issuance_attempt
+        # rows (_log_attempt above) share this table but populate a
+        # disjoint set of fields (aggregator/attempt_succeeded, no
+        # device_model/platform/esim_supported), so mixing both event
+        # types into one admin table would produce rows that don't share
+        # a consistent column meaning.
+        query = select(DeviceCompatibilityLog).where(
+            DeviceCompatibilityLog.event_type
+            == DeviceCompatibilityEvent.COMPATIBILITY_CHECK
+        )
+        if platform is not None:
+            query = query.where(DeviceCompatibilityLog.platform == platform)
+        if esim_supported is not None:
+            query = query.where(
+                DeviceCompatibilityLog.esim_supported == esim_supported
+            )
+        return list(
+            session.exec(
+                query.order_by(col(DeviceCompatibilityLog.checked_at).desc())
+            ).all()
+        )
+
 
 class HtoPilgrimService:
     def list_pilgrims(
@@ -326,6 +356,14 @@ class HtoPilgrimService:
         if manifest_id is not None:
             query = query.where(col(ManifestPilgrim.manifest_id) == manifest_id)
         pilgrims = session.exec(query.order_by(col(ManifestPilgrim.last_name))).all()
+
+        manifest_ids = {p.manifest_id for p in pilgrims}
+        manifest_names: dict[UUID, str | None] = {
+            manifest.id: manifest.name
+            for manifest in session.exec(
+                select(Manifest).where(col(Manifest.id).in_(manifest_ids))
+            ).all()
+        }
 
         tier_names: dict[UUID, str] = {}
         order_ids = {p.manifest_order_id for p in pilgrims if p.manifest_order_id}
@@ -394,6 +432,8 @@ class HtoPilgrimService:
             HtoPilgrimSummary(
                 id=pilgrim.id,
                 name=f"{pilgrim.first_name} {pilgrim.last_name}".strip(),
+                manifest_id=pilgrim.manifest_id,
+                manifest_name=manifest_names.get(pilgrim.manifest_id),
                 phone_number=pilgrim.phone_number,
                 tier=(
                     tier_names.get(pilgrim.manifest_order_id)
