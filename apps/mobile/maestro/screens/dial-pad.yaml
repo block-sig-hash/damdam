@@ -3,6 +3,7 @@ appId: com.damdam.app
 - launchApp
 - tapOn:
     id: "harness-target-dial-pad"
+- takeScreenshot: DEBUG-dial-pad-post-tap
 - assertVisible:
     id: "start-call"
 - takeScreenshot: dial-pad

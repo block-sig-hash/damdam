@@ -3,6 +3,7 @@ appId: com.damdam.app
 - launchApp
 - tapOn:
     id: "harness-target-esim-qr-code"
+- takeScreenshot: DEBUG-esim-qr-code-post-tap
 - assertVisible:
     id: "esim-qr-code-screen"
 - takeScreenshot: esim-qr-code

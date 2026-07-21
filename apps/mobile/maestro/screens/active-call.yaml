@@ -1,6 +1,7 @@
 appId: com.damdam.app
 ---
 - launchApp
+- takeScreenshot: DEBUG-active-call-post-launch
 - tapOn:
     id: "harness-target-active-call"
 - assertVisible:
