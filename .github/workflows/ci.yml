@@ -294,15 +294,23 @@ jobs:
   # activation flow's real platform divergence (frontend-mobile.md's
   # "iOS has no public API for programmatic eSIM installation" --
   # esim-activation-ios.yaml vs. Android's esim-activation-android.yaml).
-  # Deliberately NOT run on every PR: macos-14 runners bill at roughly
+  # Deliberately NOT run on every PR: macOS runners bill at roughly
   # 10x an ubuntu-latest minute, and this is testing infrastructure, not
   # the safety-critical path -- nightly plus on-demand (workflow_dispatch)
   # is the affordable cadence for now. Re-evaluate if iOS-specific visual
   # regressions start slipping through between nightly runs.
+  #
+  # runs-on is macos-15, not macos-14: RN 0.86 requires Xcode >= 16.1
+  # (react-native-nitro-modules' Podfile enforces this), and macos-14's
+  # *default* selected Xcode is 15.4 (it has 16.1/16.2 installed but not
+  # selected) -- confirmed by a real `pod install` failure on macos-14
+  # in this job ("React Native requires XCode >= 16.1. Found 15.4.")
+  # during initial verification. macos-15 defaults to Xcode 16.4, which
+  # satisfies the requirement without an extra xcode-select step.
   screenshot-mobile-ios:
     name: Mobile — iOS screenshot generation (nightly/on-demand)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: macos-14
+    runs-on: macos-15
     defaults:
       run:
         working-directory: apps/mobile
