@@ -13,10 +13,15 @@ import {
 } from './fixtures';
 
 function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
+  // Do not depend on a browser `Response` constructor in the React Native
+  // device runtime. The application clients only consume this small response
+  // surface, so a deterministic test double is sufficient for the harness.
+  return {
+    ok: status >= 200 && status < 300,
     status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  } as Response;
 }
 
 type Route = {

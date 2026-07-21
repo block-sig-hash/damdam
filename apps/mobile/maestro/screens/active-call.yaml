@@ -1,7 +1,10 @@
 appId: com.damdam.app
 ---
 - launchApp
-- takeScreenshot: DEBUG-active-call-post-launch
+- scrollUntilVisible:
+    element:
+      id: "harness-target-active-call"
+    direction: DOWN
 - tapOn:
     id: "harness-target-active-call"
 - assertVisible:

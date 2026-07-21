@@ -263,29 +263,20 @@ jobs:
           profile: pixel_6
           script: |
             adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
-            cd apps/mobile && maestro test maestro/screens --exclude-tags ios-only --format junit --output maestro-report.xml
-            # `--debug-output <path>` is documented as a `test`-subcommand
-            # option but produced zero files during initial verification
-            # (cause not yet understood); copying Maestro's own documented
-            # *default* debug location (~/.maestro/tests/<datetime>/,
-            # containing a screenshot taken at the moment of each flow
-            # failure) into the workspace is simpler and needs no flag at
-            # all, so use that instead of debugging the flag further.
-            mkdir -p maestro-debug
-            cp -r "$HOME/.maestro/tests/." maestro-debug/ 2>/dev/null || true
-            # DIAGNOSTIC: the "Collect screenshots" step (which looks in
-            # apps/mobile/*.png) has come up empty even on runs where
-            # Maestro's own [Passed] output confirms takeScreenshot ran --
-            # find out where these PNGs actually land instead of assuming.
-            echo "::group::DEBUG find all PNGs under workspace and HOME"
-            find "$GITHUB_WORKSPACE" -iname "*.png" 2>/dev/null
-            find "$HOME" -iname "*.png" 2>/dev/null
-            echo "::endgroup::"
+            cd apps/mobile
+            status=0
+            maestro test maestro/screens \
+              --exclude-tags ios-only \
+              --format junit \
+              --output maestro-report.xml \
+              --test-output-dir="$PWD/maestro-output" || status=$?
+            find maestro-output -maxdepth 4 -type f -print 2>/dev/null || true
+            exit "$status"
       - name: Collect screenshots
         if: always()
         run: |
           mkdir -p screenshots
-          mv ./*.png screenshots/ 2>/dev/null || true
+          find maestro-output -type f -name '*.png' -exec cp {} screenshots/ \; 2>/dev/null || true
           ls -la screenshots
       - name: Upload screenshots as CI artifacts
         if: always()
@@ -296,18 +287,12 @@ jobs:
             apps/mobile/screenshots/*.png
             apps/mobile/maestro-report.xml
           if-no-files-found: warn
-      # Maestro's own debug bundle (per-flow logs, command timelines, and a
-      # screenshot taken at the moment of failure) -- added specifically to
-      # get real evidence for the 7/12-flows-failed pattern hit during
-      # initial verification instead of continuing to guess blind. Separate
-      # artifact so a healthy run's (empty-ish) debug output doesn't bloat
-      # the main screenshots artifact.
-      - name: Upload Maestro debug bundle
+      - name: Upload Maestro output bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-screenshots-android-maestro-debug
-          path: apps/mobile/maestro-debug
+          name: mobile-screenshots-android-maestro-output
+          path: apps/mobile/maestro-output
           if-no-files-found: warn
       # Inline preview in the job's own Summary tab -- reviewers (human or
       # Claude in claude-review.yml) can see every captured screen without
@@ -413,21 +398,23 @@ jobs:
           xcrun simctl install "$DEVICE_ID" "ios/build/Build/Products/Release-iphonesimulator/DamDam.app"
       - name: Run Maestro flows
         run: |
-          maestro --device "$DEVICE_ID" test maestro/screens --exclude-tags android-only --format junit --output maestro-report.xml
+          maestro --device "$DEVICE_ID" test maestro/screens \
+            --exclude-tags android-only \
+            --format junit \
+            --output maestro-report.xml \
+            --test-output-dir="$PWD/maestro-output"
       - name: Collect screenshots
         if: always()
         run: |
           mkdir -p screenshots
-          mv ./*.png screenshots/ 2>/dev/null || true
+          find maestro-output -type f -name '*.png' -exec cp {} screenshots/ \; 2>/dev/null || true
           ls -la screenshots
-          mkdir -p maestro-debug
-          cp -r "$HOME/.maestro/tests/." maestro-debug/ 2>/dev/null || true
-      - name: Upload Maestro debug bundle
+      - name: Upload Maestro output bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mobile-screenshots-ios-maestro-debug
-          path: apps/mobile/maestro-debug
+          name: mobile-screenshots-ios-maestro-output
+          path: apps/mobile/maestro-output
           if-no-files-found: warn
       - name: Upload screenshots as CI artifacts
         if: always()

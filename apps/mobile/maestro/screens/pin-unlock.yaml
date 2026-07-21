@@ -3,7 +3,5 @@ appId: com.damdam.app
 - launchApp
 - tapOn:
     id: "harness-target-pin-unlock"
-- takeScreenshot: DEBUG-pin-unlock-post-tap
-- assertVisible:
-    id: "pin-unlock-input"
+- assertVisible: "Enter your 4-digit PIN to continue."
 - takeScreenshot: pin-unlock

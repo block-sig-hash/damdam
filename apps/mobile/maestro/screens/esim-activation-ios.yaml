@@ -5,6 +5,5 @@ tags:
 - launchApp
 - tapOn:
     id: "harness-target-esim-activation-guide-ios"
-- assertVisible:
-    id: "confirm-esim-activated"
+- assertVisible: "Activate your eSIM"
 - takeScreenshot: esim-activation-guide-ios

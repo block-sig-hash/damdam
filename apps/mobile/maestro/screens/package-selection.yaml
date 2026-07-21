@@ -3,7 +3,6 @@ appId: com.damdam.app
 - launchApp
 - tapOn:
     id: "harness-target-package-selection"
-- takeScreenshot: DEBUG-package-selection-post-tap
 - assertVisible:
     id: "package-selection-screen"
 - takeScreenshot: package-selection
