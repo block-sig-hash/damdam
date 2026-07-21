@@ -261,6 +261,14 @@ jobs:
             # all, so use that instead of debugging the flag further.
             mkdir -p maestro-debug
             cp -r "$HOME/.maestro/tests/." maestro-debug/ 2>/dev/null || true
+            # DIAGNOSTIC: the "Collect screenshots" step (which looks in
+            # apps/mobile/*.png) has come up empty even on runs where
+            # Maestro's own [Passed] output confirms takeScreenshot ran --
+            # find out where these PNGs actually land instead of assuming.
+            echo "::group::DEBUG find all PNGs under workspace and HOME"
+            find "$GITHUB_WORKSPACE" -iname "*.png" 2>/dev/null
+            find "$HOME" -iname "*.png" 2>/dev/null
+            echo "::endgroup::"
       - name: Collect screenshots
         if: always()
         run: |
