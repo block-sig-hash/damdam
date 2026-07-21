@@ -329,6 +329,14 @@ jobs:
       - name: Install CocoaPods dependencies
         working-directory: apps/mobile/ios
         run: pod install
+      # Device model pinned here is runner-image-dependent -- Apple's
+      # simulator device lineup shifts with each Xcode/runner-image
+      # bump (verified during initial CI verification: this macos-15
+      # image's Xcode 16.4 no longer ships an "iPhone 15" simulator
+      # device at all, only iPhone 16/16e/17/Air/SE). If a future
+      # runner image drops "iPhone 16" too, `xcodebuild`'s own error
+      # output lists every currently available destination -- update
+      # both this and the `simctl create` line below to match.
       - name: Build harness-mode Release app for the simulator
         working-directory: apps/mobile/ios
         env:
@@ -340,11 +348,11 @@ jobs:
             -configuration Release \
             -sdk iphonesimulator \
             -derivedDataPath build \
-            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
             build
       - name: Boot simulator and install the app
         run: |
-          DEVICE_ID=$(xcrun simctl create DamDamScreenshotCI "iPhone 15" 2>/dev/null || xcrun simctl list devices | grep DamDamScreenshotCI | grep -oE '[0-9A-F-]{36}')
+          DEVICE_ID=$(xcrun simctl create DamDamScreenshotCI "iPhone 16" 2>/dev/null || xcrun simctl list devices | grep DamDamScreenshotCI | grep -oE '[0-9A-F-]{36}')
           echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
           xcrun simctl boot "$DEVICE_ID"
           xcrun simctl install "$DEVICE_ID" "ios/build/Build/Products/Release-iphonesimulator/DamDam.app"
