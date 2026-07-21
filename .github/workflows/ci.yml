@@ -251,7 +251,7 @@ jobs:
           profile: pixel_6
           script: |
             adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
-            cd apps/mobile && maestro test maestro/screens --exclude-tags ios-only --format junit --output maestro-report.xml
+            cd apps/mobile && maestro test maestro/screens --exclude-tags ios-only --format junit --output maestro-report.xml --debug-output maestro-debug
       - name: Collect screenshots
         if: always()
         run: |
@@ -266,6 +266,19 @@ jobs:
           path: |
             apps/mobile/screenshots/*.png
             apps/mobile/maestro-report.xml
+          if-no-files-found: warn
+      # Maestro's own debug bundle (per-flow logs, command timelines, and a
+      # screenshot taken at the moment of failure) -- added specifically to
+      # get real evidence for the 7/12-flows-failed pattern hit during
+      # initial verification instead of continuing to guess blind. Separate
+      # artifact so a healthy run's (empty-ish) debug output doesn't bloat
+      # the main screenshots artifact.
+      - name: Upload Maestro debug bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-screenshots-android-maestro-debug
+          path: apps/mobile/maestro-debug
           if-no-files-found: warn
       # Inline preview in the job's own Summary tab -- reviewers (human or
       # Claude in claude-review.yml) can see every captured screen without
@@ -371,13 +384,20 @@ jobs:
           xcrun simctl install "$DEVICE_ID" "ios/build/Build/Products/Release-iphonesimulator/DamDam.app"
       - name: Run Maestro flows
         run: |
-          maestro --device "$DEVICE_ID" test maestro/screens --exclude-tags android-only --format junit --output maestro-report.xml
+          maestro --device "$DEVICE_ID" test maestro/screens --exclude-tags android-only --format junit --output maestro-report.xml --debug-output maestro-debug
       - name: Collect screenshots
         if: always()
         run: |
           mkdir -p screenshots
           mv ./*.png screenshots/ 2>/dev/null || true
           ls -la screenshots
+      - name: Upload Maestro debug bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-screenshots-ios-maestro-debug
+          path: apps/mobile/maestro-debug
+          if-no-files-found: warn
       - name: Upload screenshots as CI artifacts
         if: always()
         uses: actions/upload-artifact@v4
