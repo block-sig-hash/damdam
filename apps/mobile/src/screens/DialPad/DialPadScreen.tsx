@@ -16,7 +16,7 @@ import {
   type VoiceEligibility,
 } from '../../api/voiceClient';
 import { Banner } from '../../components/Banner/Banner';
-import { useNetworkQuality } from '../../hooks/useNetworkQuality';
+import { useNetworkQuality, type NetworkQuality } from '../../hooks/useNetworkQuality';
 import { ensureAndroidCallingReady } from '../../services/callKit';
 import { loadDialContacts, type DialContact } from '../../services/deviceContacts';
 import { telnyxVoiceGateway, type VoiceCallSession, type VoiceGateway } from '../../services/voiceGateway';
@@ -31,6 +31,7 @@ interface DialPadScreenProps {
   voiceGateway?: VoiceGateway;
   contactsLoader?: () => Promise<DialContact[]>;
   callingReadiness?: () => Promise<void>;
+  networkQualityOverride?: { connected: boolean; quality: NetworkQuality };
 }
 
 function isDialable(number: string): boolean {
@@ -44,8 +45,10 @@ export function DialPadScreen({
   voiceGateway = telnyxVoiceGateway,
   contactsLoader = loadDialContacts,
   callingReadiness = ensureAndroidCallingReady,
+  networkQualityOverride,
 }: DialPadScreenProps): React.JSX.Element {
-  const network = useNetworkQuality();
+  const liveNetwork = useNetworkQuality();
+  const network = networkQualityOverride ?? liveNetwork;
   const [number, setNumber] = useState('');
   const [contactName, setContactName] = useState<string>();
   const [eligibility, setEligibility] = useState<VoiceEligibility>();

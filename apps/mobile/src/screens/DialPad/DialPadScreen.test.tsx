@@ -51,6 +51,20 @@ it('allows the screenshot harness to replace native calling setup', async () => 
   await waitFor(() => expect(callingReadiness).toHaveBeenCalledTimes(1));
 });
 
+it('allows the screenshot harness to replace the simulator network snapshot', async () => {
+  network.mockReturnValue({ connected: false, quality: 'poor' });
+  await render(
+    <DialPadScreen
+      accessToken="access"
+      pstnMinutesRemaining={10}
+      onCallStarted={jest.fn()}
+      networkQualityOverride={{ connected: true, quality: 'excellent' }}
+    />,
+  );
+
+  expect(screen.queryByText('Calling requires an internet connection')).toBeNull();
+});
+
 it('AC-14.2/8: zero-minute users can pick a contact and place a free app-to-app call', async () => {
   const call = { callType: 'app_to_app', displayNumber: '08098765432' } as never;
   const gateway = { startCall: jest.fn().mockResolvedValue(call) };
