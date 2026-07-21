@@ -263,15 +263,7 @@ jobs:
           profile: pixel_6
           script: |
             adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
-            cd apps/mobile
-            status=0
-            maestro test maestro/screens \
-              --exclude-tags ios-only \
-              --format junit \
-              --output maestro-report.xml \
-              --test-output-dir="$PWD/maestro-output" || status=$?
-            find maestro-output -maxdepth 4 -type f -print 2>/dev/null || true
-            exit "$status"
+            apps/mobile/scripts/run-maestro-android-ci.sh
       - name: Collect screenshots
         if: always()
         run: |
