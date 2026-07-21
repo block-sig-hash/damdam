@@ -506,3 +506,61 @@ def test_hto_pilgrims_list_filters_by_manifest_id(
     assert response.status_code == 200
     pilgrims = {p["name"] for p in response.json()["pilgrims"]}
     assert pilgrims == {"Amina Yusuf"}
+
+
+def test_hto_pilgrims_list_with_no_manifest_filter_aggregates_across_manifests(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """data-model.md §6.38 / frontend-dashboard.md §9.3 Screen 4: the
+    cross-manifest HTO home roster calls this same endpoint with no
+    manifest_id -- confirms that already aggregates (list_pilgrims'
+    manifest_id filter has always been optional) and that each row now
+    carries manifest_id/manifest_name so the roster can label which
+    manifest a pilgrim belongs to."""
+    api = _payload(settings, redis_client, providers, scheduler, session_factory, clock)
+    owner = create_operator(session_factory, "hto-cross-manifest@example.com")
+
+    with session_factory() as session:
+        manifest_a = Manifest(
+            organization_id=owner.id,
+            name="Flight NAF203",
+            status=ManifestStatus.VALIDATED,
+        )
+        manifest_b = Manifest(
+            organization_id=owner.id,
+            name=None,
+            status=ManifestStatus.VALIDATED,
+        )
+        session.add_all([manifest_a, manifest_b])
+        session.flush()
+
+        pilgrim_a = ManifestPilgrim(
+            manifest_id=manifest_a.id,
+            first_name="Amina",
+            last_name="Yusuf",
+            phone_number="08011112222",
+            row_number=1,
+            validation_status=ManifestValidationStatus.VALID,
+        )
+        pilgrim_b = ManifestPilgrim(
+            manifest_id=manifest_b.id,
+            first_name="Bello",
+            last_name="Aliyu",
+            phone_number="08022223333",
+            row_number=1,
+            validation_status=ManifestValidationStatus.VALID,
+        )
+        session.add_all([pilgrim_a, pilgrim_b])
+        session.commit()
+        manifest_a_id, manifest_b_id = manifest_a.id, manifest_b.id
+
+    client = TestClient(api, headers=operator_headers(settings, clock, owner.id))
+    response = client.get("/v1/hto/pilgrims")
+
+    assert response.status_code == 200
+    pilgrims = {p["name"]: p for p in response.json()["pilgrims"]}
+    assert set(pilgrims) == {"Amina Yusuf", "Bello Aliyu"}
+    assert pilgrims["Amina Yusuf"]["manifest_id"] == str(manifest_a_id)
+    assert pilgrims["Amina Yusuf"]["manifest_name"] == "Flight NAF203"
+    assert pilgrims["Bello Aliyu"]["manifest_id"] == str(manifest_b_id)
+    assert pilgrims["Bello Aliyu"]["manifest_name"] is None

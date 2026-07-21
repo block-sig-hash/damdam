@@ -327,6 +327,14 @@ class HtoPilgrimService:
             query = query.where(col(ManifestPilgrim.manifest_id) == manifest_id)
         pilgrims = session.exec(query.order_by(col(ManifestPilgrim.last_name))).all()
 
+        manifest_ids = {p.manifest_id for p in pilgrims}
+        manifest_names: dict[UUID, str | None] = {
+            manifest.id: manifest.name
+            for manifest in session.exec(
+                select(Manifest).where(col(Manifest.id).in_(manifest_ids))
+            ).all()
+        }
+
         tier_names: dict[UUID, str] = {}
         order_ids = {p.manifest_order_id for p in pilgrims if p.manifest_order_id}
         if order_ids:
@@ -394,6 +402,8 @@ class HtoPilgrimService:
             HtoPilgrimSummary(
                 id=pilgrim.id,
                 name=f"{pilgrim.first_name} {pilgrim.last_name}".strip(),
+                manifest_id=pilgrim.manifest_id,
+                manifest_name=manifest_names.get(pilgrim.manifest_id),
                 phone_number=pilgrim.phone_number,
                 tier=(
                     tier_names.get(pilgrim.manifest_order_id)

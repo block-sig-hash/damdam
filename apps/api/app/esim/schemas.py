@@ -21,6 +21,14 @@ class HtoPilgrimSummary(BaseModel):
     id: UUID
     name: str
     phone_number: str
+    # Added for the cross-manifest HTO home roster (frontend-dashboard.md
+    # §9.3 Screen 4 / data-model.md §6.38): the per-manifest page
+    # (/manifests/[id]) doesn't need these since the manifest is already
+    # implied by the URL, but a roster aggregating across every manifest
+    # an organization owns has no other way to label which manifest each
+    # row belongs to.
+    manifest_id: UUID
+    manifest_name: str | None
     tier: str | None
     # Deliberately a two-value signal for MVP, not a full lifecycle
     # (issued/downloaded/activated, which belongs to US-11's

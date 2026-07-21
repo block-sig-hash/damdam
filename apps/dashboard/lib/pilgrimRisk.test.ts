@@ -14,6 +14,8 @@ function pilgrim(overrides: Partial<HtoPilgrim>): HtoPilgrim {
     id: "p-1",
     name: "Amina Yusuf",
     phone_number: "+2348012345678",
+    manifest_id: "manifest-1",
+    manifest_name: "Flight NAF203",
     tier: "Standard",
     esim_status: "activated",
     activation_status: "activated",

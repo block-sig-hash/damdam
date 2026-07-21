@@ -513,14 +513,19 @@ GET    /hto/manifests
 ```
 GET    /hto/pilgrims
   HTO auth required
-  Query: ?manifest_id= (filters to one manifest; risk-sort AC-18.1,
-         amber-highlight AC-18.3, and search AC-18.7 are all
-         implemented client-side against this same full-list
-         response, not as new server query params — a per-manifest
+  Query: ?manifest_id= (optional — omitted, this aggregates across
+         every manifest the calling organization owns, which is
+         what the cross-manifest HTO Home roster (frontend-
+         dashboard.md §9.3 Screen 4, data-model.md §6.38) calls
+         with no filter; risk-sort AC-18.1, amber-highlight
+         AC-18.3, and search AC-18.7 are all implemented
+         client-side against this same full-list response, not as
+         new server query params — a per-manifest or per-org
          roster is small enough that server-side pagination/sort
          isn't warranted yet)
-  200: { pilgrims: [{ id, name, phone_number, tier, esim_status,
-          last_checkin_at?, sos_status, activation_status }] }
+  200: { pilgrims: [{ id, name, phone_number, manifest_id,
+          manifest_name?, tier, esim_status, last_checkin_at?,
+          sos_status, activation_status }] }
 
 GET    /hto/pilgrims/{id}
   HTO auth required

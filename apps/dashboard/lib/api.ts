@@ -268,6 +268,8 @@ export type HtoPilgrim = {
   id: string;
   name: string;
   phone_number: string;
+  manifest_id: string;
+  manifest_name: string | null;
   tier: string | null;
   esim_status: string;
   activation_status: string;
@@ -275,9 +277,13 @@ export type HtoPilgrim = {
   sos_status: string;
 };
 
-export async function getHtoPilgrims(manifestId: string): Promise<HtoPilgrim[]> {
-  const query = new URLSearchParams({ manifest_id: manifestId });
-  const response = await fetch(`${API_BASE_URL}/hto/pilgrims?${query}`, {
+// manifestId omitted (or undefined) aggregates across every manifest the
+// calling organization owns -- this is what the cross-manifest HTO Home
+// roster (frontend-dashboard.md §9.3 Screen 4) calls with no filter;
+// /manifests/[id] passes a specific id to scope to just that manifest.
+export async function getHtoPilgrims(manifestId?: string): Promise<HtoPilgrim[]> {
+  const query = manifestId ? `?${new URLSearchParams({ manifest_id: manifestId })}` : "";
+  const response = await fetch(`${API_BASE_URL}/hto/pilgrims${query}`, {
     headers: operatorHeaders(),
   });
   return (await parseResponse<{ pilgrims: HtoPilgrim[] }>(response)).pilgrims;

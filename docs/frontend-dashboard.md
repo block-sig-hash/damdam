@@ -101,28 +101,37 @@ tier, eSIM status, last check-in, SOS status. Sorted by risk by
 default (unresolved SOS first, stale check-ins next, alphabetical
 last).
 
-**Implementation note (US-18):** this spec describes a single
-cross-manifest roster at `/home`. The actual US-18 build instead
-implements the risk-sort/highlight/search table per-manifest at
-`/manifests/[id]`, deliberately leaving `/home`'s existing narrower
-unresolved-SOS-only banner (built earlier, still live) untouched
-rather than conflating the two. `/home` therefore does not yet show
-the "manifest/batch" column or a cross-manifest aggregate view — a
-pilgrim's risk state is only visible by opening their specific
-manifest. Reconciling this (either building the cross-manifest `/home`
-view this section describes, or updating this section to describe the
-per-manifest scope as the intended design) is open follow-up work, not
-resolved silently in either direction here.
+**Implementation note (§9.7 amendment):** the cross-manifest roster
+this section describes is now built at `/home`
+(`apps/dashboard/app/home/page.tsx`), reusing the same risk-sort/
+highlight/search logic `/manifests/[id]` already used (`lib/
+pilgrimRisk.ts`), called with no `manifest_id` filter so it
+aggregates across every manifest the organization owns —
+`GET /hto/pilgrims` already supported this (api-spec.md §7.8), the
+only backend gap was that `HtoPilgrimSummary` had no field to label
+which manifest a row belonged to, closed by adding `manifest_id`/
+`manifest_name` (data-model.md §6.38). `/manifests/[id]` is
+unchanged — it remains the single-manifest view, useful when an
+operator has already navigated to a specific manifest. Two
+interactive elements below are **not** implemented, disclosed rather
+than silently dropped: "Sort column headers" (no clickable-header-sort
+pattern exists anywhere else in this dashboard to follow; the
+default risk-sort is the only ordering) and "Row click → Pilgrim
+Detail" (Screen 10, Pilgrim Detail, does not exist yet — see §9.1;
+`/sos-alerts` has the same pre-existing dangling link for the same
+reason).
 
 **Interactive elements:**
 - Filter by manifest (dropdown)
 - Search by name/phone
-- Sort column headers
-- Row click → Pilgrim Detail
+- ~~Sort column headers~~ — not implemented, see note above
+- ~~Row click → Pilgrim Detail~~ — not implemented, see note above
 - Manual refresh button alongside the 60s auto-refresh indicator
 
 **States:**
-- *Loading:* skeleton table
+- *Loading:* plain loading text, not a skeleton table — matches
+  this dashboard's existing convention elsewhere (§9.5 scope; no
+  skeleton-table pattern exists in this codebase to follow)
 - *Empty (no manifests yet):* CTA to create first manifest
 - *Unresolved SOS present:* red banner at top of page, persistent
   until resolved, **in addition to** the pinned red row —
@@ -407,3 +416,39 @@ a dedicated responsive rebuild.
 | SOS Alerts | Polling | 15s (tighter, given urgency) |
 | Manifest Order status | Polling | 30s (only while status = awaiting_payment) |
 | Admin screens | Manual refresh only | No auto-poll |
+
+---
+
+## 9.7 Amendment — Failed Notification Queue, Cross-Manifest HTO Home, Device Compatibility Log
+
+Three screens this spec described but the dashboard didn't yet have
+a frontend for are now built, closing gaps against backend support
+that (for two of the three) already existed:
+
+**Failed Notification Queue (Screen 16)** —
+`apps/dashboard/app/admin/sos-notifications/page.tsx`. Pure frontend
+work; `GET /admin/sos-notifications/failed`, `POST .../{id}/retry`,
+and `POST .../retry-bulk` (api-spec.md §7.10) were already fully
+implemented and tested. Both retry actions refetch the list rather
+than optimistically removing the retried row(s) — a row only
+disappears once the backend confirms it (status reset off `failed`,
+`admin_queued_at` cleared), so a retry that fails again immediately
+still shows as failed.
+
+**Cross-Manifest HTO Home (Screen 4)** —
+`apps/dashboard/app/home/page.tsx`, replacing the previous narrower
+unresolved-SOS-only banner described as a known gap in Screen 4's own
+spec text above before this amendment. `GET /hto/pilgrims` already
+aggregated across manifests when called with no `manifest_id`
+(`HtoPilgrimService.list_pilgrims`'s filter was always optional) —
+the one real backend gap was that `HtoPilgrimSummary` had no field
+to say *which* manifest a row belonged to, needed for the
+"manifest/batch" column this section's spec always called for.
+Closed by adding `manifest_id`/`manifest_name` to `HtoPilgrimSummary`
+(data-model.md §6.38, api-spec.md §7.8) — no migration, this is a
+response-shape addition over existing columns, not a schema change.
+Two originally-specified interactive elements are deliberately not
+built, disclosed above under Screen 4 rather than silently dropped:
+column-header sorting (no precedent pattern in this codebase) and
+row-click-to-Pilgrim-Detail (that screen, #10 in §9.1, doesn't exist
+yet).

@@ -2652,6 +2652,15 @@ components:
         phone_number:
           type: string
           title: Phone Number
+        manifest_id:
+          type: string
+          format: uuid
+          title: Manifest Id
+        manifest_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Manifest Name
         tier:
           anyOf:
           - type: string
@@ -2677,6 +2686,8 @@ components:
       - id
       - name
       - phone_number
+      - manifest_id
+      - manifest_name
       - tier
       - esim_status
       - activation_status

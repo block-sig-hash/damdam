@@ -1675,3 +1675,23 @@ deletion through their nullable `package_id`; the new six-year task is their
 only age-based deletion path. `device_compatibility_log` already uses the same
 nullable `ON DELETE SET NULL` relationship required by its 90-day PII-strip
 rule.
+
+---
+
+## 6.38 Amendment — HTO Pilgrim Summary Manifest Label
+
+No column or table change — this is a response-shape addition over existing
+data. `HtoPilgrimService.list_pilgrims` (`apps/api/app/esim/service.py`)
+already joined `manifest_pilgrims` to `manifests` and already aggregated
+across every manifest an organization owns when called with no `manifest_id`
+filter; the API response (`HtoPilgrimSummary`, `apps/api/app/esim/
+schemas.py`) simply never surfaced which manifest each row came from, since
+the only caller (`/manifests/[id]`, frontend-dashboard.md §9.3 Screen 4) had
+the manifest implied by the URL and never needed it.
+
+The cross-manifest HTO Home roster (frontend-dashboard.md §9.7 amendment)
+does need it — a table aggregating pilgrims from several manifests has no
+other way to label which manifest a given row belongs to. `HtoPilgrimSummary`
+gains `manifest_id: UUID` (always present — every `manifest_pilgrims` row has
+a non-null `manifest_id`) and `manifest_name: str | None` (nullable, matching
+`manifests.name`'s own nullability). See api-spec.md §7.8.
