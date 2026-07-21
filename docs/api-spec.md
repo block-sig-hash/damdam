@@ -672,8 +672,16 @@ POST   /admin/sos-notifications/retry-bulk
   Body: { notification_ids: [uuid] }
 
 GET    /admin/device-compatibility-log
+  Admin auth required
   Query: ?esim_supported=false&platform=ios
-  Used to build the "known incompatible devices" list
+  200: { entries: [{ id, device_model, platform, os_version,
+          esim_supported, checked_at }] }
+  Used to build the "known incompatible devices" list. Scoped to
+  device_compatibility_log rows with event_type=compatibility_check
+  only — issuance_attempt rows (data-model.md §6.19) share the same
+  table but populate a disjoint set of fields (aggregator,
+  attempt_succeeded, no device_model/platform/esim_supported) and
+  are not returned here.
 
 POST   /admin/packages/{id}/cancel
   Admin auth required

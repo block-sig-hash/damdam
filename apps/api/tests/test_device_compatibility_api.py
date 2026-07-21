@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import select
 
 from app.auth.models import (
+    AdminUser,
     HTOApprovalStatus,
     Manifest,
     ManifestOrder,
@@ -21,6 +22,7 @@ from app.auth.models import (
 from app.auth.routes import request_otp, verify_otp
 from app.auth.schemas import OTPRequest, OTPVerifyRequest
 from app.esim.models import (
+    DeviceCompatibilityEvent,
     DeviceCompatibilityLog,
     EsimAggregator,
     EsimProfile,
@@ -564,3 +566,147 @@ def test_hto_pilgrims_list_with_no_manifest_filter_aggregates_across_manifests(
     assert pilgrims["Amina Yusuf"]["manifest_name"] == "Flight NAF203"
     assert pilgrims["Bello Aliyu"]["manifest_id"] == str(manifest_b_id)
     assert pilgrims["Bello Aliyu"]["manifest_name"] is None
+
+
+def admin_headers(settings, clock, admin_id: UUID) -> dict[str, str]:
+    token = jwt.encode(
+        {
+            "sub": str(admin_id),
+            "aud": "admin",
+            "type": "access",
+            "iat": clock(),
+            "exp": clock() + timedelta(minutes=15),
+        },
+        settings.jwt_secret,
+        algorithm="HS256",
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_admin_device_compatibility_log_lists_compatibility_check_rows(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """api-spec.md §7.10: the admin log view -- device model, OS version,
+    compatibility outcome, timestamp. Confirms the endpoint now exists
+    (it was documented but unimplemented before this change) and returns
+    real rows written by the existing POST /me/device-compatibility path."""
+    api = _payload(settings, redis_client, providers, scheduler, session_factory, clock)
+    client, _ = _authenticated_client(api, "08033335555")
+    client.post(
+        "/v1/me/device-compatibility",
+        json={
+            "platform": "ios",
+            "device_model": "iPhone 8",
+            "os_version": "15.0",
+            "esim_supported": False,
+        },
+    )
+
+    with session_factory() as session:
+        admin = AdminUser(email="admin-devicelog@example.com", password_hash="unused")
+        session.add(admin)
+        session.commit()
+        admin_id = admin.id
+
+    admin_client = TestClient(api, headers=admin_headers(settings, clock, admin_id))
+    response = admin_client.get("/v1/admin/device-compatibility-log")
+
+    assert response.status_code == 200
+    entries = response.json()["entries"]
+    assert len(entries) == 1
+    assert entries[0]["device_model"] == "iPhone 8"
+    assert entries[0]["os_version"] == "15.0"
+    assert entries[0]["platform"] == "ios"
+    assert entries[0]["esim_supported"] is False
+
+
+def test_admin_device_compatibility_log_excludes_issuance_attempt_rows(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """issuance_attempt rows share this table but have no device_model/
+    os_version/esim_supported -- must not appear in the admin compatibility
+    log, which only makes sense for compatibility_check rows."""
+    api = _payload(settings, redis_client, providers, scheduler, session_factory, clock)
+
+    with session_factory() as session:
+        session.add(
+            DeviceCompatibilityLog(
+                event_type=DeviceCompatibilityEvent.ISSUANCE_ATTEMPT,
+                aggregator=EsimAggregator.MONTY_MOBILE,
+                attempt_succeeded=True,
+                checked_at=clock(),
+            )
+        )
+        admin = AdminUser(email="admin-devicelog-2@example.com", password_hash="unused")
+        session.add(admin)
+        session.commit()
+        admin_id = admin.id
+
+    admin_client = TestClient(api, headers=admin_headers(settings, clock, admin_id))
+    response = admin_client.get("/v1/admin/device-compatibility-log")
+
+    assert response.status_code == 200
+    assert response.json()["entries"] == []
+
+
+def test_admin_device_compatibility_log_filters_by_platform_and_esim_supported(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """Query params documented in api-spec.md §7.10
+    (?esim_supported=false&platform=ios) -- confirms both filter,
+    combined, not just individually."""
+    api = _payload(settings, redis_client, providers, scheduler, session_factory, clock)
+    ios_client, _ = _authenticated_client(api, "08044445555")
+    ios_client.post(
+        "/v1/me/device-compatibility",
+        json={
+            "platform": "ios",
+            "device_model": "iPhone 8",
+            "esim_supported": False,
+        },
+    )
+    android_client, _ = _authenticated_client(api, "08055556666")
+    android_client.post(
+        "/v1/me/device-compatibility",
+        json={
+            "platform": "android",
+            "device_model": "Tecno Spark 10",
+            "esim_supported": False,
+        },
+    )
+    ios_compatible_client, _ = _authenticated_client(api, "08066667777")
+    ios_compatible_client.post(
+        "/v1/me/device-compatibility",
+        json={
+            "platform": "ios",
+            "device_model": "iPhone 15",
+            "esim_supported": True,
+        },
+    )
+
+    with session_factory() as session:
+        admin = AdminUser(email="admin-devicelog-3@example.com", password_hash="unused")
+        session.add(admin)
+        session.commit()
+        admin_id = admin.id
+
+    admin_client = TestClient(api, headers=admin_headers(settings, clock, admin_id))
+    response = admin_client.get(
+        "/v1/admin/device-compatibility-log?platform=ios&esim_supported=false"
+    )
+
+    assert response.status_code == 200
+    entries = response.json()["entries"]
+    assert len(entries) == 1
+    assert entries[0]["device_model"] == "iPhone 8"
+
+
+def test_admin_device_compatibility_log_requires_admin_auth(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    api = _payload(settings, redis_client, providers, scheduler, session_factory, clock)
+    client = TestClient(api, raise_server_exceptions=False)
+
+    response = client.get("/v1/admin/device-compatibility-log")
+
+    assert response.status_code == 401

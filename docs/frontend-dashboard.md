@@ -347,6 +347,9 @@ pending (highlighted if >48h — an internal SLA flag).
 
 ### Screen: Admin — Failed Notification Queue (Screen 16)
 
+**Built** — `apps/dashboard/app/admin/sos-notifications/page.tsx`
+(§9.7 amendment).
+
 **Data displayed:** Failed `sos_notifications` rows — pilgrim
 name, channel, failure reason, SOS timestamp, retry count.
 
@@ -356,6 +359,40 @@ name, channel, failure reason, SOS timestamp, retry count.
   a systemic outage (e.g., WhatsApp API down for an hour) could
   produce many failed rows at once, and one-by-one retry would be
   painful during exactly the kind of incident where speed matters
+- After either action, the row's continued presence/absence reflects
+  a genuine refetch of `GET /admin/sos-notifications/failed`, not an
+  optimistic local removal — a retry that fails again quickly (e.g.
+  the vendor outage is still ongoing) must still show as failed, not
+  silently disappear because the button was clicked
+
+---
+
+### Screen: Admin — Device Compatibility Log (Screen 17)
+
+**Built** — `apps/dashboard/app/admin/device-compatibility/page.tsx`
+(§9.7 amendment). No per-screen spec existed for this screen before
+now — the same category of gap Screen 12 (Reports) had before US-20
+(§9.3 above); this fills it using this dashboard's own established
+conventions per that same precedent, plus the US-20-style acceptance
+criteria implied by api-spec.md §7.10's `GET
+/admin/device-compatibility-log` documentation.
+
+**Data displayed:** `device_compatibility_log` rows, scoped to
+`event_type=compatibility_check` only (`issuance_attempt` rows share
+the table but have no device_model/platform/esim_supported to show,
+api-spec.md §7.10) — device model, platform, OS version,
+compatibility outcome (Compatible/Incompatible), checked-at
+timestamp.
+
+**Interactive elements:**
+- Filter by platform (iOS/Android/all)
+- Filter by outcome (Compatible/Incompatible/all)
+- Manual refresh button (no auto-poll, per §9.6)
+
+**States:**
+- *Loading:* plain loading text (see Screen 4's note on this
+  dashboard's loading-state convention)
+- *Empty:* "No device compatibility checks match these filters."
 
 ---
 
@@ -452,3 +489,27 @@ built, disclosed above under Screen 4 rather than silently dropped:
 column-header sorting (no precedent pattern in this codebase) and
 row-click-to-Pilgrim-Detail (that screen, #10 in §9.1, doesn't exist
 yet).
+
+**Device Compatibility Log (Screen 17)** —
+`apps/dashboard/app/admin/device-compatibility/page.tsx` plus a new
+backend endpoint, `GET /admin/device-compatibility-log`
+(`apps/api/app/admin/routes.py`), which api-spec.md §7.10 already
+documented but which did not actually exist in `apps/api` before
+this change — confirmed by grepping the router files directly, not
+assumed from the spec. Added `DeviceCompatibilityService.list_checks`
+and `DeviceCompatibilityLogEntry`/`DeviceCompatibilityLogListResponse`
+schemas (`apps/api/app/esim/service.py`, `apps/api/app/esim/
+schemas.py`). Scoped to `event_type=compatibility_check` rows only —
+`issuance_attempt` rows share the `device_compatibility_log` table
+(data-model.md §6.19) but populate a disjoint set of fields
+(`aggregator`, `attempt_succeeded`, no `device_model`/`platform`/
+`esim_supported`), so returning both event types in one table would
+produce rows whose columns don't mean the same thing.
+
+Test coverage: `apps/api/tests/test_device_compatibility_api.py`
+(5 new backend tests — endpoint auth, listing, both filters,
+issuance_attempt exclusion, plus 1 new test confirming the
+cross-manifest `HtoPilgrimSummary` fields), and a `page.test.tsx`
+per new dashboard page following this codebase's existing
+`vi.stubGlobal("fetch", ...)` convention (18 new frontend tests
+across the three screens).

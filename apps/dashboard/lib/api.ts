@@ -498,3 +498,33 @@ export async function retrySOSNotificationsBulk(ids: string[]): Promise<void> {
     }),
   );
 }
+
+export type DeviceCompatibilityLogEntry = {
+  id: string;
+  device_model: string | null;
+  platform: "ios" | "android" | null;
+  os_version: string | null;
+  esim_supported: boolean | null;
+  checked_at: string;
+};
+
+export type DeviceCompatibilityLogFilter = {
+  platform?: "ios" | "android";
+  esimSupported?: boolean;
+};
+
+export async function getDeviceCompatibilityLog(
+  filter: DeviceCompatibilityLogFilter = {},
+): Promise<DeviceCompatibilityLogEntry[]> {
+  const query = new URLSearchParams();
+  if (filter.platform) query.set("platform", filter.platform);
+  if (filter.esimSupported !== undefined) {
+    query.set("esim_supported", String(filter.esimSupported));
+  }
+  const suffix = query.toString() ? `?${query}` : "";
+  const response = await fetch(
+    `${API_BASE_URL}/admin/device-compatibility-log${suffix}`,
+    { headers: adminHeaders() },
+  );
+  return (await parseResponse<{ entries: DeviceCompatibilityLogEntry[] }>(response)).entries;
+}

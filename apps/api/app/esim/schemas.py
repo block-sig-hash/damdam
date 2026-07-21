@@ -17,6 +17,19 @@ class DeviceCompatibilityResponse(BaseModel):
     logged: bool = True
 
 
+class DeviceCompatibilityLogEntry(BaseModel):
+    id: UUID
+    device_model: str | None
+    platform: Platform | None
+    os_version: str | None
+    esim_supported: bool | None
+    checked_at: datetime
+
+
+class DeviceCompatibilityLogListResponse(BaseModel):
+    entries: list[DeviceCompatibilityLogEntry]
+
+
 class HtoPilgrimSummary(BaseModel):
     id: UUID
     name: str
