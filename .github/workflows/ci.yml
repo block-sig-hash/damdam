@@ -261,6 +261,10 @@ jobs:
           api-level: 28
           arch: x86_64
           profile: pixel_6
+          # Pin the emulator binary proven by the successful screenshot run.
+          # The mutable `latest` package intermittently returned a corrupt ZIP
+          # from sdkmanager before the emulator could even boot.
+          emulator-build: 15507667
           script: |
             adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
             apps/mobile/scripts/run-maestro-android-ci.sh
