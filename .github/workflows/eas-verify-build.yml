@@ -40,6 +40,14 @@ jobs:
         with:
           node-version: "20"
       - run: npm install -g eas-cli
+      # EAS CLI's own preflight for developmentClient: true checks
+      # whether expo-dev-client is actually resolvable in
+      # apps/mobile/node_modules, not just declared in package.json --
+      # without this, that check fails even after the dependency is
+      # correctly added, because it was never installed in this job.
+      - name: Install mobile app dependencies
+        working-directory: apps/mobile
+        run: npm ci
       - name: EAS Build
         working-directory: apps/mobile
         env:
