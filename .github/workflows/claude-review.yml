@@ -18,14 +18,17 @@ name: Claude Review
 # would cost more in missed issues than it saves in tokens.
 #
 # NOTE: the prompt below asks Claude to look at a rendered
-# screenshot when reviewing mobile screens. That only works if a
-# screenshot-generation step actually runs and uploads an artifact
-# before this job — e.g. a Detox/Maestro screenshot test, or an
-# Expo/React Native preview build step. That CI step doesn't exist
-# yet as of this workflow's authoring; add it before relying on
-# the visual-review guidance below, or Claude will be reviewing
-# code only and the design-system compliance check will be
-# text-based inference rather than an actual look at the screen.
+# screenshot when reviewing mobile screens. `ci.yml`'s
+# `screenshot-mobile-android` job (nightly/on-demand
+# `screenshot-mobile-ios` counterpart) now generates these via the
+# harness at apps/mobile/screenshotHarness/ and uploads them as the
+# `mobile-screenshots-android`/`mobile-screenshots-ios` artifacts —
+# see docs/testing-qa.md §14.11 for what's covered. Coverage is
+# currently 13 of the screen inventory in frontend-mobile.md §8.1,
+# not all of it, so this job's screenshot artifact won't exist for
+# every mobile PR yet: check whether it ran before treating its
+# absence as a review finding, and still fall back to text-based
+# inference for any screen outside the harness's current set.
 
 on:
   pull_request:

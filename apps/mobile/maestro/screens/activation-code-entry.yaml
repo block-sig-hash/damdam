@@ -1,0 +1,8 @@
+appId: com.damdam.app
+---
+- launchApp
+- tapOn:
+    id: "harness-target-activation-code-entry"
+- assertVisible:
+    id: "activation-code-input"
+- takeScreenshot: activation-code-entry

@@ -9,6 +9,7 @@ module.exports = {
           'POSTHOG_API_KEY',
           'POSTHOG_HOST',
           'SUPPORT_WHATSAPP_NUMBER',
+          'SCREENSHOT_HARNESS_MODE',
         ],
       },
     ],

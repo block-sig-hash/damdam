@@ -1,0 +1,7 @@
+appId: com.damdam.app
+---
+- launchApp
+- tapOn:
+    id: "harness-target-sos-confirm"
+- assertVisible: "Emergency SOS"
+- takeScreenshot: sos-confirm

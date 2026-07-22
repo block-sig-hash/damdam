@@ -1,0 +1,7 @@
+appId: com.damdam.app
+---
+- launchApp
+- tapOn:
+    id: "harness-target-pin-unlock"
+- assertVisible: "Enter your 4-digit PIN to continue."
+- takeScreenshot: pin-unlock

@@ -58,18 +58,15 @@ concrete test types, not inventing new requirements.
 
 **Dependency note on the visual-compliance row:** `claude-review.yml`
 is written to check a PR's rendered screenshot against
-`design-system.md`, but that only works once a screenshot-
-generation CI step actually exists and uploads an artifact for the
-review job to look at — that step is not yet built (flagged as a
-prerequisite in the workflow file's own header comment). Until it
-exists, treat this coverage row as **not actually satisfied**, even
-though the review prompt asks for it — a text-only code review is
-a materially weaker check than an actual look at the screen, and
-the gap between "the review prompt asks for a screenshot" and "a
-screenshot actually gets generated" is exactly the kind of thing
-that quietly stops mattering to anyone until a screen ships looking
-wrong. Building that CI step is a prerequisite for this row to be
-real, not optional polish.
+`design-system.md`. That prerequisite is now built — see
+"Amendment — Screenshot-Generation CI" at the end of this document
+for what's actually covered and what's still out of scope. Until
+that amendment's coverage gaps close (most of the screen inventory
+isn't wired into the harness yet, and the iOS job only runs
+nightly/on-demand rather than per-PR), still treat this row as
+**partially satisfied**: a screen inside the harness's covered set
+gets a real rendered-screenshot check, but a screen outside it still
+falls back to the weaker text-only review.
 
 **Migration testing gap:** the API coverage row above excludes
 migrations, and CI's "Apply database migrations" step
@@ -451,3 +448,91 @@ percentage formula to both resources:
   failed/offline refresh retains both cached balances;
 - the Home queued-events indicator is tested with check-in and SOS rows pending
   at the same time, and reports their combined count.
+
+---
+
+## 14.11 Amendment — Screenshot-Generation CI
+
+Closes the gap flagged in §14.2's visual-compliance row and in
+`claude-review.yml`'s own header comment: Claude's mobile review
+workflow could only read code/diffs, never see an actual rendered
+screen. `apps/mobile/screenshotHarness/` and
+`.github/workflows/ci.yml`'s `screenshot-mobile-android` /
+`screenshot-mobile-ios` jobs now generate real device/simulator
+screenshots — see `apps/mobile/screenshotHarness/README.md` for the
+harness design and how to add a new target.
+
+**Why a harness instead of driving the real app:** `apps/mobile` has
+no navigation library, no deep-linking, and no mock-server layer, so
+there was no way to make the real running app land on an arbitrary
+screen in CI. The harness instead mounts each target screen directly
+with fixture props — the same approach the screen's own Jest/RNTL
+tests already use — with a `global.fetch` override standing in for
+the backend on the few screens that fetch on mount. A single APK/IPA
+build serves every registered target; Maestro selects the target at
+runtime via a picker screen, not per-screen rebuild.
+
+**Currently covered** (`apps/mobile/maestro/screens/*.yaml`, 13
+targets): OTP verification, PIN unlock, PIN setup, activation code
+entry, package selection, eSIM QR code, eSIM activation (Android
+automatic path and iOS manual-guide path, captured separately —
+demonstrating the real platform divergence `frontend-mobile.md`
+documents), activation success, SOS confirm, SOS sent, dial pad, and
+active call.
+
+**Explicitly out of scope, not faked:**
+
+- **The native CallKit (iOS) / ConnectionService (Android) incoming-
+  call UI.** This is OS-level chrome outside the app's own view
+  hierarchy, only reachable via a real Apple PushKit VoIP push or a
+  real FCM-triggered Headless JS task — neither is triggerable
+  headlessly in CI on any tooling (Detox, Maestro, or otherwise),
+  real device or simulator. The `active-call` target captures
+  `ActiveCallScreen` (the in-app UI after a call connects) mounted
+  directly with a fixture call session instead — a real, useful
+  screen to review, but not a substitute for seeing the native call
+  UI.
+- **`EsimActivationFlow`'s real device-eSIM-slot detection**
+  (`services/esimActivation.ts`) — an emulator/simulator can't
+  meaningfully answer whether a device has an eSIM slot, so the
+  harness mounts the flow's two presentational child screens
+  directly instead of the real network+native-check container.
+- **The rest of the screen inventory** (`frontend-mobile.md` §8.1
+  lists 29+ screens; 13 are covered above) — the harness and Maestro
+  flows are built to make adding one cheap (one registry entry, one
+  YAML file), not to close every screen in this pass.
+- **Per-PR iOS coverage.** `screenshot-mobile-ios` runs nightly plus
+  on-demand (`workflow_dispatch`) only, not on every PR —
+  `macos-15` GitHub-hosted runners bill at roughly 10x an
+  `ubuntu-latest` minute, and this is testing infrastructure, not
+  the safety-critical path. `screenshot-mobile-android` does run on
+  every mobile-touching PR. Re-evaluate the iOS cadence if
+  iOS-specific visual regressions start slipping through between
+  nightly runs.
+
+**Where the screenshots land:** both jobs upload full-resolution
+PNGs as CI artifacts (`mobile-screenshots-android` /
+`mobile-screenshots-ios`) and additionally render resized inline
+previews directly in the job's Actions Summary tab, so a screen can
+be visually checked without downloading anything.
+
+**Verification history on this amendment:** the first real run
+against live GitHub Actions infrastructure surfaced two genuine bugs
+that no amount of local review would have caught — `takeScreenshot`
+output landing in Maestro's own `--test-output-dir` tree rather than
+the process's working directory (the collection step was silently
+finding nothing), and 7 of the 13 registered screens failing to
+render in time on-device due to a mix of causes: the harness's own
+`fetchMock.ts` using `new Response(...)` (unreliable in the React
+Native runtime), native hooks (`useNetworkQuality`,
+`ensureAndroidCallingReady`) blocking on a real device, the picker
+list needing `scrollUntilVisible` for lower items, and two PIN
+screens' testID-based assertions being fragile on-device (now
+text-based instead). All were root-caused from real failure logs and
+fixed, not patched around — every run since (both platforms) has
+passed 12/12 flows (`esim-activation-ios`/`esim-activation-android`
+are platform-exclusive, so 12 run per platform out of the 13
+registered targets) with real, independently-inspected screenshots
+matching the harness's fixture data. Treat this the way `testing-qa.md`
+treats PR #41 in §14.2: a concrete example of why CI passing on
+first write is not the same as CI passing for real.

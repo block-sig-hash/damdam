@@ -5,6 +5,14 @@ on:
     branches: [develop, main]
   push:
     branches: [develop]
+  # Powers the iOS screenshot job below, which deliberately does not run
+  # on every PR (macOS runners cost ~10x an ubuntu-latest minute) --
+  # nightly plus on-demand keeps it exercised without that recurring
+  # per-PR cost. See docs/testing-qa.md's screenshot-generation-CI
+  # amendment for the full cost rationale.
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch: {}
 
 jobs:
   # Path-filters which of the four jobs below actually need to run,
@@ -173,6 +181,287 @@ jobs:
         if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
         working-directory: apps/mobile/android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+  # Renders real screens on a real Android emulator via the screenshot
+  # harness (apps/mobile/screenshotHarness/README.md) and Maestro flows
+  # (apps/mobile/maestro/screens/*.yaml), closing the gap flagged in
+  # docs/testing-qa.md's screenshot-generation-CI amendment and in
+  # claude-review.yml's own header comment: mobile visual review had no
+  # way to see a rendered screen, only diffs. Runs on ubuntu-latest (no
+  # macOS surcharge) so it's affordable on every mobile PR, unlike the
+  # iOS job below.
+  screenshot-mobile-android:
+    name: Mobile — Android screenshot generation
+    needs: changes
+    if: >-
+      (github.event_name == 'pull_request' && needs.changes.outputs.mobile == 'true') ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            apps/mobile/android/*.gradle
+            apps/mobile/android/gradle/wrapper/gradle-wrapper.properties
+      - run: npm ci
+      - name: Install Maestro CLI
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      # Debug builds load JS from a live Metro server rather than bundling
+      # it (android/app/build.gradle's react{} block defaults
+      # debuggableVariants to ["debug", "debugOptimized"]), so a debug
+      # APK alone wouldn't pick up SCREENSHOT_HARNESS_MODE. The release
+      # build type bundles JS offline at build time and, per this repo's
+      # current android/app/build.gradle, is signed with the same
+      # checked-in debug keystore as the debug build (no release signing
+      # secret needed) -- so building "release" here gets us an
+      # offline-bundled, installable APK with the harness baked in.
+      - name: Build harness-mode release APK
+        working-directory: apps/mobile/android
+        env:
+          SCREENSHOT_HARNESS_MODE: "true"
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+      - name: Enable KVM for the Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Boot emulator, install APK, run Maestro flows
+        # This action's `script` runs from $GITHUB_WORKSPACE (repo root),
+        # not this job's `defaults.run.working-directory` -- composite
+        # actions don't inherit that setting, so paths below are spelled
+        # out relative to the repo root rather than apps/mobile.
+        # api-level 28 (not a newer one like 34): a real community
+        # reference config for this exact action+ubuntu-latest+Maestro
+        # combination (github.com/retyui/Using-GitHub-Actions-to-run-
+        # your-Maestro-Flows) explicitly documents only api-level
+        # 26-28 as stable on ubuntu-* runners. This app's
+        # minSdkVersion is 24 (android/build.gradle), so 28 is well
+        # within range. NOTE: switching to 28 alone did NOT fix the
+        # empty-screenshot-artifact finding or the 7/12-flows-failed
+        # pattern seen during initial verification -- those turned out
+        # to be real bugs (see docs/testing-qa.md §14.11's verification
+        # history), not an api-level 34 instability issue. Kept at 28
+        # anyway per this reference's stability guidance and because
+        # reverting to 34 was never re-tested once the real bugs were
+        # fixed.
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          arch: x86_64
+          profile: pixel_6
+          # Pin the emulator binary proven by the successful screenshot run.
+          # The mutable `latest` package intermittently returned a corrupt ZIP
+          # from sdkmanager before the emulator could even boot.
+          emulator-build: 15507667
+          script: |
+            adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            apps/mobile/scripts/run-maestro-android-ci.sh
+      - name: Collect screenshots
+        if: always()
+        run: |
+          mkdir -p screenshots
+          find maestro-output -type f -path '*/takeScreenshot/*.png' -exec cp {} screenshots/ \; 2>/dev/null || true
+          ls -la screenshots
+      - name: Validate screenshot artifact completeness
+        if: always()
+        run: |
+          shopt -s nullglob
+          screenshots=(screenshots/*.png)
+          test "${#screenshots[@]}" -eq 12
+          test -s maestro-report.xml
+      - name: Upload screenshots as CI artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-screenshots-android
+          path: |
+            apps/mobile/screenshots/*.png
+            apps/mobile/maestro-report.xml
+          if-no-files-found: error
+      - name: Upload Maestro output bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-screenshots-android-maestro-output
+          path: apps/mobile/maestro-output
+          if-no-files-found: warn
+      # Inline preview in the job's own Summary tab -- reviewers (human or
+      # Claude in claude-review.yml) can see every captured screen without
+      # downloading the artifact zip. Thumbnails only (full-resolution
+      # PNGs are in the artifact above): GITHUB_STEP_SUMMARY has a ~1MiB
+      # cap, and a dozen full-size phone screenshots would blow past it.
+      - name: Render inline screenshot preview in job summary
+        if: always()
+        run: |
+          echo "## Android screenshot preview" >> "$GITHUB_STEP_SUMMARY"
+          echo "Full-resolution PNGs are attached as the mobile-screenshots-android artifact." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          for f in screenshots/*.png; do
+            [ -e "$f" ] || continue
+            name=$(basename "$f" .png)
+            thumb="screenshots/${name}.thumb.jpg"
+            mime="image/jpeg"
+            if ! convert "$f" -resize 120x -quality 55 "$thumb" 2>/dev/null; then
+              thumb="$f"
+              mime="image/png"
+            fi
+            b64=$(base64 -w0 "$thumb")
+            echo "**${name}**" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "![${name}](data:${mime};base64,${b64})" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  # iOS mirror of screenshot-mobile-android, capturing the eSIM
+  # activation flow's real platform divergence (frontend-mobile.md's
+  # "iOS has no public API for programmatic eSIM installation" --
+  # esim-activation-ios.yaml vs. Android's esim-activation-android.yaml).
+  # Deliberately NOT run on every PR: macOS runners bill at roughly
+  # 10x an ubuntu-latest minute, and this is testing infrastructure, not
+  # the safety-critical path -- nightly plus on-demand (workflow_dispatch)
+  # is the affordable cadence for now. Re-evaluate if iOS-specific visual
+  # regressions start slipping through between nightly runs.
+  #
+  # runs-on is macos-15, not macos-14: RN 0.86 requires Xcode >= 16.1
+  # (react-native-nitro-modules' Podfile enforces this), and macos-14's
+  # *default* selected Xcode is 15.4 (it has 16.1/16.2 installed but not
+  # selected) -- confirmed by a real `pod install` failure on macos-14
+  # in this job ("React Native requires XCode >= 16.1. Found 15.4.")
+  # during initial verification. macos-15 defaults to Xcode 16.4, which
+  # satisfies the requirement without an extra xcode-select step.
+  screenshot-mobile-ios:
+    name: Mobile — iOS screenshot generation (nightly/on-demand)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci
+      - name: Install Maestro CLI
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Install CocoaPods dependencies
+        working-directory: apps/mobile/ios
+        run: pod install
+      # Building against a *named concrete device* destination
+      # (`-destination 'platform=iOS Simulator,name=iPhone 16'`) proved
+      # flaky during initial CI verification: which concrete simulator
+      # instances CoreSimulator reports as "currently available" varied
+      # run to run on freshly-booted runner VMs (one run listed dozens
+      # of iPhone/iPad devices at that exact destination-resolution
+      # moment, the next listed almost none, despite the same runner
+      # image and Xcode version) -- a likely CoreSimulator-daemon
+      # population race, not a real device-catalog gap. `generic/
+      # platform=iOS Simulator` builds an SDK-generic simulator binary
+      # without needing to resolve any concrete device instance at
+      # build time, sidestepping that race entirely. The concrete
+      # device only needs to exist for the *install/run* step below,
+      # via `simctl create`, which creates a fresh instance from
+      # Xcode's fixed device-*type* catalog rather than depending on
+      # what instances already happen to exist -- a more reliable
+      # operation than destination-matching proved to be.
+      - name: Build harness-mode Release app for the simulator
+        working-directory: apps/mobile/ios
+        env:
+          SCREENSHOT_HARNESS_MODE: "true"
+        run: |
+          xcodebuild \
+            -workspace DamDam.xcworkspace \
+            -scheme DamDam \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            -destination 'generic/platform=iOS Simulator' \
+            build
+      # "iPhone 16" here is a device *type* from Xcode's fixed catalog,
+      # not a currently-existing instance -- if a future runner image
+      # drops this device type, `xcrun simctl list devicetypes` on that
+      # image will show what's available to update this to.
+      - name: Boot simulator and install the app
+        run: |
+          DEVICE_ID=$(xcrun simctl create DamDamScreenshotCI "iPhone 16" 2>/dev/null || xcrun simctl list devices | grep DamDamScreenshotCI | grep -oE '[0-9A-F-]{36}')
+          echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE_ID"
+          xcrun simctl install "$DEVICE_ID" "ios/build/Build/Products/Release-iphonesimulator/DamDam.app"
+      - name: Run Maestro flows
+        run: |
+          maestro --device "$DEVICE_ID" test maestro/screens \
+            --exclude-tags android-only \
+            --format junit \
+            --output maestro-report.xml \
+            --test-output-dir="$PWD/maestro-output"
+      - name: Collect screenshots
+        if: always()
+        run: |
+          mkdir -p screenshots
+          find maestro-output -type f -path '*/takeScreenshot/*.png' -exec cp {} screenshots/ \; 2>/dev/null || true
+          ls -la screenshots
+      - name: Validate screenshot artifact completeness
+        if: always()
+        run: |
+          shopt -s nullglob
+          screenshots=(screenshots/*.png)
+          test "${#screenshots[@]}" -eq 12
+          test -s maestro-report.xml
+      - name: Upload Maestro output bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-screenshots-ios-maestro-output
+          path: apps/mobile/maestro-output
+          if-no-files-found: warn
+      - name: Upload screenshots as CI artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-screenshots-ios
+          path: |
+            apps/mobile/screenshots/*.png
+            apps/mobile/maestro-report.xml
+          if-no-files-found: error
+      - name: Render inline screenshot preview in job summary
+        if: always()
+        run: |
+          echo "## iOS screenshot preview" >> "$GITHUB_STEP_SUMMARY"
+          echo "Full-resolution PNGs are attached as the mobile-screenshots-ios artifact." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          for f in screenshots/*.png; do
+            [ -e "$f" ] || continue
+            name=$(basename "$f" .png)
+            thumb="screenshots/${name}.thumb.jpg"
+            mime="image/jpeg"
+            if ! sips -s format jpeg -s formatOptions 55 -Z 120 "$f" --out "$thumb" >/dev/null 2>&1; then
+              thumb="$f"
+              mime="image/png"
+            fi
+            b64=$(base64 -i "$thumb" | tr -d '\n')
+            echo "**${name}**" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "![${name}](data:${mime};base64,${b64})" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          done
 
   build-check:
     name: Docker build check (multi-arch)

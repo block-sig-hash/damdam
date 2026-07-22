@@ -34,6 +34,20 @@ it('AC-14.5/8: shows duration, free call type, and signal quality during a call'
   expect(screen.getByLabelText('Call quality good')).toBeTruthy();
 });
 
+it('allows the screenshot harness to replace the simulator network snapshot', async () => {
+  network.mockReturnValue({ connected: false, quality: 'poor' });
+  const call = fakeCall();
+  await render(
+    <ActiveCallScreen
+      call={call}
+      onFinished={jest.fn()}
+      networkQualityOverride={{ connected: true, quality: 'excellent' }}
+    />,
+  );
+  expect(screen.getByLabelText('Call quality excellent')).toBeTruthy();
+  expect(call.hangup).not.toHaveBeenCalled();
+});
+
 it('AC-14.6: connectivity loss ends gracefully and returns after exactly 3 seconds', async () => {
   jest.useFakeTimers();
   network.mockReturnValue({ connected: false, quality: 'poor' });

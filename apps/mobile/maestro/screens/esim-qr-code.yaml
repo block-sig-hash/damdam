@@ -1,0 +1,12 @@
+appId: com.damdam.app
+---
+- launchApp
+- scrollUntilVisible:
+    element:
+      id: "harness-target-esim-qr-code"
+    direction: DOWN
+- tapOn:
+    id: "harness-target-esim-qr-code"
+- assertVisible:
+    id: "esim-qr-code-screen"
+- takeScreenshot: esim-qr-code
