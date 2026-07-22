@@ -1,0 +1,54 @@
+name: EAS On-Demand Build Verification
+
+# Manual, on-demand real EAS cloud build -- for verifying that native
+# code (e.g. CallKit/PushKit's RNCallKeep, RNVoipPushNotificationManager,
+# and the custom VoipCallKitBridge added in PR #87) actually compiles on
+# Expo's own infrastructure, independent of GitHub Actions' Linux
+# runners or any local machine. Not part of the release pipeline
+# (deploy.yml already handles real releases on push to main) -- this
+# exists purely so "does this compile on EAS" can be checked without
+# waiting for a production release.
+#
+# Deliberately blocks and waits for the real build result (no
+# --no-wait) so this job's own exit code and log directly reflect
+# whether the EAS cloud build actually succeeded, not just that it
+# was queued.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Platform to build"
+        required: true
+        default: ios
+        type: choice
+        options: [ios, android]
+      profile:
+        description: "eas.json build profile"
+        required: true
+        default: development
+        type: choice
+        options: [development, production]
+
+jobs:
+  eas-build:
+    name: EAS Build (${{ inputs.platform }}, ${{ inputs.profile }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install -g eas-cli
+      - name: EAS Build
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas build \
+            --platform "${{ inputs.platform }}" \
+            --profile "${{ inputs.profile }}" \
+            --non-interactive \
+            --json > eas-build-result.json
+          echo "## EAS build result" >> "$GITHUB_STEP_SUMMARY"
+          cat eas-build-result.json | tee -a "$GITHUB_STEP_SUMMARY"
