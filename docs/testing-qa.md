@@ -503,7 +503,7 @@ active call.
   YAML file), not to close every screen in this pass.
 - **Per-PR iOS coverage.** `screenshot-mobile-ios` runs nightly plus
   on-demand (`workflow_dispatch`) only, not on every PR —
-  `macos-14` GitHub-hosted runners bill at roughly 10x an
+  `macos-15` GitHub-hosted runners bill at roughly 10x an
   `ubuntu-latest` minute, and this is testing infrastructure, not
   the safety-critical path. `screenshot-mobile-android` does run on
   every mobile-touching PR. Re-evaluate the iOS cadence if
@@ -516,10 +516,23 @@ PNGs as CI artifacts (`mobile-screenshots-android` /
 previews directly in the job's Actions Summary tab, so a screen can
 be visually checked without downloading anything.
 
-**Caveat on this amendment itself:** the workflow was written and
-reviewed carefully against Maestro's and `reactivecircus/android-
-emulator-runner`'s documented behavior, but has not yet been
-dry-run against a live GitHub Actions runner (not available in the
-environment this was built in). Treat the first real CI run as a
-verification pass, not just an activation — flag and fix anything
-that doesn't match this section if it surfaces.
+**Verification history on this amendment:** the first real run
+against live GitHub Actions infrastructure surfaced two genuine bugs
+that no amount of local review would have caught — `takeScreenshot`
+output landing in Maestro's own `--test-output-dir` tree rather than
+the process's working directory (the collection step was silently
+finding nothing), and 7 of the 13 registered screens failing to
+render in time on-device due to a mix of causes: the harness's own
+`fetchMock.ts` using `new Response(...)` (unreliable in the React
+Native runtime), native hooks (`useNetworkQuality`,
+`ensureAndroidCallingReady`) blocking on a real device, the picker
+list needing `scrollUntilVisible` for lower items, and two PIN
+screens' testID-based assertions being fragile on-device (now
+text-based instead). All were root-caused from real failure logs and
+fixed, not patched around — every run since (both platforms) has
+passed 12/12 flows (`esim-activation-ios`/`esim-activation-android`
+are platform-exclusive, so 12 run per platform out of the 13
+registered targets) with real, independently-inspected screenshots
+matching the harness's fixture data. Treat this the way `testing-qa.md`
+treats PR #41 in §14.2: a concrete example of why CI passing on
+first write is not the same as CI passing for real.

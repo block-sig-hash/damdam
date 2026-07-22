@@ -250,12 +250,14 @@ jobs:
         # your-Maestro-Flows) explicitly documents only api-level
         # 26-28 as stable on ubuntu-* runners. This app's
         # minSdkVersion is 24 (android/build.gradle), so 28 is well
-        # within range. Strong candidate for the actual root cause of
-        # both the empty-screenshot-artifact finding (takeScreenshot
-        # producing zero files on every run so far) and the
-        # reproducible 7/12-flows-failed pattern -- both are
-        # consistent with a genuinely unstable emulator/GPU stack at
-        # api-level 34, not a bug in the harness itself.
+        # within range. NOTE: switching to 28 alone did NOT fix the
+        # empty-screenshot-artifact finding or the 7/12-flows-failed
+        # pattern seen during initial verification -- those turned out
+        # to be real bugs (see docs/testing-qa.md §14.11's verification
+        # history), not an api-level 34 instability issue. Kept at 28
+        # anyway per this reference's stability guidance and because
+        # reverting to 34 was never re-tested once the real bugs were
+        # fixed.
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 28
