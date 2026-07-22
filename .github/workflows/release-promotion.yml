@@ -1,0 +1,34 @@
+name: Release Promotion Signoff
+
+# CI-enforced half of the staging->main promotion gate described in
+# docs/infrastructure.md's "Amendment -- Three-Branch Promotion and
+# Release Signoff Gate". Runs on every PR targeting `main` (not just
+# ones from `staging` -- there's no other legitimate way into `main`
+# under that convention, so the check doesn't need to special-case the
+# source branch) and fails the PR if it doesn't carry a real, fresh,
+# complete release-signoff artifact for the commit actually being
+# promoted. This is only a real blocker because `main`'s branch
+# protection requires this job's status check to pass before merging
+# -- a red X alone wouldn't stop anyone from merging anyway.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-release-signoff:
+    name: Validate release signoff artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Full history, not the default shallow clone -- the
+          # validator needs `git merge-base` against origin/main and
+          # to walk ancestry for the anti-staleness check.
+          fetch-depth: 0
+      - name: Validate signoff artifact for this promotion
+        run: scripts/validate-release-signoff.sh "${{ github.event.pull_request.head.sha }}"

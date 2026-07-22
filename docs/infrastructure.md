@@ -897,3 +897,102 @@ provisioned), not a Kuma misconfiguration. A second notification channel
 (e.g. email) can be added once real SMTP credentials exist; none are
 required for this amendment, since Telegram already satisfies "Ibrahim
 receives alerts" with a channel that was already live.
+
+---
+
+## 11.14 Amendment — Three-Branch Promotion and Release Signoff Gate
+
+**What changed:** formalizes the `develop` → `staging` → `main`
+promotion convention that §11.4 already assumed (it describes what
+happens once code reaches `main`, but never specified how code gets
+there) and adds a real branch plus a CI-enforced gate in front of it.
+
+- **`develop`** — integration branch, unchanged. Every push runs the
+  full CI suite and (§11.4) attempts a `staging` environment deploy.
+- **`staging`** — a real branch (not just an environment name) that
+  now exists in the repository. `ci.yml`'s `deploy-staging` job
+  fast-forwards it to the just-deployed commit immediately after that
+  commit's staging health check passes — never before, and never by
+  force-push. This makes `staging` mean something specific: "the
+  commit currently confirmed healthy on the staging environment," not
+  just "wherever `develop` happens to be." A `staging → main` PR is
+  therefore always promoting something that was actually deployed and
+  came back healthy, not an arbitrary later `develop` commit.
+- **`main`** — production. Nothing pushes to it automatically.
+  `deploy.yml`'s existing production job (§11.4) still triggers on
+  push to `main` and still fails fast on missing OCI secrets exactly
+  as it did before this amendment — this amendment does not build a
+  real production deploy target (none is provisioned yet, per §11.2),
+  it only makes sure `main`'s role is genuinely wired for when one
+  is, rather than a branch nothing ever reaches.
+
+**The promotion gate:** a `staging → main` PR must add exactly one new
+file at `docs/release-signoffs/<commit-sha>.md` (template:
+`docs/release-signoffs/TEMPLATE.md`), and
+`.github/workflows/release-promotion.yml` runs
+`scripts/validate-release-signoff.sh` on every PR targeting `main` to
+enforce it. The script fails the check (and, via `main`'s required
+status check in branch protection, actually blocks the merge button —
+not just a red X someone could ignore) if:
+
+1. No signoff artifact was added by this promotion.
+2. The declared commit SHA doesn't resolve to a real commit, isn't an
+   ancestor of the PR's head commit, or doesn't match its own filename
+   — this is the anti-staleness check: it catches a signoff
+   copy-pasted forward from an earlier, already-promoted release
+   rather than one covering what's actually in this PR. (It
+   deliberately checks *ancestor-of-head* rather than *exact-match*
+   with the PR head: the natural sequence is test the current
+   `staging` tip, then commit the signoff file on top of it, which by
+   construction advances the tip by one commit past the SHA that was
+   actually tested.)
+3. Any required field is missing or still a `<placeholder>` — tester
+   name, date, the full device-matrix table (mapped against
+   `pre-pilot-checklist.md` §6's real-device list), every row of the
+   required critical-scenario table (incoming call wake from
+   killed/backgrounded state on both platforms, CallKit lock-screen
+   UI, PushKit delivery, offline check-in/SOS survival through
+   force-quit/reboot), and the HTO usability signoff section.
+4. The signoff's date is more than 7 days old at promotion time.
+
+Photo/video evidence of device testing is **not** required by this
+gate yet. Per the note carried in `docs/release-signoffs/TEMPLATE.md`
+itself: it becomes mandatory the first time someone other than the
+founder is authorized to promote to `main`, or 3 months before the
+Hajj 2027 pilot launch, whichever comes first — at that point add a
+required `evidence_links` field to the template and extend the
+validator to enforce it.
+
+**Why an ancestor check instead of requiring the artifact's SHA to
+equal the PR head exactly:** the alternative forces an awkward
+self-referential commit (you can't know a commit's own SHA before
+creating it, so matching the PR head exactly would require a
+compute-then-amend dance every time). Requiring the declared SHA to be
+a real ancestor of the PR head gets the same guarantee — this signoff
+genuinely covers a commit that's part of what's being promoted, not
+something unrelated — without that friction.
+
+**What is real and directly verified, not self-reported:** the
+`staging` branch was created for real (bootstrapped to `develop`'s
+HEAD at the time of this amendment) and confirmed to exist via
+`git ls-remote`. The validator script was run against both a
+deliberately broken case (missing signoff, and separately a
+SHA-mismatched one) and a correctly filled-in one, via real PRs
+against `main` in this repository, and `main`'s branch protection was
+configured to require `Validate release signoff artifact` as a status
+check — confirmed by attempting to merge the broken PRs and observing
+GitHub's merge button genuinely refuse, not just a failing check
+sitting next to an available "Merge" button.
+
+**What still depends on infrastructure that doesn't exist yet:**
+`deploy-staging`'s health check (and therefore the `staging` branch's
+auto-advance step) cannot succeed until the `staging` GitHub
+Environment has real `STAGING_OCI_HOST`/`STAGING_OCI_DEPLOY_USER`/
+`STAGING_OCI_SSH_KEY`/`STAGING_API_BASE_URL` secrets — it currently
+does not (verified directly: `staging` and `production` GitHub
+Environments both exist with zero secrets configured in either), so
+in the repository's current state `staging` will not actually advance
+past its bootstrap commit until a real staging host is provisioned.
+This is the same "wired but not yet resourced" state §11.11 already
+documents for production, extended honestly to staging rather than
+implied to already work.

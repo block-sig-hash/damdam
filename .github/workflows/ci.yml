@@ -534,6 +534,14 @@ jobs:
     concurrency:
       group: staging-deploy
       cancel-in-progress: false
+    # This repo's org/repo-level default is a read-only GITHUB_TOKEN
+    # (Settings > Actions > "Read repository contents" default) --
+    # every other job here either doesn't need to write, or (like
+    # `changes`) explicitly opts into a narrow write. This job now
+    # needs contents: write for the "Advance staging branch" step
+    # below, which pushes to refs/heads/staging.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -611,6 +619,19 @@ jobs:
             --connect-timeout 5 --max-time 10 \
             --retry 12 --retry-delay 5 --retry-all-errors \
             "${STAGING_API_BASE_URL%/}/health"
+
+      # docs/infrastructure.md §11.14: the `staging` branch is meant to
+      # always reflect exactly what's actually running (and confirmed
+      # healthy) on the staging environment, not just wherever `develop`
+      # happens to be -- that's what makes a later `staging`->`main`
+      # promotion PR meaningful (you're promoting what was validated,
+      # not an arbitrary later commit that was never deployed here). A
+      # plain (non-force) push, so it only ever fast-forwards; if it
+      # can't fast-forward, something has directly modified `staging`
+      # out of band and that needs human eyes, not a silent overwrite.
+      - name: Advance staging branch to deployed commit
+        if: steps.staging-health.outcome == 'success'
+        run: git push origin HEAD:refs/heads/staging
 
       - name: Roll back failed staging release
         if: steps.staging-deploy.outcome == 'failure' || steps.staging-health.outcome == 'failure'
