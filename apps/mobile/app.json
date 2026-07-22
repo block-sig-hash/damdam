@@ -1,4 +1,10 @@
 {
   "name": "DamDam",
-  "displayName": "DamDam"
+  "displayName": "DamDam",
+  "extra": {
+    "eas": {
+      "projectId": "d45e0c5c-b7cb-4aee-b2db-f4e02963f44e"
+    }
+  },
+  "owner": "damdam23"
 }
