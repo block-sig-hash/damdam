@@ -274,6 +274,13 @@ jobs:
           mkdir -p screenshots
           find maestro-output -type f -path '*/takeScreenshot/*.png' -exec cp {} screenshots/ \; 2>/dev/null || true
           ls -la screenshots
+      - name: Validate screenshot artifact completeness
+        if: always()
+        run: |
+          shopt -s nullglob
+          screenshots=(screenshots/*.png)
+          test "${#screenshots[@]}" -eq 12
+          test -s maestro-report.xml
       - name: Upload screenshots as CI artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -282,7 +289,7 @@ jobs:
           path: |
             apps/mobile/screenshots/*.png
             apps/mobile/maestro-report.xml
-          if-no-files-found: warn
+          if-no-files-found: error
       - name: Upload Maestro output bundle
         if: always()
         uses: actions/upload-artifact@v4
@@ -409,6 +416,13 @@ jobs:
           mkdir -p screenshots
           find maestro-output -type f -path '*/takeScreenshot/*.png' -exec cp {} screenshots/ \; 2>/dev/null || true
           ls -la screenshots
+      - name: Validate screenshot artifact completeness
+        if: always()
+        run: |
+          shopt -s nullglob
+          screenshots=(screenshots/*.png)
+          test "${#screenshots[@]}" -eq 12
+          test -s maestro-report.xml
       - name: Upload Maestro output bundle
         if: always()
         uses: actions/upload-artifact@v4
@@ -424,7 +438,7 @@ jobs:
           path: |
             apps/mobile/screenshots/*.png
             apps/mobile/maestro-report.xml
-          if-no-files-found: warn
+          if-no-files-found: error
       - name: Render inline screenshot preview in job summary
         if: always()
         run: |
