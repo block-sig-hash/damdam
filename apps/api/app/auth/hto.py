@@ -65,6 +65,7 @@ class HTOService:
             ).decode(),
             phone_number=to_e164(payload.phone_number),
             nahcon_licence_number=payload.nahcon_licence_number,
+            locale=payload.locale,
         )
         try:
             session.add(organization)

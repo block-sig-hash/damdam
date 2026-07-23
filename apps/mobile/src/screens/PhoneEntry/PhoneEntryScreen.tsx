@@ -2,6 +2,7 @@ import React from 'react';
 import { KeyboardAvoidingView, Platform as RNPlatform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Banner } from '../../components/Banner/Banner';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
+import {LocaleSelector} from '../../components/LocaleSelector/LocaleSelector';
 import { color, space, typography } from '../../theme/tokens';
 import { formatNigerianPhoneForDisplay } from '../../utils/phoneNumber';
 import { usePhoneEntry } from './usePhoneEntry';
@@ -30,6 +31,7 @@ export function PhoneEntryScreen({
       behavior={RNPlatform.OS === 'ios' ? 'padding' : undefined}
       style={styles.screen}
     >
+      <LocaleSelector />
       <Text style={styles.title}>What's your phone number?</Text>
       <Text style={styles.subtitle}>
         We'll text you a 6-digit code to verify it's you.

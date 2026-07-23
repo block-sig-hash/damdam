@@ -6,6 +6,7 @@ import { API_BASE_URL } from '../config/env';
  * apps/api/app/main.py's OTPError exception handler.
  */
 export type Platform = 'ios' | 'android';
+export type AppLocale = 'en' | 'fr';
 
 export type OtpErrorCode =
   | 'account_exists'
@@ -27,6 +28,7 @@ export interface UserResponse {
   email: string | null;
   verified_cli: boolean;
   departure_date?: string | null;
+  locale: AppLocale;
   platform: string;
   status: string;
 }
@@ -99,16 +101,17 @@ async function post<TResponse>(path: string, body: unknown): Promise<TResponse> 
   return (await response.json()) as TResponse;
 }
 
-export function requestOtp(phoneNumber: string): Promise<{ message: string }> {
-  return post('/auth/otp/request', { phone_number: phoneNumber });
+export function requestOtp(phoneNumber: string, locale: AppLocale = 'en'): Promise<{ message: string }> {
+  return post('/auth/otp/request', { phone_number: phoneNumber, locale });
 }
 
 export function verifyOtp(
   phoneNumber: string,
   otp: string,
   platform: Platform,
+  locale: AppLocale = 'en',
 ): Promise<AuthResponse> {
-  return post('/auth/otp/verify', { phone_number: phoneNumber, otp, platform });
+  return post('/auth/otp/verify', { phone_number: phoneNumber, otp, platform, locale });
 }
 
 /**
@@ -119,16 +122,17 @@ export function verifyOtp(
  * OTP-based recovery pair US-02 built for "forgot my PIN," per
  * docs/api-spec.md §7.1's documented contract for these routes.
  */
-export function requestPinRecovery(phoneNumber: string): Promise<{ message: string }> {
-  return post('/auth/pin/recovery/request', { phone_number: phoneNumber });
+export function requestPinRecovery(phoneNumber: string, locale: AppLocale = 'en'): Promise<{ message: string }> {
+  return post('/auth/pin/recovery/request', { phone_number: phoneNumber, locale });
 }
 
 export function verifyPinRecovery(
   phoneNumber: string,
   otp: string,
   platform: Platform,
+  locale: AppLocale = 'en',
 ): Promise<AuthResponse> {
-  return post('/auth/pin/recovery/verify', { phone_number: phoneNumber, otp, platform });
+  return post('/auth/pin/recovery/verify', { phone_number: phoneNumber, otp, platform, locale });
 }
 
 export interface RefreshResponse {

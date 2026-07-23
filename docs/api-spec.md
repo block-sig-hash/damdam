@@ -40,15 +40,16 @@ GET /health
 
 ```
 POST   /auth/otp/request
-  Body: { phone_number: string }
+  Body: { phone_number: string, locale: "en"|"fr" = "en" }
   200: { message: "OTP sent" }
   429: { error: "rate_limited", retry_after: int }
   409: { error: "account_exists" }
   503: { error: "otp_unavailable" }
 
 POST   /auth/otp/verify
-  Body: { phone_number: string, otp: string, platform: "ios"|"android" }
-  200: { access_token, refresh_token, user: {..}, is_new_user: bool }
+  Body: { phone_number: string, otp: string, platform: "ios"|"android",
+          locale: "en"|"fr" = "en" }
+  200: { access_token, refresh_token, user: {.., locale}, is_new_user: bool }
   400: { error: "invalid_otp" | "otp_expired" }
   423: { error: "locked", retry_after: int }
   503: { error: "otp_unavailable" }
@@ -67,14 +68,15 @@ POST   /auth/pin/verify
   423: { error: "locked", retry_after: int }
 
 POST   /auth/pin/recovery/request
-  Body: { phone_number: string }
+  Body: { phone_number: string, locale: "en"|"fr" = "en" }
   200: { message: "OTP sent" }
   404: { error: "account_not_found" }
   429: { error: "rate_limited", retry_after: int }
   503: { error: "otp_unavailable" }
 
 POST   /auth/pin/recovery/verify
-  Body: { phone_number: string, otp: string, platform: "ios"|"android" }
+  Body: { phone_number: string, otp: string, platform: "ios"|"android",
+          locale: "en"|"fr" = "en" }
   200: { access_token, refresh_token, user: {..}, is_new_user: false }
   Resets the PIN attempt lock and returns an authenticated session;
   the client then replaces the PIN through `/auth/pin/set`.
@@ -88,7 +90,7 @@ POST   /auth/token/refresh
 
 POST   /auth/hto/register
   Body: { business_name, operator_name, email, password,
-          phone_number, nahcon_licence_number }
+          phone_number, nahcon_licence_number, locale: "en"|"fr" = "en" }
   201: { message: "Verification email sent" }
   409: { error: "email_already_registered" }
 
@@ -112,7 +114,7 @@ POST   /auth/hto/login
 GET    /me
   Auth required
   200: { id, phone_number, first_name, last_name, email,
-          verified_cli, departure_date, platform, packages: [..] }
+          verified_cli, departure_date, locale, platform, packages: [..] }
 
 PATCH  /me
   Auth required
@@ -138,14 +140,14 @@ PUT    /me/device-token
 
 POST   /me/family-contact
   Auth required
-  Body: { phone_number: string, name?: string }
-  201: { id, phone_number, name, notified_of_nomination: bool }
+  Body: { phone_number: string, name?: string, locale: "en"|"fr" = "en" }
+  201: { id, phone_number, name, locale, notified_of_nomination: bool }
   409: { error: "family_contact_exists" }
   503: { error: "notification_unavailable" }
 
 PATCH  /me/family-contact
   Auth required
-  Body: { phone_number?: string, name?: string }
+  Body: { phone_number?: string, name?: string, locale?: "en"|"fr" }
   200: { ...updated contact }
   404: { error: "family_contact_not_found" }
   503: { error: "notification_unavailable" }
@@ -1061,3 +1063,19 @@ exception details.
 Postgres or Redis. This separation prevents container/process diagnostics from
 conflating a dependency outage with a crashed API process while ensuring deploy
 gates cannot accept the old liveness-only false positive.
+
+---
+
+## 7.24 Amendment — English/French Locale Contract
+
+Authentication and pre-account notification requests accept `locale: "en" |
+"fr"` with a backward-compatible English default. OTP verification persists the
+choice and returns it in `user.locale`; OTP recovery updates an existing user's
+explicit choice. HTO registration persists the same field on the organization,
+and HTO login returns it under `operator.locale`.
+
+Family-contact create/update accepts the recipient's locale and returns it with
+the contact. Locale is never inferred from destination or phone country.
+First-party clients must continue treating stable `error` codes as the primary
+display contract; localized backend `message` fallbacks and outbound templates
+are specified separately by the i18n notification amendment.

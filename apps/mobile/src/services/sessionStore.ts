@@ -22,6 +22,7 @@ export interface PersistedSession {
   phoneNumber: string;
   departureDate: string | null;
   packageId?: string;
+  locale: 'en' | 'fr';
   /** ISO timestamp of the last moment this session was known to be in active use. */
   lastActiveAt: string;
 }
@@ -32,7 +33,20 @@ async function readState(): Promise<PersistedSession | null> {
     return null;
   }
   try {
-    return JSON.parse(credentials.password) as PersistedSession;
+    const parsed = JSON.parse(credentials.password) as Partial<PersistedSession>;
+    if (
+      !parsed.accessToken ||
+      !parsed.refreshToken ||
+      !parsed.phoneNumber ||
+      !parsed.lastActiveAt
+    ) {
+      return null;
+    }
+    return {
+      ...parsed,
+      departureDate: parsed.departureDate ?? null,
+      locale: parsed.locale === 'fr' ? 'fr' : 'en',
+    } as PersistedSession;
   } catch {
     return null;
   }

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AuthResponse, OtpApiError, Platform, requestOtp, verifyOtp } from '../../api/authClient';
 import { useCountdownSeconds } from '../../hooks/useCountdownSeconds';
 import { useElapsedSeconds } from '../../hooks/useElapsedSeconds';
+import {i18n} from '../../i18n';
+import {normalizeLocale} from '../../i18n/locale';
 
 /**
  * AC-01.9: "Sending your code..." after 10s, manual resend from 30s —
@@ -88,7 +90,12 @@ export function useOtpVerification({
     setStatus('verifying');
     setErrorMessage(null);
     try {
-      const result = await verifyOtp(phoneNumber, code, platform);
+      const result = await verifyOtp(
+        phoneNumber,
+        code,
+        platform,
+        normalizeLocale(i18n.language),
+      );
       onVerified(result);
     } catch (err) {
       if (err instanceof OtpApiError && err.code === 'locked') {
@@ -125,7 +132,7 @@ export function useOtpVerification({
     setIsResending(true);
     setErrorMessage(null);
     try {
-      await requestOtp(phoneNumber);
+      await requestOtp(phoneNumber, normalizeLocale(i18n.language));
       setSentAt(Date.now());
       setCodeState('');
       setStatus('awaiting_code');

@@ -6,6 +6,8 @@ import {
   requestPinRecovery,
   verifyPinRecovery,
 } from '../../api/authClient';
+import {i18n} from '../../i18n';
+import {normalizeLocale} from '../../i18n/locale';
 import { useCountdownSeconds } from '../../hooks/useCountdownSeconds';
 import { useElapsedSeconds } from '../../hooks/useElapsedSeconds';
 
@@ -83,7 +85,7 @@ export function useReturningPilgrimLogin({
   const sendCode = useCallback(async () => {
     setErrorMessage(null);
     try {
-      await requestPinRecovery(phoneNumber);
+      await requestPinRecovery(phoneNumber, normalizeLocale(i18n.language));
       setSentAt(Date.now());
       setCodeState('');
       setStatus('awaiting_code');
@@ -124,7 +126,12 @@ export function useReturningPilgrimLogin({
     setStatus('verifying');
     setErrorMessage(null);
     try {
-      const result = await verifyPinRecovery(phoneNumber, code, platform);
+      const result = await verifyPinRecovery(
+        phoneNumber,
+        code,
+        platform,
+        normalizeLocale(i18n.language),
+      );
       onVerified(result);
     } catch (err) {
       if (err instanceof OtpApiError && err.code === 'locked') {

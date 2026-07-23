@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {NextIntlClientProvider} from "next-intl";
 
+import messages from "@/messages/en.json";
 import RegistrationPage from "./page";
 
 describe("HTO registration", () => {
@@ -9,7 +11,11 @@ describe("HTO registration", () => {
   it("AC-04.1 submits every required operator field", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    render(<RegistrationPage />);
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <RegistrationPage />
+      </NextIntlClientProvider>,
+    );
 
     fireEvent.change(screen.getByLabelText("Business name"), {
       target: { value: "Barakah Hajj Services" },
@@ -40,6 +46,7 @@ describe("HTO registration", () => {
       phone_number: "08012345678",
       nahcon_licence_number: "NAHCON-123",
       password: "secure-password",
+      locale: "en",
     });
     expect(await screen.findByText("Check your email")).toBeInTheDocument();
   });

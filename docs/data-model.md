@@ -99,6 +99,7 @@ DeviceCompatibilityLog
 | verified_cli | BOOLEAN | DEFAULT FALSE | Legacy flag, superseded by `verified_caller_identities.status = active` (§6.40); retained only to drive the one-time login-state migration described there |
 | departure_date | DATE | NULLABLE | Drives the eSIM banner timing |
 | destination_country | VARCHAR(2) | DEFAULT 'SA' | ISO code; hardcoded SA for MVP |
+| locale | ENUM | NOT NULL, DEFAULT 'en' | `en` \| `fr`; explicit reading/notification preference, independent of destination |
 | platform | ENUM | NOT NULL | `ios` \| `android` — set at registration |
 | status | ENUM | DEFAULT 'active' | `active` \| `suspended` \| `pending_deletion` |
 | deletion_requested_at | TIMESTAMPTZ | NULLABLE | Set by `DELETE /me/account`; hard-delete eligibility begins 30 days later |
@@ -153,6 +154,7 @@ login OTP entirely, not just provider-agnostic within it.
 | phone_number | VARCHAR(14) | NOT NULL | E.164 |
 | name | VARCHAR(100) | NULLABLE | |
 | notified_of_nomination | BOOLEAN | DEFAULT FALSE | True only after Meta accepts the nomination template |
+| locale | ENUM | NOT NULL, DEFAULT 'en' | Recipient's own `en` \| `fr` notification preference |
 
 ---
 
@@ -167,6 +169,7 @@ login OTP entirely, not just provider-agnostic within it.
 | email | VARCHAR(255) | UNIQUE, NOT NULL | |
 | password_hash | VARCHAR(255) | NOT NULL | bcrypt |
 | phone_number | VARCHAR(14) | NOT NULL | |
+| locale | ENUM | NOT NULL, DEFAULT 'en' | Operator dashboard and notification preference |
 | nahcon_licence_number | VARCHAR(50) | NULLABLE | Required only when `org_type = hto_operator`; must otherwise be null (`ck_organizations_hto_licence` check constraint) |
 | email_verified | BOOLEAN | DEFAULT FALSE | |
 | approval_status | ENUM | DEFAULT 'pending' | `pending` \| `approved` \| `rejected` |
@@ -204,6 +207,7 @@ login OTP entirely, not just provider-agnostic within it.
 | first_name | VARCHAR(100) | NOT NULL | |
 | last_name | VARCHAR(100) | NOT NULL | |
 | phone_number | VARCHAR(14) | NOT NULL | |
+| locale | ENUM | NOT NULL, DEFAULT 'en' | Optional CSV `locale`; otherwise copied from the organization at upload |
 | passport_number | VARCHAR(50) | NULLABLE | Consider column-level encryption — see security.md §10.4 |
 | seat_number | VARCHAR(10) | NULLABLE | |
 | row_number | INTEGER | NOT NULL | Original CSV row, for error reference |
@@ -544,6 +548,7 @@ backs with its own unique index).
 | email | VARCHAR(255) | UNIQUE, NOT NULL | |
 | password_hash | VARCHAR(255) | NOT NULL | |
 | role | ENUM | DEFAULT 'admin' | Single role for MVP, kept extensible — see security.md §10.5 |
+| locale | ENUM | NOT NULL, DEFAULT 'en' | Persisted admin dashboard preference |
 
 ---
 
@@ -1870,3 +1875,25 @@ for voice is minutes decremented from a `destination_country`-scoped
 read-then-charge). This amendment does not introduce a parallel
 billing model; CLI verification is orthogonal to how a call, once
 authorized, gets charged.
+
+---
+
+## 6.41 Amendment — English/French Recipient Locale
+
+Migration `0025_i18n_locales` creates the shared `locale` enum (`en`, `fr`) and
+adds a non-null, English-defaulted preference to `users`, `organizations`,
+`admin_users`, `family_contacts`, and `manifest_pilgrims`. Existing records are
+backfilled to English.
+
+Locale is an account or message-recipient preference and is deliberately
+independent of `destination_country`. Signup and OTP recovery persist the
+mobile selection on `users`; HTO registration persists the browser selection
+on `organizations`. Family-contact nomination accepts the contact's own locale.
+Manifest CSVs may include an optional `locale` column; when absent, each staged
+pilgrim snapshots the owning organization's locale so activation messages sent
+before account creation have a deterministic language.
+
+Auth and HTO login responses expose the persisted locale so mobile secure
+session state and dashboard locale cookies can restore an explicit choice
+before device/browser inference. Only `en` and `fr` are valid in this release;
+BCP 47 regional variants resolve to their base language at the client boundary.

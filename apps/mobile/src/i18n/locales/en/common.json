@@ -1,0 +1,19 @@
+{
+  "language": {
+    "label": "Language",
+    "english": "English",
+    "french": "Français"
+  },
+  "actions": {
+    "continue": "Continue",
+    "cancel": "Cancel",
+    "close": "Close",
+    "retry": "Try again",
+    "back": "Back",
+    "done": "Done",
+    "save": "Save"
+  },
+  "state": {
+    "loading": "Loading…"
+  }
+}

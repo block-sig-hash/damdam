@@ -25,6 +25,7 @@ const AUTH_RESPONSE: AuthResponse = {
     last_name: '',
     email: null,
     verified_cli: true,
+    locale: 'en' as const,
     platform: 'android',
     status: 'active',
   },
@@ -96,7 +97,7 @@ describe('useOtpVerification', () => {
       await result.current.submit();
     });
 
-    expect(mockVerifyOtp).toHaveBeenCalledWith('08012345678', '123456', 'android');
+    expect(mockVerifyOtp).toHaveBeenCalledWith('08012345678', '123456', 'android', 'en');
     expect(onVerified).toHaveBeenCalledWith(AUTH_RESPONSE);
   });
 
@@ -177,7 +178,7 @@ describe('useOtpVerification', () => {
       await result.current.resend();
     });
 
-    expect(mockRequestOtp).toHaveBeenCalledWith('08012345678');
+    expect(mockRequestOtp).toHaveBeenCalledWith('08012345678', 'en');
     expect(result.current.canResend).toBe(false);
     expect(result.current.showSendingReassurance).toBe(false);
   });

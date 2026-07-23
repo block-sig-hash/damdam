@@ -5,6 +5,7 @@ export type HTORegistration = {
   password: string;
   phone_number: string;
   nahcon_licence_number: string;
+  locale: "en" | "fr";
 };
 
 export type SOSAlert = {
@@ -76,6 +77,7 @@ export type ManifestUploadResult = {
 export type HTOLoginResult = {
   access_token: string;
   refresh_token: string;
+  operator: {locale: "en" | "fr"};
 };
 
 const API_BASE_URL =
@@ -126,6 +128,8 @@ export async function loginHTO(email: string, password: string): Promise<void> {
   const result = await parseResponse<HTOLoginResult>(response);
   window.localStorage.setItem("hto_access_token", result.access_token);
   window.localStorage.setItem("hto_refresh_token", result.refresh_token);
+  window.localStorage.setItem("damdam_locale", result.operator.locale);
+  document.cookie = `damdam_locale=${result.operator.locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
 }
 
 export async function createManifest(name?: string): Promise<string> {

@@ -1,0 +1,31 @@
+{
+  "common": {
+    "language": {
+      "label": "Langue",
+      "english": "English",
+      "french": "Français"
+    },
+    "actions": {
+      "continue": "Continuer",
+      "cancel": "Annuler",
+      "close": "Fermer",
+      "retry": "Réessayer",
+      "save": "Enregistrer"
+    },
+    "state": {
+      "loading": "Chargement…"
+    },
+    "metadata": {
+      "title": "Tableau de bord opérateur DamDam",
+      "description": "Inscrivez et gérez votre compte d’opérateur de voyages pour le Hajj."
+    }
+  },
+  "auth": {},
+  "home": {},
+  "esim": {},
+  "safety": {},
+  "payments": {},
+  "manifests": {},
+  "admin": {},
+  "reports": {}
+}

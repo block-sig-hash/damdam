@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import {LocaleSwitcher} from "@/components/LocaleSwitcher";
 import { loginHTO } from "@/lib/api";
 
 export default function LoginPage() {
@@ -29,6 +30,7 @@ export default function LoginPage() {
   return (
     <main className="auth-shell">
       <section className="auth-card compact-card">
+        <LocaleSwitcher />
         <p className="eyebrow">HTO dashboard</p>
         <h1>Sign in</h1>
         <p className="intro">Use your approved operator account.</p>

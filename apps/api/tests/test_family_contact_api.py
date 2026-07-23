@@ -92,6 +92,7 @@ def test_nomination_accepts_nigerian_number_and_sends_whatsapp(
         "phone_number": "+2349012345678",
         "name": "Hauwa Yusuf",
         "notified_of_nomination": True,
+        "locale": "en",
     }
     assert whatsapp_sender.nominations == ["+2349012345678"]
     with session_factory() as session:
@@ -160,6 +161,7 @@ def test_family_contact_can_be_updated_without_creating_a_second_row(
         "phone_number": "+2348123456789",
         "name": "Maryam",
         "notified_of_nomination": True,
+        "locale": "en",
     }
     assert whatsapp_sender.nominations == [
         "+2349012345678",

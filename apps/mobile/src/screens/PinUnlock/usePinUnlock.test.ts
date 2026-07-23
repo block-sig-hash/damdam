@@ -35,6 +35,7 @@ const AUTH_RESPONSE: AuthResponse = {
     last_name: '',
     email: null,
     verified_cli: true,
+    locale: 'en' as const,
     platform: 'android',
     status: 'active',
   },

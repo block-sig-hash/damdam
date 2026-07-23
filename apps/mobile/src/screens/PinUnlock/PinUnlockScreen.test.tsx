@@ -109,6 +109,7 @@ describe('PinUnlockScreen', () => {
         last_name: '',
         email: null,
         verified_cli: true,
+        locale: 'en' as const,
         platform: 'android',
         status: 'active',
       },
@@ -123,7 +124,7 @@ describe('PinUnlockScreen', () => {
       fireEvent.press(screen.getByTestId('pin-unlock-recovery-link'));
     });
 
-    expect(mockRequestRecovery).toHaveBeenCalledWith('08012345678');
+    expect(mockRequestRecovery).toHaveBeenCalledWith('08012345678', 'en');
     await act(async () => {
       fireEvent.changeText(screen.getByTestId('otp-code-input'), '123456');
     });

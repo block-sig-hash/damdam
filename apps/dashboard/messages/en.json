@@ -1,0 +1,31 @@
+{
+  "common": {
+    "language": {
+      "label": "Language",
+      "english": "English",
+      "french": "Français"
+    },
+    "actions": {
+      "continue": "Continue",
+      "cancel": "Cancel",
+      "close": "Close",
+      "retry": "Try again",
+      "save": "Save"
+    },
+    "state": {
+      "loading": "Loading…"
+    },
+    "metadata": {
+      "title": "DamDam Operator Dashboard",
+      "description": "Register and manage your Hajj tour operator account."
+    }
+  },
+  "auth": {},
+  "home": {},
+  "esim": {},
+  "safety": {},
+  "payments": {},
+  "manifests": {},
+  "admin": {},
+  "reports": {}
+}

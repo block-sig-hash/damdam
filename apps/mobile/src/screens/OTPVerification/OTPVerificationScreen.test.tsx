@@ -21,6 +21,7 @@ const AUTH_RESPONSE: AuthResponse = {
     last_name: '',
     email: null,
     verified_cli: true,
+    locale: 'en' as const,
     platform: 'android',
     status: 'active',
   },
@@ -40,7 +41,12 @@ describe('OTPVerificationScreen', () => {
       fireEvent.changeText(screen.getByTestId('otp-code-input'), '123456');
     });
 
-    expect(mockVerifyOtp).toHaveBeenCalledWith('08012345678', '123456', expect.any(String));
+    expect(mockVerifyOtp).toHaveBeenCalledWith(
+      '08012345678',
+      '123456',
+      expect.any(String),
+      'en',
+    );
     expect(onVerified).toHaveBeenCalledWith(AUTH_RESPONSE);
   });
 

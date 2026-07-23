@@ -1,7 +1,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import {useLocale} from "next-intl";
 
+import {LocaleSwitcher} from "@/components/LocaleSwitcher";
+import type {AppLocale} from "@/i18n/locale";
 import { registerHTO } from "@/lib/api";
 
 const initialForm = {
@@ -14,6 +17,7 @@ const initialForm = {
 };
 
 export default function RegistrationPage() {
+  const locale = useLocale() as AppLocale;
   const [form, setForm] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [complete, setComplete] = useState(false);
@@ -28,7 +32,7 @@ export default function RegistrationPage() {
     setSubmitting(true);
     setError("");
     try {
-      await registerHTO(form);
+      await registerHTO({...form, locale});
       setComplete(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Registration failed.");
@@ -56,6 +60,7 @@ export default function RegistrationPage() {
   return (
     <main className="auth-shell">
       <section className="auth-card">
+        <LocaleSwitcher />
         <p className="eyebrow">DamDam for Hajj Tour Operators</p>
         <h1>Create your business account</h1>
         <p className="intro">

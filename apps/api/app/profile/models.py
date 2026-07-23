@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import Column, DateTime, Enum, ForeignKey, String
 from sqlmodel import Field, SQLModel
 
-from app.auth.models import Platform, utc_now
+from app.auth.models import Locale, Platform, utc_now
 
 
 class FamilyContact(SQLModel, table=True):
@@ -20,6 +20,17 @@ class FamilyContact(SQLModel, table=True):
         )
     )
     phone_number: str = Field(sa_column=Column(String(14), nullable=False))
+    locale: Locale = Field(
+        default=Locale.EN,
+        sa_column=Column(
+            Enum(
+                Locale,
+                name="locale",
+                values_callable=lambda choices: [choice.value for choice in choices],
+            ),
+            nullable=False,
+        ),
+    )
     name: str | None = Field(default=None, max_length=100)
     notified_of_nomination: bool = Field(default=False)
     created_at: datetime = Field(

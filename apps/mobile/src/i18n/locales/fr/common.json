@@ -1,0 +1,19 @@
+{
+  "language": {
+    "label": "Langue",
+    "english": "English",
+    "french": "Français"
+  },
+  "actions": {
+    "continue": "Continuer",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "retry": "Réessayer",
+    "back": "Retour",
+    "done": "Terminé",
+    "save": "Enregistrer"
+  },
+  "state": {
+    "loading": "Chargement…"
+  }
+}

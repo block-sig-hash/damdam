@@ -22,6 +22,7 @@ const AUTH_RESPONSE = {
     last_name: '',
     email: null,
     verified_cli: true,
+    locale: 'en' as const,
     platform: 'android',
     status: 'active',
   },
@@ -42,13 +43,18 @@ describe('ReturningPilgrimScreen', () => {
       render(<ReturningPilgrimScreen phoneNumber="08012345678" onVerified={onVerified} />);
     });
 
-    expect(mockRequest).toHaveBeenCalledWith('08012345678');
+    expect(mockRequest).toHaveBeenCalledWith('08012345678', 'en');
 
     await act(async () => {
       fireEvent.changeText(screen.getByTestId('otp-code-input'), '123456');
     });
 
-    expect(mockVerify).toHaveBeenCalledWith('08012345678', '123456', expect.any(String));
+    expect(mockVerify).toHaveBeenCalledWith(
+      '08012345678',
+      '123456',
+      expect.any(String),
+      'en',
+    );
     expect(onVerified).toHaveBeenCalledWith(AUTH_RESPONSE);
   });
 

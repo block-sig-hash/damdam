@@ -8,10 +8,12 @@ from sqlalchemy import delete
 from sqlmodel import Session, col, select
 
 from app.auth.models import (
+    Locale,
     Manifest,
     ManifestPilgrim,
     ManifestStatus,
     ManifestValidationStatus,
+    Organization,
 )
 from app.auth.schemas import to_e164, validate_nigerian_phone
 from app.manifests.schemas import (
@@ -39,6 +41,7 @@ class ParsedRow:
     phone_number: str
     passport_number: str | None
     seat_number: str | None
+    locale: Locale | None
     errors: list[str]
 
 
@@ -61,6 +64,8 @@ class ManifestService:
         contents: bytes,
     ) -> ManifestUploadResponse:
         manifest = self._owned_draft(session, organization_id, manifest_id)
+        organization = session.get(Organization, organization_id)
+        assert organization is not None
         if filename is None or not filename.lower().endswith(".csv"):
             raise ManifestError("csv_required")
         rows = self._parse(contents)
@@ -96,6 +101,7 @@ class ManifestService:
                 phone_number=row.phone_number[:14],
                 passport_number=(row.passport_number or None),
                 seat_number=(row.seat_number or None),
+                locale=row.locale or organization.locale,
                 row_number=row.row_number,
                 validation_status=status,
                 validation_error=reason[:255] if reason else None,
@@ -219,6 +225,13 @@ class ManifestService:
             raw_phone = (raw.get("phone_number") or "").strip()
             passport = (raw.get("passport_number") or "").strip() or None
             seat = (raw.get("seat_number") or "").strip() or None
+            raw_locale = (raw.get("locale") or "").strip().lower()
+            locale: Locale | None = None
+            if raw_locale:
+                try:
+                    locale = Locale(raw_locale)
+                except ValueError:
+                    errors.append("locale must be en or fr")
             if not first_name:
                 errors.append("first_name is required")
             elif len(first_name) > 100:
@@ -247,6 +260,7 @@ class ManifestService:
                     phone_number=phone_number,
                     passport_number=passport,
                     seat_number=seat,
+                    locale=locale,
                     errors=errors,
                 )
             )

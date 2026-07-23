@@ -43,7 +43,7 @@ describe('PhoneEntryScreen', () => {
       fireEvent.press(screen.getByTestId('phone-entry-submit'));
     });
 
-    expect(mockRequestOtp).toHaveBeenCalledWith('08012345678');
+    expect(mockRequestOtp).toHaveBeenCalledWith('08012345678', 'en');
     expect(onOtpSent).toHaveBeenCalledWith('08012345678');
   });
 });

@@ -40,6 +40,7 @@ const BASE: Omit<PersistedSession, 'lastActiveAt'> = {
   refreshToken: 'refresh-1',
   phoneNumber: '08012345678',
   departureDate: '2026-08-01',
+  locale: 'en' as const,
   packageId: 'package-1',
 };
 

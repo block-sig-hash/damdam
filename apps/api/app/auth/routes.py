@@ -47,7 +47,9 @@ def _hto_service(request: Request) -> HTOService:
 @router.post("/otp/request", response_model=MessageResponse)
 def request_otp(payload: OTPRequest, request: Request) -> MessageResponse:
     with request.app.state.session_factory() as session:
-        _service(request).request(session, payload.phone_number)
+        _service(request).request(
+            session, payload.phone_number, locale=payload.locale
+        )
     return MessageResponse(message="OTP sent")
 
 
@@ -79,7 +81,11 @@ def _auth_response(session: Session, result: AuthResult) -> AuthResponse:
 def verify_otp(payload: OTPVerifyRequest, request: Request) -> AuthResponse:
     with request.app.state.session_factory() as session:
         result = _service(request).verify(
-            session, payload.phone_number, payload.otp, payload.platform
+            session,
+            payload.phone_number,
+            payload.otp,
+            payload.platform,
+            payload.locale,
         )
         return _auth_response(session, result)
 
@@ -111,7 +117,12 @@ def request_pin_recovery(
     payload: PINRecoveryRequest, request: Request
 ) -> MessageResponse:
     with request.app.state.session_factory() as session:
-        _service(request).request(session, payload.phone_number, allow_existing=True)
+        _service(request).request(
+            session,
+            payload.phone_number,
+            allow_existing=True,
+            locale=payload.locale,
+        )
     return MessageResponse(message="OTP sent")
 
 
@@ -123,6 +134,7 @@ def verify_pin_recovery(payload: OTPVerifyRequest, request: Request) -> AuthResp
             payload.phone_number,
             payload.otp,
             payload.platform,
+            payload.locale,
             purpose="recovery",
         )
     with request.app.state.session_factory() as session:

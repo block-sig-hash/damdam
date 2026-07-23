@@ -31,6 +31,11 @@ class Platform(str, Enum):
     ANDROID = "android"
 
 
+class Locale(str, Enum):
+    EN = "en"
+    FR = "fr"
+
+
 class UserStatus(str, Enum):
     ACTIVE = "active"
     SUSPENDED = "suspended"
@@ -102,6 +107,17 @@ class User(SQLModel, table=True):
     verified_cli: bool = Field(default=False)
     departure_date: Date | None = Field(default=None, index=True)
     destination_country: str = Field(default="SA", max_length=2)
+    locale: Locale = Field(
+        default=Locale.EN,
+        sa_column=Column(
+            SAEnum(
+                Locale,
+                name="locale",
+                values_callable=lambda choices: [choice.value for choice in choices],
+            ),
+            nullable=False,
+        ),
+    )
     platform: Platform = Field(
         sa_column=Column(
             SAEnum(
@@ -172,6 +188,17 @@ class AdminUser(SQLModel, table=True):
         sa_column=Column(String(255), unique=True, nullable=False, index=True)
     )
     password_hash: str = Field(max_length=255)
+    locale: Locale = Field(
+        default=Locale.EN,
+        sa_column=Column(
+            SAEnum(
+                Locale,
+                name="locale",
+                values_callable=lambda choices: [choice.value for choice in choices],
+            ),
+            nullable=False,
+        ),
+    )
     role: AdminRole = Field(
         default=AdminRole.ADMIN,
         sa_column=Column(
@@ -213,6 +240,17 @@ class Organization(SQLModel, table=True):
     )
     password_hash: str = Field(max_length=255)
     phone_number: str = Field(max_length=14)
+    locale: Locale = Field(
+        default=Locale.EN,
+        sa_column=Column(
+            SAEnum(
+                Locale,
+                name="locale",
+                values_callable=lambda choices: [choice.value for choice in choices],
+            ),
+            nullable=False,
+        ),
+    )
     nahcon_licence_number: str | None = Field(default=None, max_length=50)
     email_verified: bool = Field(default=False)
     approval_status: HTOApprovalStatus = Field(
@@ -321,6 +359,17 @@ class ManifestPilgrim(SQLModel, table=True):
     first_name: str = Field(max_length=100)
     last_name: str = Field(max_length=100)
     phone_number: str = Field(max_length=14, index=True)
+    locale: Locale = Field(
+        default=Locale.EN,
+        sa_column=Column(
+            SAEnum(
+                Locale,
+                name="locale",
+                values_callable=lambda choices: [choice.value for choice in choices],
+            ),
+            nullable=False,
+        ),
+    )
     passport_number: str | None = Field(default=None, max_length=50)
     seat_number: str | None = Field(default=None, max_length=10)
     row_number: int = Field(sa_column=Column(Integer, nullable=False))

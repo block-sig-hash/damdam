@@ -22,6 +22,7 @@ type OnboardingStep =
       isNewUser: boolean;
       departureDate: string | null;
       packageId: string;
+      locale: 'en' | 'fr';
     }
   | { name: 'onboarded' };
 
@@ -34,6 +35,7 @@ export interface AuthenticatedMobileSession {
   phoneNumber: string;
   departureDate: string | null;
   packageId?: string;
+  locale: 'en' | 'fr';
 }
 
 interface OnboardingNavigatorProps {
@@ -148,6 +150,7 @@ export function OnboardingNavigator({
                 isNewUser: step.result.is_new_user,
                 departureDate: step.result.user.departure_date ?? null,
                 packageId: redemption.package_id,
+                locale: step.result.user.locale,
               })
             }
           />
@@ -161,6 +164,7 @@ export function OnboardingNavigator({
               refreshToken: step.result.refresh_token,
               phoneNumber: step.result.user.phone_number,
               departureDate: step.result.user.departure_date ?? null,
+              locale: step.result.user.locale,
             }}
             onAuthenticated={onAuthenticated}
             title="Welcome back"
@@ -177,6 +181,7 @@ export function OnboardingNavigator({
                 refreshToken: step.result.refresh_token,
                 phoneNumber: step.result.user.phone_number,
                 departureDate: step.result.user.departure_date ?? null,
+                locale: step.result.user.locale,
               });
             } else {
               setStep({ name: 'onboarded' });
@@ -198,6 +203,7 @@ export function OnboardingNavigator({
               phoneNumber: step.phoneNumber,
               departureDate: step.departureDate,
               packageId: step.packageId,
+              locale: step.locale,
             }}
             onAuthenticated={onAuthenticated}
             title="Package active"
@@ -215,6 +221,7 @@ export function OnboardingNavigator({
                 phoneNumber: step.phoneNumber,
                 departureDate: step.departureDate,
                 packageId: step.packageId,
+                locale: step.locale,
               });
             } else {
               setStep({ name: 'onboarded' });
