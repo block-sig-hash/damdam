@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import select
 
+from app.audit.models import AuditEventType, AuditLog, AuditOutcome
 from app.auth.models import (
     AdminUser,
     HTOApprovalStatus,
@@ -24,7 +25,10 @@ from app.auth.models import (
 from app.main import create_app
 from app.manifests.invoices import InvoiceStorage
 from app.manifests.orders import ManifestOrderService, ProvisioningScheduler
+from app.manifests.service import ManifestError
 from app.notifications.service import NotificationError
+from app.packages.models import PaymentMethod, Transaction, TransactionStatus
+from app.retention.service import RetentionService
 
 
 class MemoryInvoiceStorage(InvoiceStorage):
@@ -585,6 +589,91 @@ def test_admin_confirmation_is_idempotent_and_gates_activation_dispatch(
         same = service.provision(session, order_id)
     assert same.status == ManifestOrderStatus.PROVISIONED
     assert len(whatsapp.activations) == 2
+
+
+def test_manual_confirmation_creates_one_retained_auditable_transaction(
+    order_api,
+    session_factory,
+    clock,
+    order_dependencies,
+) -> None:
+    """AC-06.5/payment retention: manual invoices get six-year evidence."""
+    _, provisioning, _, _ = order_dependencies
+    operator = create_operator(session_factory, "retained-payment@example.com")
+    manifest, _ = create_manifest_data(session_factory, operator.id, 1)
+    basic, _ = create_pricing(session_factory)
+    admin = AdminUser(email="retention-admin@example.com", password_hash="unused")
+    order = ManifestOrder(
+        manifest_id=manifest.id,
+        pricing_tier_id=basic.id,
+        pilgrim_count=1,
+        wholesale_price_ngn=Decimal("128000.00"),
+        total_ngn=Decimal("160000.00"),
+    )
+    with session_factory() as session:
+        session.add_all([admin, order])
+        session.commit()
+        session.refresh(admin)
+        session.refresh(order)
+        admin_id, order_id = admin.id, order.id
+
+    service: ManifestOrderService = order_api.state.manifest_order_service
+    provisioning.fail = True
+    with session_factory() as session, pytest.raises(ManifestError):
+        stored_admin = session.get(AdminUser, admin_id)
+        assert stored_admin is not None
+        service.confirm_payment(session, order_id, stored_admin)
+
+    # Payment evidence committed even though the downstream queue was down.
+    provisioning.fail = False
+    with session_factory() as session:
+        stored_admin = session.get(AdminUser, admin_id)
+        assert stored_admin is not None
+        service.confirm_payment(session, order_id, stored_admin)
+        service.confirm_payment(session, order_id, stored_admin)
+
+    assert provisioning.calls == [order_id]
+    with session_factory() as session:
+        transactions = session.exec(
+            select(Transaction).where(Transaction.manifest_order_id == order_id)
+        ).all()
+        assert len(transactions) == 1
+        transaction = transactions[0]
+        assert transaction.processor is None
+        assert transaction.processor_reference == f"hto-{order_id}"
+        assert transaction.amount_ngn == Decimal("160000.00")
+        assert transaction.payment_method == PaymentMethod.INVOICE
+        assert transaction.status == TransactionStatus.SUCCESS
+        assert transaction.webhook_payload == {
+            "confirmation_source": "admin",
+            "confirmed_by_admin_id": str(admin_id),
+            "confirmed_at": clock().isoformat(),
+        }
+        transaction_id = transaction.id
+
+    # The manual invoice evidence follows the same six-year lifecycle and
+    # leaves the same durable deletion audit as an automated transaction.
+    cutoff = clock().replace(year=clock().year - 6)
+    with session_factory() as session:
+        transaction = session.get(Transaction, transaction_id)
+        assert transaction is not None
+        transaction.created_at = cutoff
+        session.add(transaction)
+        session.commit()
+        retention = RetentionService(clock)
+        assert retention.delete_expired_transactions(session) == 1
+        assert retention.delete_expired_transactions(session) == 0
+        assert session.get(Transaction, transaction_id) is None
+        audit = session.exec(
+            select(AuditLog).where(
+                AuditLog.event_type == AuditEventType.DATA_RETENTION.value,
+                AuditLog.outcome == AuditOutcome.TRANSACTION_DELETED.value,
+                AuditLog.reference == str(transaction_id),
+            )
+        ).one()
+        assert audit.idempotency_key == (
+            f"retention:{AuditOutcome.TRANSACTION_DELETED.value}:{transaction_id}"
+        )
 
 
 def test_admin_confirmation_recovers_when_queue_is_temporarily_unavailable(

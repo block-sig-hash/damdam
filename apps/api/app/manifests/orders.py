@@ -41,6 +41,7 @@ from app.manifests.schemas import (
 )
 from app.manifests.service import ManifestError
 from app.notifications.service import NotificationError, NotificationService
+from app.packages.models import PaymentMethod, Transaction, TransactionStatus
 
 ACCEPTED_VALIDATION_STATUSES = (
     ManifestValidationStatus.VALID,
@@ -462,17 +463,40 @@ class ManifestOrderService:
         if order is None:
             raise ManifestError("manifest_order_not_found")
         if order.status == ManifestOrderStatus.AWAITING_PAYMENT:
+            confirmed_at = self.clock()
             order.status = ManifestOrderStatus.PROVISIONING
-            order.payment_confirmed_at = self.clock()
+            order.payment_confirmed_at = confirmed_at
             order.payment_confirmed_by = admin.id
             session.add(order)
-            session.commit()
-            session.refresh(order)
         elif order.status not in (
             ManifestOrderStatus.PROVISIONING,
             ManifestOrderStatus.PROVISIONED,
         ):
             raise ManifestError("invalid_payment_transition")
+
+        transaction = session.exec(
+            select(Transaction).where(Transaction.manifest_order_id == order.id)
+        ).first()
+        if transaction is None:
+            confirmed_at = order.payment_confirmed_at or self.clock()
+            confirmed_by = order.payment_confirmed_by or admin.id
+            transaction = Transaction(
+                manifest_order_id=order.id,
+                processor=None,
+                processor_reference=f"hto-{order.id}",
+                amount_ngn=order.total_ngn,
+                payment_method=PaymentMethod.INVOICE,
+                status=TransactionStatus.SUCCESS,
+                webhook_payload={
+                    "confirmation_source": "admin",
+                    "confirmed_by_admin_id": str(confirmed_by),
+                    "confirmed_at": confirmed_at.isoformat(),
+                },
+                created_at=confirmed_at,
+            )
+            session.add(transaction)
+        session.commit()
+        session.refresh(order)
 
         if (
             order.status == ManifestOrderStatus.PROVISIONING

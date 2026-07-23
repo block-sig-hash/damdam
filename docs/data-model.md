@@ -309,17 +309,18 @@ one, rather than hardcoding a single vendor's identifier field.
 | id | UUID | PK | |
 | package_id | UUID | FK → packages, NULLABLE | |
 | manifest_order_id | UUID | FK → manifest_orders, NULLABLE | |
-| processor | ENUM | NOT NULL, DEFAULT 'paystack' | `paystack` \| `flutterwave` — see §6.7 amendment |
+| processor | ENUM | NULLABLE | `paystack` \| `flutterwave`; NULL only for a processor-neutral manually confirmed HTO invoice — see §6.39 |
 | processor_reference | VARCHAR(100) | UNIQUE, NULLABLE | Idempotency key (Path A); replaces the earlier Paystack-only `paystack_reference` field |
 | amount_ngn | DECIMAL(12,2) | NOT NULL | |
 | payment_method | ENUM | NULLABLE | `card` \| `bank_transfer` \| `ussd` \| `invoice` |
 | status | ENUM | NOT NULL | `pending` \| `success` \| `failed` |
-| webhook_payload | JSONB | NULLABLE | Raw processor payload (Paystack or Flutterwave), audit trail |
+| webhook_payload | JSONB | NULLABLE | Minimized provider reconciliation evidence, or minimal manual-confirmation evidence; never a raw provider body — see §6.39 and `security.md` §10.13 |
 | receipt_sent_at | TIMESTAMPTZ | NULLABLE | Set after all applicable receipt channels succeed; permits safe retry after a notification outage |
 | created_at | TIMESTAMPTZ | NOT NULL | Starts the 6-year retention window in `security.md` §10.3 |
 
 **Indexes:** `processor_reference` (unique, partial index `WHERE
-processor_reference IS NOT NULL`), `created_at`
+processor_reference IS NOT NULL`), `manifest_order_id` (unique; multiple NULLs
+permitted), `created_at`
 
 ---
 
@@ -1695,3 +1696,41 @@ other way to label which manifest a given row belongs to. `HtoPilgrimSummary`
 gains `manifest_id: UUID` (always present — every `manifest_pilgrims` row has
 a non-null `manifest_id`) and `manifest_name: str | None` (nullable, matching
 `manifests.name`'s own nullability). See api-spec.md §7.8.
+
+---
+
+## 6.39 Amendment — Minimized Webhook Evidence and Manual HTO Transactions
+
+Migration `0024_retention_payment_gaps` closes two gaps in the six-year
+financial record lifecycle.
+
+`transactions.webhook_payload` is no longer a raw provider-body archive. New
+Paystack and Flutterwave callbacks are reduced after signature verification to
+the explicit reconciliation allowlists in `security.md` §10.13, and the
+migration rewrites existing JSONB values to those same shapes. The column name
+is retained to avoid an unnecessary schema rename, but its contract is now
+"minimized payment evidence." Customer and payment-instrument identifiers are
+not hashed because the retained processor references already support
+reconciliation without creating a second long-lived linkage identifier.
+
+Manual HTO invoice confirmation creates one successful transaction with:
+
+- `manifest_order_id` set to the confirmed order and protected by a unique
+  index;
+- `processor = NULL`, because neither Paystack nor Flutterwave processed the
+  bank-transfer invoice;
+- an internal, globally unique `processor_reference` of `hto-{order_id}`;
+- `payment_method = invoice`, the order's `total_ngn`, and a minimal evidence
+  object containing confirmation source, admin ID, and timestamp; and
+- `created_at` equal to the payment confirmation time, which starts the same
+  six-year retention clock used for automated payments.
+
+The existing `processor` server default is removed. Retail payment code already
+sets an explicit Paystack or Flutterwave processor, while the database check
+permits a NULL processor only for an invoice transaction whose internal
+reference starts with `hto-` (the reference remains after an order FK is later
+set NULL). The migration backfills one equivalent transaction for every
+previously confirmed HTO order without one before creating the unique index.
+Confirmation locks the order, writes its state and transaction atomically, and
+heals a missing transaction when an already-confirmed order is retried;
+provisioning dispatch remains a separate, safely retryable post-commit step.

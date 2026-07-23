@@ -3,7 +3,17 @@ from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Numeric, String, text
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    text,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
@@ -129,6 +139,16 @@ class Transaction(SQLModel, table=True):
             unique=True,
             postgresql_where=text("processor_reference IS NOT NULL"),
         ),
+        Index(
+            "ux_transactions_manifest_order_id",
+            "manifest_order_id",
+            unique=True,
+        ),
+        CheckConstraint(
+            "processor IS NOT NULL OR "
+            "(payment_method = 'invoice' AND processor_reference LIKE 'hto-%')",
+            name="ck_transactions_manual_invoice_processor",
+        ),
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -144,15 +164,15 @@ class Transaction(SQLModel, table=True):
             ForeignKey("manifest_orders.id", ondelete="SET NULL"), nullable=True
         ),
     )
-    processor: PaymentProcessor = Field(
-        default=PaymentProcessor.PAYSTACK,
+    processor: PaymentProcessor | None = Field(
+        default=None,
         sa_column=Column(
             SAEnum(
                 PaymentProcessor,
                 name="payment_processor",
                 values_callable=lambda choices: [choice.value for choice in choices],
             ),
-            nullable=False,
+            nullable=True,
         ),
     )
     processor_reference: str | None = Field(

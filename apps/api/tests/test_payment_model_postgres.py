@@ -8,12 +8,20 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from app.auth.models import PricingTier, User
+from app.auth.models import (
+    Manifest,
+    ManifestOrder,
+    Organization,
+    OrganizationType,
+    PricingTier,
+    User,
+)
 from app.config import Settings
 from app.packages.models import (
     Package,
     PackageSource,
     PackageStatus,
+    PaymentMethod,
     PaymentProcessor,
     Transaction,
     TransactionStatus,
@@ -73,6 +81,100 @@ def test_processor_reference_is_globally_unique_across_processors() -> None:
                 processor_reference=f"shared-{suffix}",
                 amount_ngn=Decimal("145000.00"),
                 status=TransactionStatus.PENDING,
+            )
+        )
+
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+
+@pytest.mark.skipif(
+    "TEST_DATABASE_URL" not in os.environ,
+    reason="real PostgreSQL manual-processor constraint test runs in CI",
+)
+def test_null_processor_is_reserved_for_internal_hto_invoice_references() -> None:
+    """Processor-neutral evidence cannot be created for an unrelated payment."""
+    engine = create_engine(os.environ["TEST_DATABASE_URL"])
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        session.add(
+            Transaction(
+                processor=None,
+                processor_reference=f"not-an-hto-{uuid4().hex}",
+                amount_ngn=Decimal("160000.00"),
+                payment_method=PaymentMethod.INVOICE,
+                status=TransactionStatus.SUCCESS,
+            )
+        )
+
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+
+@pytest.mark.skipif(
+    "TEST_DATABASE_URL" not in os.environ,
+    reason="real PostgreSQL HTO transaction constraint test runs in CI",
+)
+def test_manifest_order_has_at_most_one_processor_neutral_transaction() -> None:
+    """AC-06.5: retries cannot duplicate retained manual-payment evidence."""
+    engine = create_engine(os.environ["TEST_DATABASE_URL"])
+    SQLModel.metadata.create_all(engine)
+    suffix = uuid4().hex
+    with Session(engine) as session:
+        organization = Organization(
+            org_type=OrganizationType.HTO_OPERATOR,
+            name=f"Retention HTO {suffix}",
+            primary_contact_name="Amina Yusuf",
+            email=f"retention-{suffix}@example.com",
+            password_hash="unused",
+            phone_number=f"+23480{suffix[:8]}",
+            nahcon_licence_number=f"NAHCON-{suffix}",
+        )
+        session.add(organization)
+        session.commit()
+        session.refresh(organization)
+        manifest = Manifest(organization_id=organization.id)
+        tier = PricingTier(
+            name=f"HTO-{suffix}",
+            usd_reference_price=Decimal("100.00"),
+            data_gb=5,
+            pstn_minutes=30,
+            wholesale_usd_price=Decimal("80.00"),
+            ngn_price=Decimal("160000.00"),
+        )
+        session.add_all([manifest, tier])
+        session.commit()
+        session.refresh(manifest)
+        session.refresh(tier)
+        order = ManifestOrder(
+            manifest_id=manifest.id,
+            pricing_tier_id=tier.id,
+            pilgrim_count=1,
+            wholesale_price_ngn=Decimal("128000.00"),
+            total_ngn=Decimal("160000.00"),
+        )
+        session.add(order)
+        session.commit()
+        session.refresh(order)
+        session.add(
+            Transaction(
+                manifest_order_id=order.id,
+                processor=None,
+                processor_reference=f"hto-first-{suffix}",
+                amount_ngn=order.total_ngn,
+                payment_method=PaymentMethod.INVOICE,
+                status=TransactionStatus.SUCCESS,
+            )
+        )
+        session.commit()
+        session.add(
+            Transaction(
+                manifest_order_id=order.id,
+                processor=None,
+                processor_reference=f"hto-second-{suffix}",
+                amount_ngn=order.total_ngn,
+                payment_method=PaymentMethod.INVOICE,
+                status=TransactionStatus.SUCCESS,
             )
         )
 
