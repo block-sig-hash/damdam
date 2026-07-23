@@ -18,7 +18,7 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const title = (payload.notification && payload.notification.title) || "DamDam SOS alert";
+  const title = (payload.notification && payload.notification.title) || "DamDam SOS";
   const body = (payload.notification && payload.notification.body) || "";
   self.registration.showNotification(title, {
     body,

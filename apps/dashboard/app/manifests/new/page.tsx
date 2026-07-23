@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import {
   confirmManifest,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/api";
 
 export default function ManifestUploadPage() {
+  const t = useTranslations("manifests.upload");
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [manifestId, setManifestId] = useState<string | null>(null);
@@ -29,7 +31,7 @@ export default function ManifestUploadPage() {
       setManifestId(id);
       setPreview(await uploadManifest(id, file));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Upload failed.");
+      setError(caught instanceof Error ? caught.message : t("uploadFailed"));
     } finally {
       setUploading(false);
     }
@@ -42,7 +44,7 @@ export default function ManifestUploadPage() {
     try {
       setConfirmedCount(await confirmManifest(manifestId));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Confirmation failed.");
+      setError(caught instanceof Error ? caught.message : t("confirmationFailed"));
     } finally {
       setConfirming(false);
     }
@@ -58,14 +60,14 @@ export default function ManifestUploadPage() {
     return (
       <main className="dashboard-shell">
         <section className="manifest-card" aria-live="polite">
-          <p className="eyebrow">Manifest confirmed</p>
-          <h1>{confirmedCount} pilgrims accepted</h1>
-          <p>The valid rows are ready for package selection.</p>
+          <p className="eyebrow">{t("confirmedEyebrow")}</p>
+          <h1>{t("accepted", { count: confirmedCount })}</h1>
+          <p>{t("ready")}</p>
           <a
             className="primary-link"
             href={`/manifests/${manifestId}/order`}
           >
-            Continue to grouping and package order
+            {t("continue")}
           </a>
         </section>
       </main>
@@ -77,28 +79,28 @@ export default function ManifestUploadPage() {
     return (
       <main className="dashboard-shell">
         <section className="manifest-card wide-card">
-          <p className="eyebrow">Validation preview</p>
-          <h1>Review before confirming</h1>
-          <div className="summary-row" aria-label="Upload summary">
-            <strong>{preview.valid_rows} valid</strong>
-            <span>{preview.invalid_rows.length} invalid</span>
-            <span>{warnings.length} duplicate warnings</span>
+          <p className="eyebrow">{t("previewEyebrow")}</p>
+          <h1>{t("reviewTitle")}</h1>
+          <div className="summary-row" aria-label={t("summaryAria")}>
+            <strong>{t("valid", { count: preview.valid_rows })}</strong>
+            <span>{t("invalid", { count: preview.invalid_rows.length })}</span>
+            <span>{t("duplicateWarnings", { count: warnings.length })}</span>
           </div>
 
           <section className="issues-panel">
-            <h2>Issues found</h2>
+            <h2>{t("issues")}</h2>
             {preview.invalid_rows.length === 0 && warnings.length === 0 ? (
-              <p>No issues found.</p>
+              <p>{t("noIssues")}</p>
             ) : (
               <ul className="issue-list">
                 {preview.invalid_rows.map((issue) => (
                   <li className="hard-error" key={`error-${issue.row_number}`}>
-                    <strong>Row {issue.row_number}</strong>: {issue.reason}
+                    <strong>{t("row", { number: issue.row_number })}</strong>: {issue.reason}
                   </li>
                 ))}
                 {warnings.map((row) => (
                   <li className="warning" key={`warning-${row.id}`}>
-                    <strong>Row {row.row_number}</strong>: {row.first_name} {row.last_name} — {row.warning}
+                    <strong>{t("row", { number: row.row_number })}</strong>: {row.first_name} {row.last_name} — {row.warning}
                   </li>
                 ))}
               </ul>
@@ -106,10 +108,10 @@ export default function ManifestUploadPage() {
           </section>
 
           <details>
-            <summary>Valid rows ({preview.valid_rows})</summary>
+            <summary>{t("validRows", { count: preview.valid_rows })}</summary>
             <div className="table-scroll">
               <table>
-                <thead><tr><th>Row</th><th>Name</th><th>Phone</th><th>Passport</th><th>Seat</th></tr></thead>
+                <thead><tr><th>{t("row", { number: "" })}</th><th>{t("name")}</th><th>{t("phone")}</th><th>{t("passport")}</th><th>{t("seat")}</th></tr></thead>
                 <tbody>
                   {preview.preview.map((row) => (
                     <tr key={row.id}>
@@ -128,10 +130,10 @@ export default function ManifestUploadPage() {
           {error ? <p className="error" role="alert">{error}</p> : null}
           <div className="action-row">
             <button className="secondary-button" type="button" onClick={reupload}>
-              Cancel and re-upload
+              {t("cancelReupload")}
             </button>
             <button type="button" onClick={confirm} disabled={confirming || preview.valid_rows === 0}>
-              {confirming ? "Confirming…" : "Confirm and proceed"}
+              {confirming ? t("confirming") : t("confirmProceed")}
             </button>
           </div>
         </section>
@@ -142,28 +144,28 @@ export default function ManifestUploadPage() {
   return (
     <main className="dashboard-shell">
       <section className="manifest-card">
-        <p className="eyebrow">New manifest</p>
-        <h1>Upload pilgrim CSV</h1>
-        <p className="intro">Up to 500 pilgrims. Invalid rows will be separated before you confirm.</p>
+        <p className="eyebrow">{t("newEyebrow")}</p>
+        <h1>{t("title")}</h1>
+        <p className="intro">{t("intro")}</p>
         <form onSubmit={submit} className="single-column-form">
           <label>
-            Manifest name <span className="hint">(optional)</span>
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Flight NAF203 — 14 May" />
+            {t("manifestName")} <span className="hint">{t("optional")}</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("namePlaceholder")} />
           </label>
           <label className="file-zone">
-            CSV file
+            {t("csvFile")}
             <input
               required
               type="file"
               accept=".csv,text/csv"
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />
-            <span className="hint">Required: first_name, last_name, phone_number</span>
+            <span className="hint">{t("requiredColumns")}</span>
           </label>
-          <a href="/manifest-template.csv" download>Download CSV template</a>
+          <a href="/manifest-template.csv" download>{t("downloadTemplate")}</a>
           {error ? <p className="error" role="alert">{error}</p> : null}
           <button type="submit" disabled={!file || uploading}>
-            {uploading ? "Uploading and validating…" : "Upload"}
+            {uploading ? t("uploading") : t("submit")}
           </button>
         </form>
       </section>

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import {useLocale} from "next-intl";
+import {useLocale, useTranslations} from "next-intl";
 
 import {LocaleSwitcher} from "@/components/LocaleSwitcher";
 import type {AppLocale} from "@/i18n/locale";
@@ -18,6 +18,7 @@ const initialForm = {
 
 export default function RegistrationPage() {
   const locale = useLocale() as AppLocale;
+  const t = useTranslations("auth");
   const [form, setForm] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [complete, setComplete] = useState(false);
@@ -35,7 +36,7 @@ export default function RegistrationPage() {
       await registerHTO({...form, locale});
       setComplete(true);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Registration failed.");
+      setError(caught instanceof Error ? caught.message : t("registrationFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -45,13 +46,9 @@ export default function RegistrationPage() {
     return (
       <main className="auth-shell">
         <section className="auth-card" aria-live="polite">
-          <p className="eyebrow">Registration received</p>
-          <h1>Check your email</h1>
-          <p>
-            We sent a verification link to <strong>{form.email}</strong>. The
-            link expires in 24 hours. After verification, DamDam will review
-            your NAHCON licence and respond within 24 hours.
-          </p>
+          <p className="eyebrow">{t("registrationReceived")}</p>
+          <h1>{t("checkEmail")}</h1>
+          <p>{t("verificationSent", {email: form.email})}</p>
         </section>
       </main>
     );
@@ -61,16 +58,13 @@ export default function RegistrationPage() {
     <main className="auth-shell">
       <section className="auth-card">
         <LocaleSwitcher />
-        <p className="eyebrow">DamDam for Hajj Tour Operators</p>
-        <h1>Create your business account</h1>
-        <p className="intro">
-          Register your operator details. Your NAHCON licence will be reviewed
-          manually before dashboard access is activated.
-        </p>
+        <p className="eyebrow">{t("operatorEyebrow")}</p>
+        <h1>{t("createTitle")}</h1>
+        <p className="intro">{t("createIntro")}</p>
 
         <form onSubmit={submit} className="registration-form">
           <label>
-            Business name
+            {t("businessName")}
             <input
               required
               autoComplete="organization"
@@ -79,7 +73,7 @@ export default function RegistrationPage() {
             />
           </label>
           <label>
-            Operator name
+            {t("operatorName")}
             <input
               required
               autoComplete="name"
@@ -88,7 +82,7 @@ export default function RegistrationPage() {
             />
           </label>
           <label>
-            Email address
+            {t("email")}
             <input
               required
               type="email"
@@ -98,7 +92,7 @@ export default function RegistrationPage() {
             />
           </label>
           <label>
-            Nigerian phone number
+            {t("nigerianPhone")}
             <input
               required
               type="tel"
@@ -111,7 +105,7 @@ export default function RegistrationPage() {
             />
           </label>
           <label>
-            NAHCON licence number
+            {t("licence")}
             <input
               required
               value={form.nahcon_licence_number}
@@ -121,7 +115,7 @@ export default function RegistrationPage() {
             />
           </label>
           <label>
-            Password
+            {t("password")}
             <input
               required
               type="password"
@@ -131,12 +125,12 @@ export default function RegistrationPage() {
               value={form.password}
               onChange={(event) => update("password", event.target.value)}
             />
-            <span className="hint">Use at least 8 characters.</span>
+            <span className="hint">{t("passwordHint")}</span>
           </label>
 
           {error ? <p className="error" role="alert">{error}</p> : null}
           <button type="submit" disabled={submitting}>
-            {submitting ? "Creating account…" : "Create account"}
+            {submitting ? t("creating") : t("create")}
           </button>
         </form>
       </section>

@@ -8,6 +8,7 @@ import {
 } from "firebase/messaging";
 
 import {subscribeToPushTopic} from "./api";
+import {clientMessage} from "./clientI18n";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? "",
@@ -81,7 +82,7 @@ export function listenForForegroundSOSPush(
   if (!messaging) return () => undefined;
   return onMessage(messaging, (payload) => {
     onAlert(
-      payload.notification?.title ?? "SOS alert",
+      payload.notification?.title ?? clientMessage("common.errors.sosTitle"),
       payload.notification?.body ?? "",
     );
   });

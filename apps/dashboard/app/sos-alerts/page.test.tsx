@@ -1,4 +1,4 @@
-import {cleanup, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {cleanup, fireEvent, render, screen, waitFor} from '@/test-utils';
 import {afterEach, beforeEach, expect, it, vi} from 'vitest';
 
 const enableSOSPushAlertsMock = vi.fn(async () => 'subscribed' as const);

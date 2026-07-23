@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen } from "@/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { VerifyEmailResult } from "./page";

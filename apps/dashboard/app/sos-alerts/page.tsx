@@ -1,12 +1,15 @@
 "use client";
 
 import {useCallback, useEffect, useState} from "react";
+import {useLocale, useTranslations} from "next-intl";
 import {getSOSAlerts, resolveSOSAlert, type SOSAlert} from "../../lib/api";
 import {enableSOSPushAlerts, type PushSubscriptionOutcome} from "../../lib/push";
 
 type Filter = "active" | "resolved" | "all";
 
 export default function SOSAlertsPage() {
+  const t = useTranslations("safety");
+  const locale = useLocale();
   const [filter, setFilter] = useState<Filter>("active");
   const [alerts, setAlerts] = useState<SOSAlert[]>([]);
   const [error, setError] = useState("");
@@ -18,9 +21,9 @@ export default function SOSAlertsPage() {
       setAlerts(await getSOSAlerts(filter === "all" ? undefined : filter));
       setError("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load SOS alerts.");
+      setError(cause instanceof Error ? cause.message : t("loadFailed"));
     }
-  }, [filter]);
+  }, [filter, t]);
   useEffect(() => {
     const initial = window.setTimeout(load, 0);
     const timer = window.setInterval(load, 15_000);
@@ -50,30 +53,30 @@ export default function SOSAlertsPage() {
   }
   return (
     <main className="dashboard-page">
-      <header className="page-heading"><div><p className="eyebrow">HTO safety desk</p><h1>SOS Alerts</h1></div><p>Refreshes every 15 seconds</p></header>
+      <header className="page-heading"><div><p className="eyebrow">{t("desk")}</p><h1>{t("title")}</h1></div><p>{t("refresh")}</p></header>
       {pushPermission === "default" ? (
         <aside className="push-banner" role="status">
-          <p>Get an alert on this browser the moment an SOS comes in, even when this tab isn&apos;t open.</p>
+          <p>{t("pushIntro")}</p>
           <button disabled={enablingPush} onClick={requestPushAlerts}>
-            {enablingPush ? "Enabling…" : "Enable browser alerts"}
+            {enablingPush ? t("enabling") : t("enable")}
           </button>
         </aside>
       ) : null}
-      {pushOutcome === "error" ? <p role="alert">Could not enable browser alerts. Try again shortly.</p> : null}
-      {pushOutcome === "unsupported" ? <p role="alert">This browser doesn&apos;t support push alerts.</p> : null}
-      <nav aria-label="SOS status filter" className="filter-row">
-        {(["active", "resolved", "all"] as const).map(value => <button aria-pressed={filter === value} key={value} onClick={() => setFilter(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}
+      {pushOutcome === "error" ? <p role="alert">{t("pushFailed")}</p> : null}
+      {pushOutcome === "unsupported" ? <p role="alert">{t("pushUnsupported")}</p> : null}
+      <nav aria-label={t("filterAria")} className="filter-row">
+        {(["active", "resolved", "all"] as const).map(value => <button aria-pressed={filter === value} key={value} onClick={() => setFilter(value)}>{t(`filters.${value}`)}</button>)}
       </nav>
       {error ? <p role="alert">{error}</p> : null}
       <section aria-live="polite" className="sos-grid">
-        {alerts.length === 0 ? <p>No {filter} SOS alerts.</p> : alerts.map(alert => (
+        {alerts.length === 0 ? <p>{t("empty", {filter: t(`filters.${filter}`).toLocaleLowerCase(locale)})}</p> : alerts.map(alert => (
           <article className={`sos-card sos-${alert.status}`} key={alert.id}>
-            <div><span className="status-pill">{alert.status.toUpperCase()}</span><h2>{alert.pilgrim_name}</h2><a href={`tel:${alert.pilgrim_phone}`}>{alert.pilgrim_phone}</a><time dateTime={alert.timestamp}>{new Date(alert.timestamp).toLocaleString()}</time></div>
+            <div><span className="status-pill">{t(`filters.${alert.status as "active" | "resolved"}`)}</span><h2>{alert.pilgrim_name}</h2><a href={`tel:${alert.pilgrim_phone}`}>{alert.pilgrim_phone}</a><time dateTime={alert.timestamp}>{new Date(alert.timestamp).toLocaleString(locale)}</time></div>
             {alert.latitude !== null && alert.longitude !== null ? <a href={`https://www.google.com/maps?q=${alert.latitude},${alert.longitude}`} target="_blank" rel="noreferrer">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img alt={`Location of ${alert.pilgrim_name}`} src={`https://staticmap.openstreetmap.de/staticmap.php?center=${alert.latitude},${alert.longitude}&zoom=15&size=420x180&markers=${alert.latitude},${alert.longitude},red-pushpin`} />
-            </a> : <p>Location unavailable</p>}
-            <div className="action-row"><a href={`/pilgrims/${alert.id}`}>View pilgrim detail</a>{alert.status === "active" ? <button onClick={() => resolve(alert)}>Resolve</button> : null}</div>
+              <img alt={t("locationAlt", {name: alert.pilgrim_name})} src={`https://staticmap.openstreetmap.de/staticmap.php?center=${alert.latitude},${alert.longitude}&zoom=15&size=420x180&markers=${alert.latitude},${alert.longitude},red-pushpin`} />
+            </a> : <p>{t("locationUnavailable")}</p>}
+            <div className="action-row"><a href={`/pilgrims/${alert.id}`}>{t("viewPilgrim")}</a>{alert.status === "active" ? <button onClick={() => resolve(alert)}>{t("resolve")}</button> : null}</div>
           </article>
         ))}
       </section>

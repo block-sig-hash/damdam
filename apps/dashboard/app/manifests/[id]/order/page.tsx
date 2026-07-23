@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 
 import {
   createFamilyGroup,
@@ -17,14 +18,15 @@ import {
   updateFamilyGroup,
 } from "@/lib/api";
 
-const naira = new Intl.NumberFormat("en-NG", {
-  style: "currency",
-  currency: "NGN",
-  maximumFractionDigits: 0,
-});
-
 export default function ManifestOrderPage() {
   const { id } = useParams<{ id: string }>();
+  const locale = useLocale();
+  const t = useTranslations("manifests.order");
+  const naira = useMemo(() => new Intl.NumberFormat(locale === "fr" ? "fr-NG" : "en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }), [locale]);
   const [pilgrims, setPilgrims] = useState<UnorderedPilgrim[]>([]);
   const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [orders, setOrders] = useState<ManifestOrder[]>([]);
@@ -49,10 +51,10 @@ export default function ManifestOrderPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      refresh().catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load manifest."));
+      refresh().catch((caught) => setError(caught instanceof Error ? caught.message : t("loadFailed")));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [refresh]);
+  }, [refresh, t]);
 
   useEffect(() => {
     if (!orders.some((order) => order.status === "awaiting_payment")) return;
@@ -123,7 +125,7 @@ export default function ManifestOrderPage() {
       setGroupSelection(new Set());
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not save family group.");
+      setError(caught instanceof Error ? caught.message : t("saveGroupFailed"));
     } finally {
       setBusy(false);
     }
@@ -135,7 +137,7 @@ export default function ManifestOrderPage() {
       await deleteFamilyGroup(id, groupId);
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not delete family group.");
+      setError(caught instanceof Error ? caught.message : t("deleteGroupFailed"));
     } finally {
       setBusy(false);
     }
@@ -157,7 +159,7 @@ export default function ManifestOrderPage() {
       setTierId("");
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not place order.");
+      setError(caught instanceof Error ? caught.message : t("placeFailed"));
     } finally {
       setBusy(false);
     }
@@ -170,13 +172,13 @@ export default function ManifestOrderPage() {
   return (
     <main className="dashboard-shell">
       <section className="manifest-card wide-card">
-        <p className="eyebrow">Manifest packages</p>
-        <h1>Group families and place orders</h1>
+        <p className="eyebrow">{t("eyebrow")}</p>
+        <h1>{t("title")}</h1>
         {error ? <p className="error" role="alert">{error}</p> : null}
 
         <section className="order-section">
-          <h2>1. Optional Family grouping</h2>
-          <p>Select 2–8 pilgrims who will share a Family-tier purchase.</p>
+          <h2>{t("groupStep")}</h2>
+          <p>{t("groupHelp")}</p>
           <div className="check-grid">
             {groupingCandidates.map((pilgrim) => (
               <label className="check-row" key={pilgrim.id}>
@@ -190,71 +192,71 @@ export default function ManifestOrderPage() {
             ))}
           </div>
           <button type="button" disabled={busy || groupSelection.size < 2 || groupSelection.size > 8} onClick={saveGroup}>
-            {editingGroup ? `Update group (${groupSelection.size})` : `Group selected (${groupSelection.size})`}
+            {editingGroup ? t("updateGroup", { count: groupSelection.size }) : t("groupSelected", { count: groupSelection.size })}
           </button>
-          {editingGroup ? <button type="button" className="link-button" onClick={() => { setEditingGroup(null); setGroupSelection(new Set()); }}>Cancel editing</button> : null}
+          {editingGroup ? <button type="button" className="link-button" onClick={() => { setEditingGroup(null); setGroupSelection(new Set()); }}>{t("cancelEditing")}</button> : null}
 
           {[...groups].map(([groupId, members]) => (
             <div className="family-group" key={groupId}>
-              <strong>Family group ({members.length})</strong>
+              <strong>{t("familyGroupCount", { count: members.length })}</strong>
               <span>{members.map((member) => member.name).join(", ")}</span>
-              <div><button type="button" className="link-button" onClick={() => editGroup(groupId)}>Edit</button><button type="button" className="link-button danger-link" onClick={() => removeGroup(groupId)}>Delete</button></div>
+              <div><button type="button" className="link-button" onClick={() => editGroup(groupId)}>{t("edit")}</button><button type="button" className="link-button danger-link" onClick={() => removeGroup(groupId)}>{t("delete")}</button></div>
             </div>
           ))}
         </section>
 
         <section className="order-section">
-          <h2>2. Select pilgrims</h2>
-          <p>Choosing one Family member selects their complete group.</p>
+          <h2>{t("pilgrimStep")}</h2>
+          <p>{t("pilgrimHelp")}</p>
           <div className="check-grid">
             {pilgrims.map((pilgrim) => (
               <label className="check-row" key={pilgrim.id}>
                 <input type="checkbox" checked={orderSelection.has(pilgrim.id)} onChange={() => toggleOrderPilgrim(pilgrim)} />
-                <span>{pilgrim.name}<small>{pilgrim.family_group_id ? "Family group" : pilgrim.phone_number}</small></span>
+                <span>{pilgrim.name}<small>{pilgrim.family_group_id ? t("familyGroup") : pilgrim.phone_number}</small></span>
               </label>
             ))}
           </div>
         </section>
 
         <section className="order-section">
-          <h2>3. Select package tier</h2>
-          {!completeFamilyGroup && !individualSelection && selectedPilgrims.length ? <p className="error">Select individuals or one complete Family group, not both.</p> : null}
+          <h2>{t("tierStep")}</h2>
+          {!completeFamilyGroup && !individualSelection && selectedPilgrims.length ? <p className="error">{t("mixedSelection")}</p> : null}
           <div className="tier-grid">
             {availableTiers.map((tier) => (
               <label className="tier-card" key={tier.id}>
                 <input type="radio" name="tier" checked={(selectedTier?.id ?? "") === tier.id} onChange={() => setTierId(tier.id)} />
                 <strong>{tier.name}</strong>
-                <span>{naira.format(tier.wholesale_price_ngn)} per pilgrim</span>
-                <small>Retail {naira.format(tier.retail_price_ngn)} · Margin {naira.format(tier.estimated_margin_ngn)}</small>
+                <span>{t("perPilgrim", { price: naira.format(tier.wholesale_price_ngn) })}</span>
+                <small>{t("retailMargin", { retail: naira.format(tier.retail_price_ngn), margin: naira.format(tier.estimated_margin_ngn) })}</small>
               </label>
             ))}
           </div>
           {selectedTier ? (
             <div className="price-summary">
-              <span>{selectedPilgrims.length} × {naira.format(selectedTier.wholesale_price_ngn)}</span>
-              <strong>Total {naira.format(total)}</strong>
-              <span>Estimated retail margin {naira.format(margin)}</span>
+              <span>{t("calculation", { count: selectedPilgrims.length, price: naira.format(selectedTier.wholesale_price_ngn) })}</span>
+              <strong>{t("total", { price: naira.format(total) })}</strong>
+              <span>{t("estimatedMargin", { price: naira.format(margin) })}</span>
             </div>
           ) : null}
-          <button type="button" disabled={busy || !selectedTier} onClick={placeOrder}>Place order and generate invoice</button>
+          <button type="button" disabled={busy || !selectedTier} onClick={placeOrder}>{t("placeOrder")}</button>
         </section>
 
         {placedOrder ? (
           <section className="success-panel" aria-live="polite">
-            <strong>Order awaiting bank-transfer payment</strong>
-            <span>Total: {naira.format(placedOrder.total)}</span>
-            <button type="button" onClick={() => openManifestInvoice(id, placedOrder.id)}>View PDF invoice</button>
+            <strong>{t("awaitingTransfer")}</strong>
+            <span>{t("totalLabel", { price: naira.format(placedOrder.total) })}</span>
+            <button type="button" onClick={() => openManifestInvoice(id, placedOrder.id)}>{t("viewInvoice")}</button>
           </section>
         ) : null}
 
         <section className="order-section">
-          <h2>Orders</h2>
+          <h2>{t("orders")}</h2>
           {orders.map((order) => (
             <div className="order-row" key={order.id}>
-              <span><strong>{order.tier_name}</strong> · {order.pilgrim_count} pilgrims</span>
+              <span><strong>{order.tier_name}</strong> · {t("pilgrimCount", { count: order.pilgrim_count })}</span>
               <span>{naira.format(order.total_ngn)}</span>
-              <span className={`status-badge status-${order.status}`}>{order.status.replaceAll("_", " ")}</span>
-              <button type="button" className="link-button" onClick={() => openManifestInvoice(id, order.id)}>Invoice</button>
+              <span className={`status-badge status-${order.status}`}>{t(`status.${order.status}`)}</span>
+              <button type="button" className="link-button" onClick={() => openManifestInvoice(id, order.id)}>{t("invoice")}</button>
             </div>
           ))}
         </section>
