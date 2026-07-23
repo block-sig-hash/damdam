@@ -68,8 +68,14 @@ class RecordingEmailSender:
         self.receipts: list[tuple[str, str, Decimal, str]] = []
 
     def send_receipt(
-        self, email: str, tier_name: str, amount_ngn: Decimal, reference: str
+        self,
+        email: str,
+        tier_name: str,
+        amount_ngn: Decimal,
+        reference: str,
+        locale: str = "en",
     ) -> None:
+        del locale
         self.receipts.append((email, tier_name, amount_ngn, reference))
 
 
@@ -78,8 +84,14 @@ class RecordingWhatsAppSender:
         self.receipts: list[tuple[str, str, Decimal, str]] = []
 
     def send_receipt(
-        self, phone_number: str, tier_name: str, amount_ngn: Decimal, reference: str
+        self,
+        phone_number: str,
+        tier_name: str,
+        amount_ngn: Decimal,
+        reference: str,
+        locale: str = "en",
     ) -> None:
+        del locale
         self.receipts.append((phone_number, tier_name, amount_ngn, reference))
 
 
@@ -224,8 +236,7 @@ def test_checkout_falls_back_only_when_configured_primary_initialization_fails(
     assert len(primary.initializations) == len(secondary.initializations) == 1
     assert secondary.initializations[0].amount_ngn == Decimal("300000.00")
     assert (
-        response.json()["processor_reference"]
-        == primary.initializations[0].reference
+        response.json()["processor_reference"] == primary.initializations[0].reference
     )
 
 
@@ -414,7 +425,6 @@ def test_package_status_is_private_to_its_pilgrim(
 
     assert response.status_code == 404
     assert response.json()["error"] == "package_not_found"
-
 
 
 def test_duplicate_paystack_webhook_activates_and_sends_receipt_once(

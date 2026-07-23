@@ -43,7 +43,7 @@ def test_otp_request_and_verify_contract(api: FastAPI) -> None:
         request,
     )
 
-    assert sent.model_dump() == {"message": "OTP sent"}
+    assert sent.model_dump() == {"message": "Code de vérification envoyé"}
     assert verified.is_new_user is True
     assert verified.user.phone_number == "+2348012345678"
     assert verified.user.locale == "fr"

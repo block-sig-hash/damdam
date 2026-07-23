@@ -131,8 +131,7 @@ class EsimAccessProvider:
         order_number = str(order_object["orderNo"])
 
         deadline = (
-            self.monotonic()
-            + self.settings.esim_access_allocation_timeout_seconds
+            self.monotonic() + self.settings.esim_access_allocation_timeout_seconds
         )
         while self.monotonic() <= deadline:
             try:
@@ -181,12 +180,7 @@ class EsimAccessProvider:
         body = json.dumps(payload, separators=(",", ":"))
         timestamp = str(int(time.time()))
         request_id = uuid4().hex
-        signed = (
-            timestamp
-            + request_id
-            + self.settings.esim_access_access_code
-            + body
-        )
+        signed = timestamp + request_id + self.settings.esim_access_access_code + body
         signature = hmac.new(
             self.settings.esim_access_secret_key.encode(),
             signed.encode(),
@@ -211,12 +205,11 @@ class EsimAccessProvider:
             raise EsimProviderError("esim_access request failed") from exc
         if not isinstance(result, dict):
             raise EsimProviderError("esim_access returned an invalid response")
-        failed = result.get("success") is False or str(
-            result.get("success")
-        ).lower() == "false"
-        if failed and not (
-            allow_pending and str(result.get("errorCode")) == "200010"
-        ):
+        failed = (
+            result.get("success") is False
+            or str(result.get("success")).lower() == "false"
+        )
+        if failed and not (allow_pending and str(result.get("errorCode")) == "200010"):
             raise EsimProviderError("esim_access request failed")
         return result
 

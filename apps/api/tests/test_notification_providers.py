@@ -118,6 +118,83 @@ def test_meta_family_nomination_uses_configured_template(monkeypatch) -> None:
     }
 
 
+def test_meta_selects_the_approved_french_template_and_language(monkeypatch) -> None:
+    requests: list[dict[str, Any]] = []
+
+    def fake_post(*args, **kwargs):
+        requests.append({"args": args, "kwargs": kwargs})
+        return FakeResponse()
+
+    monkeypatch.setattr("app.notifications.providers.httpx.post", fake_post)
+    settings = Settings(
+        jwt_secret="test-secret-at-least-32-characters-long",
+        whatsapp_access_token="meta-token",
+        whatsapp_phone_number_id="phone-id",
+        whatsapp_family_nomination_template="family_contact_nominated_v1",
+        whatsapp_family_nomination_template_fr="contact_familial_designe_v1",
+    )
+
+    MetaWhatsAppSender(settings).send_family_nomination("+221771234567", locale="fr")
+
+    template = requests[0]["kwargs"]["json"]["template"]
+    assert template["name"] == "contact_familial_designe_v1"
+    assert template["language"] == {"code": "fr"}
+
+
+def test_resend_renders_french_subject_and_body(monkeypatch) -> None:
+    requests: list[dict[str, Any]] = []
+
+    def fake_post(*args, **kwargs):
+        requests.append({"args": args, "kwargs": kwargs})
+        return FakeResponse()
+
+    monkeypatch.setattr("app.notifications.providers.httpx.post", fake_post)
+    settings = Settings(
+        jwt_secret="test-secret-at-least-32-characters-long",
+        resend_api_key="resend-token",
+    )
+
+    ResendEmailSender(settings).send_verification(
+        "amina@example.com",
+        "Amina",
+        "https://damdam.app/verify",
+        locale="fr",
+    )
+
+    payload = requests[0]["kwargs"]["json"]
+    assert payload["subject"] == "Vérifiez votre compte opérateur DamDam"
+    assert "Ce lien expire dans 24 heures." in payload["html"]
+
+
+def test_french_receipt_localizes_tier_and_amount_parameters(monkeypatch) -> None:
+    requests: list[dict[str, Any]] = []
+
+    def fake_post(*args, **kwargs):
+        requests.append({"args": args, "kwargs": kwargs})
+        return FakeResponse()
+
+    monkeypatch.setattr("app.notifications.providers.httpx.post", fake_post)
+    settings = Settings(
+        jwt_secret="test-secret-at-least-32-characters-long",
+        whatsapp_access_token="meta-token",
+        whatsapp_phone_number_id="phone-id",
+    )
+
+    MetaWhatsAppSender(settings).send_receipt(
+        "+221771234567",
+        "Family",
+        Decimal("128000.50"),
+        "ref-fr",
+        locale="fr",
+    )
+
+    parameters = requests[0]["kwargs"]["json"]["template"]["components"][0][
+        "parameters"
+    ]
+    assert parameters[0]["text"] == "Famille"
+    assert parameters[1]["text"] == "NGN 128\u202f000,50"
+
+
 def test_meta_approval_template_keeps_operator_name_parameter(monkeypatch) -> None:
     """US-04 regression: shared template dispatch retains approval parameters."""
     requests: list[dict[str, Any]] = []
@@ -174,6 +251,7 @@ def test_meta_checkin_returns_message_id_for_delivery_tracking(monkeypatch) -> N
 
 def test_termii_family_sms_uses_plain_message_endpoint() -> None:
     """AC-15.10: fallback uses Termii outbound SMS, not the OTP endpoint."""
+
     class Client:
         def __init__(self) -> None:
             self.requests: list[tuple[str, dict[str, Any]]] = []

@@ -54,9 +54,7 @@ class DeviceToken(SQLModel, table=True):
             ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
         )
     )
-    fcm_token: str = Field(
-        sa_column=Column(String(4096), unique=True, nullable=False)
-    )
+    fcm_token: str = Field(sa_column=Column(String(4096), unique=True, nullable=False))
     platform: Platform = Field(
         sa_column=Column(
             Enum(

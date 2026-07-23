@@ -1079,3 +1079,31 @@ the contact. Locale is never inferred from destination or phone country.
 First-party clients must continue treating stable `error` codes as the primary
 display contract; localized backend `message` fallbacks and outbound templates
 are specified separately by the i18n notification amendment.
+
+---
+
+## 7.25 Amendment — Locale-Aware Responses and Outbound Notifications
+
+First-party clients send `Accept-Language: en|fr` on requests where no explicit
+body locale is available. The API resolves any `fr-*` preference to `fr`; all
+other or missing values fall back to `en`. The response shape and status code
+contract do not change: `error` remains the stable machine code, while
+`message` and serialized validator descriptions are rendered in the resolved
+language. Signup/recovery success messages use the explicit request locale,
+and authenticated recipient messages use the persisted locale.
+
+Outbound content is rendered from a domain event, recipient locale, and
+structured variables before it reaches Resend, Meta, Termii, Twilio Verify, or
+Firebase. Email subjects/bodies, OTP copy, check-in/SOS fallback SMS, and SOS
+push copy have English and French variants. Meta template dispatch selects both
+an approved template name and language code. Each existing
+`WHATSAPP_*_TEMPLATE` setting therefore has an optional `_FR` override; when
+the override is empty, the same Meta template name is requested with language
+code `fr`. French templates must be approved in Meta before production rollout.
+
+Recipient selection is explicit: organization locale for operator
+email/WhatsApp/push, family-contact locale for family WhatsApp/SMS, user locale
+for receipts and eSIM-ready messages, and manifest-pilgrim locale for
+pre-account activation. Verification and activation links include a
+non-authoritative `lang` hint; the client still permits the recipient to change
+language.

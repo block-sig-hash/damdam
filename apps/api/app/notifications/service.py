@@ -12,12 +12,19 @@ class EmailSender(Protocol):
         maps_url: str | None,
         cancelled: bool,
         notification_id: str,
+        locale: str = "en",
     ) -> None: ...
     def send_verification(
-        self, email: str, operator_name: str, verification_url: str
+        self,
+        email: str,
+        operator_name: str,
+        verification_url: str,
+        locale: str = "en",
     ) -> None: ...
 
-    def send_approval(self, email: str, operator_name: str) -> None: ...
+    def send_approval(
+        self, email: str, operator_name: str, locale: str = "en"
+    ) -> None: ...
 
     def send_invoice(
         self,
@@ -26,10 +33,16 @@ class EmailSender(Protocol):
         order_id: str,
         total_ngn: Decimal,
         pdf: bytes,
+        locale: str = "en",
     ) -> None: ...
 
     def send_receipt(
-        self, email: str, tier_name: str, amount_ngn: Decimal, reference: str
+        self,
+        email: str,
+        tier_name: str,
+        amount_ngn: Decimal,
+        reference: str,
+        locale: str = "en",
     ) -> None: ...
 
 
@@ -42,20 +55,35 @@ class WhatsAppSender(Protocol):
         maps_url: str | None,
         hto_phone: str,
         cancelled: bool,
+        locale: str = "en",
     ) -> str: ...
-    def send_approval(self, phone_number: str, operator_name: str) -> None: ...
+    def send_approval(
+        self, phone_number: str, operator_name: str, locale: str = "en"
+    ) -> None: ...
 
-    def send_family_nomination(self, phone_number: str) -> None: ...
+    def send_family_nomination(self, phone_number: str, locale: str = "en") -> None: ...
 
     def send_activation(
-        self, phone_number: str, pilgrim_name: str, tier_name: str, url: str
+        self,
+        phone_number: str,
+        pilgrim_name: str,
+        tier_name: str,
+        url: str,
+        locale: str = "en",
     ) -> None: ...
 
     def send_receipt(
-        self, phone_number: str, tier_name: str, amount_ngn: Decimal, reference: str
+        self,
+        phone_number: str,
+        tier_name: str,
+        amount_ngn: Decimal,
+        reference: str,
+        locale: str = "en",
     ) -> None: ...
 
-    def send_esim_ready(self, phone_number: str, qr_code_url: str) -> None: ...
+    def send_esim_ready(
+        self, phone_number: str, qr_code_url: str, locale: str = "en"
+    ) -> None: ...
 
     def send_checkin(
         self,
@@ -63,6 +91,7 @@ class WhatsAppSender(Protocol):
         pilgrim_name: str,
         checked_in_at: str,
         maps_url: str | None,
+        locale: str = "en",
     ) -> str: ...
 
 
@@ -80,18 +109,26 @@ class NotificationService:
         self.whatsapp = whatsapp
 
     def send_verification(
-        self, email: str, operator_name: str, verification_url: str
+        self,
+        email: str,
+        operator_name: str,
+        verification_url: str,
+        locale: str = "en",
     ) -> None:
-        self.email.send_verification(email, operator_name, verification_url)
+        self.email.send_verification(email, operator_name, verification_url, locale)
 
-    def send_approval_email(self, email: str, operator_name: str) -> None:
-        self.email.send_approval(email, operator_name)
+    def send_approval_email(
+        self, email: str, operator_name: str, locale: str = "en"
+    ) -> None:
+        self.email.send_approval(email, operator_name, locale)
 
-    def send_approval_whatsapp(self, phone_number: str, operator_name: str) -> None:
-        self.whatsapp.send_approval(phone_number, operator_name)
+    def send_approval_whatsapp(
+        self, phone_number: str, operator_name: str, locale: str = "en"
+    ) -> None:
+        self.whatsapp.send_approval(phone_number, operator_name, locale)
 
-    def send_family_nomination(self, phone_number: str) -> None:
-        self.whatsapp.send_family_nomination(phone_number)
+    def send_family_nomination(self, phone_number: str, locale: str = "en") -> None:
+        self.whatsapp.send_family_nomination(phone_number, locale)
 
     def send_invoice(
         self,
@@ -100,23 +137,45 @@ class NotificationService:
         order_id: str,
         total_ngn: Decimal,
         pdf: bytes,
+        locale: str = "en",
     ) -> None:
-        self.email.send_invoice(email, operator_name, order_id, total_ngn, pdf)
+        self.email.send_invoice(email, operator_name, order_id, total_ngn, pdf, locale)
 
     def send_activation(
-        self, phone_number: str, pilgrim_name: str, tier_name: str, url: str
+        self,
+        phone_number: str,
+        pilgrim_name: str,
+        tier_name: str,
+        url: str,
+        locale: str = "en",
     ) -> None:
-        self.whatsapp.send_activation(phone_number, pilgrim_name, tier_name, url)
+        self.whatsapp.send_activation(
+            phone_number, pilgrim_name, tier_name, url, locale
+        )
 
     def send_receipt_email(
-        self, email: str, tier_name: str, amount_ngn: Decimal, reference: str
+        self,
+        email: str,
+        tier_name: str,
+        amount_ngn: Decimal,
+        reference: str,
+        locale: str = "en",
     ) -> None:
-        self.email.send_receipt(email, tier_name, amount_ngn, reference)
+        self.email.send_receipt(email, tier_name, amount_ngn, reference, locale)
 
     def send_receipt_whatsapp(
-        self, phone_number: str, tier_name: str, amount_ngn: Decimal, reference: str
+        self,
+        phone_number: str,
+        tier_name: str,
+        amount_ngn: Decimal,
+        reference: str,
+        locale: str = "en",
     ) -> None:
-        self.whatsapp.send_receipt(phone_number, tier_name, amount_ngn, reference)
+        self.whatsapp.send_receipt(
+            phone_number, tier_name, amount_ngn, reference, locale
+        )
 
-    def send_esim_ready(self, phone_number: str, qr_code_url: str) -> None:
-        self.whatsapp.send_esim_ready(phone_number, qr_code_url)
+    def send_esim_ready(
+        self, phone_number: str, qr_code_url: str, locale: str = "en"
+    ) -> None:
+        self.whatsapp.send_esim_ready(phone_number, qr_code_url, locale)

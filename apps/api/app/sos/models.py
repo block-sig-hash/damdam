@@ -51,7 +51,7 @@ class SOSAlert(SQLModel, table=True):
         default=None,
         sa_column=Column(
             ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
-        )
+        ),
     )
     client_generated_id: UUID = Field(
         sa_column=Column(Uuid, nullable=False, unique=True, index=True)

@@ -174,10 +174,10 @@ class OTPService:
         primary_name = self.settings.otp_provider_primary
         secondary_name = self.settings.otp_provider_secondary
         try:
-            dispatch = self.providers[primary_name].send(e164)
+            dispatch = self.providers[primary_name].send(e164, locale.value)
         except OTPProviderError:
             try:
-                dispatch = self.providers[secondary_name].send(e164)
+                dispatch = self.providers[secondary_name].send(e164, locale.value)
             except OTPProviderError as exc:
                 raise OTPError("otp_unavailable") from exc
             challenge = self._new_challenge(
@@ -253,7 +253,7 @@ class OTPService:
             return False
         try:
             dispatch = self.providers[challenge.secondary_provider].send(
-                to_e164(phone_number)
+                to_e164(phone_number), challenge.locale
             )
         except OTPProviderError:
             return False

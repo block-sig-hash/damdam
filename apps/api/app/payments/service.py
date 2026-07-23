@@ -365,6 +365,7 @@ class PaymentService:
                     tier.name,
                     transaction.amount_ngn,
                     transaction.processor_reference,
+                    user.locale.value,
                 )
             except NotificationError:
                 delivered = False
@@ -374,6 +375,7 @@ class PaymentService:
                 tier.name,
                 transaction.amount_ngn,
                 transaction.processor_reference,
+                user.locale.value,
             )
         except NotificationError:
             delivered = False

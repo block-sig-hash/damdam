@@ -162,9 +162,7 @@ class ManifestService:
         session.refresh(manifest)
         return manifest
 
-    def list_manifests(
-        self, session: Session, organization_id: UUID
-    ) -> list[Manifest]:
+    def list_manifests(self, session: Session, organization_id: UUID) -> list[Manifest]:
         return list(
             session.exec(
                 select(Manifest)

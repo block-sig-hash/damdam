@@ -11,6 +11,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import Session, col, select
 
 from app.auth.models import Manifest, ManifestPilgrim, Organization, User
+from app.i18n.notifications import NotificationRenderer
 from app.notifications.service import (
     NotificationError,
     NotificationService,
@@ -44,6 +45,8 @@ class SOSDeliveryContext:
     timestamp: str
     maps_url: str | None
     hto_topic: str
+    hto_locale: str = "en"
+    family_locale: str = "en"
 
 
 class SOSChannelSender(Protocol):
@@ -112,22 +115,19 @@ def due_sos_fallback_notifications_query(now: datetime) -> Any:
     codebase. Kept separate from the Celery task for the same testability
     reason as the query above."""
     fallback_sibling = aliased(SOSNotification)
-    return (
-        select(SOSNotification)
+    return select(SOSNotification).where(
+        SOSNotification.channel == SOSNotificationChannel.WHATSAPP_FAMILY,
+        col(SOSNotification.fallback_due_at).is_not(None),
+        col(SOSNotification.fallback_due_at) <= now,
+        col(SOSNotification.whatsapp_delivered_at).is_(None),
+        col(SOSNotification.admin_queued_at).is_(None),
+        ~select(fallback_sibling.id)
         .where(
-            SOSNotification.channel == SOSNotificationChannel.WHATSAPP_FAMILY,
-            col(SOSNotification.fallback_due_at).is_not(None),
-            col(SOSNotification.fallback_due_at) <= now,
-            col(SOSNotification.whatsapp_delivered_at).is_(None),
-            col(SOSNotification.admin_queued_at).is_(None),
-            ~select(fallback_sibling.id)
-            .where(
-                fallback_sibling.sos_alert_id == SOSNotification.sos_alert_id,
-                fallback_sibling.channel == SOSNotificationChannel.SMS_FAMILY,
-                fallback_sibling.event == SOSNotification.event,
-            )
-            .exists(),
+            fallback_sibling.sos_alert_id == SOSNotification.sos_alert_id,
+            fallback_sibling.channel == SOSNotificationChannel.SMS_FAMILY,
+            fallback_sibling.event == SOSNotification.event,
         )
+        .exists(),
     )
 
 
@@ -143,18 +143,18 @@ class SOSProviderAdapter:
         self.notifications = notifications
         self.push = push
         self.sms = sms
+        self.renderer = NotificationRenderer()
 
     def send(self, context: SOSDeliveryContext) -> str | None:
         cancelled = context.event == SOSNotificationEvent.CANCELLED
         if context.channel == SOSNotificationChannel.PUSH:
-            title = "SOS cancelled" if cancelled else "URGENT: pilgrim SOS"
+            title, body = self.renderer.push_sos(
+                context.pilgrim_name, cancelled, context.hto_locale
+            )
             self.push.send_topic(
                 context.hto_topic,
                 title,
-                (
-                    f"{context.pilgrim_name} "
-                    f"{'cancelled the SOS' if cancelled else 'needs help now'}."
-                ),
+                body,
                 {"sos_id": str(context.notification_id), "event": context.event.value},
             )
             return None
@@ -167,6 +167,7 @@ class SOSProviderAdapter:
                 context.maps_url,
                 cancelled,
                 str(context.notification_id),
+                context.hto_locale,
             )
             return None
         if context.channel == SOSNotificationChannel.WHATSAPP_OPERATOR:
@@ -177,6 +178,7 @@ class SOSProviderAdapter:
                 context.maps_url,
                 context.hto_phone,
                 cancelled,
+                context.hto_locale,
             )
             return None
         if context.channel == SOSNotificationChannel.WHATSAPP_FAMILY:
@@ -189,24 +191,21 @@ class SOSProviderAdapter:
                 context.maps_url,
                 context.hto_phone,
                 cancelled,
+                context.family_locale,
             )
         if context.channel == SOSNotificationChannel.SMS_FAMILY:
             if not context.family_phone:
                 raise NotificationError("family contact unavailable")
             if self.sms is None:
                 raise NotificationError("SMS fallback is not configured")
-            prefix = "SOS cancelled" if cancelled else "URGENT"
-            verb = (
-                "cancelled their SOS"
-                if cancelled
-                else "triggered an SOS and needs help"
+            message = self.renderer.sms_sos(
+                context.pilgrim_name,
+                context.timestamp,
+                context.hto_phone,
+                context.maps_url,
+                cancelled,
+                context.family_locale,
             )
-            message = (
-                f"{prefix}: {context.pilgrim_name} {verb} at {context.timestamp}. "
-                f"Contact the operator: {context.hto_phone}."
-            )
-            if context.maps_url:
-                message = f"{message} {context.maps_url}"
             self.sms.send(context.family_phone, message)
             return None
         return None
@@ -264,6 +263,8 @@ class SOSNotificationService:
             timestamp=timestamp.astimezone(self.WAT).strftime("%d %b %Y, %H:%M WAT"),
             maps_url=maps_url,
             hto_topic=f"hto-{organization.id}",
+            hto_locale=organization.locale.value,
+            family_locale=family.locale.value if family else organization.locale.value,
         )
 
     def dispatch(self, session: Session, notification_id: UUID) -> bool:
@@ -287,8 +288,7 @@ class SOSNotificationService:
             alert = session.get(SOSAlert, row.sos_alert_id)
             if alert is not None and alert.status != SOSStatus.ACTIVE:
                 logger.info(
-                    "Skipping SOS notification %s: alert %s is no longer "
-                    "active (%s)",
+                    "Skipping SOS notification %s: alert %s is no longer active (%s)",
                     row.id,
                     alert.id,
                     alert.status.value,

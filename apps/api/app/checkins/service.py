@@ -18,6 +18,8 @@ from app.checkins.models import (
     WhatsAppDeliveryStatus,
 )
 from app.checkins.schemas import CheckInCreate
+from app.i18n import normalize_locale
+from app.i18n.notifications import NotificationRenderer
 from app.notifications.service import (
     NotificationError,
     SMSNotificationSender,
@@ -63,9 +65,7 @@ class CheckInService:
         self.scheduler = scheduler
         self.clock = clock
 
-    def create(
-        self, session: Session, user: User, payload: CheckInCreate
-    ) -> CheckIn:
+    def create(self, session: Session, user: User, payload: CheckInCreate) -> CheckIn:
         existing = session.exec(
             select(CheckIn).where(
                 CheckIn.client_generated_id == payload.client_generated_id
@@ -118,9 +118,7 @@ class CheckInService:
             client_generated_id=payload.client_generated_id,
             timestamp=payload.timestamp,
             latitude=(
-                Decimal(str(payload.latitude))
-                if payload.latitude is not None
-                else None
+                Decimal(str(payload.latitude)) if payload.latitude is not None else None
             ),
             longitude=(
                 Decimal(str(payload.longitude))
@@ -222,6 +220,7 @@ class CheckInNotificationService:
         self.fallback_seconds = fallback_seconds
         self.primary_channel = primary_channel
         self.secondary_channel = secondary_channel
+        self.renderer = NotificationRenderer()
 
     def _context(
         self, session: Session, notification: CheckInNotification
@@ -239,15 +238,15 @@ class CheckInNotificationService:
 
     @classmethod
     def _message_parts(
-        cls, checkin: CheckIn, user: User
+        cls, checkin: CheckIn, user: User, locale: object = "en"
     ) -> tuple[str, str, str | None]:
-        name = f"{user.first_name} {user.last_name}".strip() or "Your family member"
+        name = f"{user.first_name} {user.last_name}".strip() or (
+            "Votre proche" if normalize_locale(locale) == "fr" else "Your family member"
+        )
         timestamp = checkin.timestamp
         if timestamp.tzinfo is None:
             timestamp = timestamp.replace(tzinfo=timezone.utc)
-        checked_in_at = timestamp.astimezone(cls.WAT).strftime(
-            "%d %b %Y, %H:%M WAT"
-        )
+        checked_in_at = timestamp.astimezone(cls.WAT).strftime("%d %b %Y, %H:%M WAT")
         maps_url = None
         if checkin.latitude is not None and checkin.longitude is not None:
             maps_url = (
@@ -279,11 +278,17 @@ class CheckInNotificationService:
             session.commit()
             return False
         checkin, user, contact = context
-        name, checked_in_at, maps_url = self._message_parts(checkin, user)
+        name, checked_in_at, maps_url = self._message_parts(
+            checkin, user, contact.locale
+        )
         notification.whatsapp_attempted_at = self.clock()
         try:
             message_id = self.whatsapp.send_checkin(
-                contact.phone_number, name, checked_in_at, maps_url
+                contact.phone_number,
+                name,
+                checked_in_at,
+                maps_url,
+                contact.locale.value,
             )
             notification.whatsapp_status = WhatsAppDeliveryStatus.ACCEPTED
             notification.whatsapp_message_id = message_id
@@ -350,10 +355,12 @@ class CheckInNotificationService:
             session.commit()
             return False
         checkin, user, contact = context
-        name, checked_in_at, maps_url = self._message_parts(checkin, user)
-        message = f"{name} checked in safely at {checked_in_at}. All is well."
-        if maps_url:
-            message = f"{message} {maps_url}"
+        name, checked_in_at, maps_url = self._message_parts(
+            checkin, user, contact.locale
+        )
+        message = self.renderer.sms_checkin(
+            name, checked_in_at, maps_url, contact.locale
+        )
         notification.sms_attempt_count += 1
         try:
             message_id = self.sms.send(contact.phone_number, message)

@@ -65,7 +65,10 @@ class FakeNotificationSender:
     success_calls: list[tuple[str, str]]
     failing: bool = False
 
-    def send_esim_ready(self, phone_number: str, qr_code_url: str) -> None:
+    def send_esim_ready(
+        self, phone_number: str, qr_code_url: str, locale: str = "en"
+    ) -> None:
+        del locale
         self.success_calls.append((phone_number, qr_code_url))
         if self.failing:
             raise NotificationError("WhatsApp unavailable")

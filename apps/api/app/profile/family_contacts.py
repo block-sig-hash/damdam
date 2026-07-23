@@ -63,9 +63,7 @@ class FamilyContactService:
             raise FamilyContactError("family_contact_not_found")
 
         phone_number_input = (
-            payload.phone_number
-            if "phone_number" in payload.model_fields_set
-            else None
+            payload.phone_number if "phone_number" in payload.model_fields_set else None
         )
         if phone_number_input is not None:
             phone_number = to_e164(phone_number_input)
@@ -93,7 +91,9 @@ class FamilyContactService:
 
     def _notify(self, session: Session, contact: FamilyContact) -> None:
         try:
-            self.notifications.send_family_nomination(contact.phone_number)
+            self.notifications.send_family_nomination(
+                contact.phone_number, contact.locale.value
+            )
         except NotificationError as exc:
             raise FamilyContactError("notification_unavailable") from exc
         contact.notified_of_nomination = True

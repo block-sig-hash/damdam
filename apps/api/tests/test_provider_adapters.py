@@ -36,6 +36,26 @@ def test_termii_send_and_verify_use_managed_six_digit_token(
     assert provider.verify("+2348012345678", "123456", "pin-1") is True
 
 
+def test_termii_uses_french_otp_copy_for_a_french_challenge(
+    settings: Settings,
+) -> None:
+    settings.termii_api_key = "termii-key"
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(__import__("json").loads(request.content))
+        return httpx.Response(
+            200, json={"pin_id": "pin-fr", "message_id_str": "message-fr"}
+        )
+
+    provider = TermiiProvider(settings, client_for(httpx.MockTransport(handler)))
+    provider.send("+221771234567", "fr")
+
+    assert captured["message_text"] == (
+        "Votre code de vérification DamDam est < 123456 >"
+    )
+
+
 def test_termii_rejects_bad_response_and_unconfigured_credentials(
     settings: Settings,
 ) -> None:
@@ -68,6 +88,19 @@ def test_twilio_send_and_verify_contract(settings: Settings) -> None:
 
     assert dispatch.reference == "VE123"
     assert provider.verify("+2348012345678", "654321", "VE123") is True
+
+
+def test_twilio_verify_receives_the_french_locale(settings: Settings) -> None:
+    settings.twilio_account_sid = "AC123"
+    settings.twilio_auth_token = "secret"
+    settings.twilio_verify_service_sid = "VA123"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert b"Locale=fr" in request.content
+        return httpx.Response(201, json={"sid": "VE-FR"})
+
+    provider = TwilioVerifyProvider(settings, client_for(httpx.MockTransport(handler)))
+    provider.send("+221771234567", "fr")
 
 
 def test_twilio_missing_credentials_and_expired_check(settings: Settings) -> None:

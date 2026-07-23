@@ -3,6 +3,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings
+from app.i18n import normalize_locale
 from app.otp.providers.base import OTPDispatch, OTPProviderError
 
 
@@ -20,7 +21,7 @@ class TermiiProvider:
         if not self.settings.termii_api_key:
             raise OTPProviderError("Termii is not configured")
 
-    def send(self, phone_number: str) -> OTPDispatch:
+    def send(self, phone_number: str, locale: str = "en") -> OTPDispatch:
         self._credentials_ready()
         payload: dict[str, Any] = {
             "api_key": self.settings.termii_api_key,
@@ -33,7 +34,11 @@ class TermiiProvider:
             "pin_time_to_live": self.settings.otp_ttl_seconds // 60,
             "pin_length": 6,
             "pin_placeholder": "< 123456 >",
-            "message_text": "Your DamDam verification code is < 123456 >",
+            "message_text": (
+                "Votre code de vérification DamDam est < 123456 >"
+                if normalize_locale(locale) == "fr"
+                else "Your DamDam verification code is < 123456 >"
+            ),
         }
         try:
             response = self.client.post("/api/sms/otp/send", json=payload)

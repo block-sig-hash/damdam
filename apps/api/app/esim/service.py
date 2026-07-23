@@ -85,9 +85,7 @@ class EsimProfileService:
         ).first()
         if existing is not None:
             job = session.exec(
-                select(EsimIssuanceJob).where(
-                    EsimIssuanceJob.package_id == package.id
-                )
+                select(EsimIssuanceJob).where(EsimIssuanceJob.package_id == package.id)
             ).first()
             if job is not None and job.success_notified_at is None:
                 self._notify_success(session, user, existing, job)
@@ -128,9 +126,7 @@ class EsimProfileService:
             )
             session.add(profile)
             job = session.exec(
-                select(EsimIssuanceJob).where(
-                    EsimIssuanceJob.package_id == package.id
-                )
+                select(EsimIssuanceJob).where(EsimIssuanceJob.package_id == package.id)
             ).first()
             if job is None:
                 job = EsimIssuanceJob(package_id=package.id)
@@ -254,7 +250,9 @@ class EsimProfileService:
         job: EsimIssuanceJob | None,
     ) -> None:
         try:
-            self.notifications.send_esim_ready(user.phone_number, profile.qr_code_url)
+            self.notifications.send_esim_ready(
+                user.phone_number, profile.qr_code_url, user.locale.value
+            )
         except NotificationError:
             if job is not None:
                 job.next_attempt_at = self.clock() + timedelta(seconds=60)
@@ -331,9 +329,7 @@ class DeviceCompatibilityService:
         if platform is not None:
             query = query.where(DeviceCompatibilityLog.platform == platform)
         if esim_supported is not None:
-            query = query.where(
-                DeviceCompatibilityLog.esim_supported == esim_supported
-            )
+            query = query.where(DeviceCompatibilityLog.esim_supported == esim_supported)
         return list(
             session.exec(
                 query.order_by(col(DeviceCompatibilityLog.checked_at).desc())
@@ -456,9 +452,7 @@ class HtoPilgrimService:
                     (
                         last_checkins[pilgrim.user_id]
                         if last_checkins[pilgrim.user_id].tzinfo is not None
-                        else last_checkins[pilgrim.user_id].replace(
-                            tzinfo=timezone.utc
-                        )
+                        else last_checkins[pilgrim.user_id].replace(tzinfo=timezone.utc)
                     ).isoformat()
                     if pilgrim.user_id in last_checkins
                     else None

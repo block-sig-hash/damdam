@@ -52,9 +52,14 @@ class RecordingWhatsAppSender:
         self.fail = False
 
     def send_checkin(
-        self, phone_number: str, pilgrim_name: str, checked_in_at: str,
+        self,
+        phone_number: str,
+        pilgrim_name: str,
+        checked_in_at: str,
         maps_url: str | None,
+        locale: str = "en",
     ) -> str:
+        del locale
         if self.fail:
             from app.notifications.service import NotificationError
 
@@ -104,8 +109,15 @@ class ApiClient:
 
 
 def _build_api(
-    settings, redis_client, providers, scheduler, session_factory, clock,
-    whatsapp, sms, checkin_scheduler,
+    settings,
+    redis_client,
+    providers,
+    scheduler,
+    session_factory,
+    clock,
+    whatsapp,
+    sms,
+    checkin_scheduler,
 ):
     return create_app(
         settings=settings.model_copy(
@@ -129,11 +141,10 @@ def _authenticated(api) -> tuple[ApiClient, UUID]:
     request = SimpleNamespace(app=api)
     request_otp(OTPRequest(phone_number="08012345678"), request)
     auth = verify_otp(
-        OTPVerifyRequest(
-            phone_number="08012345678", otp="123456", platform="android"
-        ),
+        OTPVerifyRequest(phone_number="08012345678", otp="123456", platform="android"),
         request,
     )
+
     async def current_user_override():
         return auth.user
 
@@ -151,8 +162,15 @@ def _api_dependencies(
     sms = RecordingSmsSender()
     notification_scheduler = RecordingCheckInScheduler()
     api = _build_api(
-        settings, redis_client, providers, scheduler, session_factory, clock,
-        whatsapp, sms, notification_scheduler,
+        settings,
+        redis_client,
+        providers,
+        scheduler,
+        session_factory,
+        clock,
+        whatsapp,
+        sms,
+        notification_scheduler,
     )
     return api, whatsapp, sms, notification_scheduler
 
@@ -566,9 +584,7 @@ def test_signed_meta_delivery_webhook_marks_message_delivered(
                     "changes": [
                         {
                             "value": {
-                                "statuses": [
-                                    {"id": "wamid.1", "status": "delivered"}
-                                ]
+                                "statuses": [{"id": "wamid.1", "status": "delivered"}]
                             }
                         }
                     ]
@@ -577,16 +593,18 @@ def test_signed_meta_delivery_webhook_marks_message_delivered(
         },
         separators=(",", ":"),
     ).encode()
-    signature = "sha256=" + hmac.new(
-        b"meta-app-secret", body, hashlib.sha256
-    ).hexdigest()
+    signature = (
+        "sha256=" + hmac.new(b"meta-app-secret", body, hashlib.sha256).hexdigest()
+    )
 
     unsigned = client.post(
-        "/v1/webhooks/meta/whatsapp", content=body,
+        "/v1/webhooks/meta/whatsapp",
+        content=body,
         headers={"content-type": "application/json"},
     )
     delivered = client.post(
-        "/v1/webhooks/meta/whatsapp", content=body,
+        "/v1/webhooks/meta/whatsapp",
+        content=body,
         headers={"x-hub-signature-256": signature, "content-type": "application/json"},
     )
     clock.advance(seconds=60)
@@ -631,9 +649,7 @@ def test_meta_webhook_signed_with_wrong_secret_is_rejected(
                     "changes": [
                         {
                             "value": {
-                                "statuses": [
-                                    {"id": "wamid.1", "status": "delivered"}
-                                ]
+                                "statuses": [{"id": "wamid.1", "status": "delivered"}]
                             }
                         }
                     ]
@@ -642,9 +658,10 @@ def test_meta_webhook_signed_with_wrong_secret_is_rejected(
         },
         separators=(",", ":"),
     ).encode()
-    wrong_secret_signature = "sha256=" + hmac.new(
-        b"attacker-guessed-secret", body, hashlib.sha256
-    ).hexdigest()
+    wrong_secret_signature = (
+        "sha256="
+        + hmac.new(b"attacker-guessed-secret", body, hashlib.sha256).hexdigest()
+    )
 
     response = client.post(
         "/v1/webhooks/meta/whatsapp",
