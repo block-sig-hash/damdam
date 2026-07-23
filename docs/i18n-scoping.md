@@ -533,3 +533,55 @@ recipient-locale persistence and all transactional/safety channels.
 Defer only the broader country-market changes to a separate workstream;
 do not defer SOS, OTP, activation, or family-notification localization
 if the product is presented as French-supported.
+
+---
+
+## 10. Amendment — Implemented English/French Architecture
+
+The engineering scope in this report is implemented on
+`agent/i18n-implementation` in five reviewable stages: foundation, mobile,
+dashboard, backend, and verification/docs.
+
+### 10.1 What shipped in code
+
+- The shared non-null `locale` model, migration, auth/session response fields,
+  signup/recovery selection, family-contact locale, organization locale, and
+  manifest-pilgrim pre-account snapshot described in §6.1.
+- Mobile `i18next`/`react-i18next`/`react-native-localize` with the six
+  proposed namespaces, bundled catalogs, native Android/iOS resources,
+  locale-aware formatting, stable API-error maps, and translated offline
+  emergency labels.
+- Dashboard `next-intl` with a locale cookie/provider, language selector,
+  catalogs, explicit enum maps, and locale-aware date/currency formatting.
+- Locale-aware API messages and known validator descriptions, preserving
+  stable error codes.
+- A backend `NotificationRenderer` and locale plumbing for Resend, Meta,
+  Termii/Twilio OTP, fallback SMS, Firebase SOS push, receipts, eSIM-ready,
+  verification, invoices, and activation.
+- Runtime component tests in both languages, catalog parity tests, and
+  bilingual Maestro targets with 24-artifact gates per platform.
+
+The 299 mobile and 287 dashboard figures remain audited **source sites**.
+Extraction deduplicated repeated labels/fallbacks and combined concatenations
+into plural/interpolation keys, producing 289 mobile and 271 dashboard leaf
+keys without dropping source sites. The 102 backend sites resolve through 81
+unique response keys plus validator mappings.
+
+### 10.2 Non-code release gates still open
+
+French copy is an AI-assisted substantive draft with no deliberate placeholder
+translations, but it has not been approved by a native Francophone reviewer.
+Native review—especially West African terminology—and the separate
+safety/legal review from §7.3 remain mandatory before production.
+
+French Meta template approval and account-level delivery testing remain
+external dependencies. The bilingual screenshot workflows are implemented,
+but this development environment has no Android emulator, iOS simulator, or
+Maestro binary; real rendered artifacts therefore run in CI when the branch is
+published. The eSIM manual guide already used screenshot placeholders before
+this work. Its translated guide frames are now in the matrix, while real
+English/French OS walkthrough images remain a content asset gate rather than
+fabricated assets.
+
+The ongoing key, notification, screenshot, and review process is normative in
+[`localization.md`](./localization.md).

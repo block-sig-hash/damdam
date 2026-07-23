@@ -595,3 +595,18 @@ registered targets) with real, independently-inspected screenshots
 matching the harness's fixture data. Treat this the way `testing-qa.md`
 treats PR #41 in §14.2: a concrete example of why CI passing on
 first write is not the same as CI passing for real.
+
+---
+
+## 14.12 Amendment — Bilingual Screenshot Matrix
+
+Each applicable Maestro flow now captures English and French after waiting for
+the harness to confirm the selected runtime locale. The platform completeness
+gate is therefore 24 PNGs (12 applicable targets × 2 locales), named with
+`-en`/`-fr` suffixes. Existing Android per-PR and iOS nightly/on-demand cadence
+is unchanged.
+
+Review must explicitly check French expansion/wrapping, inaccessible actions,
+SOS hierarchy, and the Android-automatic/iOS-manual eSIM divergence. The guide
+frame is covered; final localized OS walkthrough imagery remains the content
+gate documented in `localization.md` §6.

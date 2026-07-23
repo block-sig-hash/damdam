@@ -467,3 +467,17 @@ device_model/platform/esim_supported to show. Known gap: the outcome
 filter can't isolate a null `esim_supported` value — not fixed here
 since compatibility-check rows always populate it in practice (see
 comment in `page.tsx`).
+
+---
+
+## 9.8 Amendment — English/French Dashboard
+
+The dashboard uses `next-intl` with a locale cookie and persisted organization
+preference. All route copy, loading/empty/error states, status labels,
+accessibility text, dates, plurals, and currency formatting support English
+and French. API calls send `Accept-Language`; stable API error codes remain the
+client contract.
+
+New strings follow `localization.md` §3 and keep catalog parity. Desktop tables
+may expand or wrap headings for French; clipping or replacing translated
+labels with raw enum values is not acceptable.

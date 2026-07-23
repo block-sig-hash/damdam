@@ -2,7 +2,22 @@ appId: com.damdam.app
 ---
 - launchApp
 - tapOn:
+    id: "harness-locale-en"
+- assertVisible:
+    id: "harness-locale-active-en"
+- tapOn:
     id: "harness-target-otp-verification"
 - assertVisible:
     id: "otp-verify-submit"
-- takeScreenshot: otp-verification
+- takeScreenshot: otp-verification-en
+- stopApp
+- launchApp
+- tapOn:
+    id: "harness-locale-fr"
+- assertVisible:
+    id: "harness-locale-active-fr"
+- tapOn:
+    id: "harness-target-otp-verification"
+- assertVisible:
+    id: "otp-verify-submit"
+- takeScreenshot: otp-verification-fr

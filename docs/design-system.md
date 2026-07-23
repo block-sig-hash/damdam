@@ -419,3 +419,16 @@ they didn't diverge:
   `frontend-mobile.md` §8.3 — this document covers the *visual
   vocabulary*, not screen-by-screen behavior, which stays in
   `frontend-mobile.md`
+
+---
+
+## 16. Amendment — Localized Layout
+
+Components accommodate English and French without fixed text heights or
+single-line assumptions. Buttons may grow vertically while preserving the
+48dp target; cards, banners, SOS controls, and guide steps wrap at word
+boundaries. Do not reduce the documented type scale to make French fit.
+
+Visual review uses both locale matrices from `localization.md` §6. A component
+whose French text clips, overlaps, hides an action, or weakens the SOS visual
+hierarchy fails design review even when its unit tests pass.

@@ -281,7 +281,7 @@ jobs:
         run: |
           shopt -s nullglob
           screenshots=(screenshots/*.png)
-          test "${#screenshots[@]}" -eq 16
+          test "${#screenshots[@]}" -eq 24
           test -s maestro-report.xml
       - name: Upload screenshots as CI artifacts
         if: always()
@@ -423,7 +423,7 @@ jobs:
         run: |
           shopt -s nullglob
           screenshots=(screenshots/*.png)
-          test "${#screenshots[@]}" -eq 16
+          test "${#screenshots[@]}" -eq 24
           test -s maestro-report.xml
       - name: Upload Maestro output bundle
         if: always()

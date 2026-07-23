@@ -40,7 +40,7 @@ describe('requestOtp', () => {
 
     await expect(requestOtp('08012345678')).rejects.toMatchObject({
       code: 'account_exists',
-      message: 'Please log in.',
+      message: 'Something went wrong. Please try again.',
     });
   });
 

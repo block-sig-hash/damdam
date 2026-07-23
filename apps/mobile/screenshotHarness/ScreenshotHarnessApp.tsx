@@ -3,6 +3,7 @@ import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text } from
 import { color, space, typography } from '../src/theme/tokens';
 import { installHarnessFetchMock } from './fetchMock';
 import { HARNESS_REGISTRY } from './registry';
+import {setAppLocale} from '../src/i18n';
 
 installHarnessFetchMock();
 
@@ -17,6 +18,7 @@ installHarnessFetchMock();
  */
 export function ScreenshotHarnessApp(): React.JSX.Element {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [activeLocale, setActiveLocale] = useState<'en' | 'fr'>('en');
 
   const selected = selectedKey ? HARNESS_REGISTRY[selectedKey] : null;
 
@@ -28,6 +30,26 @@ export function ScreenshotHarnessApp(): React.JSX.Element {
       ) : (
         <ScrollView testID="harness-picker" contentContainerStyle={styles.list}>
           <Text style={styles.heading}>Screenshot harness</Text>
+          <Pressable
+            testID="harness-locale-en"
+            onPress={() => {
+              setAppLocale('en').then(() => setActiveLocale('en')).catch(() => undefined);
+            }}
+            style={styles.item}
+          >
+            <Text style={styles.itemLabel}>English</Text>
+            {activeLocale === 'en' ? <Text testID="harness-locale-active-en">Selected</Text> : null}
+          </Pressable>
+          <Pressable
+            testID="harness-locale-fr"
+            onPress={() => {
+              setAppLocale('fr').then(() => setActiveLocale('fr')).catch(() => undefined);
+            }}
+            style={styles.item}
+          >
+            <Text style={styles.itemLabel}>Français</Text>
+            {activeLocale === 'fr' ? <Text testID="harness-locale-active-fr">Sélectionné</Text> : null}
+          </Pressable>
           {Object.entries(HARNESS_REGISTRY).map(([key, target]) => (
             <Pressable
               key={key}

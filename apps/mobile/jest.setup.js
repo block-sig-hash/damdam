@@ -79,3 +79,6 @@ jest.mock('react-native-voip-push-notification', () => ({
     onVoipNotificationCompleted: jest.fn(),
   },
 }));
+
+// Initialize the production i18next singleton for isolated component tests.
+require('./src/i18n');

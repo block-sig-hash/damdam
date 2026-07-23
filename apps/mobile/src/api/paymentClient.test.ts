@@ -74,7 +74,7 @@ describe('paymentClient', () => {
       });
 
     await expect(initializePurchase('token', 'standard')).rejects.toThrow(
-      'Both payment services are unavailable.',
+      'The payment was not completed.',
     );
     await expect(getPackageStatus('token', 'package-1')).resolves.toEqual(
       expect.objectContaining({

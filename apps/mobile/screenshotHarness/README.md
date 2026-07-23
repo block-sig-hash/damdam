@@ -31,8 +31,9 @@ response router (`fetchMock.ts`) instead of running a real backend.
 - `registry.tsx` — the map of `target key -> { label, render() }`.
   **This is the one file you edit to add a new screenshot target.**
 - `ScreenshotHarnessApp.tsx` — the harness's root component: a picker
-  screen listing every registered target (`testID="harness-target-<key>"`),
-  which renders the selected screen in place once tapped.
+screen listing every registered target (`testID="harness-target-<key>"`)
+and explicit English/French locale controls, which renders the selected
+screen in place once tapped.
 
 ## Adding a new screen
 
@@ -45,13 +46,21 @@ response router (`fetchMock.ts`) instead of running a real backend.
    ---
    - launchApp
    - tapOn:
+       id: "harness-locale-en"
+   - assertVisible:
+       id: "harness-locale-active-en"
+   - tapOn:
        id: "harness-target-<key>"
    - assertVisible:
        id: "<some-testID-on-the-real-screen>"
-   - takeScreenshot: <key>
+   - takeScreenshot: <key>-en
    ```
    If the screen has no `testID` of its own, `assertVisible` can
    match visible text instead (see `sos-confirm.yaml` for an example).
+   Every flow must then relaunch the harness, select
+   `harness-locale-fr`, repeat the assertion, and capture
+   `<key>-fr`. CI requires 24 non-empty images per platform (12
+   platform-applicable targets × 2 locales).
 3. If the screen renders differently per platform in a way worth
    capturing separately (like the eSIM activation flow), add
    `tags: [android-only]` / `tags: [ios-only]` to the flow file — see
