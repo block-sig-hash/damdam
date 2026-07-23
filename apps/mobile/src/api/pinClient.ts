@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/env';
+import {i18n} from '../i18n';
 
 /**
  * Mirrors apps/api/app/auth/pin.py's PINError codes and their mapping
@@ -34,9 +35,12 @@ async function parseError(response: Response): Promise<PinApiError> {
     const code = KNOWN_CODES.includes(payload.error as PinErrorCode)
       ? (payload.error as PinErrorCode)
       : 'validation_error';
-    return new PinApiError(code, payload.message);
+    return new PinApiError(
+      code,
+      i18n.t(code === 'pin_too_weak' ? 'errors.weakPin' : 'errors.generic', {ns: 'auth'}),
+    );
   } catch {
-    return new PinApiError('network_error', 'Something went wrong. Please try again.');
+    return new PinApiError('network_error', i18n.t('errors.generic', {ns: 'auth'}));
   }
 }
 
@@ -52,7 +56,7 @@ export async function setPin(accessToken: string, pin: string): Promise<{ messag
       body: JSON.stringify({ pin }),
     });
   } catch {
-    throw new PinApiError('network_error', 'Check your connection and try again.');
+    throw new PinApiError('network_error', i18n.t('errors.network', {ns: 'auth'}));
   }
 
   if (!response.ok) {

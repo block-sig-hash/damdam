@@ -1,1 +1,87 @@
-{}
+{
+  "arrival": {
+    "title": "Vous êtes arrivé(e)",
+    "message": "Vous êtes arrivé(e) en Arabie saoudite. Touchez ici pour activer vos données DamDam — cela prend 30 secondes.",
+    "showGuide": "Afficher le guide d'activation",
+    "activateNow": "Activer maintenant",
+    "manualGuide": "Utiliser le guide manuel"
+  },
+  "activation": {
+    "title": "Activez votre eSIM",
+    "intro": "Suivez ces étapes pour {{device}}. Gardez DamDam ouvert.",
+    "placeholderNotice": "Les captures propres à chaque appareil sont en cours de vérification sur de vrais téléphones. Vous pouvez utiliser ces étapes génériques en toute sécurité.",
+    "showQr": "Afficher mon code QR",
+    "confirmed": "Je l'ai activée",
+    "loadFailed": "Impossible de charger les informations de votre eSIM. Veuillez réessayer.",
+    "notConnected": "DamDam ne détecte pas encore les données mobiles. Vérifiez que votre eSIM est sélectionnée, puis réessayez.",
+    "failed": "L'activation n'a pas abouti. Utilisez le guide manuel."
+  },
+  "guide": {
+    "android": {
+      "openSettings": "Ouvrez Paramètres.",
+      "settingsHome": "Accueil des paramètres",
+      "openSim": "Ouvrez Cartes SIM, Réseau mobile ou Connexions.",
+      "simSettings": "Paramètres SIM",
+      "enable": "Sélectionnez l'eSIM DamDam et activez-la.",
+      "switch": "Activation de l'eSIM DamDam",
+      "chooseData": "Choisissez DamDam pour les données mobiles.",
+      "dataSelection": "Sélection des données mobiles",
+      "genericDevice": "Android"
+    },
+    "ios": {
+      "openCellular": "Ouvrez Réglages, puis Données cellulaires.",
+      "cellularSettings": "Réglages → Données cellulaires",
+      "addEsim": "Touchez Ajouter une eSIM.",
+      "addEsimLabel": "Ajouter une eSIM",
+      "chooseQr": "Choisissez Utiliser un code QR.",
+      "chooseQrLabel": "Utiliser un code QR",
+      "scanQr": "Scannez le code QR DamDam affiché dans l'application.",
+      "scanQrLabel": "Scanner le code QR",
+      "enableData": "Activez la nouvelle ligne pour les données cellulaires.",
+      "dataSelection": "Sélection des données cellulaires"
+    }
+  },
+  "compatibility": {
+    "checking": "Vérification de votre appareil...",
+    "title": "Configurez votre eSIM",
+    "supported": "Votre appareil prend en charge l'eSIM. Téléchargez-la directement ou scannez plutôt un code QR.",
+    "download": "Télécharger sur l'appareil",
+    "qrOnly": "Utilisez le code QR pour activer votre forfait DamDam sur un appareil compatible.",
+    "viewQr": "Afficher le code QR",
+    "warningTitle": "Votre appareil pourrait ne pas prendre en charge l'eSIM",
+    "warningBody": "Votre appareil ne semble pas prendre en charge l'eSIM. Vous pouvez tout de même utiliser votre forfait DamDam en scannant le code QR sur un appareil compatible. Touchez Continuer pour télécharger votre code QR ou Assistance pour obtenir de l'aide.",
+    "support": "Assistance",
+    "supportMessage": "Bonjour, j'ai besoin d'aide pour configurer mon eSIM DamDam. Référence de commande : {{reference}}"
+  },
+  "qr": {
+    "preparing": "Préparation de votre eSIM...",
+    "queuedTitle": "Votre eSIM est en attente",
+    "queuedFallback": "Nous réessaierons automatiquement et vous préviendrons lorsqu'elle sera prête.",
+    "queuedBody": "Vous pouvez quitter cet écran. Nous vous préviendrons lorsque votre code QR sera prêt.",
+    "tryNow": "Réessayer maintenant",
+    "readyTitle": "Votre eSIM est prête",
+    "installWindow": "Installez-la 2 à 7 jours avant votre départ.",
+    "recorded": "Le téléchargement de l'eSIM a bien été enregistré.",
+    "downloaded": "Téléchargée",
+    "readyToDownload": "Prête à télécharger",
+    "accessibility": "Code QR d'installation de l'eSIM",
+    "activationCode": "Code d'activation",
+    "installed": "J'ai installé cette eSIM",
+    "save": "Enregistrer le code QR",
+    "offlineNote": "Conservez ce code QR hors ligne. Affichez-le en plein écran, puis utilisez l'option d'enregistrement d'image de votre appareil."
+  },
+  "banner": {
+    "title": "Activer l'eSIM",
+    "message": "Configurez vos données pour l'Arabie saoudite avant votre voyage.",
+    "action": "Activer maintenant",
+    "dismiss": "Masquer jusqu'à la prochaine ouverture"
+  },
+  "errors": {
+    "queued": "Échec du téléchargement. Il est en attente et sera relancé automatiquement.",
+    "queuedFallback": "Votre eSIM est en attente d'une nouvelle tentative.",
+    "downloadFailed": "Impossible de lancer le téléchargement.",
+    "statusFailed": "Impossible de mettre à jour le statut.",
+    "manualOnly": "Utilisez le guide d'activation manuelle sur cet appareil.",
+    "directUnavailable": "Le téléchargement direct de l'eSIM n'est pas disponible dans cette version."
+  }
+}

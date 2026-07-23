@@ -4,6 +4,7 @@ import {
   ActivationRedemption,
   redeemActivationCode,
 } from '../../api/activationClient';
+import {i18n} from '../../i18n';
 
 export type ActivationRedeemStatus = 'redeeming' | 'success' | 'error';
 
@@ -46,7 +47,7 @@ export function useActivationRedeem({
       if (err instanceof ActivationApiError) {
         setErrorMessage(err.message);
       } else {
-        setErrorMessage('Something went wrong. Please try again.');
+        setErrorMessage(i18n.t('errors.generic', {ns: 'auth'}));
       }
     }
   }, [accessToken, activationCode]);

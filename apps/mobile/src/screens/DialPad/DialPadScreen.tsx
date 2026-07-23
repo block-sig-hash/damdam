@@ -1,5 +1,6 @@
 import { Backspace, ClockCounterClockwise, Phone, UserList } from 'phosphor-react-native';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {useTranslation} from 'react-i18next';
 import {
   FlatList,
   Modal,
@@ -49,6 +50,7 @@ export function DialPadScreen({
   callingReadiness = ensureAndroidCallingReady,
   networkQualityOverride,
 }: DialPadScreenProps): React.JSX.Element {
+  const {t} = useTranslation(['home', 'common']);
   const liveNetwork = useNetworkQuality();
   const network = networkQualityOverride ?? liveNetwork;
   const [number, setNumber] = useState('');
@@ -101,13 +103,13 @@ export function DialPadScreen({
   const disabledHint = useMemo(() => {
     if (!network.connected) return undefined;
     if (cliNotVerified && isDialable(number)) {
-      return 'Verify your Nigerian number above to call this number.';
+      return t('dial.verifyCallerIdHint');
     }
     if (noMinutesForPstn && isDialable(number)) {
-      return 'No PSTN minutes remain. DamDam-to-DamDam calls are still free.';
+      return t('dial.noMinutes');
     }
     return undefined;
-  }, [network.connected, cliNotVerified, noMinutesForPstn, number]);
+  }, [network.connected, cliNotVerified, noMinutesForPstn, number, t]);
 
   async function openContacts(): Promise<void> {
     setError(undefined);
@@ -115,7 +117,7 @@ export function DialPadScreen({
       setContacts(await contactsLoader());
       setContactsVisible(true);
     } catch {
-      setError('Contacts are unavailable. You can still enter a number.');
+      setError(t('dial.contactsUnavailable'));
     }
   }
 
@@ -127,7 +129,7 @@ export function DialPadScreen({
       const session = await voiceGateway.startCall(accessToken, number, contactName);
       onCallStarted(session, contactName);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Calling is temporarily unavailable.');
+      setError(reason instanceof Error ? reason.message : t('dial.temporarilyUnavailable'));
     } finally {
       setCalling(false);
     }
@@ -147,24 +149,24 @@ export function DialPadScreen({
       keyboardShouldPersistTaps="handled"
     >
       <View style={styles.header}>
-        <Text style={styles.title}>Call</Text>
+        <Text style={styles.title}>{t('dial.title')}</Text>
         <Text
           testID="manage-cli-link"
           accessibilityRole="button"
           onPress={onManageCli}
           style={styles.manageCliLink}
         >
-          Caller ID
+          {t('dial.callerId')}
         </Text>
       </View>
       {!network.connected ? (
-        <Banner tone="error" message="Calling requires an internet connection" testID="offline-banner" />
+        <Banner tone="error" message={t('dial.offline')} testID="offline-banner" />
       ) : null}
       {eligibility?.reason === 'cli_not_verified' && isDialable(number) ? (
         <Banner
           tone="info"
-          message="Verify your Nigerian number to call numbers outside DamDam."
-          actionLabel="Verify now"
+          message={t('dial.verifyCallerIdMessage')}
+          actionLabel={t('dial.verifyNow')}
           onAction={onManageCli}
           testID="cli-not-verified-banner"
         />
@@ -172,7 +174,7 @@ export function DialPadScreen({
       {currentMinutes > 0 && currentMinutes < 5 ? (
         <Banner
           tone="warning"
-          message={`Only ${currentMinutes.toFixed(1)} PSTN minutes remaining`}
+          message={t('dial.lowMinutes', {amount: currentMinutes.toFixed(1)})}
           testID="low-minutes-banner"
         />
       ) : null}
@@ -180,10 +182,10 @@ export function DialPadScreen({
 
       <View style={styles.numberRow}>
         <Text style={styles.number} numberOfLines={1} testID="dialed-number">
-          {number || 'Enter a number'}
+          {number || t('dial.enterNumber')}
         </Text>
         <Pressable
-          accessibilityLabel="Delete digit"
+          accessibilityLabel={t('dial.deleteDigit')}
           onPress={() => setNumber((value) => value.slice(0, -1))}
           style={styles.iconButton}
           testID="delete-digit"
@@ -195,7 +197,7 @@ export function DialPadScreen({
       <View style={styles.shortcutRow}>
         <Pressable onPress={openContacts} style={styles.shortcut} testID="open-contacts">
           <UserList color={color.primary500} size={26} weight="bold" />
-          <Text style={styles.shortcutLabel}>Contacts</Text>
+          <Text style={styles.shortcutLabel}>{t('dial.contacts')}</Text>
         </Pressable>
         <Pressable
           onPress={() => scroll.current?.scrollTo({ y: historyY, animated: true })}
@@ -203,7 +205,7 @@ export function DialPadScreen({
           testID="open-recents"
         >
           <ClockCounterClockwise color={color.primary500} size={26} weight="bold" />
-          <Text style={styles.shortcutLabel}>Recent</Text>
+          <Text style={styles.shortcutLabel}>{t('dial.recent')}</Text>
         </Pressable>
       </View>
 
@@ -225,7 +227,7 @@ export function DialPadScreen({
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Start call"
+        accessibilityLabel={t('dial.startCall')}
         accessibilityState={{ disabled }}
         disabled={disabled}
         onPress={call}
@@ -234,7 +236,7 @@ export function DialPadScreen({
       >
         <Phone color={disabled ? color.gray500 : color.white} size={30} weight="fill" />
         <Text style={[styles.callLabel, disabled && styles.callLabelDisabled]}>
-          {calling ? 'Connecting…' : eligibility?.call_type === 'app_to_app' ? 'Call free' : 'Call'}
+          {calling ? t('dial.connecting') : eligibility?.call_type === 'app_to_app' ? t('dial.callFree') : t('dial.call')}
         </Text>
       </Pressable>
       {disabledHint ? <Text style={styles.disabledHint}>{disabledHint}</Text> : null}
@@ -243,16 +245,16 @@ export function DialPadScreen({
         style={styles.history}
         onLayout={(event) => setHistoryY(event.nativeEvent.layout.y)}
       >
-        <Text style={styles.sectionTitle}>Recent calls</Text>
+        <Text style={styles.sectionTitle}>{t('dial.recentCalls')}</Text>
         {history.slice(0, 20).map((item) => (
           <Pressable
             key={item.id}
             onPress={() => setNumber(item.to_number ?? '')}
             style={styles.historyItem}
           >
-            <Text style={styles.historyNumber}>{item.to_number ?? 'DamDam user'}</Text>
+            <Text style={styles.historyNumber}>{item.to_number ?? t('dial.damdamUser')}</Text>
             <Text style={styles.historyMeta}>
-              {item.call_type === 'app_to_app' ? 'Free' : `${item.pstn_minutes_charged.toFixed(2)} min`}
+              {item.call_type === 'app_to_app' ? t('dial.free') : t('dial.minutes', {amount: item.pstn_minutes_charged.toFixed(2)})}
             </Text>
           </Pressable>
         ))}
@@ -261,15 +263,15 @@ export function DialPadScreen({
       <Modal visible={contactsVisible} animationType="slide" onRequestClose={() => setContactsVisible(false)}>
         <View style={styles.contactModal}>
           <View style={styles.contactHeader}>
-            <Text style={styles.sectionTitle}>Choose a contact</Text>
+            <Text style={styles.sectionTitle}>{t('dial.chooseContact')}</Text>
             <Pressable onPress={() => setContactsVisible(false)} style={styles.closeButton}>
-              <Text style={styles.closeLabel}>Close</Text>
+              <Text style={styles.closeLabel}>{t('actions.close', {ns: 'common'})}</Text>
             </Pressable>
           </View>
           <FlatList
             data={contacts}
             keyExtractor={(item) => item.id}
-            ListEmptyComponent={<Text style={styles.emptyText}>No contacts available</Text>}
+            ListEmptyComponent={<Text style={styles.emptyText}>{t('dial.noContacts')}</Text>}
             renderItem={({ item }) => (
               <Pressable onPress={() => chooseContact(item)} style={styles.contactItem}>
                 <Text style={styles.historyNumber}>{item.name}</Text>

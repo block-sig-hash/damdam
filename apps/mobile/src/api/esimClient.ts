@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/env';
+import {i18n} from '../i18n';
 
 export interface DeviceCompatibilityPayload {
   platform: 'ios' | 'android';
@@ -40,7 +41,7 @@ async function profileRequest<T>(
       headers: { Authorization: `Bearer ${accessToken}` },
     });
   } catch {
-    throw new EsimApiError('Check your connection and try again.', 'network_error');
+    throw new EsimApiError(i18n.t('errors.network', {ns: 'auth'}), 'network_error');
   }
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as {
@@ -48,7 +49,7 @@ async function profileRequest<T>(
       message?: string;
     };
     throw new EsimApiError(
-      payload.message ?? 'Your eSIM is not available yet. Please try again.',
+      i18n.t('errors.queuedFallback', {ns: 'esim'}),
       payload.error,
     );
   }
@@ -100,9 +101,9 @@ export async function logDeviceCompatibility(
       body: JSON.stringify(payload),
     });
   } catch {
-    throw new EsimApiError('Check your connection and try again.');
+    throw new EsimApiError(i18n.t('errors.network', {ns: 'auth'}));
   }
   if (!response.ok) {
-    throw new EsimApiError('Could not save your device check. Please try again.');
+    throw new EsimApiError(i18n.t('errors.generic', {ns: 'auth'}));
   }
 }

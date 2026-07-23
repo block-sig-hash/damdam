@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import {useTranslation} from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
 import { Banner } from '../../components/Banner/Banner';
 import { OtpCodeInput } from '../../components/OtpCodeInput/OtpCodeInput';
@@ -11,21 +12,6 @@ interface PinSetupScreenProps {
   onPinSet: () => void;
 }
 
-const COPY: Record<'enter' | 'confirm' | 'submitting', { title: string; subtitle: string }> = {
-  enter: {
-    title: 'Create your PIN',
-    subtitle: "Choose a 4-digit PIN to protect your account — avoid runs like 1234 or repeats like 1111.",
-  },
-  confirm: {
-    title: 'Confirm your PIN',
-    subtitle: 'Enter your PIN again to confirm.',
-  },
-  submitting: {
-    title: 'Confirm your PIN',
-    subtitle: 'Enter your PIN again to confirm.',
-  },
-};
-
 /**
  * US-02 / prd.md §4.1 — AC-02.1 through AC-02.4. Screen 4 of the
  * onboarding flow (docs/frontend-mobile.md §8.1), directly following
@@ -35,6 +21,7 @@ export function PinSetupScreen({
   accessToken,
   onPinSet,
 }: PinSetupScreenProps): React.JSX.Element {
+  const {t} = useTranslation(['auth', 'common']);
   const { stage, value, setValue, errorMessage, submit } = usePinSetup({
     accessToken,
     onPinSet,
@@ -46,7 +33,9 @@ export function PinSetupScreen({
     }
   }, [value, stage, submit]);
 
-  const { title, subtitle } = COPY[stage];
+  const entering = stage === 'enter';
+  const title = entering ? t('pinSetup.createTitle') : t('pinSetup.confirmTitle');
+  const subtitle = entering ? t('pinSetup.createSubtitle') : t('pinSetup.confirmSubtitle');
 
   return (
     <View style={styles.screen}>
@@ -65,7 +54,7 @@ export function PinSetupScreen({
           onSubmit={submit}
           masked
           testID="pin-setup-input"
-          accessibilityLabel={stage === 'enter' ? 'Create PIN' : 'Confirm PIN'}
+          accessibilityLabel={entering ? t('pinSetup.createAccessibility') : t('pinSetup.confirmAccessibility')}
         />
       </View>
 
@@ -78,7 +67,7 @@ export function PinSetupScreen({
       <View style={styles.footer}>
         <PrimaryButton
           testID="pin-setup-submit"
-          label={stage === 'enter' ? 'Continue' : 'Confirm PIN'}
+          label={entering ? t('actions.continue', {ns: 'common'}) : t('pinSetup.confirmAction')}
           onPress={submit}
           disabled={value.length !== PIN_LENGTH}
           loading={stage === 'submitting'}

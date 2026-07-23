@@ -10,7 +10,6 @@
 
 export interface EmergencyPhrase {
   key: string;
-  english: string;
   arabic: string;
   /** Latin transliteration, for a pilgrim attempting to say the phrase
    * aloud — the Arabic script itself is the primary content, for showing
@@ -19,18 +18,16 @@ export interface EmergencyPhrase {
 }
 
 export const EMERGENCY_PHRASES: readonly EmergencyPhrase[] = [
-  { key: 'help', english: 'Help', arabic: 'ساعدني', transliteration: 'sa-i-dnee' },
-  { key: 'thank_you', english: 'Thank you', arabic: 'شكراً', transliteration: 'shuk-ran' },
-  { key: 'where_is', english: 'Where is...?', arabic: 'أين...؟', transliteration: 'ay-na...?' },
+  { key: 'help', arabic: 'ساعدني', transliteration: 'sa-i-dnee' },
+  { key: 'thank_you', arabic: 'شكراً', transliteration: 'shuk-ran' },
+  { key: 'where_is', arabic: 'أين...؟', transliteration: 'ay-na...?' },
   {
     key: 'i_dont_understand',
-    english: "I don't understand",
     arabic: 'لا أفهم',
     transliteration: 'la af-ham',
   },
   {
     key: 'i_need_a_doctor',
-    english: 'I need a doctor',
     arabic: 'أحتاج إلى طبيب',
     transliteration: 'ah-taj i-la ta-beeb',
   },

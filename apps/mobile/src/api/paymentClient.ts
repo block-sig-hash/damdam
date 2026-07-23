@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/env';
+import {i18n} from '../i18n';
 
 export interface PurchaseCheckout {
   package_id: string;
@@ -22,10 +23,6 @@ export interface PackageGeofence {
   request_id: string;
 }
 
-interface ErrorPayload {
-  message?: string;
-}
-
 export class PaymentApiError extends Error {
   constructor(message: string) {
     super(message);
@@ -45,16 +42,10 @@ async function request<T>(url: string, accessToken: string, init?: RequestInit):
       },
     });
   } catch {
-    throw new PaymentApiError('Check your connection and try again.');
+    throw new PaymentApiError(i18n.t('errors.network', {ns: 'auth'}));
   }
   if (!response.ok) {
-    let message = 'Payment could not be completed. Please try again.';
-    try {
-      message = ((await response.json()) as ErrorPayload).message ?? message;
-    } catch {
-      // The generic message is safer than exposing a gateway HTML error.
-    }
-    throw new PaymentApiError(message);
+    throw new PaymentApiError(i18n.t('purchase.failedDefault', {ns: 'payments'}));
   }
   return (await response.json()) as T;
 }

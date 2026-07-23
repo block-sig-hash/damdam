@@ -7,6 +7,7 @@ import {
   markEsimDownloaded,
 } from '../../api/esimClient';
 import { downloadEsimProfile } from '../../services/esimDownload';
+import {i18n} from '../../i18n';
 
 const RETRY_POLL_MS = 10_000;
 
@@ -31,10 +32,10 @@ export function useEsimProfile(accessToken: string, packageId: string) {
       setPhase('queued');
       setError(
         caught instanceof EsimApiError && caught.code === 'aggregator_unavailable'
-          ? 'Download failed. It is queued and will retry automatically.'
+          ? i18n.t('errors.queued', {ns: 'esim'})
           : caught instanceof Error
             ? caught.message
-            : 'Your eSIM is queued for retry.',
+            : i18n.t('errors.queuedFallback', {ns: 'esim'}),
       );
     } finally {
       inFlight.current = false;
@@ -90,7 +91,7 @@ export function useEsimProfile(accessToken: string, packageId: string) {
       setPhase('downloaded');
     } catch (caught) {
       setPhase('ready');
-      setError(caught instanceof Error ? caught.message : 'Download could not start.');
+      setError(caught instanceof Error ? caught.message : i18n.t('errors.downloadFailed', {ns: 'esim'}));
     } finally {
       inFlight.current = false;
     }
@@ -106,7 +107,7 @@ export function useEsimProfile(accessToken: string, packageId: string) {
       setPhase('downloaded');
     } catch (caught) {
       setPhase('ready');
-      setError(caught instanceof Error ? caught.message : 'Status could not be updated.');
+      setError(caught instanceof Error ? caught.message : i18n.t('errors.statusFailed', {ns: 'esim'}));
     } finally {
       inFlight.current = false;
     }

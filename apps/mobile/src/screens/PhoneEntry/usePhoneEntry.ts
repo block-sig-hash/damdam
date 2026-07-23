@@ -51,7 +51,7 @@ export function usePhoneEntry({
       } else if (err instanceof OtpApiError) {
         setErrorMessage(err.message);
       } else {
-        setErrorMessage('Something went wrong. Please try again.');
+        setErrorMessage(i18n.t('errors.generic', {ns: 'auth'}));
       }
     } finally {
       setStatus('idle');

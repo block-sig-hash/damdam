@@ -1,4 +1,5 @@
 import React from 'react';
+import {useTranslation} from 'react-i18next';
 import { FirstAidKit, PhoneCall, Translate, WhatsappLogo } from 'phosphor-react-native';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SUPPORT_WHATSAPP_NUMBER } from '../../config/env';
@@ -20,19 +21,20 @@ interface EmergencyEssentialsProps {
 export function EmergencyEssentials({
   accessToken,
 }: EmergencyEssentialsProps): React.JSX.Element {
+  const {t} = useTranslation('safety');
   const contact = useEmergencyContact(accessToken);
 
   return (
     <View style={styles.card} testID="emergency-essentials">
       <View style={styles.header}>
         <FirstAidKit color={color.primary500} size={20} weight="bold" />
-        <Text style={styles.headerText}>Emergency essentials</Text>
+        <Text style={styles.headerText}>{t('essentials.title')}</Text>
       </View>
 
       {contact?.hto_operator_phone_number ? (
         <ContactRow
           icon={<PhoneCall color={color.primary500} size={24} weight="bold" />}
-          label={contact.hto_operator_name ?? 'Your HTO operator'}
+          label={contact.hto_operator_name ?? t('essentials.htoOperator')}
           value={contact.hto_operator_phone_number}
           onPress={() =>
             Linking.openURL(`tel:${contact.hto_operator_phone_number}`).catch(() => undefined)
@@ -43,7 +45,7 @@ export function EmergencyEssentials({
 
       <ContactRow
         icon={<WhatsappLogo color={color.primary500} size={24} weight="bold" />}
-        label="DamDam support (WhatsApp)"
+        label={t('essentials.support')}
         value={`+${SUPPORT_WHATSAPP_NUMBER}`}
         onPress={() =>
           Linking.openURL(`https://wa.me/${SUPPORT_WHATSAPP_NUMBER}`).catch(() => undefined)
@@ -53,7 +55,7 @@ export function EmergencyEssentials({
 
       <View style={[styles.header, styles.phrasesHeader]}>
         <Translate color={color.primary500} size={20} weight="bold" />
-        <Text style={styles.headerText}>Key phrases</Text>
+        <Text style={styles.headerText}>{t('essentials.phrasesTitle')}</Text>
       </View>
       {EMERGENCY_PHRASES.map(phrase => (
         <View
@@ -61,7 +63,7 @@ export function EmergencyEssentials({
           style={styles.phraseRow}
           testID={`emergency-phrase-${phrase.key}`}
         >
-          <Text style={styles.phraseEnglish}>{phrase.english}</Text>
+          <Text style={styles.phraseEnglish}>{t(`phrases.${phrase.key}`)}</Text>
           {/* design-system.md §2 "Bilingual / RTL content": system-font
               fallback (no Arabic glyphs in the bundled Inter asset) plus
               an explicit writingDirection, not the Inter/LTR default —

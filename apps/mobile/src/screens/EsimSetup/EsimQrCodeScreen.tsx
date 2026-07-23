@@ -1,4 +1,5 @@
 import React from 'react';
+import {useTranslation} from 'react-i18next';
 import { CheckCircle, Info } from 'phosphor-react-native';
 import {
   ActivityIndicator,
@@ -30,6 +31,7 @@ export function EsimQrCodeScreen({
   accessToken,
   packageId,
 }: EsimQrCodeScreenProps): React.JSX.Element {
+  const {t} = useTranslation('esim');
   const { phase, profile, error, retry, download, confirmManualDownload } =
     useEsimProfile(accessToken, packageId);
 
@@ -37,7 +39,7 @@ export function EsimQrCodeScreen({
     return (
       <View style={[styles.screen, styles.centered]} testID="esim-profile-loading">
         <ActivityIndicator size="large" color={color.primary500} />
-        <Text style={styles.body}>Preparing your eSIM...</Text>
+        <Text style={styles.body}>{t('qr.preparing')}</Text>
       </View>
     );
   }
@@ -45,16 +47,16 @@ export function EsimQrCodeScreen({
   if (!profile) {
     return (
       <View style={styles.screen} testID="esim-profile-queued">
-        <Text style={styles.title}>Your eSIM is queued</Text>
+        <Text style={styles.title}>{t('qr.queuedTitle')}</Text>
         <Banner
           tone="warning"
-          message={error ?? 'We will retry automatically and notify you when it is ready.'}
+          message={error ?? t('qr.queuedFallback')}
         />
         <Text style={styles.body}>
-          You can leave this screen. We will notify you when your QR code is ready.
+          {t('qr.queuedBody')}
         </Text>
         <View style={styles.action}>
-          <PrimaryButton label="Try now" onPress={() => retry().catch(() => undefined)} />
+          <PrimaryButton label={t('qr.tryNow')} onPress={() => retry().catch(() => undefined)} />
         </View>
       </View>
     );
@@ -67,10 +69,10 @@ export function EsimQrCodeScreen({
       contentContainerStyle={styles.content}
       testID="esim-qr-code-screen"
     >
-      <Text style={styles.title}>Your eSIM is ready</Text>
-      <Text style={styles.body}>Install it 2–7 days before your departure.</Text>
+      <Text style={styles.title}>{t('qr.readyTitle')}</Text>
+      <Text style={styles.body}>{t('qr.installWindow')}</Text>
       {downloaded ? (
-        <Banner tone="info" message="eSIM download recorded successfully." testID="esim-ready-notice" />
+        <Banner tone="info" message={t('qr.recorded')} testID="esim-ready-notice" />
       ) : error ? (
         <Banner tone="error" message={error} />
       ) : null}
@@ -95,7 +97,7 @@ export function EsimQrCodeScreen({
             />
           )}
           <Text style={[styles.statusText, downloaded && styles.statusTextDone]}>
-            {downloaded ? 'Downloaded' : 'Ready to download'}
+            {downloaded ? t('qr.downloaded') : t('qr.readyToDownload')}
           </Text>
         </View>
       </View>
@@ -103,7 +105,7 @@ export function EsimQrCodeScreen({
       <View style={styles.qrCard} testID="esim-qr-card">
         <Image
           source={{ uri: profile.qr_code_url }}
-          accessibilityLabel="eSIM installation QR code"
+          accessibilityLabel={t('qr.accessibility')}
           resizeMode="contain"
           style={styles.qrImage}
           testID="esim-qr-image"
@@ -113,7 +115,7 @@ export function EsimQrCodeScreen({
       <View style={styles.detailCard} testID="esim-detail-card">
         <Text style={styles.detailLabel}>ICCID</Text>
         <Text selectable style={styles.detailValue}>{profile.iccid}</Text>
-        <Text style={styles.detailLabel}>Activation code</Text>
+        <Text style={styles.detailLabel}>{t('qr.activationCode')}</Text>
         <Text selectable style={styles.codeValue} testID="esim-activation-code">
           {profile.activation_code_lpa}
         </Text>
@@ -122,7 +124,7 @@ export function EsimQrCodeScreen({
       {Platform.OS === 'android' ? (
         <View style={styles.action}>
           <PrimaryButton
-            label={downloaded ? 'Downloaded' : 'Download to device'}
+            label={downloaded ? t('qr.downloaded') : t('compatibility.download')}
             onPress={() => download().catch(() => undefined)}
             disabled={downloaded}
             loading={phase === 'downloading'}
@@ -133,7 +135,7 @@ export function EsimQrCodeScreen({
       {Platform.OS === 'ios' && !downloaded ? (
         <View style={styles.action}>
           <SecondaryButton
-            label="I installed this eSIM"
+            label={t('qr.installed')}
             onPress={() => confirmManualDownload().catch(() => undefined)}
             testID="esim-confirm-manual"
           />
@@ -141,13 +143,13 @@ export function EsimQrCodeScreen({
       ) : null}
       <View style={styles.action}>
         <SecondaryButton
-          label="Save QR code"
+          label={t('qr.save')}
           onPress={() => Linking.openURL(profile.qr_code_url).catch(() => undefined)}
           testID="esim-save-qr"
         />
       </View>
       <Text style={styles.note}>
-        Keep this QR code saved offline. Open it full-screen, then use your device's Save Image action.
+        {t('qr.offlineNote')}
       </Text>
 
       {/* US-12 AC-12.1: same screen as the eSIM QR/download, but a clearly

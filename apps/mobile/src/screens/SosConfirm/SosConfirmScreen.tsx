@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {useTranslation} from 'react-i18next';
 import { Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { color, space, typography } from '../../theme/tokens';
@@ -17,6 +18,7 @@ export interface SosConfirmScreenProps {
 }
 
 export function SosConfirmScreen({ onConfirmed }: SosConfirmScreenProps): React.JSX.Element {
+  const {t} = useTranslation('safety');
   const [elapsedMs, setElapsedMs] = useState(0);
   const [holding, setHolding] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -70,15 +72,15 @@ export function SosConfirmScreen({ onConfirmed }: SosConfirmScreenProps): React.
   const secondsLeft = Math.max(1, 3 - Math.floor(elapsedMs / 1000));
 
   return (
-    <View style={styles.screen}>
-      <Text style={styles.title}>Emergency SOS</Text>
+    <View style={styles.screen} testID="sos-confirm-screen">
+      <Text style={styles.title}>{t('sos.confirmTitle')}</Text>
       <Text style={styles.instructions}>
-        Press and hold the button below for 3 seconds to alert your operator and family.
+        {t('sos.confirmInstructions')}
       </Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="SOS / Emergency"
-        accessibilityHint="Press and hold for 3 seconds to send an emergency alert"
+        accessibilityLabel={t('sos.accessibilityLabel')}
+        accessibilityHint={t('sos.accessibilityHint')}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         style={styles.buttonWrap}

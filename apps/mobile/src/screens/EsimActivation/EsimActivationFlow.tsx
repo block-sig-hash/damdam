@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {useTranslation} from 'react-i18next';
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { getEsim } from '../../api/esimClient';
 import {
@@ -23,6 +24,7 @@ interface Props {
 export function EsimActivationFlow({
   accessToken, packageId, deviceModel, onShowQrCode, onActivated,
 }: Props): React.JSX.Element {
+  const {t} = useTranslation('esim');
   const [path, setPath] = useState<ActivationPath>('manual');
   const [iccid, setIccid] = useState<string>();
   const [showGuide, setShowGuide] = useState(false);
@@ -38,9 +40,9 @@ export function EsimActivationFlow({
       setIccid(profile.iccid);
       setPath(nextPath);
       if (profile.status === 'activated') onActivated();
-    }).catch(() => active && setError('Your eSIM details could not load. Please try again.'));
+    }).catch(() => active && setError(t('activation.loadFailed')));
     return () => { active = false; };
-  }, [accessToken, onActivated, packageId]);
+  }, [accessToken, onActivated, packageId, t]);
 
   const runOnce = useCallback(async (
     action: () => Promise<'activated' | 'not_connected'>,
@@ -51,15 +53,15 @@ export function EsimActivationFlow({
       try {
         const result = await action();
         if (result === 'activated') onActivated();
-        else setError('DamDam could not confirm mobile data yet. Check your eSIM is selected, then try again.');
+        else setError(t('activation.notConnected'));
       } catch {
-        setError('Activation could not complete. Use the manual guide instead.');
+        setError(t('activation.failed'));
         setShowGuide(true);
       } finally {
         setWorking(false);
       }
     });
-  }, [onActivated]);
+  }, [onActivated, t]);
 
   if (!iccid && !error) {
     return <View style={styles.loading}><ActivityIndicator color={color.primary500} /></View>;

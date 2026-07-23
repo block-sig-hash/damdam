@@ -1,5 +1,6 @@
 import { Microphone, MicrophoneSlash, PhoneDisconnect, SpeakerHigh } from 'phosphor-react-native';
 import React, { useEffect, useState } from 'react';
+import {useTranslation} from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Banner } from '../../components/Banner/Banner';
 import { useNetworkQuality, type NetworkQuality } from '../../hooks/useNetworkQuality';
@@ -21,9 +22,11 @@ function formatDuration(seconds: number): string {
 }
 
 function QualityIndicator({ quality }: { quality: NetworkQuality }): React.JSX.Element {
+  const {t} = useTranslation('home');
+  const qualityLabel = t(`activeCall.qualityValues.${quality}`);
   const levels: Record<NetworkQuality, number> = { poor: 1, fair: 2, good: 3, excellent: 4 };
   return (
-    <View style={styles.qualityRow} accessibilityLabel={`Call quality ${quality}`} testID="call-quality">
+    <View style={styles.qualityRow} accessibilityLabel={t('activeCall.qualityAccessibility', {quality: qualityLabel})} testID="call-quality">
       <View style={styles.signalBars}>
         {[1, 2, 3, 4].map((level) => (
           <View
@@ -36,7 +39,7 @@ function QualityIndicator({ quality }: { quality: NetworkQuality }): React.JSX.E
           />
         ))}
       </View>
-      <Text style={styles.qualityLabel}>{quality[0].toUpperCase() + quality.slice(1)} quality</Text>
+      <Text style={styles.qualityLabel}>{t('activeCall.quality', {quality: qualityLabel})}</Text>
     </View>
   );
 }
@@ -48,6 +51,7 @@ export function ActiveCallScreen({
   connectivityReturnDelayMs = 3000,
   networkQualityOverride,
 }: ActiveCallScreenProps): React.JSX.Element {
+  const {t} = useTranslation('home');
   const liveNetwork = useNetworkQuality();
   const network = networkQualityOverride ?? liveNetwork;
   const [state, setState] = useState<VoiceCallState>('connecting');
@@ -80,7 +84,7 @@ export function ActiveCallScreen({
   if (connectivityLost || state === 'dropped') {
     return (
       <View style={styles.screen}>
-        <Banner tone="error" message="Call ended — connectivity lost" testID="connectivity-lost" />
+        <Banner tone="error" message={t('activeCall.lost')} testID="connectivity-lost" />
         <Text style={styles.recipient}>{recipientName || call.displayNumber}</Text>
       </View>
     );
@@ -88,32 +92,32 @@ export function ActiveCallScreen({
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.eyebrow}>{state === 'connected' ? 'Connected' : 'Connecting…'}</Text>
+      <Text style={styles.eyebrow}>{state === 'connected' ? t('activeCall.connected') : t('activeCall.connecting')}</Text>
       <Text style={styles.recipient}>{recipientName || call.displayNumber}</Text>
       {recipientName ? <Text style={styles.number}>{call.displayNumber}</Text> : null}
       <Text style={styles.duration}>{formatDuration(duration)}</Text>
       <View style={call.callType === 'app_to_app' ? styles.freePill : styles.standardPill}>
         <Text style={styles.typeLabel}>
-          {call.callType === 'app_to_app' ? 'DamDam-to-DamDam — free' : 'Standard call'}
+          {call.callType === 'app_to_app' ? t('activeCall.free') : t('activeCall.standard')}
         </Text>
       </View>
       <QualityIndicator quality={network.quality} />
 
       <View style={styles.controls}>
         <CallControl
-          label={muted ? 'Unmute' : 'Mute'}
+          label={muted ? t('activeCall.unmute') : t('activeCall.mute')}
           onPress={() => call.toggleMute().then(setMuted)}
           active={muted}
           icon={muted ? <MicrophoneSlash color={color.gray900} size={28} weight="bold" /> : <Microphone color={color.gray900} size={28} weight="bold" />}
         />
         <CallControl
-          label="Speaker"
+          label={t('activeCall.speaker')}
           onPress={() => call.toggleSpeaker().then(setSpeaker)}
           active={speaker}
           icon={<SpeakerHigh color={color.gray900} size={28} weight="bold" />}
         />
         <CallControl
-          label="End call"
+          label={t('activeCall.end')}
           onPress={() => call.hangup().finally(onFinished)}
           destructive
           icon={<PhoneDisconnect color={color.white} size={28} weight="fill" />}

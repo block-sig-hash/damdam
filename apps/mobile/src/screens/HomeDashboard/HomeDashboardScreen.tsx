@@ -7,11 +7,13 @@ import {
   WarningCircle,
 } from 'phosphor-react-native';
 import React, { useState } from 'react';
+import {useTranslation} from 'react-i18next';
 import {Linking, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {SUPPORT_WHATSAPP_NUMBER} from '../../config/env';
 import { shouldShowDateActivationBanner } from '../../services/arrivalPrompts';
 import { color, radius, space, typography } from '../../theme/tokens';
 import { EsimActivationBanner } from './EsimActivationBanner';
+import {i18n} from '../../i18n';
 
 interface HomeDashboardScreenProps {
   departureDate: string | null;
@@ -46,8 +48,9 @@ export function HomeDashboardScreen({
   queuedSOSAlerts = 0,
   onOpenSOS,
 }: HomeDashboardScreenProps): React.JSX.Element {
+  const {t} = useTranslation('home');
   const [dismissedThisSession, setDismissedThisSession] = useState(false);
-  const [checkInFeedback, setCheckInFeedback] = useState<string>();
+  const [checkInFeedback, setCheckInFeedback] = useState<'sent' | 'queued' | 'failed'>();
   const [checkingIn, setCheckingIn] = useState(false);
   const lastCheckInTime = lastCheckInAt ? new Date(lastCheckInAt).getTime() : 0;
   const rateLimited =
@@ -66,11 +69,11 @@ export function HomeDashboardScreen({
 
   return (
     <ScrollView contentContainerStyle={styles.screen}>
-      <Text style={styles.title}>Home</Text>
+      <Text style={styles.title}>{t('dashboard.title')}</Text>
       <View style={styles.checkInControl}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="I'm okay"
+          accessibilityLabel={t('dashboard.imOkay')}
           disabled={!onCheckIn || checkingIn || rateLimited}
           onPress={() => {
             if (!onCheckIn) return;
@@ -78,12 +81,10 @@ export function HomeDashboardScreen({
             onCheckIn()
               .then(result =>
                 setCheckInFeedback(
-                  result === 'sent'
-                    ? 'Check-in sent'
-                    : 'Check-in queued, will send when connected',
+                  result === 'sent' ? 'sent' : 'queued',
                 ),
               )
-              .catch(() => setCheckInFeedback('Check-in unavailable — try again'))
+              .catch(() => setCheckInFeedback('failed'))
               .finally(() => setCheckingIn(false));
           }}
           style={({pressed}) => [
@@ -97,36 +98,36 @@ export function HomeDashboardScreen({
               styles.checkInButtonLabel,
               rateLimited && styles.disabledButtonLabel,
             ]}>
-            {checkingIn ? 'Saving check-in…' : "I'm okay"}
+            {checkingIn ? t('dashboard.savingCheckIn') : t('dashboard.imOkay')}
           </Text>
         </Pressable>
         {rateLimited ? (
-          <Text style={styles.rateLimitHint}>Check-in available every 15 minutes</Text>
+          <Text style={styles.rateLimitHint}>{t('dashboard.checkInRateLimit')}</Text>
         ) : null}
       </View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="SOS / Emergency"
-        accessibilityHint="Opens the three-second emergency hold control"
+        accessibilityLabel={t('dashboard.sosLabel')}
+        accessibilityHint={t('dashboard.sosHint')}
         onPress={onOpenSOS}
         disabled={!onOpenSOS}
         style={({pressed}) => [styles.sosButton, pressed && styles.pressedButton]}>
         <Siren color={color.white} size={28} weight="fill" />
-        <Text style={styles.sosButtonLabel}>SOS / Emergency</Text>
+        <Text style={styles.sosButtonLabel}>{t('dashboard.sosLabel')}</Text>
       </Pressable>
       {checkInFeedback ? (
         <View
           accessibilityLiveRegion="polite"
           style={
-            checkInFeedback === 'Check-in sent'
+            checkInFeedback === 'sent'
               ? styles.successBanner
-              : checkInFeedback.includes('queued')
+              : checkInFeedback === 'queued'
                 ? styles.queueBanner
                 : styles.errorBanner
           }>
-          {checkInFeedback === 'Check-in sent' ? (
+          {checkInFeedback === 'sent' ? (
             <CheckCircle color={color.success500} size={24} weight="bold" />
-          ) : checkInFeedback.includes('queued') ? (
+          ) : checkInFeedback === 'queued' ? (
             <Clock color={color.gray700} size={24} weight="bold" />
           ) : (
             <WarningCircle color={color.error700} size={24} weight="bold" />
@@ -134,9 +135,9 @@ export function HomeDashboardScreen({
           <Text
             style={[
               styles.bannerText,
-              checkInFeedback.includes('queued') && styles.queueBannerText,
+              checkInFeedback === 'queued' && styles.queueBannerText,
             ]}>
-            {checkInFeedback}
+            {t(`dashboard.checkIn${checkInFeedback === 'sent' ? 'Sent' : checkInFeedback === 'queued' ? 'Queued' : 'Failed'}`)}
           </Text>
         </View>
       ) : null}
@@ -145,7 +146,7 @@ export function HomeDashboardScreen({
           <Clock color={color.gray700} size={24} weight="bold" />
           <View style={styles.queueCopy}>
             <Text style={[styles.bannerText, styles.queueBannerText]}>
-              {queuedEvents} {queuedEvents === 1 ? 'event' : 'events'} waiting to send
+              {t('dashboard.queuedEvents', {count: queuedEvents})}
             </Text>
             <Text style={styles.queueDetail}>
               {queueBreakdown(queuedCheckIns, queuedSOSAlerts)}
@@ -154,15 +155,14 @@ export function HomeDashboardScreen({
         </View>
       ) : null}
       <Text style={styles.lastCheckIn}>
-        Last check-in:{' '}
-        {lastCheckInAt
-          ? new Date(lastCheckInAt).toLocaleString([], {
+        {t('dashboard.lastCheckIn', {value: lastCheckInAt
+          ? new Date(lastCheckInAt).toLocaleString(i18n.language, {
               day: 'numeric',
               month: 'short',
               hour: '2-digit',
               minute: '2-digit',
             })
-          : 'Not yet'}
+          : t('dashboard.notYet')})}
       </Text>
       {showBanner ? (
         <EsimActivationBanner
@@ -174,7 +174,7 @@ export function HomeDashboardScreen({
         <View style={styles.warningBanner} testID="balance-warning-banner">
           <WarningCircle color={color.warning500} size={24} weight="bold" />
           <Text style={styles.bannerText}>
-            Balance running low. Message support if you need more data or minutes.
+            {t('dashboard.lowBalance')}
           </Text>
         </View>
       ) : null}
@@ -182,7 +182,7 @@ export function HomeDashboardScreen({
         <View style={styles.errorBanner} testID="balance-error-banner">
           <WarningCircle color={color.error700} size={24} weight="bold" />
           <Text style={styles.bannerText}>
-            A balance is exhausted. Message support to get connected again.
+            {t('dashboard.exhaustedBalance')}
           </Text>
         </View>
       ) : null}
@@ -192,35 +192,35 @@ export function HomeDashboardScreen({
           {esimStatus === 'activated' ? (
             <View style={styles.activePill} testID="esim-active-pill">
               <CheckCircle color={color.success700} size={16} weight="bold" />
-              <Text style={styles.activePillText}>Active</Text>
+              <Text style={styles.activePillText}>{t('dashboard.active')}</Text>
             </View>
           ) : null}
         </View>
         <Text style={styles.activeTitle}>
           {esimStatus === 'activated'
-            ? 'Saudi Arabia data — active'
-            : 'Saudi Arabia data is ready to activate.'}
+            ? t('dashboard.dataActive')
+            : t('dashboard.dataReady')}
         </Text>
         {remainingDataGb === null ? (
-          <Text style={styles.inactiveText}>Balance unavailable</Text>
+          <Text style={styles.inactiveText}>{t('dashboard.balanceUnavailable')}</Text>
         ) : (
           <BalanceProgress
             kind="data"
-            label="Mobile data"
+            label={t('dashboard.mobileData')}
             remaining={remainingDataGb}
-            value={`${remainingDataGb.toFixed(2)} GB remaining`}
+            value={t('dashboard.dataRemaining', {amount: remainingDataGb.toFixed(2)})}
             percent={dataPercent}
             testID="data-balance-progress"
           />
         )}
         {pstnMinutesRemaining === null ? (
-          <Text style={styles.inactiveText}>Minutes balance unavailable</Text>
+          <Text style={styles.inactiveText}>{t('dashboard.minutesUnavailable')}</Text>
         ) : (
           <BalanceProgress
             kind="minutes"
-            label="Calling minutes"
+            label={t('dashboard.callingMinutes')}
             remaining={pstnMinutesRemaining}
-            value={`${formatMinutes(pstnMinutesRemaining)} minutes remaining`}
+            value={t('dashboard.minutesRemaining', {amount: formatMinutes(pstnMinutesRemaining)})}
             percent={minutesPercent}
             testID="minutes-balance-progress"
           />
@@ -228,11 +228,11 @@ export function HomeDashboardScreen({
         {remainingDataGb !== null || pstnMinutesRemaining !== null ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Message support on WhatsApp"
+            accessibilityLabel={t('dashboard.supportAccessibility')}
             onPress={() =>
               Linking.openURL(
                 `https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${encodeURIComponent(
-                  'Hello DamDam Support, I need help adding more data or calling minutes.',
+                  t('dashboard.supportMessage'),
                 )}`,
               ).catch(() => undefined)
             }
@@ -241,14 +241,14 @@ export function HomeDashboardScreen({
               pressed && styles.pressedButton,
             ]}>
             <ChatCircle color={color.primary500} size={20} weight="bold" />
-            <Text style={styles.supportButtonLabel}>Need more? Message support</Text>
+            <Text style={styles.supportButtonLabel}>{t('dashboard.needMore')}</Text>
           </Pressable>
         ) : null}
       </View>
       {onOpenCall ? (
         <Pressable onPress={onOpenCall} style={styles.callButton} testID="open-call-tab">
           <Phone color={color.white} size={24} weight="fill" />
-          <Text style={styles.callButtonLabel}>Call family</Text>
+          <Text style={styles.callButtonLabel}>{t('dashboard.callFamily')}</Text>
         </Pressable>
       ) : null}
     </ScrollView>
@@ -298,11 +298,13 @@ function formatMinutes(minutes: number): string {
 
 function queueBreakdown(checkIns: number, sosAlerts: number): string {
   const pieces: string[] = [];
-  if (checkIns > 0) pieces.push(`${checkIns} ${checkIns === 1 ? 'check-in' : 'check-ins'}`);
+  if (checkIns > 0) pieces.push(i18n.t('dashboard.queuedCheckIns', {ns: 'home', count: checkIns}));
   if (sosAlerts > 0) {
-    pieces.push(`${sosAlerts} SOS ${sosAlerts === 1 ? 'alert' : 'alerts'}`);
+    pieces.push(i18n.t('dashboard.queuedSos', {ns: 'home', count: sosAlerts}));
   }
-  return pieces.join(' and ');
+  return pieces.length === 2
+    ? i18n.t('dashboard.queueJoin', {ns: 'home', first: pieces[0], second: pieces[1]})
+    : pieces[0] ?? '';
 }
 
 function BalanceProgress({

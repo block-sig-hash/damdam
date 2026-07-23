@@ -1,9 +1,11 @@
 import { Linking, NativeModules, PermissionsAndroid, Platform } from 'react-native';
 import { registerDeviceToken } from '../api/pushClient';
 import { getPackageGeofence } from '../api/paymentClient';
+import {i18n} from '../i18n';
 
-export const ARRIVAL_NOTIFICATION_COPY =
-  "You've arrived in Saudi Arabia. Tap to activate your DamDam data — takes 30 seconds.";
+export function getArrivalNotificationCopy(): string {
+  return i18n.t('arrival.message', {ns: 'esim'});
+}
 export const ARRIVAL_DEEP_LINK_PREFIX = 'damdam://esim/activate';
 
 interface ArrivalPromptNativeModule {

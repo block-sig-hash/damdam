@@ -1,9 +1,9 @@
 import { MapPin } from 'phosphor-react-native';
 import React from 'react';
+import {useTranslation} from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
 import { SecondaryButton } from '../../components/SecondaryButton/SecondaryButton';
-import { ARRIVAL_NOTIFICATION_COPY } from '../../services/arrivalPrompts';
 import { color, radius, space, typography } from '../../theme/tokens';
 
 interface EsimActivationPromptScreenProps {
@@ -19,23 +19,24 @@ export function EsimActivationPromptScreen({
   onManualGuide,
   activating = false,
 }: EsimActivationPromptScreenProps): React.JSX.Element {
+  const {t} = useTranslation('esim');
   const manual = activationPath === 'manual';
   return (
     <View style={styles.screen} testID="esim-arrival-prompt">
       <View style={styles.iconCard}>
         <MapPin color={color.info500} size={32} weight="bold" />
       </View>
-      <Text style={styles.title}>You’ve arrived</Text>
-      <Text style={styles.message}>{ARRIVAL_NOTIFICATION_COPY}</Text>
+      <Text style={styles.title}>{t('arrival.title')}</Text>
+      <Text style={styles.message}>{t('arrival.message')}</Text>
       <View style={styles.actions}>
         <PrimaryButton
-          label={manual ? 'Show activation guide' : 'Activate now'}
+          label={manual ? t('arrival.showGuide') : t('arrival.activateNow')}
           onPress={manual ? onManualGuide : onActivate}
           loading={activating}
           testID="arrival-activate"
         />
         {!manual ? (
-          <SecondaryButton label="Use manual guide" onPress={onManualGuide} />
+          <SecondaryButton label={t('arrival.manualGuide')} onPress={onManualGuide} />
         ) : null}
       </View>
     </View>

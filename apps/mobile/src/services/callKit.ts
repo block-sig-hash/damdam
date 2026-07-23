@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import RNCallKeep from 'react-native-callkeep';
+import {i18n} from '../i18n';
 import VoipPushNotification from 'react-native-voip-push-notification';
 import uuid from 'react-native-uuid';
 import {
@@ -89,7 +90,7 @@ function handleIncomingPush(
   onIncomingCallReady: (session: VoiceCallSession) => void,
 ): void {
   const callUuid = payload.uuid ?? String(uuid.v4());
-  const callerNumber = payload.handle ?? payload.callerName ?? 'Unknown';
+  const callerNumber = payload.handle ?? payload.callerName ?? i18n.t('native.unknown', {ns: 'common'});
 
   loginTelnyxClientForIncomingCalls(accessToken, callerNumber, voipPushToken, onIncomingCallReady)
     .then((client) => {
@@ -323,15 +324,15 @@ export async function ensureAndroidCallingReady(): Promise<void> {
     // config is actually read.
     ios: { appName: 'DamDam' },
     android: {
-      alertTitle: 'Calling permission required',
-      alertDescription: 'DamDam needs to be enabled as a calling account to show incoming and outgoing calls on your lock screen.',
-      cancelButton: 'Cancel',
-      okButton: 'Enable',
+      alertTitle: i18n.t('native.callingPermissionTitle', {ns: 'common'}),
+      alertDescription: i18n.t('native.callingPermissionBody', {ns: 'common'}),
+      cancelButton: i18n.t('actions.cancel', {ns: 'common'}),
+      okButton: i18n.t('native.enable', {ns: 'common'}),
       additionalPermissions: [],
       foregroundService: {
         channelId: 'com.damdam.app.calls',
-        channelName: 'DamDam calls',
-        notificationTitle: 'DamDam call in progress',
+        channelName: i18n.t('native.callChannel', {ns: 'common'}),
+        notificationTitle: i18n.t('native.callInProgress', {ns: 'common'}),
       },
     },
   });

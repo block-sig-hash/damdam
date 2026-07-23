@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/env';
+import {i18n} from '../i18n';
 
 export type CallType = 'pstn' | 'app_to_app';
 
@@ -46,16 +47,10 @@ async function request<T>(path: string, accessToken: string, init?: RequestInit)
       },
     });
   } catch {
-    throw new VoiceApiError('Calling requires an internet connection');
+    throw new VoiceApiError(i18n.t('dial.offline', {ns: 'home'}));
   }
   if (!response.ok) {
-    let message = 'Calling is temporarily unavailable.';
-    try {
-      message = ((await response.json()) as { message?: string }).message ?? message;
-    } catch {
-      // Never expose an upstream HTML or proxy response.
-    }
-    throw new VoiceApiError(message);
+    throw new VoiceApiError(i18n.t('dial.temporarilyUnavailable', {ns: 'home'}));
   }
   return (await response.json()) as T;
 }

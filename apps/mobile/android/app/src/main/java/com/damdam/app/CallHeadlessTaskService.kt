@@ -48,14 +48,14 @@ class CallHeadlessTaskService : HeadlessJsTaskService() {
       val manager = getSystemService(NotificationManager::class.java)
       val channel = NotificationChannel(
         CHANNEL_ID,
-        "DamDam calls",
+        getString(R.string.call_channel),
         NotificationManager.IMPORTANCE_HIGH,
       )
       manager?.createNotificationChannel(channel)
     }
     val notification = NotificationCompat.Builder(this, CHANNEL_ID)
       .setContentTitle("DamDam")
-      .setContentText("Incoming call")
+      .setContentText(getString(R.string.incoming_call))
       .setSmallIcon(R.mipmap.ic_launcher)
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setCategory(NotificationCompat.CATEGORY_CALL)

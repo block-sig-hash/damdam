@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { PinApiError, setPin as setPinRequest } from '../../api/pinClient';
 import { isStrongPin } from '../../utils/pin';
 import { savePinLocally } from '../../utils/pinLocalStore';
+import {i18n} from '../../i18n';
 
 export const PIN_LENGTH = 4;
 
@@ -46,7 +47,7 @@ export function usePinSetup({ accessToken, onPinSet }: UsePinSetupArgs): UsePinS
 
     if (stage === 'enter') {
       if (!isStrongPin(value)) {
-        setErrorMessage('Choose a non-repeated, non-sequential 4-digit PIN.');
+        setErrorMessage(i18n.t('errors.weakPin', {ns: 'auth'}));
         setValueState('');
         return;
       }
@@ -58,7 +59,7 @@ export function usePinSetup({ accessToken, onPinSet }: UsePinSetupArgs): UsePinS
 
     // stage === 'confirm'
     if (value !== firstEntry) {
-      setErrorMessage("PINs didn't match. Try again.");
+      setErrorMessage(i18n.t('errors.pinMismatch', {ns: 'auth'}));
       setStage('enter');
       setFirstEntry('');
       setValueState('');
@@ -83,7 +84,7 @@ export function usePinSetup({ accessToken, onPinSet }: UsePinSetupArgs): UsePinS
       if (err instanceof PinApiError) {
         setErrorMessage(err.message);
       } else {
-        setErrorMessage('Something went wrong. Please try again.');
+        setErrorMessage(i18n.t('errors.generic', {ns: 'auth'}));
       }
       setStage('enter');
       setFirstEntry('');

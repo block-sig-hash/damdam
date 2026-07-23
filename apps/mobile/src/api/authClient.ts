@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/env';
+import {i18n} from '../i18n';
 
 /**
  * Mirrors apps/api/app/auth/schemas.py and the error codes raised by
@@ -76,9 +77,15 @@ async function parseErrorResponse(response: Response): Promise<OtpApiError> {
     const code = KNOWN_CODES.includes(payload.error as OtpErrorCode)
       ? (payload.error as OtpErrorCode)
       : 'validation_error';
-    return new OtpApiError(code, payload.message, payload.details?.retry_after);
+    const key =
+      code === 'invalid_otp' ? 'incorrectCode'
+      : code === 'otp_expired' ? 'expiredCode'
+      : code === 'locked' ? 'tooManyAttempts'
+      : code === 'rate_limited' ? 'waitBeforeCode'
+      : 'generic';
+    return new OtpApiError(code, i18n.t(`errors.${key}`, {ns: 'auth'}), payload.details?.retry_after);
   } catch {
-    return new OtpApiError('network_error', 'Something went wrong. Please try again.');
+    return new OtpApiError('network_error', i18n.t('errors.generic', {ns: 'auth'}));
   }
 }
 
@@ -91,7 +98,7 @@ async function post<TResponse>(path: string, body: unknown): Promise<TResponse> 
       body: JSON.stringify(body),
     });
   } catch {
-    throw new OtpApiError('network_error', 'Check your connection and try again.');
+    throw new OtpApiError('network_error', i18n.t('errors.network', {ns: 'auth'}));
   }
 
   if (!response.ok) {

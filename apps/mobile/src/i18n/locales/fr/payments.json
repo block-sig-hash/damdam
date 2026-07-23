@@ -1,1 +1,54 @@
-{}
+{
+  "packages": {
+    "title": "Choisissez votre forfait",
+    "eyebrow": "Restez connecté en Arabie saoudite",
+    "subtitle": "Des prix clairs en nairas, données et appels inclus.",
+    "unavailable": "Les tarifs des forfaits sont indisponibles. Veuillez réessayer.",
+    "tierNames": {
+      "Starter": "Découverte",
+      "Basic": "Essentiel",
+      "Standard": "Standard",
+      "Family": "Famille"
+    },
+    "chooseTier": "Choisir le forfait {{tier}}",
+    "recommended": "Recommandé",
+    "from": "À partir de ",
+    "perPilgrim": " par pèlerin",
+    "groupCaption": "par pèlerin · choisissez 2 à 8 personnes",
+    "dataFeature": "{{amount}} Go de données eSIM{{suffix}}",
+    "minutesFeature": "{{amount}} minutes d'appel vers le Nigeria{{suffix}}",
+    "offlineFeature": "Outils de pointage et SOS hors ligne",
+    "included": "Ce qui est inclus",
+    "includedTitle": "Tous les forfaits comprennent",
+    "includedData": "des données eSIM pour l'Arabie saoudite",
+    "includedCalls": "des appels avec votre numéro nigérian",
+    "includedSafety": "des outils de pointage et SOS utilisables hors ligne",
+    "familyTitle": "Combien de pèlerins ?",
+    "familyBody": "Le tarif Famille est par personne. Choisissez entre {{minimum}} et {{maximum}} pèlerins.",
+    "groupSize": "Taille du groupe",
+    "closeGroup": "Fermer le sélecteur de taille du groupe",
+    "removePilgrim": "Retirer un pèlerin",
+    "familyAccessibility": "Taille du groupe familial",
+    "addPilgrim": "Ajouter un pèlerin",
+    "groupError": "Saisissez un nombre entre {{minimum}} et {{maximum}}.",
+    "total": "Prix total du forfait",
+    "perPilgrimPrice": "{{price}} par pèlerin",
+    "continuePayment": "Continuer vers le paiement"
+  },
+  "purchase": {
+    "failedDefault": "Le paiement n'a pas abouti.",
+    "successful": "Paiement réussi",
+    "activePackage": "Votre forfait est actif avec {{data}} Go et {{minutes}} minutes d'appel.",
+    "receipt": "Votre reçu est envoyé par WhatsApp et par e-mail lorsque cela est possible.",
+    "startFailed": "Impossible de lancer le paiement.",
+    "expired": "Cette session de paiement a expiré. Veuillez réessayer.",
+    "delayed": "La confirmation du paiement prend plus de temps que prévu. Contactez l'assistance si vous avez été débité.",
+    "notCompleted": "Paiement non effectué",
+    "chooseAnother": "Choisir un autre forfait",
+    "preparing": "Préparation du paiement sécurisé",
+    "preparingBody": "Cela ne prend généralement que quelques secondes.",
+    "complete": "Effectuer le paiement",
+    "methods": "Les cartes, virements bancaires, USSD, OPay et PalmPay sont acceptés.",
+    "checkoutLoadFailed": "Impossible de charger la page de paiement sécurisé. Vérifiez votre connexion et réessayez."
+  }
+}

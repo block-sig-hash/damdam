@@ -1,4 +1,5 @@
 import React from 'react';
+import {useTranslation} from 'react-i18next';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
 import { color, space, typography } from '../../theme/tokens';
@@ -26,6 +27,7 @@ export function EsimSetupIntroScreen({
   packageId,
   onProceed,
 }: EsimSetupIntroScreenProps): React.JSX.Element {
+  const {t} = useTranslation('esim');
   const { stage, handleWarningContinue, handleWarningSupport } = useEsimSetupIntro({
     accessToken,
     packageId,
@@ -35,23 +37,23 @@ export function EsimSetupIntroScreen({
     return (
       <View style={[styles.screen, styles.centered]} testID="esim-setup-checking">
         <ActivityIndicator color={color.primary500} size="large" />
-        <Text style={styles.checkingText}>Checking your device...</Text>
+        <Text style={styles.checkingText}>{t('compatibility.checking')}</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.screen} testID="esim-setup-intro">
-      <Text style={styles.title}>Set up your eSIM</Text>
+      <Text style={styles.title}>{t('compatibility.title')}</Text>
       {stage === 'compatible' ? (
         <>
           <Text style={styles.body}>
-            Your device supports eSIM. Download it directly, or scan a QR code instead.
+            {t('compatibility.supported')}
           </Text>
           <View style={styles.footer}>
             <PrimaryButton
               testID="esim-setup-download"
-              label="Download to device"
+              label={t('compatibility.download')}
               onPress={() => onProceed(packageId)}
             />
           </View>
@@ -59,12 +61,12 @@ export function EsimSetupIntroScreen({
       ) : (
         <>
           <Text style={styles.body}>
-            Use the QR code to activate your DamDam package on a compatible device.
+            {t('compatibility.qrOnly')}
           </Text>
           <View style={styles.footer}>
             <PrimaryButton
               testID="esim-setup-view-qr"
-              label="View QR code"
+              label={t('compatibility.viewQr')}
               onPress={() => onProceed(packageId)}
             />
           </View>

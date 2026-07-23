@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/env';
+import {i18n} from '../i18n';
 
 export interface PricingTier {
   id: string;
@@ -14,10 +15,6 @@ export interface PricingTier {
 
 interface PricingTierResponse {
   tiers: PricingTier[];
-}
-
-interface ErrorPayload {
-  message?: string;
 }
 
 export class PricingApiError extends Error {
@@ -36,20 +33,20 @@ export async function getPricingTiers(): Promise<PricingTier[]> {
   try {
     response = await fetch(`${API_BASE_URL}/pricing/tiers`);
   } catch {
-    throw new PricingApiError('Check your connection and try again.');
+    throw new PricingApiError(i18n.t('errors.network', {ns: 'auth'}));
   }
 
   if (!response.ok) {
     try {
-      const payload = (await response.json()) as ErrorPayload;
+      await response.json();
       throw new PricingApiError(
-        payload.message ?? 'Package prices are unavailable. Please try again.',
+        i18n.t('packages.unavailable', {ns: 'payments'}),
       );
     } catch (error) {
       if (error instanceof PricingApiError) {
         throw error;
       }
-      throw new PricingApiError('Package prices are unavailable. Please try again.');
+      throw new PricingApiError(i18n.t('packages.unavailable', {ns: 'payments'}));
     }
   }
 

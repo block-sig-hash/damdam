@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import {useTranslation} from 'react-i18next';
+import {i18n} from '../../i18n';
 import { Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { color, minTouchTarget, radius, space, typography } from '../../theme/tokens';
 
@@ -12,29 +14,30 @@ export interface SosSentScreenProps {
 function formatTimestamp(timestamp: string): string {
   const parsed = new Date(timestamp);
   if (Number.isNaN(parsed.getTime())) return timestamp;
-  return parsed.toLocaleString();
+  return new Intl.DateTimeFormat(i18n.language, {dateStyle: 'medium', timeStyle: 'short'}).format(parsed);
 }
 
 export function SosSentScreen({ synced, htoPhone, timestamp, onCancel }: SosSentScreenProps): React.JSX.Element {
+  const {t} = useTranslation('safety');
   const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   return (
-    <View style={styles.screen}>
-      <Text style={styles.headline}>SOS sent — help is coming</Text>
+    <View style={styles.screen} testID="sos-sent-screen">
+      <Text style={styles.headline}>{t('sos.sentTitle')}</Text>
 
       <View style={synced ? styles.syncedBanner : styles.pendingBanner}>
         <Text style={styles.bannerText}>
           {synced
-            ? 'Your operator and family have been notified'
-            : 'Sending... will notify your operator and family as soon as you have signal'}
+            ? t('sos.notified')
+            : t('sos.pending')}
         </Text>
       </View>
 
-      <Text style={styles.timestamp}>Sent {formatTimestamp(timestamp)}</Text>
+      <Text style={styles.timestamp}>{t('sos.sentAt', {timestamp: formatTimestamp(timestamp)})}</Text>
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Call now"
+        accessibilityLabel={t('sos.callNow')}
         onPress={() => {
           // Native dialer only — never the app's VoIP layer, so this still
           // works if the app's own calling feature is degraded.
@@ -42,17 +45,17 @@ export function SosSentScreen({ synced, htoPhone, timestamp, onCancel }: SosSent
         }}
         style={styles.callButton}
       >
-        <Text style={styles.callLabel}>Call now</Text>
+        <Text style={styles.callLabel}>{t('sos.callNow')}</Text>
         <Text style={styles.callNumber}>{htoPhone}</Text>
       </Pressable>
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Cancel SOS"
+        accessibilityLabel={t('sos.cancel')}
         onPress={() => setConfirmingCancel(true)}
         style={styles.cancelButton}
       >
-        <Text style={styles.cancelLabel}>Cancel SOS</Text>
+        <Text style={styles.cancelLabel}>{t('sos.cancel')}</Text>
       </Pressable>
 
       {/* Product-level confirmation is always a custom in-app modal, never a
@@ -60,28 +63,28 @@ export function SosSentScreen({ synced, htoPhone, timestamp, onCancel }: SosSent
       <Modal visible={confirmingCancel} transparent animationType="fade" onRequestClose={() => setConfirmingCancel(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Are you sure you want to cancel this SOS?</Text>
+            <Text style={styles.modalTitle}>{t('sos.cancelTitle')}</Text>
             <Text style={styles.modalBody}>
-              Your operator and family were already notified. Only cancel if this was sent by mistake.
+              {t('sos.cancelBody')}
             </Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Confirm cancellation"
+              accessibilityLabel={t('sos.confirmCancellation')}
               onPress={() => {
                 setConfirmingCancel(false);
                 onCancel();
               }}
               style={styles.confirmCancelButton}
             >
-              <Text style={styles.confirmCancelLabel}>Confirm cancellation</Text>
+              <Text style={styles.confirmCancelLabel}>{t('sos.confirmCancellation')}</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Keep SOS active"
+              accessibilityLabel={t('sos.keepActive')}
               onPress={() => setConfirmingCancel(false)}
               style={styles.keepActiveButton}
             >
-              <Text style={styles.keepActiveLabel}>Keep SOS active</Text>
+              <Text style={styles.keepActiveLabel}>{t('sos.keepActive')}</Text>
             </Pressable>
           </View>
         </View>

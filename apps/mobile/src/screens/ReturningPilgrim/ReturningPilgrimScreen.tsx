@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import {useTranslation} from 'react-i18next';
 import { Platform as RNPlatform, StyleSheet, Text, View } from 'react-native';
 import { AuthResponse } from '../../api/authClient';
 import { Banner } from '../../components/Banner/Banner';
@@ -28,6 +29,7 @@ export function ReturningPilgrimScreen({
   phoneNumber,
   onVerified,
 }: ReturningPilgrimScreenProps): React.JSX.Element {
+  const {t} = useTranslation('auth');
   const platform = RNPlatform.OS === 'ios' ? 'ios' : 'android';
   const {
     code,
@@ -50,14 +52,14 @@ export function ReturningPilgrimScreen({
 
   const helperText =
     status === 'sending'
-      ? 'Sending your code...'
+      ? t('otp.sending')
       : status === 'locked'
-        ? `Too many attempts. Try again in ${lockoutSecondsRemaining}s.`
-        : `Enter the 6-digit code sent to ${formatNigerianPhoneForDisplay(phoneNumber)}.`;
+        ? t('otp.lockedCountdown', {seconds: lockoutSecondsRemaining})
+        : t('otp.sentTo', {phone: formatNigerianPhoneForDisplay(phoneNumber)});
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>Welcome back</Text>
+      <Text style={styles.title}>{t('returning.title')}</Text>
       <Text style={styles.subtitle} testID="returning-pilgrim-helper-text">
         {helperText}
       </Text>
@@ -86,7 +88,7 @@ export function ReturningPilgrimScreen({
       <View style={styles.footer}>
         <PrimaryButton
           testID="returning-pilgrim-submit"
-          label="Verify"
+          label={t('otp.verify')}
           onPress={submit}
           disabled={code.length !== OTP_CODE_LENGTH || status === 'locked'}
           loading={status === 'verifying'}
@@ -99,10 +101,10 @@ export function ReturningPilgrimScreen({
           style={[styles.resendLink, !canResend && styles.resendLinkDisabled]}
         >
           {isResending
-            ? 'Resending...'
+            ? t('otp.resending')
             : canResend
-              ? 'Resend code'
-              : `Resend code in ${secondsUntilResend}s`}
+              ? t('otp.resend')
+              : t('otp.resendCountdown', {seconds: secondsUntilResend})}
         </Text>
       </View>
     </View>

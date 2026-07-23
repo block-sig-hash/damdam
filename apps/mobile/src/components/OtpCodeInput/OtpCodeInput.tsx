@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {i18n} from '../../i18n';
 import { color, radius, typography } from '../../theme/tokens';
 
 interface OtpCodeInputProps {
@@ -33,7 +34,7 @@ export function OtpCodeInput({
   errored = false,
   testID = 'otp-code-input',
   masked = false,
-  accessibilityLabel = 'Verification code',
+  accessibilityLabel = i18n.t('otp.accessibilityLabel', {ns: 'auth'}),
 }: OtpCodeInputProps): React.JSX.Element {
   const inputRef = useRef<TextInput>(null);
 

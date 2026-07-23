@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import {useTranslation} from 'react-i18next';
 import { AuthResponse } from '../api/authClient';
 import { ActivationCodeEntryScreen } from '../screens/ActivationCodeEntry/ActivationCodeEntryScreen';
 import { ActivationSuccessScreen } from '../screens/ActivationSuccess/ActivationSuccessScreen';
@@ -58,10 +59,11 @@ function AuthenticationHandoff({
   onAuthenticated?: (session: AuthenticatedMobileSession) => void;
   title: string;
 }): React.JSX.Element {
+  const {t} = useTranslation('common');
   useEffect(() => {
     onAuthenticated?.(session);
   }, [onAuthenticated, session]);
-  return <PlaceholderScreen title={title} note="Opening Home..." />;
+  return <PlaceholderScreen title={title} note={t('onboarding.openingHome')} />;
 }
 
 /**
@@ -76,6 +78,7 @@ export function OnboardingNavigator({
   initialActivationCode,
   onAuthenticated,
 }: OnboardingNavigatorProps = {}): React.JSX.Element {
+  const {t} = useTranslation('common');
   const [step, setStep] = useState<OnboardingStep>(
     initialActivationCode ? { name: 'activation-entry' } : { name: 'phone' },
   );
@@ -167,7 +170,7 @@ export function OnboardingNavigator({
               locale: step.result.user.locale,
             }}
             onAuthenticated={onAuthenticated}
-            title="Welcome back"
+            title={t('onboarding.welcomeBack')}
           />
         );
       }
@@ -206,7 +209,7 @@ export function OnboardingNavigator({
               locale: step.locale,
             }}
             onAuthenticated={onAuthenticated}
-            title="Package active"
+            title={t('onboarding.packageActive')}
           />
         );
       }
@@ -232,8 +235,8 @@ export function OnboardingNavigator({
     case 'onboarded':
       return (
         <PlaceholderScreen
-          title="PIN set"
-          note="Next: family contact and departure date — coming in later stories."
+          title={t('onboarding.pinSet')}
+          note={t('onboarding.nextSteps')}
         />
       );
   }

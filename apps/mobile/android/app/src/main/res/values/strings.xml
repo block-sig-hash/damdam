@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">DamDam</string>
+    <string name="arrival_channel">eSIM arrival reminders</string>
+    <string name="arrival_title">Activate your DamDam eSIM</string>
+    <string name="arrival_copy">You\'ve arrived in Saudi Arabia. Tap to activate your DamDam data — takes 30 seconds.</string>
+    <string name="call_channel">DamDam calls</string>
+    <string name="incoming_call">Incoming call</string>
 </resources>

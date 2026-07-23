@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/env';
+import {i18n} from '../i18n';
 
 export interface EmergencyContact {
   hto_operator_name: string | null;
@@ -20,10 +21,10 @@ export async function getEmergencyContact(accessToken: string): Promise<Emergenc
       headers: { Authorization: `Bearer ${accessToken}` },
     });
   } catch {
-    throw new EmergencyContactApiError('Check your connection and try again.');
+    throw new EmergencyContactApiError(i18n.t('errors.network', {ns: 'auth'}));
   }
   if (!response.ok) {
-    throw new EmergencyContactApiError('Could not load emergency contact info.');
+    throw new EmergencyContactApiError(i18n.t('errors.emergencyContact', {ns: 'auth'}));
   }
   return response.json() as Promise<EmergencyContact>;
 }
