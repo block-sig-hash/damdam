@@ -61,6 +61,16 @@ def _json_object(body: bytes) -> dict[str, object]:
     return payload
 
 
+def _audit_payload(
+    event: object, data: dict[str, object], retained_fields: tuple[str, ...]
+) -> dict[str, object]:
+    """Build the long-lived financial evidence without payer/instrument PII."""
+    return {
+        "event": event,
+        "data": {key: data[key] for key in retained_fields if key in data},
+    }
+
+
 class PaystackProvider:
     name = "paystack"
 
@@ -125,7 +135,22 @@ class PaystackProvider:
                 processor_reference=str(data["reference"]),
                 amount_ngn=Decimal(str(data["amount"])) / 100,
                 payment_method=str(data.get("channel", "card")),
-                payload=payload,
+                payload=_audit_payload(
+                    payload.get("event"),
+                    data,
+                    (
+                        "id",
+                        "domain",
+                        "status",
+                        "reference",
+                        "amount",
+                        "currency",
+                        "channel",
+                        "paid_at",
+                        "created_at",
+                        "fees",
+                    ),
+                ),
             )
         except (KeyError, ValueError) as exc:
             raise PaymentProviderError("invalid webhook payload") from exc
@@ -193,7 +218,24 @@ class FlutterwaveProvider:
                 processor_reference=str(data["tx_ref"]),
                 amount_ngn=Decimal(str(data["amount"])),
                 payment_method=str(data.get("payment_type", "card")),
-                payload=payload,
+                payload=_audit_payload(
+                    payload.get("event"),
+                    data,
+                    (
+                        "id",
+                        "status",
+                        "tx_ref",
+                        "flw_ref",
+                        "amount",
+                        "charged_amount",
+                        "currency",
+                        "app_fee",
+                        "merchant_fee",
+                        "payment_type",
+                        "created_at",
+                        "account_id",
+                    ),
+                ),
             )
         except (KeyError, ValueError) as exc:
             raise PaymentProviderError("invalid webhook payload") from exc

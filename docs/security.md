@@ -93,7 +93,7 @@ this product serves.
 | `call_logs` | 12 months | Billing dispute window + reasonable audit trail |
 | User account data (post-deletion request) | 30-day soft-delete grace period, then hard delete | Balances accidental-deletion recovery against the right to erasure |
 | `device_compatibility_log` | 24 months, PII-stripped after 90 days (device model retained, `user_id` link removed) | Aggregate product analytics value persists after the individual link is no longer needed |
-| Payment transaction records | 6 years | Standard financial record-keeping (tax/audit), independent of NDPA |
+| Payment transaction records (automated and manually confirmed HTO invoices) | 6 years | Standard financial record-keeping (tax/audit), independent of NDPA. Stored webhook evidence is the minimized reconciliation subset in §10.13, never the full provider body. |
 | WhatsApp message logs | Governed by the WhatsApp Business API provider's own retention, not DamDam's — documented dependency, not assumed control | |
 
 **Action item flagged for founder review:** the 3-year SOS
@@ -321,3 +321,45 @@ No WhatsApp retention task exists because Meta, not DamDam, governs those
 provider-side message logs. This amendment implements the existing periods
 exactly; it does not resolve or alter the founder/legal verification action for
 the 3-year SOS and 6-year financial defaults.
+
+---
+
+## 10.13 Amendment — Minimized Payment Evidence and Complete HTO Retention
+
+The six-year financial period applies to the derived `transactions` record, not
+to an unbounded copy of a payment provider's webhook. Signed Paystack and
+Flutterwave bodies may contain customer email/name/phone, IP address, device
+fingerprint, card BIN/last-four/bank, mobile-money phone/network details,
+reusable authorization codes, metadata, redirect details, and provider
+diagnostic logs. Those fields exceed DamDam's long-term tax, reconciliation,
+and dispute purpose.
+
+After signature verification and payment validation, ingestion therefore
+retains an explicit allowlist:
+
+- Paystack: event type; provider event ID; live/test domain; status; DamDam
+  reference; amount and currency; payment channel; paid/created timestamps; and
+  fee.
+- Flutterwave: event type; provider event ID; status; DamDam and Flutterwave
+  references; requested/charged amounts and currency; application/merchant
+  fees; payment type; created timestamp; and merchant account ID.
+
+Everything else is discarded rather than hashed. A hash of a payer or
+instrument identifier is unnecessary for reconciliation—the opaque provider
+references already provide that linkage—and would preserve avoidable
+linkability. Migration `0024_retention_payment_gaps` applies the same allowlists
+to existing Paystack and Flutterwave JSONB values, so the correction is not
+limited to future callbacks. Provider-side records remain retrievable through
+the retained references when an authorized dispute investigation genuinely
+requires more detail.
+
+Manual HTO invoice confirmations now create a successful, processor-neutral
+`transactions` row in the same database commit as the order's payment-confirmed
+state. Its evidence contains only the confirmation source, confirming admin ID,
+and confirmation timestamp. Repeated confirmation is idempotent, including the
+recovery path after a provisioning-queue outage, and a unique
+`manifest_order_id` index prevents duplicate financial evidence. Migration
+`0024_retention_payment_gaps` also backfills every previously confirmed HTO
+order that lacks a transaction. These rows use the same `created_at`-based
+six-year deletion task and deterministic `transaction_deleted` audit entry as
+automated Paystack/Flutterwave payments.
