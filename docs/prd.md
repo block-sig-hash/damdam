@@ -352,7 +352,10 @@ have data within minutes of arrival.
 
 **US-14** [P0] — As a Pilgrim, I want to make an outbound call
 showing my real Nigerian number so that my family picks up.
-- AC-14.1: CLI verification (OTP) completed once at account setup
+- AC-14.1: CLI verification is a dedicated one-time flow, separate
+  from account login OTP — phone-possession proof (Telnyx Verified
+  Numbers) plus explicit CLI consent, before a number can be used
+  as caller ID — see §5.5's CLI-verification amendment paragraph
 - AC-14.2: Dial pad + device contacts picker
 - AC-14.3: Calls route over the eSIM data connection (VoIP)
 - AC-14.4: Recipient sees the pilgrim's verified Nigerian number
@@ -363,6 +366,13 @@ showing my real Nigerian number so that my family picks up.
   within 60 seconds
 - AC-14.8: App-to-app calls are free, shown clearly as such
 - AC-14.9: Call history shows last 20 calls
+- AC-14.10: The verified number is not required to match the
+  account's login number — a pilgrim may verify possession of any
+  Nigerian mobile number as CLI, independent of which number they
+  signed in with
+- AC-14.11: Revoking consent, reporting a lost SIM, or an admin
+  suspension immediately prevents new calls using that CLI; no
+  in-flight call is force-terminated by a revocation
 
 **US-15** [P0] — As a Pilgrim, I want to send a check-in with a
 single tap so that my HTO and family know I am safe, even with
@@ -805,6 +815,38 @@ Telnyx's bundled pricing. Tracked as a Phase 2+ infrastructure item
 (post-MVP) — not something the `VoiceProvider` abstraction needs to
 support on day one, but the abstraction is exactly what makes this
 migration low-risk when the time comes.
+
+**CLI-verification amendment (AC-14.1/AC-14.10/AC-14.11):** the
+original MVP shortcut — treating the account's login OTP as CLI
+ownership proof, since both used the same number — is replaced by a
+dedicated CLI verification flow, decoupled from login. Rationale: a
+compromised or SIM-swapped login session should not inherit caller-
+ID rights with no additional proof, and a pilgrim's login number is
+not guaranteed to be the Nigerian number they want family to see.
+Phone possession is proven via Telnyx Verified Numbers (separate
+from account OTP); activation additionally requires an explicit,
+versioned CLI consent capture (see `data-model.md` §6.40's
+`CallerIdConsent`). A `VerifiedCallerIdentity` state machine
+(`data-model.md` §6.40) replaces the `verified_cli` boolean;
+existing users' current `verified_cli=True` state migrates to
+`phone_verified`, not `active` — one fresh consent capture is
+required before any existing account's calls resume, since consent
+was never actually collected under the old shortcut.
+
+NIN identity verification was evaluated as a further activation
+requirement (matching the `STRICT_NIN_MSISDN_MATCH_REQUIRED`
+capability below) but is **not enabled for this MVP pass** — see
+`docs/verified-cli-scoping.md` §4 for the founder/product sign-off
+this needs before it's turned on. The identity-provider interface
+exists and is wired to a labeled mock so the activation policy is
+swappable later without another schema change; no raw NIN is
+collected or stored while this stays disabled.
+
+**Action item flagged for founder review:** whether
+`NIN_VERIFICATION_ENABLED`/`STRICT_NIN_MSISDN_MATCH_REQUIRED` should
+ever be turned on, and on what legal basis, is a KYC/regulatory
+decision — not an engineering default. See
+`docs/verified-cli-scoping.md` §4.
 
 ### 5.6 Check-in & SOS (Offline-First Safety Layer)
 **Maps to:** US-15, US-16, US-24
