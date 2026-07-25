@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.db import SessionFactory
+from app.voice.nigerian_numbers import normalize_nigerian_number
 from app.voice.schemas import (
     CallHistoryResponse,
     CallResponse,
@@ -12,7 +13,6 @@ from app.voice.schemas import (
     VoiceTokenRequest,
     VoiceTokenResponse,
     WebhookResponse,
-    normalize_dialed_number,
 )
 from app.voice.service import VoiceService
 
@@ -25,7 +25,7 @@ async def eligibility(
     user: Annotated[User, Depends(get_current_user)],
     phone_number: str = Query(),
 ) -> VoiceEligibilityResponse:
-    number = normalize_dialed_number(phone_number)
+    number = normalize_nigerian_number(phone_number)
     factory = cast(SessionFactory, request.app.state.session_factory)
     service = cast(VoiceService, request.app.state.voice_service)
     with factory() as session:

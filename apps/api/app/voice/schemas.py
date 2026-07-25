@@ -1,4 +1,3 @@
-import re
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -6,15 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.voice.models import CallType
-
-
-def normalize_dialed_number(value: str) -> str:
-    compact = re.sub(r"[\s()-]", "", value)
-    if re.fullmatch(r"0\d{10}", compact):
-        compact = "+234" + compact[1:]
-    if not re.fullmatch(r"\+234\d{10}", compact):
-        raise ValueError("Enter a Nigerian number in 0XXXXXXXXXX or +234 format")
-    return compact
+from app.voice.nigerian_numbers import normalize_nigerian_number
 
 
 class VoiceEligibilityResponse(BaseModel):
@@ -28,7 +19,7 @@ class VoiceEligibilityResponse(BaseModel):
 class VoiceTokenRequest(BaseModel):
     to_number: str
 
-    _normalize_number = field_validator("to_number")(normalize_dialed_number)
+    _normalize_number = field_validator("to_number")(normalize_nigerian_number)
 
 
 class VoiceTokenResponse(BaseModel):
