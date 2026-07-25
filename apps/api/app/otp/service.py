@@ -319,11 +319,6 @@ class OTPService:
         else:
             user.last_login_at = now
 
-        # AC-14.1/prd.md §5.5: the account-setup OTP is the CLI ownership
-        # verification for Path A pilgrims, reusing this same login number
-        # with no separate verification step.
-        user.verified_cli = True
-
         pair = self.tokens.issue(session, user, now)
         session.commit()
         session.refresh(user)

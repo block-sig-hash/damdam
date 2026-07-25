@@ -38,6 +38,8 @@ class VoiceProvider(Protocol):
         caller_id: str,
         to_number: str,
         time_limit_seconds: int,
+        verified_caller_identity_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> None: ...
 
     def bridge_call(self, call_control_id: str, peer_call_control_id: str) -> None: ...
@@ -92,10 +94,17 @@ class TelnyxVoiceProvider:
         caller_id: str,
         to_number: str,
         time_limit_seconds: int,
+        verified_caller_identity_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> None:
         state = base64.b64encode(
             json.dumps(
-                {"user_id": user_id, "webrtc_call_control_id": webrtc_call_control_id},
+                {
+                    "user_id": user_id,
+                    "webrtc_call_control_id": webrtc_call_control_id,
+                    "verified_caller_identity_id": verified_caller_identity_id,
+                    "idempotency_key": idempotency_key,
+                },
                 separators=(",", ":"),
             ).encode()
         ).decode()
@@ -140,3 +149,18 @@ class TelnyxVoiceProvider:
             return response.text.strip('"') if expect_text else response.json()
         except (httpx.HTTPError, ValueError) as exc:
             raise VoiceProviderError("Telnyx request failed") from exc
+
+
+class IDTExpressVoiceProvider:
+    """Unreachable stub for the Phase 2+ IDT Express BYOC migration
+    (prd.md §5.5) -- a termination-cost layer under Telnyx, not a
+    reliability change. `Settings.idt_calling_enabled` is validated False
+    at startup (config.py's `idt_calling_is_not_yet_supported`), so this
+    class is never constructed in production; it exists only to give
+    `CallLog.requested_provider`'s `idt` value and the real future adapter
+    a documented landing spot, per verified-cli-scoping.md §5's
+    "config-shaped stub" recommendation."""
+
+    def __init__(self, settings: Settings) -> None:
+        del settings
+        raise VoiceProviderError("idt_calling_not_supported")

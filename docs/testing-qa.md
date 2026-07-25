@@ -431,6 +431,37 @@ handling; it is used for US-14. Device contacts use maintained
 with `READ_CONTACTS`/Contacts-framework autolinking. No custom WebRTC, CallKit,
 ConnectionService, or contacts native bridge is justified or implemented.
 
+**CLI-verification hardening (AC-14.1/AC-14.10/AC-14.11, data-model.md
+§6.40, `docs/verified-cli-scoping.md`):** strict-TDD category (auth) per
+§14.1 -- `test_caller_identity.py` and `test_verified_numbers.py` were
+written alongside the `VerifiedCallerIdentity` state machine, not after.
+Required automated evidence in the feature PR:
+
+- Phone-possession verification is decoupled from the account login
+  number: a user may start verification for a Nigerian number other than
+  the one they signed in with (AC-14.10), and the resulting
+  `VerifiedCallerIdentity.phone_number` is what PSTN calls use as caller
+  ID, not `users.phone_number`.
+- Consent capture is a distinct, required step after phone verification
+  (`consent_required` -> `active`); attempting consent before
+  confirmation, or confirming with the wrong code, is rejected without
+  advancing state.
+- Revocation and lost-SIM reporting immediately flip PSTN eligibility back
+  to `cli_not_verified` (AC-14.11) without needing to touch an in-flight
+  call.
+- Re-verifying a different number automatically revokes the previous
+  `active` identity for the same user (at most one `active` CLI per user);
+  a number already `active` on a different account is rejected
+  (`number_already_verified_elsewhere`) rather than silently reassigned.
+- CLI-verification-specific rate limiting is exercised independently of
+  the general OTP rate limiter.
+- The retired `users.verified_cli` login-OTP shortcut no longer grants CLI
+  rights: a fresh login does not itself unlock PSTN calling.
+- `MockIdentityProvider` never reports a real identity match regardless of
+  input, and `NIN_VERIFICATION_ENABLED`/`STRICT_NIN_MSISDN_MATCH_REQUIRED`
+  default off -- both are founder/legal decisions per
+  `verified-cli-scoping.md` §4, not engineering defaults.
+
 ---
 
 ## 14.10 Home Package Balance Verification — US-17

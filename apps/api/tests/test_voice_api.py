@@ -16,7 +16,15 @@ from app.auth.routes import request_otp, verify_otp
 from app.auth.schemas import OTPRequest, OTPVerifyRequest
 from app.main import create_app
 from app.packages.models import Package, PackageSource, PackageStatus
-from app.voice.models import CallLog, VoiceCredential
+from app.voice.models import (
+    CallLog,
+    IdentityVerificationStatus,
+    PhoneVerificationProviderName,
+    PhoneVerificationStatus,
+    VerifiedCallerIdentity,
+    VerifiedCallerIdentityStatus,
+    VoiceCredential,
+)
 from app.voice.providers import ProvisionedVoiceCredential, VoiceAccessToken
 
 
@@ -112,6 +120,30 @@ def _active_package(session_factory, user_id: UUID, minutes: str) -> None:
         session.commit()
 
 
+def _activate_caller_identity(
+    session_factory, user_id: UUID, phone_number: str = "+2348012345678"
+) -> None:
+    with session_factory() as session:
+        now = datetime.now(timezone.utc)
+        session.add(
+            VerifiedCallerIdentity(
+                user_id=user_id,
+                phone_number=phone_number,
+                detected_country="NG",
+                phone_verification_provider=PhoneVerificationProviderName.TELNYX,
+                phone_verification_status=PhoneVerificationStatus.VERIFIED,
+                phone_verified_at=now,
+                identity_verification_status=IdentityVerificationStatus.NOT_REQUIRED,
+                status=VerifiedCallerIdentityStatus.ACTIVE,
+                consent_version="v1",
+                consent_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.commit()
+
+
 def _signed_headers(private_key, body: bytes, now: datetime) -> dict[str, str]:
     timestamp = str(int(now.timestamp()))
     signature = private_key.sign(timestamp.encode() + b"|" + body)
@@ -172,14 +204,8 @@ def test_app_to_app_is_free_for_unverified_user_with_zero_balance(
     api, voice, _ = _api_and_signer(
         settings, redis_client, providers, scheduler, session_factory, clock
     )
-    caller, caller_id = _authenticated(api)
+    caller, _ = _authenticated(api)
     _, callee_id = _authenticated(api, "08098765432")
-    with session_factory() as session:
-        user = session.get(User, caller_id)
-        assert user is not None
-        user.verified_cli = False
-        session.add(user)
-        session.commit()
 
     response = caller.get(
         "/v1/voice/eligibility", params={"phone_number": "08098765432"}
@@ -205,22 +231,11 @@ def test_pstn_token_requires_verified_cli_and_positive_balance(
         settings, redis_client, providers, scheduler, session_factory, clock
     )
     client, user_id = _authenticated(api)
-    with session_factory() as session:
-        user = session.get(User, user_id)
-        assert user is not None
-        user.verified_cli = False
-        session.add(user)
-        session.commit()
     assert (
         client.post("/v1/voice/token", json={"to_number": "08099999999"}).status_code
         == 403
     )
-    with session_factory() as session:
-        user = session.get(User, user_id)
-        assert user is not None
-        user.verified_cli = True
-        session.add(user)
-        session.commit()
+    _activate_caller_identity(session_factory, user_id)
     assert (
         client.post("/v1/voice/token", json={"to_number": "08099999999"}).status_code
         == 409
@@ -398,6 +413,7 @@ def test_signed_call_control_events_set_verified_cli_and_bridge(
     )
     client, user_id = _authenticated(api)
     _active_package(session_factory, user_id, "2.00")
+    _activate_caller_identity(session_factory, user_id)
     assert (
         client.post("/v1/voice/token", json={"to_number": "08099999999"}).status_code
         == 200
@@ -421,6 +437,12 @@ def test_signed_call_control_events_set_verified_cli_and_bridge(
         headers=_signed_headers(signer, initiated, clock()),
     )
     assert response.json() == {"processed": True}
+    with session_factory() as session:
+        identity = session.exec(
+            select(VerifiedCallerIdentity).where(
+                VerifiedCallerIdentity.user_id == user_id
+            )
+        ).one()
     assert voice.initiated == [
         {
             "webrtc_call_control_id": "webrtc-control",
@@ -428,6 +450,8 @@ def test_signed_call_control_events_set_verified_cli_and_bridge(
             "caller_id": "+2348012345678",
             "to_number": "+2348099999999",
             "time_limit_seconds": 120,
+            "verified_caller_identity_id": str(identity.id),
+            "idempotency_key": None,
         }
     ]
 
@@ -498,6 +522,7 @@ def test_rapid_hangups_at_zero_are_capped_without_negative_balance(
     )
     client, user_id = _authenticated(api)
     _active_package(session_factory, user_id, "0.50")
+    _activate_caller_identity(session_factory, user_id)
 
     for leg in ("rapid-leg-1", "rapid-leg-2"):
         body = _hangup(user_id, leg, 60)

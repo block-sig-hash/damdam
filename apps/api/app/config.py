@@ -102,6 +102,18 @@ class Settings(BaseSettings):
     voice_request_timeout_seconds: int = 15
     telnyx_webhook_tolerance_seconds: int = 300
 
+    # docs/verified-cli-scoping.md §4/§5 — CLI verification hardening
+    # (data-model.md §6.40). NIN identity verification and the IDT Express
+    # migration are both deliberately unresolved founder/product decisions;
+    # these flags default off/unsupported rather than assume an answer.
+    nin_verification_enabled: bool = False
+    strict_nin_msisdn_match_required: bool = False
+    idt_calling_enabled: bool = False
+    cli_verification_max_attempts_per_window: int = 5
+    cli_verification_rate_limit_window_seconds: int = 3600
+    cli_verification_reference_ttl_seconds: int = 600
+    cli_pending_idempotency_ttl_seconds: int = 120
+
     invoice_storage_backend: Literal["filesystem", "s3"] = "filesystem"
     invoice_storage_path: str = "/tmp/damdam-invoices"
     invoice_s3_endpoint_url: str = ""
@@ -112,6 +124,20 @@ class Settings(BaseSettings):
     invoice_bank_name: str = "Configure bank name"
     invoice_account_name: str = "DamDam Nigeria"
     invoice_account_number: str = "Configure account number"
+
+    @model_validator(mode="after")
+    def idt_calling_is_not_yet_supported(self) -> "Settings":
+        # prd.md §5.5: IDT Express is a deliberate Phase 2+ cost-optimization
+        # migration, not implemented today. Failing loudly at startup if
+        # someone flips this on prevents a silent no-op deploy the way
+        # ESIM_ACCESS_PACKAGE_CODES' old-format check does elsewhere.
+        if self.idt_calling_enabled:
+            raise ValueError(
+                "IDT_CALLING_ENABLED is not supported yet -- IDT Express "
+                "termination is a Phase 2+ item (prd.md §5.5), not "
+                "implemented by this codebase"
+            )
+        return self
 
     @model_validator(mode="after")
     def s3_invoice_storage_must_be_configured(self) -> "Settings":

@@ -15,8 +15,16 @@ from sqlmodel.sql.expression import SelectOfScalar
 
 from app.auth.models import User
 from app.config import Settings
+from app.otp.service import RedisClient
 from app.packages.models import Package, PackageStatus
-from app.voice.models import CallLog, CallType, VoiceCredential
+from app.voice.models import (
+    CallLog,
+    CallProvider,
+    CallType,
+    VerifiedCallerIdentity,
+    VerifiedCallerIdentityStatus,
+    VoiceCredential,
+)
 from app.voice.providers import VoiceAccessToken, VoiceProvider, VoiceProviderError
 
 
@@ -32,10 +40,12 @@ class VoiceService:
         settings: Settings,
         provider: VoiceProvider,
         clock: Callable[[], datetime],
+        redis_client: RedisClient | None = None,
     ) -> None:
         self.settings = settings
         self.provider = provider
         self.clock = clock
+        self.redis = redis_client
 
     def eligibility(
         self, session: Session, user: User, to_number: str
@@ -53,7 +63,7 @@ class VoiceService:
                 "pstn_minutes_remaining": float(balance),
             }
         reason = None
-        if not user.verified_cli:
+        if self._active_caller_identity(session, user.id) is None:
             reason = "cli_not_verified"
         elif balance <= 0:
             reason = "pstn_balance_exhausted"
@@ -66,7 +76,11 @@ class VoiceService:
         }
 
     def token(
-        self, session: Session, user: User, to_number: str
+        self,
+        session: Session,
+        user: User,
+        to_number: str,
+        idempotency_key: str | None = None,
     ) -> tuple[VoiceAccessToken, VoiceCredential, dict[str, object]]:
         eligibility = self.eligibility(session, user, to_number)
         reason = eligibility["reason"]
@@ -79,6 +93,17 @@ class VoiceService:
             if target is None:
                 raise VoiceError("voice_unavailable")
             eligibility["destination"] = self._credential(session, target).sip_username
+        elif self.redis is not None:
+            # Bridges the REST /voice/token request to the later, webhook-
+            # driven call.initiated event so a retried token request and its
+            # eventual Telnyx call share one idempotency_key on the CallLog
+            # (data-model.md §6.40) -- best-effort; a miss just leaves the
+            # column null, it never blocks the call.
+            self.redis.set(
+                f"voice:pending_call:{user.id}",
+                idempotency_key or "",
+                ex=self.settings.cli_pending_idempotency_ttl_seconds,
+            )
         credential = self._credential(session, user)
         try:
             token = self.provider.issue_token(credential.telnyx_telephony_credential_id)
@@ -146,19 +171,63 @@ class VoiceService:
         if target is not None:
             return False
         balance = self._remaining_balance(session, user.id)
-        if not user.verified_cli or balance <= 0:
+        identity = self._active_caller_identity(session, user.id)
+        if identity is None or balance <= 0:
+            self._log_pstn_rejection(
+                session,
+                user_id=user.id,
+                call_control_id=str(payload.get("call_control_id", "")),
+                to_number=to_number,
+                failure_code="cli_not_verified" if identity is None else (
+                    "insufficient_balance"
+                ),
+            )
             return False
+        idempotency_key = None
+        if self.redis is not None:
+            idempotency_key = self.redis.get(f"voice:pending_call:{user.id}") or None
+            self.redis.delete(f"voice:pending_call:{user.id}")
         try:
             self.provider.initiate_call(
                 webrtc_call_control_id=str(payload["call_control_id"]),
                 user_id=str(user.id),
-                caller_id=user.phone_number,
+                caller_id=identity.phone_number,
                 to_number=to_number,
                 time_limit_seconds=int(balance * 60),
+                verified_caller_identity_id=str(identity.id),
+                idempotency_key=idempotency_key,
             )
         except (KeyError, VoiceProviderError) as exc:
             raise VoiceError("voice_unavailable") from exc
         return True
+
+    def _log_pstn_rejection(
+        self,
+        session: Session,
+        *,
+        user_id: UUID,
+        call_control_id: str,
+        to_number: str,
+        failure_code: str,
+    ) -> None:
+        if not call_control_id:
+            return
+        log = CallLog(
+            user_id=user_id,
+            telnyx_call_leg_id=call_control_id,
+            call_type=CallType.PSTN,
+            to_number=to_number,
+            duration_seconds=0,
+            pstn_minutes_charged=Decimal("0.00"),
+            started_at=self.clock(),
+            failure_code=failure_code,
+            failure_description="Call was not placed; see failure_code.",
+        )
+        session.add(log)
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
 
     def _handle_answered(self, payload: dict[str, Any]) -> bool:
         state = self._client_state(payload.get("client_state"))
@@ -189,6 +258,10 @@ class VoiceService:
         requested_charge = (Decimal(duration_seconds) / Decimal(60)).quantize(
             Decimal("0.01"), rounding=ROUND_UP
         )
+        raw_identity_id = state.get("verified_caller_identity_id")
+        identity_id = UUID(str(raw_identity_id)) if raw_identity_id else None
+        raw_idempotency_key = state.get("idempotency_key")
+        idempotency_key = str(raw_idempotency_key) if raw_idempotency_key else None
 
         # The unique call-leg insert is the idempotency boundary. On Postgres,
         # the selected package row is locked until commit, serializing rapid
@@ -202,6 +275,9 @@ class VoiceService:
             pstn_minutes_charged=Decimal("0.00"),
             started_at=started_at,
             ended_at=ended_at,
+            verified_caller_identity_id=identity_id,
+            idempotency_key=idempotency_key,
+            requested_provider=CallProvider.TELNYX,
         )
         session.add(log)
         try:
@@ -270,6 +346,16 @@ class VoiceService:
             session.rollback()
             return False
         return True
+
+    def _active_caller_identity(
+        self, session: Session, user_id: UUID
+    ) -> VerifiedCallerIdentity | None:
+        return session.exec(
+            select(VerifiedCallerIdentity).where(
+                VerifiedCallerIdentity.user_id == user_id,
+                VerifiedCallerIdentity.status == VerifiedCallerIdentityStatus.ACTIVE,
+            )
+        ).first()
 
     def _credential(self, session: Session, user: User) -> VoiceCredential:
         existing = session.exec(
