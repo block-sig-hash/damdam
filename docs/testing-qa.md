@@ -477,13 +477,17 @@ Entry's narrower login-number pattern -- AC-14.10 accepts any
 Nigerian mobile number); a wrong code showing an inline error without
 clearing the input; a rate-limited confirm response disabling further
 submission; consent capture; and Screen 22d's three states (no
-identity, mid-verification resume, active with inline
-revoke/lost-SIM confirmation rather than a native `Alert`). Dial
-Pad's `cli_not_verified` banner and its "Verify now" action are
-covered in `DialPadScreen.test.tsx`. All four screens are registered
-in `screenshotHarness/registry.tsx` for `claude-review.yml`'s
-rendered-screenshot check; the Manage screen (22d) makes a real
-`getCliStatus` request the harness doesn't mock, so it renders its
+identity, mid-verification resume, active with revoke/lost-SIM
+confirmation via the same custom `<Modal>` pattern as `SosSentScreen`'s
+cancel confirmation and `DeviceCompatibilityWarningModal`, never a
+native `Alert`). Dial Pad's `cli_not_verified` banner and its "Verify
+now" action are covered in `DialPadScreen.test.tsx`. All four screens
+are registered in `screenshotHarness/registry.tsx` *and* have a
+corresponding `maestro/screens/cli-*.yaml` flow, so `claude-review.yml`'s
+rendered-screenshot check actually captures them (a registry entry
+alone isn't enough for CI to reach the screen); the Manage screen
+(22d) makes a real `getCliStatus` request the harness doesn't mock,
+so its flow asserts on the "Caller ID" title text and captures the
 loading state rather than a populated one there.
 
 ---

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Banner } from '../../components/Banner/Banner';
 import { DestructiveButton } from '../../components/DestructiveButton/DestructiveButton';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
@@ -23,6 +23,22 @@ const STATUS_LABEL: Partial<Record<VerifiedCallerIdentity['status'], string>> = 
   suspended: 'Suspended',
   expired: 'Expired',
   revoked: 'Revoked',
+};
+
+const CONFIRM_COPY: Record<
+  Exclude<ConfirmingAction, null>,
+  { title: string; body: string; confirmLabel: string }
+> = {
+  revoke: {
+    title: 'Revoke this caller ID?',
+    body: 'New calls will stop showing this number. Any call already in progress is not affected.',
+    confirmLabel: 'Yes, revoke',
+  },
+  lost_sim: {
+    title: 'Report this SIM as lost?',
+    body: 'New calls will stop showing this number until you verify again. Any call already in progress is not affected.',
+    confirmLabel: 'Yes, report lost',
+  },
 };
 
 /**
@@ -129,68 +145,16 @@ export function CliManageScreen({
             onPress={onVerifyNumber}
           />
 
-          {confirming === 'revoke' ? (
-            <View style={styles.confirmRow}>
-              <Text style={styles.confirmText}>
-                New calls will stop showing this number. Continue?
-              </Text>
-              <View style={styles.confirmButtons}>
-                <View style={styles.confirmButton}>
-                  <SecondaryButton
-                    testID="cli-manage-revoke-cancel"
-                    label="Cancel"
-                    onPress={() => setConfirming(null)}
-                  />
-                </View>
-                <View style={styles.confirmButton}>
-                  <DestructiveButton
-                    testID="cli-manage-revoke-confirm"
-                    label="Yes, revoke"
-                    onPress={() => runConfirmed('revoke')}
-                    loading={actionInFlight === 'revoke'}
-                  />
-                </View>
-              </View>
-            </View>
-          ) : (
-            <DestructiveButton
-              testID="cli-manage-revoke"
-              label="Revoke"
-              onPress={() => setConfirming('revoke')}
-            />
-          )}
-
-          {confirming === 'lost_sim' ? (
-            <View style={styles.confirmRow}>
-              <Text style={styles.confirmText}>
-                Report this SIM as lost? New calls will stop showing this
-                number until you verify again.
-              </Text>
-              <View style={styles.confirmButtons}>
-                <View style={styles.confirmButton}>
-                  <SecondaryButton
-                    testID="cli-manage-lost-sim-cancel"
-                    label="Cancel"
-                    onPress={() => setConfirming(null)}
-                  />
-                </View>
-                <View style={styles.confirmButton}>
-                  <DestructiveButton
-                    testID="cli-manage-lost-sim-confirm"
-                    label="Yes, report lost"
-                    onPress={() => runConfirmed('lost_sim')}
-                    loading={actionInFlight === 'lost_sim'}
-                  />
-                </View>
-              </View>
-            </View>
-          ) : (
-            <DestructiveButton
-              testID="cli-manage-lost-sim"
-              label="Report lost SIM"
-              onPress={() => setConfirming('lost_sim')}
-            />
-          )}
+          <DestructiveButton
+            testID="cli-manage-revoke"
+            label="Revoke"
+            onPress={() => setConfirming('revoke')}
+          />
+          <DestructiveButton
+            testID="cli-manage-lost-sim"
+            label="Report lost SIM"
+            onPress={() => setConfirming('lost_sim')}
+          />
         </>
       ) : (
         <>
@@ -205,6 +169,37 @@ export function CliManageScreen({
           />
         </>
       )}
+
+      {/* Product-level confirmation is always a custom in-app modal, never a
+          native Alert -- docs/design-system.md §7. */}
+      <Modal
+        visible={confirming !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirming(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {confirming ? (
+              <>
+                <Text style={styles.modalTitle}>{CONFIRM_COPY[confirming].title}</Text>
+                <Text style={styles.modalBody}>{CONFIRM_COPY[confirming].body}</Text>
+                <DestructiveButton
+                  testID={`cli-manage-${confirming === 'revoke' ? 'revoke' : 'lost-sim'}-confirm`}
+                  label={CONFIRM_COPY[confirming].confirmLabel}
+                  onPress={() => runConfirmed(confirming)}
+                  loading={actionInFlight === confirming}
+                />
+                <SecondaryButton
+                  testID={`cli-manage-${confirming === 'revoke' ? 'revoke' : 'lost-sim'}-cancel`}
+                  label="Cancel"
+                  onPress={() => setConfirming(null)}
+                />
+              </>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -237,15 +232,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.space3,
   },
   badgeLabel: { ...typography.caption, fontWeight: '600', color: color.success700 },
-  confirmRow: {
-    backgroundColor: color.white,
-    borderWidth: 1,
-    borderColor: color.gray200,
-    borderRadius: radius.card,
-    padding: space.space4,
-    gap: space.space3,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(20, 24, 26, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.space5,
   },
-  confirmText: { ...typography.body, color: color.gray900 },
-  confirmButtons: { flexDirection: 'row', gap: space.space3 },
-  confirmButton: { flex: 1 },
+  modalCard: {
+    width: '100%',
+    backgroundColor: color.white,
+    borderRadius: radius.card,
+    padding: space.space5,
+    gap: space.space4,
+  },
+  modalTitle: { ...typography.heading3, color: color.gray900, textAlign: 'center' },
+  modalBody: { ...typography.body, color: color.gray700, textAlign: 'center' },
 });

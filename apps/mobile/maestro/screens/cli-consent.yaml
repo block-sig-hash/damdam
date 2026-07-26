@@ -1,0 +1,12 @@
+appId: com.damdam.app
+---
+- launchApp
+- scrollUntilVisible:
+    element:
+      id: "harness-target-cli-consent"
+    direction: DOWN
+- tapOn:
+    id: "harness-target-cli-consent"
+- assertVisible:
+    id: "cli-consent-submit"
+- takeScreenshot: cli-consent

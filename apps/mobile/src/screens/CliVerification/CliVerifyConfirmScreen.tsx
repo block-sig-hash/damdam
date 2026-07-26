@@ -33,7 +33,7 @@ export function CliVerifyConfirmScreen({
     <View style={styles.screen}>
       <Text style={styles.title}>Enter your code</Text>
       <Text style={styles.subtitle} testID="cli-confirm-helper-text">
-        Enter the code sent to {formatNigerianPhoneForDisplay(phoneNumber)}.
+        Enter the code sent to {formatNigerianPhoneForDisplay(phoneNumber.replace('+234', '0'))}.
       </Text>
 
       <View style={styles.codeInput}>

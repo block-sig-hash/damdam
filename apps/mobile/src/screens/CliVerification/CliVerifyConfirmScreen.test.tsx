@@ -32,6 +32,22 @@ beforeEach(() => {
 });
 
 describe('CliVerifyConfirmScreen', () => {
+  it('renders the full E.164 number in local format, not truncated', async () => {
+    await render(
+      <CliVerifyConfirmScreen
+        accessToken="token"
+        identityId="identity-1"
+        phoneNumber="+2348031234567"
+        onConfirmed={jest.fn()}
+        onUseDifferentNumber={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('cli-confirm-helper-text')).toHaveTextContent(
+      'Enter the code sent to 0803 123 4567.',
+    );
+  });
+
   it('submits the entered code, calling onConfirmed', async () => {
     mockConfirm.mockResolvedValue(CONFIRMED);
     const onConfirmed = jest.fn();

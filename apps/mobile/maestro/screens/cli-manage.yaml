@@ -1,0 +1,16 @@
+appId: com.damdam.app
+---
+# Unlike the other CLI screens, CliManageScreen makes a real getCliStatus
+# fetch on mount that fetchMock.ts doesn't route (see registry.tsx's own
+# note) -- it renders its "Caller ID" / "Loading..." state here rather than
+# a populated one. "Caller ID" is present in every state, so it's the
+# stable thing to assert on.
+- launchApp
+- scrollUntilVisible:
+    element:
+      id: "harness-target-cli-manage"
+    direction: DOWN
+- tapOn:
+    id: "harness-target-cli-manage"
+- assertVisible: "Caller ID"
+- takeScreenshot: cli-manage
