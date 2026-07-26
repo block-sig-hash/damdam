@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column, DateTime, ForeignKey, Index, Numeric, String, text
@@ -78,7 +79,7 @@ class CallerIdRevocationReason(str, Enum):
     ADMIN_FRAUD_HOLD = "admin_fraud_hold"
 
 
-def _enum_column(enum_cls: type[Enum], name: str, *, nullable: bool) -> Column:
+def _enum_column(enum_cls: type[Enum], name: str, *, nullable: bool) -> Column[Any]:
     return Column(
         SAEnum(
             enum_cls,
@@ -140,7 +141,9 @@ class VerifiedCallerIdentity(SQLModel, table=True):
     )
     identity_provider: IdentityProviderName | None = Field(
         default=None,
-        sa_column=_enum_column(IdentityProviderName, "identity_provider", nullable=True),
+        sa_column=_enum_column(
+            IdentityProviderName, "identity_provider", nullable=True
+        ),
     )
     identity_verification_reference: str | None = Field(
         default=None, sa_column=Column(String(64), nullable=True)
@@ -160,7 +163,9 @@ class VerifiedCallerIdentity(SQLModel, table=True):
     status: VerifiedCallerIdentityStatus = Field(
         default=VerifiedCallerIdentityStatus.UNVERIFIED,
         sa_column=_enum_column(
-            VerifiedCallerIdentityStatus, "verified_caller_identity_status", nullable=False
+            VerifiedCallerIdentityStatus,
+            "verified_caller_identity_status",
+            nullable=False,
         ),
     )
     consent_version: str | None = Field(

@@ -4,7 +4,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from app.voice.models import CallType, PhoneVerificationStatus, VerifiedCallerIdentityStatus
+from app.voice.models import (
+    CallType,
+    PhoneVerificationStatus,
+    VerifiedCallerIdentityStatus,
+)
 from app.voice.nigerian_numbers import normalize_nigerian_number
 
 

@@ -107,7 +107,9 @@ def test_start_verification_normalizes_number_decoupled_from_login_number(
     )
     client, _ = _authenticated(api, "08012345678")
 
-    response = client.post("/v1/voice/cli/verify", json={"phone_number": "0803 999 8888"})
+    response = client.post(
+        "/v1/voice/cli/verify", json={"phone_number": "0803 999 8888"}
+    )
 
     assert response.status_code == 201
     body = response.json()
@@ -122,7 +124,9 @@ def test_start_verification_rejects_invalid_number(
     api, _ = _api(settings, redis_client, providers, scheduler, session_factory, clock)
     client, _ = _authenticated(api)
 
-    response = client.post("/v1/voice/cli/verify", json={"phone_number": "not-a-number"})
+    response = client.post(
+        "/v1/voice/cli/verify", json={"phone_number": "not-a-number"}
+    )
 
     assert response.status_code == 400
     assert response.json()["error"] == "invalid_phone_number"
@@ -161,7 +165,9 @@ def test_confirm_wrong_code_leaves_verification_pending(
         "/v1/voice/cli/verify", json={"phone_number": "08039998888"}
     ).json()["id"]
 
-    response = client.post(f"/v1/voice/cli/{identity_id}/confirm", json={"code": "111111"})
+    response = client.post(
+        f"/v1/voice/cli/{identity_id}/confirm", json={"code": "111111"}
+    )
 
     assert response.status_code == 400
     assert response.json()["error"] == "verification_code_invalid"

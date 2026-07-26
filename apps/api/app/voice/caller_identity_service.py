@@ -17,7 +17,10 @@ from app.voice.models import (
     VerifiedCallerIdentity,
     VerifiedCallerIdentityStatus,
 )
-from app.voice.nigerian_numbers import InvalidNigerianNumberError, normalize_nigerian_number
+from app.voice.nigerian_numbers import (
+    InvalidNigerianNumberError,
+    normalize_nigerian_number,
+)
 from app.voice.verified_numbers import (
     PhoneVerificationProvider,
     PhoneVerificationProviderError,
@@ -110,7 +113,9 @@ class CallerIdentityService:
             else VerifiedCallerIdentityStatus.CONSENT_REQUIRED
         )
         if not self.settings.nin_verification_enabled:
-            identity.identity_verification_status = IdentityVerificationStatus.NOT_REQUIRED
+            identity.identity_verification_status = (
+                IdentityVerificationStatus.NOT_REQUIRED
+            )
         identity.updated_at = now
         session.add(identity)
         session.commit()
@@ -235,7 +240,8 @@ class CallerIdentityService:
         window = self.settings.cli_verification_rate_limit_window_seconds
         now_ts = self.clock().timestamp()
         self.redis.zremrangebyscore(key, 0, now_ts - window)
-        if self.redis.zcard(key) >= self.settings.cli_verification_max_attempts_per_window:
+        limit = self.settings.cli_verification_max_attempts_per_window
+        if self.redis.zcard(key) >= limit:
             raise CallerIdentityError("cli_verification_rate_limited")
         self.redis.zadd(key, {str(uuid4()): now_ts})
         self.redis.expire(key, window)
