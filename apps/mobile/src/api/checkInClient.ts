@@ -1,4 +1,5 @@
 import {API_BASE_URL} from '../config/env';
+import {localeHeader} from '../i18n';
 import type {CheckInOutboxItem} from '../services/checkInOutbox';
 
 export interface CheckInHistoryItem {
@@ -14,6 +15,7 @@ async function request<T>(path: string, accessToken: string, init?: RequestInit)
     headers: {
       Authorization: `Bearer ${accessToken}`,
       ...(init?.body ? {'Content-Type': 'application/json'} : {}),
+      ...localeHeader(),
       ...init?.headers,
     },
   });

@@ -29,9 +29,10 @@ describe('activation API client', () => {
     await expect(previewActivationCode('ABCD1234')).resolves.toEqual(preview);
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/activation/ABCD1234'),
+      { headers: { 'Accept-Language': 'en' } },
     );
     const [, options] = (global.fetch as jest.Mock).mock.calls[0];
-    expect(options).toBeUndefined();
+    expect(options).toEqual({ headers: { 'Accept-Language': 'en' } });
   });
 
   it('surfaces an unknown code as a typed 404 error', async () => {

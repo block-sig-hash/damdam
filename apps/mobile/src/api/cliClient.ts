@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/env';
+import { localeHeader } from '../i18n';
 
 /**
  * Mirrors apps/api/app/voice/caller_identity_service.py's CallerIdentityError
@@ -90,6 +91,7 @@ async function request<T>(
       headers: {
         Authorization: `Bearer ${accessToken}`,
         ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+        ...localeHeader(),
         ...init?.headers,
       },
     });

@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config/env';
-import {i18n} from '../i18n';
+import {i18n, localeHeader} from '../i18n';
 
 export interface EmergencyContact {
   hto_operator_name: string | null;
@@ -18,7 +18,7 @@ export async function getEmergencyContact(accessToken: string): Promise<Emergenc
   try {
     response = await fetch(`${API_BASE_URL}/me/emergency-contact`, {
       method: 'GET',
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${accessToken}`, ...localeHeader() },
     });
   } catch {
     throw new EmergencyContactApiError(i18n.t('errors.network', {ns: 'auth'}));

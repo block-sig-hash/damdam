@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config/env';
-import {i18n} from '../i18n';
+import {i18n, localeHeader} from '../i18n';
 
 export interface PricingTier {
   id: string;
@@ -31,7 +31,7 @@ export class PricingApiError extends Error {
 export async function getPricingTiers(): Promise<PricingTier[]> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/pricing/tiers`);
+    response = await fetch(`${API_BASE_URL}/pricing/tiers`, { headers: localeHeader() });
   } catch {
     throw new PricingApiError(i18n.t('errors.network', {ns: 'auth'}));
   }

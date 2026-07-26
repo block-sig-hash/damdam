@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config/env';
-import {i18n} from '../i18n';
+import {i18n, localeHeader} from '../i18n';
 
 /**
  * Mirrors apps/api/app/auth/pin.py's PINError codes and their mapping
@@ -52,6 +52,7 @@ export async function setPin(accessToken: string, pin: string): Promise<{ messag
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        ...localeHeader(),
       },
       body: JSON.stringify({ pin }),
     });

@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config/env';
-import {i18n} from '../i18n';
+import {i18n, localeHeader} from '../i18n';
 
 export type FamilyContactErrorCode =
   | 'family_contact_exists'
@@ -68,6 +68,7 @@ async function saveFamilyContact(
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        ...localeHeader(),
       },
       body: JSON.stringify(input),
     });

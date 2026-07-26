@@ -17,6 +17,7 @@ import {
   AppLocale,
   getDeviceLocale,
   getSavedLocale,
+  normalizeLocale,
   persistLocale,
 } from './locale';
 
@@ -46,6 +47,18 @@ getSavedLocale().then(saved => {
 export async function setAppLocale(locale: AppLocale): Promise<void> {
   await persistLocale(locale);
   await i18n.changeLanguage(locale);
+}
+
+/**
+ * Every API request must send this so the backend's api_message()/
+ * request_locale() (apps/api/app/i18n/catalog.py) render error text in
+ * the user's selected language, not always English -- i18n.language
+ * reflects the live current locale (device default, or a saved
+ * override applied via setAppLocale), independent of any single
+ * request's own body fields.
+ */
+export function localeHeader(): {'Accept-Language': AppLocale} {
+  return {'Accept-Language': normalizeLocale(i18n.language)};
 }
 
 export {i18n};

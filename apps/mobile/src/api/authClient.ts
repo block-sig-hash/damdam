@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config/env';
-import {i18n} from '../i18n';
+import {i18n, localeHeader} from '../i18n';
 
 /**
  * Mirrors apps/api/app/auth/schemas.py and the error codes raised by
@@ -94,7 +94,7 @@ async function post<TResponse>(path: string, body: unknown): Promise<TResponse> 
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...localeHeader() },
       body: JSON.stringify(body),
     });
   } catch {

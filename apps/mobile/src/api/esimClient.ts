@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config/env';
-import {i18n} from '../i18n';
+import {i18n, localeHeader} from '../i18n';
 
 export interface DeviceCompatibilityPayload {
   platform: 'ios' | 'android';
@@ -38,7 +38,7 @@ async function profileRequest<T>(
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${accessToken}`, ...localeHeader() },
     });
   } catch {
     throw new EsimApiError(i18n.t('errors.network', {ns: 'auth'}), 'network_error');
@@ -97,6 +97,7 @@ export async function logDeviceCompatibility(
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        ...localeHeader(),
       },
       body: JSON.stringify(payload),
     });

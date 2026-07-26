@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config/env';
-import {i18n} from '../i18n';
+import {i18n, localeHeader} from '../i18n';
 
 export type ActivationErrorCode =
   | 'activation_code_invalid'
@@ -76,6 +76,7 @@ export async function previewActivationCode(
   try {
     response = await fetch(
       `${API_BASE_URL}/activation/${encodeURIComponent(activationCode)}`,
+      { headers: localeHeader() },
     );
   } catch {
     throw new ActivationApiError(
@@ -101,6 +102,7 @@ export async function redeemActivationCode(
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        ...localeHeader(),
       },
       body: JSON.stringify({ activation_code: activationCode }),
     });

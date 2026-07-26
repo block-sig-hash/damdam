@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config/env';
-import {i18n} from '../i18n';
+import {i18n, localeHeader} from '../i18n';
 
 export interface PurchaseCheckout {
   package_id: string;
@@ -38,6 +38,7 @@ async function request<T>(url: string, accessToken: string, init?: RequestInit):
       headers: {
         Authorization: `Bearer ${accessToken}`,
         ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+        ...localeHeader(),
         ...init?.headers,
       },
     });
