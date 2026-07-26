@@ -1755,7 +1755,7 @@ IDT Express timing).
 | user_id | UUID | FK → users, NOT NULL | One active row per user for MVP — see uniqueness note below |
 | phone_number | VARCHAR(14) | NOT NULL | E.164; independent of `users.phone_number` — AC-14.10 |
 | detected_country | VARCHAR(2) | NOT NULL | ISO code from normalization; `NG` only accepted for MVP |
-| detected_carrier | VARCHAR(32) | NULLABLE | From the carrier-lookup interface (`docs/verified-cli-scoping.md` §5); absent when the lookup provider is unavailable — never inferred from prefix alone, since numbers port |
+| detected_carrier | VARCHAR(32) | NULLABLE | Reserved for a future carrier-lookup vendor integration — deliberately deferred, not stubbed, in this MVP pass (`docs/verified-cli-scoping.md` §5); no vendor is chosen yet, so this column is always `NULL` for now and must never be inferred from number prefix alone, since numbers port between carriers |
 | phone_verification_provider | ENUM | NOT NULL | `telnyx` for MVP; kept as an enum, not hardcoded, matching the OTP/payment/eSIM provider-abstraction pattern used throughout this doc |
 | phone_verification_reference | VARCHAR(64) | NULLABLE | Telnyx Verified Numbers reference; opaque, not the verification code itself |
 | phone_verification_status | ENUM | NOT NULL, DEFAULT `not_started` | `not_started` \| `pending` \| `verified` \| `failed` \| `expired` |
@@ -1787,6 +1787,20 @@ methods may change `status`; no route or admin action writes this
 column directly, matching the existing `manifest_orders.status`
 pattern (`data-model.md` §6.5) of explicit, auditable transitions
 rather than arbitrary updates.
+
+**Confirm-attempt lockout:** `phone_verification_pending` → `confirm` is
+guarded by its own Redis-backed attempt lockout
+(`CallerIdentityService._enforce_confirm_lock`), keyed by `identity_id` and
+distinct from `start_verification`'s per-user rate limit. Without this, the
+SMS code could be brute-forced against a single already-issued
+`phone_verification_reference` with no limit on guesses, defeating the
+phone-possession proof this table exists to establish. After
+`cli_verification_confirm_attempt_limit` wrong codes (default 3), further
+confirm attempts against that `identity_id` are rejected
+(`cli_verification_rate_limited`) for `cli_verification_confirm_lockout_seconds`
+(default 60s) — the same shape as `OTPService`'s `otp_attempt_limit`/
+`otp_lockout_seconds`. This state lives in Redis, not a DB column, matching
+where the analogous OTP challenge/attempt state already lives.
 
 A CLI is usable for an outbound `pstn` call only when `status =
 active`. `users.verified_cli` is retained (see the table note where

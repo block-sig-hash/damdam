@@ -396,8 +396,13 @@ POST   /voice/cli/{identity_id}/confirm
   200: VerifiedCallerIdentity, status advances to "consent_required"
        (or "identity_verification_pending" if NIN_VERIFICATION_ENABLED,
        disabled by default -- see verified-cli-scoping.md §4)
+  Subject to a per-identity attempt lockout on top of the phone-number rate
+  limit above -- distinct from it, since this guards the code guess itself,
+  not how many codes get issued (data-model.md §6.40).
   400 verification_code_invalid | invalid_state
   404 caller_identity_not_found
+  429 cli_verification_rate_limited (too many wrong codes against this
+      identity_id; locked out for CLI_VERIFICATION_CONFIRM_LOCKOUT_SECONDS)
 
 POST   /voice/cli/{identity_id}/consent
   Auth required

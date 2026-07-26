@@ -169,6 +169,44 @@ def test_confirm_wrong_code_leaves_verification_pending(
     assert status["status"] == "phone_verification_pending"
 
 
+def test_confirm_is_locked_out_after_repeated_wrong_codes(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """The SMS code itself must not be brute-forceable: repeated wrong
+    codes against one identity_id lock out further confirm attempts,
+    independent of the coarser per-user start_verification rate limit."""
+    configured = settings.model_copy(
+        update={"cli_verification_confirm_attempt_limit": 2}
+    )
+    api, _ = _api(
+        configured, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, _ = _authenticated(api)
+    identity_id = client.post(
+        "/v1/voice/cli/verify", json={"phone_number": "08039998888"}
+    ).json()["id"]
+
+    for _ in range(2):
+        response = client.post(
+            f"/v1/voice/cli/{identity_id}/confirm", json={"code": "111111"}
+        )
+        assert response.status_code == 400
+        assert response.json()["error"] == "verification_code_invalid"
+
+    locked = client.post(
+        f"/v1/voice/cli/{identity_id}/confirm", json={"code": "111111"}
+    )
+    assert locked.status_code == 429
+    assert locked.json()["error"] == "cli_verification_rate_limited"
+
+    # Even the correct code is rejected while locked out -- the lockout is
+    # a hard stop, not just a slower retry.
+    still_locked = client.post(
+        f"/v1/voice/cli/{identity_id}/confirm", json={"code": "000000"}
+    )
+    assert still_locked.status_code == 429
+
+
 def test_full_flow_confirm_then_consent_activates_pstn_calling(
     settings, redis_client, providers, scheduler, session_factory, clock
 ) -> None:

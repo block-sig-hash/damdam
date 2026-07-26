@@ -113,6 +113,13 @@ class Settings(BaseSettings):
     cli_verification_rate_limit_window_seconds: int = 3600
     cli_verification_reference_ttl_seconds: int = 600
     cli_pending_idempotency_ttl_seconds: int = 120
+    # Guards the SMS-code confirmation step itself (distinct from the
+    # start_verification rate limit above, which only throttles issuing new
+    # codes) -- without this, a code could be brute-forced against a single
+    # already-issued phone_verification_reference. Mirrors OTPService's own
+    # otp_attempt_limit/otp_lockout_seconds pattern (otp/service.py).
+    cli_verification_confirm_attempt_limit: int = 3
+    cli_verification_confirm_lockout_seconds: int = 60
 
     invoice_storage_backend: Literal["filesystem", "s3"] = "filesystem"
     invoice_storage_path: str = "/tmp/damdam-invoices"

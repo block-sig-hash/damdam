@@ -358,6 +358,89 @@ def test_unverified_credentialed_user_pstn_dial_is_blocked_at_webhook_layer(
     assert voice.initiated == []
 
 
+def test_pstn_rejection_at_webhook_layer_writes_audit_trail_call_log(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """A rejected PSTN dial attempt must leave an auditable CallLog record,
+    not just a silent {"processed": False} -- this is the actual gap the
+    CLI-hardening pass fixes (previously nothing was written on rejection
+    at the webhook layer, only at the /voice/token layer)."""
+    api, voice, signer = _api_and_signer(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    caller, caller_id = _authenticated(api, "08012345678")
+    # A VoiceCredential is normally provisioned lazily on /voice/token; add
+    # it directly here so the webhook's `from` lookup resolves to this user
+    # without going through a token request first.
+    with session_factory() as session:
+        session.add(
+            VoiceCredential(
+                user_id=caller_id,
+                telnyx_telephony_credential_id="cred-caller",
+                sip_username="callercred",
+                created_at=clock(),
+            )
+        )
+        session.commit()
+
+    not_verified = json.dumps(
+        {
+            "data": {
+                "event_type": "call.initiated",
+                "payload": {
+                    "from": "sip:callercred@sip.telnyx.com",
+                    "to": "+2348011119999",
+                    "call_control_id": "rejected-not-verified",
+                },
+            }
+        },
+        separators=(",", ":"),
+    ).encode()
+    response = caller.post(
+        "/v1/webhooks/telnyx/call-events",
+        content=not_verified,
+        headers=_signed_headers(signer, not_verified, clock()),
+    )
+    assert response.json() == {"processed": False}
+    assert voice.initiated == []
+    with session_factory() as session:
+        log = session.exec(
+            select(CallLog).where(CallLog.telnyx_call_leg_id == "rejected-not-verified")
+        ).one()
+        assert log.failure_code == "cli_not_verified"
+        assert log.pstn_minutes_charged == Decimal("0.00")
+        assert log.to_number == "+2348011119999"
+
+    # Now activate the CLI but leave the balance at zero -- rejection
+    # switches to the other branch, still auditable.
+    _activate_caller_identity(session_factory, caller_id, "+2348012345678")
+    insufficient_balance = json.dumps(
+        {
+            "data": {
+                "event_type": "call.initiated",
+                "payload": {
+                    "from": "sip:callercred@sip.telnyx.com",
+                    "to": "+2348011119999",
+                    "call_control_id": "rejected-no-balance",
+                },
+            }
+        },
+        separators=(",", ":"),
+    ).encode()
+    response = caller.post(
+        "/v1/webhooks/telnyx/call-events",
+        content=insufficient_balance,
+        headers=_signed_headers(signer, insufficient_balance, clock()),
+    )
+    assert response.json() == {"processed": False}
+    assert voice.initiated == []
+    with session_factory() as session:
+        log = session.exec(
+            select(CallLog).where(CallLog.telnyx_call_leg_id == "rejected-no-balance")
+        ).one()
+        assert log.failure_code == "insufficient_balance"
+
+
 def test_app_to_app_hangup_writes_free_history_without_balance(
     settings, redis_client, providers, scheduler, session_factory, clock
 ) -> None:

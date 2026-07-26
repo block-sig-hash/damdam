@@ -88,6 +88,7 @@ class CallerIdentityService:
             or identity.phone_verification_reference is None
         ):
             raise CallerIdentityError("invalid_state")
+        self._enforce_confirm_lock(identity_id)
 
         try:
             verified = self.phone_provider.confirm_verification(
@@ -96,7 +97,9 @@ class CallerIdentityService:
         except PhoneVerificationProviderError as exc:
             raise CallerIdentityError("phone_verification_unavailable") from exc
         if not verified:
+            self._register_failed_confirm_attempt(identity_id)
             raise CallerIdentityError("verification_code_invalid")
+        self._clear_confirm_attempts(identity_id)
 
         now = self.clock()
         identity.phone_verification_status = PhoneVerificationStatus.VERIFIED
@@ -236,3 +239,43 @@ class CallerIdentityService:
             raise CallerIdentityError("cli_verification_rate_limited")
         self.redis.zadd(key, {str(uuid4()): now_ts})
         self.redis.expire(key, window)
+
+    @staticmethod
+    def _confirm_attempts_key(identity_id: UUID) -> str:
+        return f"cli_verify:confirm_attempts:{identity_id}"
+
+    @staticmethod
+    def _confirm_locked_key(identity_id: UUID) -> str:
+        return f"cli_verify:confirm_locked:{identity_id}"
+
+    def _enforce_confirm_lock(self, identity_id: UUID) -> None:
+        # Guards the code-confirmation step itself, distinct from
+        # _enforce_rate_limit above (which only throttles *issuing* new
+        # codes via start_verification). Without this, a caller who knows
+        # (or is themselves given) an identity_id could brute-force the SMS
+        # code against a single phone_verification_reference with no limit
+        # -- defeating the phone-possession proof this whole flow exists to
+        # establish. Mirrors OTPService's attempts/locked_until pattern.
+        if self.redis.get(self._confirm_locked_key(identity_id)) is not None:
+            raise CallerIdentityError("cli_verification_rate_limited")
+
+    def _register_failed_confirm_attempt(self, identity_id: UUID) -> None:
+        key = self._confirm_attempts_key(identity_id)
+        window = self.settings.cli_verification_confirm_lockout_seconds
+        now_ts = self.clock().timestamp()
+        self.redis.zremrangebyscore(key, 0, now_ts - window)
+        self.redis.zadd(key, {str(uuid4()): now_ts})
+        self.redis.expire(key, window)
+        limit = self.settings.cli_verification_confirm_attempt_limit
+        if self.redis.zcard(key) >= limit:
+            self.redis.set(
+                self._confirm_locked_key(identity_id),
+                "1",
+                ex=self.settings.cli_verification_confirm_lockout_seconds,
+            )
+
+    def _clear_confirm_attempts(self, identity_id: UUID) -> None:
+        self.redis.delete(
+            self._confirm_attempts_key(identity_id),
+            self._confirm_locked_key(identity_id),
+        )

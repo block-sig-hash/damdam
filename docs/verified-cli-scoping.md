@@ -100,7 +100,8 @@ path.
 | CLI decoupled from the account's own number | **Missing** | Today's model is 1:1: the verified number *is* `user.phone_number`. A diaspora Nigerian logging in on a non-NG number, or a pilgrim wanting to verify a different NG line, cannot today |
 | Consent record (versioned, revocable) | **Missing** | No consent table, no revocation endpoint |
 | CLI authorization state machine | **Missing** | Just a boolean |
-| Nigerian number normalization | **Partial** | Handles `0XX…`/`+234XX…`; misses bare `234XX…`; no premium-rate/short-code rejection; no carrier-lookup interface |
+| Nigerian number normalization | **Partial** | Handles `0XX…`/`+234XX…`; misses bare `234XX…`; no premium-rate/short-code rejection |
+| Carrier-lookup interface | **Deferred, not a gap this pass** | No carrier-lookup vendor is chosen anywhere in the doc suite; `detected_carrier` stays `NULL` until that vendor decision is made, same treatment as the other deferred items below |
 | Fraud/rate limits specific to CLI verification | **Missing** | General auth rate-limiting exists (OTP), nothing CLI-specific |
 | Telnyx webhook signature verification | **Already true** | Ed25519, timestamp-window, matches the proposal's requirement exactly |
 | Webhook idempotency | **Already true** | Unique `telnyx_call_leg_id` insert is the idempotency boundary; duplicate `call.hangup` is a documented no-op |
@@ -137,6 +138,13 @@ the existing financial/SOS retention item in `security.md` §10.3):
    `verified_cli=True` state should migrate to a `phone_verified`
    (not `active`) CLI record requiring one fresh consent capture,
    not a silent grandfathering to `active`.
+4. **Which carrier-lookup vendor, if any, backs `detected_carrier`?**
+   Not a legal question like NIN, but still an unresolved
+   product/vendor decision — no such vendor is named anywhere in
+   `prd.md`. Recommendation: leave `detected_carrier` `NULL` and
+   unpopulated this pass rather than guessing a vendor or inferring
+   carrier from number prefix (Nigerian numbers port between
+   carriers, so a prefix-based guess would be actively misleading).
 
 None of these block writing the spec text below — they block
 *strict-mode* activation, which stays off by default either way.
@@ -157,8 +165,11 @@ None of these block writing the spec text below — they block
   and failure/route metadata fields the proposal wanted on a new
   `CallRecord` — no second call-record table
 - Nigerian number validation hardening (bare `234…` support,
-  premium-rate/short-code rejection, carrier-lookup interface)
-- Fraud/rate-limit controls scoped to CLI verification specifically
+  premium-rate/short-code rejection)
+- Fraud/rate-limit controls scoped to CLI verification specifically,
+  covering both issuing new codes (`start_verification`) and guessing
+  an already-issued one (`confirm_verification`) — these are separate
+  attack surfaces and need separate limits
 
 **Stub, disabled by default:**
 - NIN identity-verification adapter as a clearly labeled mock;
@@ -167,6 +178,16 @@ None of these block writing the spec text below — they block
 - IDT Express adapter as an unreachable, config-validated stub
   (`cli_mode = unsupported`, `nigeria_cli_preservation_approved =
   false`) — exactly what `prd.md` §5.5 already committed to
+
+**Deferred, not built this pass:**
+- Carrier-lookup interface for `detected_carrier`. No carrier-lookup
+  vendor is chosen anywhere in this doc suite, and picking one is a
+  net-new vendor decision (same category as the OTP/voice/eSIM/payment
+  choices `CLAUDE.md` already tracks explicitly) rather than a detail
+  inside this CLI-hardening pass. `detected_carrier` stays a nullable
+  column, always `NULL` until that vendor decision is made and a real
+  adapter is wired in — never inferred from number prefix alone, since
+  Nigerian numbers port between carriers.
 
 **Not building:** a wallet/ledger rewrite of the existing minutes-
 against-package billing; a route-policy/fallback layer beyond what

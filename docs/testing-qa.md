@@ -455,6 +455,11 @@ Required automated evidence in the feature PR:
   (`number_already_verified_elsewhere`) rather than silently reassigned.
 - CLI-verification-specific rate limiting is exercised independently of
   the general OTP rate limiter.
+- The code-confirmation step is separately guarded against brute-forcing the
+  SMS code itself: repeated wrong codes against one `identity_id` lock out
+  further confirm attempts for `CLI_VERIFICATION_CONFIRM_LOCKOUT_SECONDS`,
+  mirroring `OTPService`'s own attempts/lockout pattern rather than relying
+  only on the coarser per-user `start_verification` rate limit.
 - The retired `users.verified_cli` login-OTP shortcut no longer grants CLI
   rights: a fresh login does not itself unlock PSTN calling.
 - `MockIdentityProvider` never reports a real identity match regardless of
