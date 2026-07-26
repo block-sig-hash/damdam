@@ -32,15 +32,21 @@ PHONE = "08012345678"
 def test_otp_request_and_verify_contract(api: FastAPI) -> None:
     """AC-01.3/01.6: documented request and verification response shapes work."""
     request = SimpleNamespace(app=api)
-    sent = request_otp(OTPRequest(phone_number=PHONE), request)
+    sent = request_otp(OTPRequest(phone_number=PHONE, locale="fr"), request)
     verified = verify_otp(
-        OTPVerifyRequest(phone_number=PHONE, otp="123456", platform="android"),
+        OTPVerifyRequest(
+            phone_number=PHONE,
+            otp="123456",
+            platform="android",
+            locale="fr",
+        ),
         request,
     )
 
-    assert sent.model_dump() == {"message": "OTP sent"}
+    assert sent.model_dump() == {"message": "Code de vérification envoyé"}
     assert verified.is_new_user is True
     assert verified.user.phone_number == "+2348012345678"
+    assert verified.user.locale == "fr"
 
     rotated = refresh_token(
         RefreshRequest(refresh_token=verified.refresh_token), request

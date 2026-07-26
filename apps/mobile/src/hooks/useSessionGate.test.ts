@@ -78,6 +78,7 @@ const BASE_SESSION = {
   refreshToken: 'refresh-1',
   phoneNumber: '08012345678',
   departureDate: '2026-08-01',
+  locale: 'en' as const,
   packageId: 'package-1',
 };
 
@@ -446,6 +447,7 @@ describe('onPinUnlocked (AC-23.2 refresh-on-resume, AC-23.4 recovery)', () => {
       last_name: 'B',
       email: null,
       verified_cli: true,
+      locale: 'en' as const,
       platform: 'android',
       status: 'active',
     },

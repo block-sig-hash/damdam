@@ -1,5 +1,6 @@
 import { NativeModules, Platform } from 'react-native';
 import { markEsimActivated } from '../api/esimClient';
+import {i18n} from '../i18n';
 
 export type ActivationPath = 'single_tap' | 'manual';
 
@@ -46,7 +47,7 @@ export async function getActivationPath(iccid: string): Promise<ActivationPath> 
 export async function activateAndroidProfile(iccid: string): Promise<void> {
   const native = nativeModule();
   if (Platform.OS !== 'android' || !native) {
-    throw new Error('Use the manual activation guide on this device.');
+    throw new Error(i18n.t('errors.manualOnly', {ns: 'esim'}));
   }
   await native.activateProfile(iccid);
 }

@@ -206,9 +206,7 @@ class ManifestOrderService:
         selected = self._selected_unordered_rows(
             session, organization_id, manifest_id, pilgrim_ids
         )
-        if any(
-            row.family_group_id not in (None, group_id) for row in selected
-        ):
+        if any(row.family_group_id not in (None, group_id) for row in selected):
             raise ManifestError("pilgrims_already_grouped")
         self._validate_group_size(session, selected, group_size)
         for row in current:
@@ -229,11 +227,13 @@ class ManifestOrderService:
     ) -> None:
         self._owned_orderable_manifest(session, organization_id, manifest_id)
         rows = session.exec(
-            select(ManifestPilgrim).where(
+            select(ManifestPilgrim)
+            .where(
                 ManifestPilgrim.manifest_id == manifest_id,
                 ManifestPilgrim.family_group_id == group_id,
                 col(ManifestPilgrim.manifest_order_id).is_(None),
-            ).with_for_update()
+            )
+            .with_for_update()
         ).all()
         if not rows:
             raise ManifestError("family_group_not_found")
@@ -250,9 +250,7 @@ class ManifestOrderService:
         pricing_tier_id: UUID,
         pilgrim_ids: list[UUID],
     ) -> ManifestOrderResponse:
-        manifest = self._owned_orderable_manifest(
-            session, organization_id, manifest_id
-        )
+        manifest = self._owned_orderable_manifest(session, organization_id, manifest_id)
         organization = session.get(Organization, organization_id)
         assert organization is not None
         tier = session.get(PricingTier, pricing_tier_id)
@@ -327,9 +325,7 @@ class ManifestOrderService:
         session.add(manifest)
         session.commit()
         session.refresh(order)
-        return self._finalize_invoice(
-            session, order, manifest, organization, tier
-        )
+        return self._finalize_invoice(session, order, manifest, organization, tier)
 
     def get_order(
         self,
@@ -338,9 +334,7 @@ class ManifestOrderService:
         manifest_id: UUID,
         order_id: UUID,
     ) -> ManifestOrderDetailResponse:
-        order, tier = self._owned_order(
-            session, organization_id, manifest_id, order_id
-        )
+        order, tier = self._owned_order(session, organization_id, manifest_id, order_id)
         return ManifestOrderDetailResponse(
             id=order.id,
             tier_name=tier.name,
@@ -380,9 +374,7 @@ class ManifestOrderService:
         manifest_id: UUID,
         order_id: UUID,
     ) -> bytes:
-        order, _ = self._owned_order(
-            session, organization_id, manifest_id, order_id
-        )
+        order, _ = self._owned_order(session, organization_id, manifest_id, order_id)
         if order.invoice_object_key is None:
             raise ManifestError("invoice_unavailable")
         try:
@@ -417,10 +409,7 @@ class ManifestOrderService:
                 or_(
                     col(ManifestOrder.status) == status,
                     (
-                        (
-                            col(ManifestOrder.status)
-                            == ManifestOrderStatus.PROVISIONING
-                        )
+                        (col(ManifestOrder.status) == ManifestOrderStatus.PROVISIONING)
                         & col(ManifestOrder.provisioning_enqueued_at).is_(None)
                     ),
                 )
@@ -456,9 +445,7 @@ class ManifestOrderService:
         self, session: Session, order_id: UUID, admin: AdminUser
     ) -> ManifestOrder:
         order = session.exec(
-            select(ManifestOrder)
-            .where(ManifestOrder.id == order_id)
-            .with_for_update()
+            select(ManifestOrder).where(ManifestOrder.id == order_id).with_for_update()
         ).first()
         if order is None:
             raise ManifestError("manifest_order_not_found")
@@ -514,9 +501,7 @@ class ManifestOrderService:
 
     def provision(self, session: Session, order_id: UUID) -> ManifestOrder:
         order = session.exec(
-            select(ManifestOrder)
-            .where(ManifestOrder.id == order_id)
-            .with_for_update()
+            select(ManifestOrder).where(ManifestOrder.id == order_id).with_for_update()
         ).first()
         if order is None:
             raise ManifestError("manifest_order_not_found")
@@ -547,21 +532,22 @@ class ManifestOrderService:
             if row.activation_link_sent_at is not None:
                 session.rollback()
                 continue
-            query = urlencode({"code": row.activation_code})
+            query = urlencode(
+                {"code": row.activation_code, "lang": row.locale.value}
+            )
             url = f"{self.settings.activation_base_url}?{query}"
             self.notifications.send_activation(
                 row.phone_number,
                 f"{row.first_name} {row.last_name}",
                 tier.name,
                 url,
+                row.locale.value,
             )
             row.activation_link_sent_at = self.clock()
             session.add(row)
             session.commit()
         order = session.exec(
-            select(ManifestOrder)
-            .where(ManifestOrder.id == order_id)
-            .with_for_update()
+            select(ManifestOrder).where(ManifestOrder.id == order_id).with_for_update()
         ).one()
         unsent_count = session.exec(
             select(func.count())
@@ -684,9 +670,7 @@ class ManifestOrderService:
         if tier.usd_reference_price <= 0:
             raise ManifestError("pricing_unavailable")
         return (
-            retail_price_ngn
-            * tier.wholesale_usd_price
-            / tier.usd_reference_price
+            retail_price_ngn * tier.wholesale_usd_price / tier.usd_reference_price
         ).quantize(MONEY, rounding=ROUND_HALF_UP)
 
     def _resumable_order(
@@ -705,9 +689,7 @@ class ManifestOrderService:
         if order is None or order.pricing_tier_id != tier_id:
             return None
         order_rows = session.exec(
-            select(ManifestPilgrim).where(
-                ManifestPilgrim.manifest_order_id == order.id
-            )
+            select(ManifestPilgrim).where(ManifestPilgrim.manifest_order_id == order.id)
         ).all()
         if {row.id for row in order_rows} != set(requested_ids):
             return None
@@ -724,9 +706,7 @@ class ManifestOrderService:
         tier: PricingTier,
     ) -> ManifestOrderResponse:
         locked_order = session.exec(
-            select(ManifestOrder)
-            .where(ManifestOrder.id == order.id)
-            .with_for_update()
+            select(ManifestOrder).where(ManifestOrder.id == order.id).with_for_update()
         ).one()
         order = locked_order
         pdf: bytes | None = None
@@ -766,6 +746,7 @@ class ManifestOrderService:
                     str(order.id),
                     order.total_ngn,
                     pdf,
+                    organization.locale.value,
                 )
             except (InvoiceStorageError, NotificationError) as exc:
                 if created_invoice:

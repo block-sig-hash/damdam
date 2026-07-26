@@ -40,11 +40,17 @@ class FakeEmailSender(EmailSender):
         self.fail_approval = False
 
     def send_verification(
-        self, email: str, operator_name: str, verification_url: str
+        self,
+        email: str,
+        operator_name: str,
+        verification_url: str,
+        locale: str = "en",
     ) -> None:
+        del locale
         self.verifications.append((email, operator_name, verification_url))
 
-    def send_approval(self, email: str, operator_name: str) -> None:
+    def send_approval(self, email: str, operator_name: str, locale: str = "en") -> None:
+        del locale
         if self.fail_approval:
             raise NotificationError("email unavailable")
         self.approvals.append((email, operator_name))
@@ -55,7 +61,10 @@ class FakeWhatsAppSender(WhatsAppSender):
         self.approvals: list[tuple[str, str]] = []
         self.fail_approval = False
 
-    def send_approval(self, phone_number: str, operator_name: str) -> None:
+    def send_approval(
+        self, phone_number: str, operator_name: str, locale: str = "en"
+    ) -> None:
+        del locale
         if self.fail_approval:
             raise NotificationError("whatsapp unavailable")
         self.approvals.append((phone_number, operator_name))
@@ -152,8 +161,7 @@ def test_registration_hashes_password_and_records_unvalidated_licence(
         assert organization.org_type == OrganizationType.HTO_OPERATOR
         assert organization.name == registration_payload["business_name"]
         assert (
-            organization.primary_contact_name
-            == registration_payload["operator_name"]
+            organization.primary_contact_name == registration_payload["operator_name"]
         )
         assert organization.email == "amina@example.com"
         assert organization.phone_number == "+2348012345678"
@@ -241,16 +249,15 @@ def test_verified_account_remains_pending_until_admin_approval(
         settings.jwt_secret,
         algorithm="HS256",
     )
-    credentials = HTTPAuthorizationCredentials(
-        scheme="Bearer", credentials=admin_token
-    )
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=admin_token)
     authenticated_admin = current_admin(request, credentials)
 
     pending_list = list_hto_operators(
         request, authenticated_admin, HTOApprovalStatus.PENDING
     )
-    assert pending_list.operators[0].nahcon_licence_number == (
-        registration_payload["nahcon_licence_number"]
+    assert (
+        pending_list.operators[0].nahcon_licence_number
+        == (registration_payload["nahcon_licence_number"])
     )
 
     approved = approve_hto_operator(operator_id, request, authenticated_admin)

@@ -23,10 +23,14 @@ class FakeWhatsAppSender:
         self.nominations: list[str] = []
         self.fail_nomination = False
 
-    def send_approval(self, phone_number: str, operator_name: str) -> None:
+    def send_approval(
+        self, phone_number: str, operator_name: str, locale: str = "en"
+    ) -> None:
+        del locale
         self.approvals.append((phone_number, operator_name))
 
-    def send_family_nomination(self, phone_number: str) -> None:
+    def send_family_nomination(self, phone_number: str, locale: str = "en") -> None:
+        del locale
         if self.fail_nomination:
             raise NotificationError("WhatsApp unavailable")
         self.nominations.append(phone_number)
@@ -92,6 +96,7 @@ def test_nomination_accepts_nigerian_number_and_sends_whatsapp(
         "phone_number": "+2349012345678",
         "name": "Hauwa Yusuf",
         "notified_of_nomination": True,
+        "locale": "en",
     }
     assert whatsapp_sender.nominations == ["+2349012345678"]
     with session_factory() as session:
@@ -110,9 +115,7 @@ def test_nomination_rejects_non_nigerian_or_invalid_numbers(
     """AC-03.1: accept only the local Nigerian mobile format."""
     client = authenticated_client(family_api)
 
-    response = client.post(
-        "/v1/me/family-contact", json={"phone_number": phone_number}
-    )
+    response = client.post("/v1/me/family-contact", json={"phone_number": phone_number})
 
     assert response.status_code == 422
     assert whatsapp_sender.nominations == []
@@ -123,9 +126,7 @@ def test_only_one_family_contact_can_be_created_per_pilgrim(
 ) -> None:
     """AC-03.4: a second POST cannot create another contact for one pilgrim."""
     client = authenticated_client(family_api)
-    first = client.post(
-        "/v1/me/family-contact", json={"phone_number": CONTACT_PHONE}
-    )
+    first = client.post("/v1/me/family-contact", json={"phone_number": CONTACT_PHONE})
 
     duplicate = client.post(
         "/v1/me/family-contact", json={"phone_number": UPDATED_CONTACT_PHONE}
@@ -160,6 +161,7 @@ def test_family_contact_can_be_updated_without_creating_a_second_row(
         "phone_number": "+2348123456789",
         "name": "Maryam",
         "notified_of_nomination": True,
+        "locale": "en",
     }
     assert whatsapp_sender.nominations == [
         "+2349012345678",
@@ -209,9 +211,7 @@ def test_failed_notification_is_retryable_without_losing_nomination(
     client = authenticated_client(family_api)
     whatsapp_sender.fail_nomination = True
 
-    failed = client.post(
-        "/v1/me/family-contact", json={"phone_number": CONTACT_PHONE}
-    )
+    failed = client.post("/v1/me/family-contact", json={"phone_number": CONTACT_PHONE})
 
     assert failed.status_code == 503
     assert failed.json()["error"] == "notification_unavailable"

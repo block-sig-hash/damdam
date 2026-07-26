@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
 import { Banner } from '../../components/Banner/Banner';
 import { OtpCodeInput } from '../../components/OtpCodeInput/OtpCodeInput';
@@ -23,6 +24,7 @@ export function CliVerifyConfirmScreen({
   onConfirmed,
   onUseDifferentNumber,
 }: CliVerifyConfirmScreenProps): React.JSX.Element {
+  const { t } = useTranslation('home');
   const { code, setCode, status, errorMessage, locked, submit } = useCliVerifyConfirm({
     accessToken,
     identityId,
@@ -31,9 +33,11 @@ export function CliVerifyConfirmScreen({
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>Enter your code</Text>
+      <Text style={styles.title}>{t('callerId.confirm.title')}</Text>
       <Text style={styles.subtitle} testID="cli-confirm-helper-text">
-        Enter the code sent to {formatNigerianPhoneForDisplay(phoneNumber.replace('+234', '0'))}.
+        {t('callerId.confirm.subtitle', {
+          phone: formatNigerianPhoneForDisplay(phoneNumber.replace('+234', '0')),
+        })}
       </Text>
 
       <View style={styles.codeInput}>
@@ -44,7 +48,7 @@ export function CliVerifyConfirmScreen({
           editable={status !== 'verifying' && !locked}
           errored={Boolean(errorMessage)}
           onSubmit={submit}
-          accessibilityLabel="Verification code"
+          accessibilityLabel={t('callerId.confirm.codeAccessibility')}
           testID="cli-confirm-code-input"
         />
       </View>
@@ -59,7 +63,7 @@ export function CliVerifyConfirmScreen({
 
       <PrimaryButton
         testID="cli-confirm-submit"
-        label="Verify"
+        label={t('callerId.confirm.verify')}
         onPress={submit}
         disabled={code.length !== CLI_CONFIRM_CODE_LENGTH || locked}
         loading={status === 'verifying'}
@@ -70,7 +74,7 @@ export function CliVerifyConfirmScreen({
         onPress={onUseDifferentNumber}
         style={styles.link}
       >
-        Use a different number
+        {t('callerId.confirm.differentNumber')}
       </Text>
     </View>
   );

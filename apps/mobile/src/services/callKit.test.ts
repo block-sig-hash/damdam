@@ -253,6 +253,7 @@ describe('handleAndroidIncomingCallPayload (Headless JS Task entry point)', () =
       refreshToken: 'persisted-refresh',
       phoneNumber: '08012340000',
       departureDate: null,
+      locale: 'en' as const,
       lastActiveAt: new Date().toISOString(),
     });
 
@@ -297,6 +298,7 @@ describe('initializeCallKit on Android', () => {
       refreshToken: 'persisted-refresh',
       phoneNumber: '08012340000',
       departureDate: null,
+      locale: 'en' as const,
       lastActiveAt: new Date().toISOString(),
     });
 

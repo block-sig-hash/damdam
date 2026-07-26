@@ -2,6 +2,30 @@ appId: com.damdam.app
 ---
 - launchApp
 - tapOn:
+    id: "harness-locale-en"
+- assertVisible:
+    id: "harness-locale-active-en"
+- scrollUntilVisible:
+    element:
+      id: "harness-target-sos-sent"
+    direction: DOWN
+- tapOn:
     id: "harness-target-sos-sent"
-- assertVisible: "SOS sent — help is coming"
-- takeScreenshot: sos-sent
+- assertVisible:
+    id: "sos-sent-screen"
+- takeScreenshot: sos-sent-en
+- stopApp
+- launchApp
+- tapOn:
+    id: "harness-locale-fr"
+- assertVisible:
+    id: "harness-locale-active-fr"
+- scrollUntilVisible:
+    element:
+      id: "harness-target-sos-sent"
+    direction: DOWN
+- tapOn:
+    id: "harness-target-sos-sent"
+- assertVisible:
+    id: "sos-sent-screen"
+- takeScreenshot: sos-sent-fr

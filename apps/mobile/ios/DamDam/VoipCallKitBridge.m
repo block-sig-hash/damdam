@@ -31,7 +31,7 @@
 + (void)reportIncomingCallFromPush:(PKPushPayload *)payload ofType:(NSString *)type {
   NSDictionary *dict = payload.dictionaryPayload;
   NSString *uuid = dict[@"uuid"] ?: [[NSUUID UUID] UUIDString];
-  NSString *callerName = dict[@"callerName"] ?: @"DamDam call";
+  NSString *callerName = dict[@"callerName"] ?: NSLocalizedString(@"damdam_call", nil);
   NSString *handle = dict[@"handle"] ?: callerName;
 
   // Apple requires CallKit to be told about the incoming call before the

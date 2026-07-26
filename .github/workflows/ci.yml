@@ -281,7 +281,8 @@ jobs:
         run: |
           shopt -s nullglob
           screenshots=(screenshots/*.png)
-          test "${#screenshots[@]}" -eq 16
+          echo "Expected 32 screenshots; found ${#screenshots[@]}"
+          test "${#screenshots[@]}" -eq 32
           test -s maestro-report.xml
       - name: Upload screenshots as CI artifacts
         if: always()
@@ -303,7 +304,8 @@ jobs:
       # Claude in claude-review.yml) can see every captured screen without
       # downloading the artifact zip. Thumbnails only (full-resolution
       # PNGs are in the artifact above): GITHUB_STEP_SUMMARY has a ~1MiB
-      # cap, and a dozen full-size phone screenshots would blow past it.
+      # cap, and full-size phone screenshots would blow past it. Never
+      # fall back to embedding the source PNG when thumbnailing fails.
       - name: Render inline screenshot preview in job summary
         if: always()
         run: |
@@ -314,15 +316,20 @@ jobs:
             [ -e "$f" ] || continue
             name=$(basename "$f" .png)
             thumb="screenshots/${name}.thumb.jpg"
-            mime="image/jpeg"
-            if ! convert "$f" -resize 120x -quality 55 "$thumb" 2>/dev/null; then
-              thumb="$f"
-              mime="image/png"
+            if command -v magick >/dev/null 2>&1; then
+              magick "$f" -resize 96x -quality 35 "$thumb" 2>/dev/null || true
+            elif command -v convert >/dev/null 2>&1; then
+              convert "$f" -resize 96x -quality 35 "$thumb" 2>/dev/null || true
             fi
-            b64=$(base64 -w0 "$thumb")
             echo "**${name}**" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "![${name}](data:${mime};base64,${b64})" >> "$GITHUB_STEP_SUMMARY"
+            if [ ! -s "$thumb" ]; then
+              echo "_Thumbnail unavailable; see the full-resolution artifact._" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            b64=$(base64 -w0 "$thumb")
+            echo "![${name}](data:image/jpeg;base64,${b64})" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
           done
 
@@ -423,7 +430,8 @@ jobs:
         run: |
           shopt -s nullglob
           screenshots=(screenshots/*.png)
-          test "${#screenshots[@]}" -eq 16
+          echo "Expected 32 screenshots; found ${#screenshots[@]}"
+          test "${#screenshots[@]}" -eq 32
           test -s maestro-report.xml
       - name: Upload Maestro output bundle
         if: always()
@@ -451,15 +459,16 @@ jobs:
             [ -e "$f" ] || continue
             name=$(basename "$f" .png)
             thumb="screenshots/${name}.thumb.jpg"
-            mime="image/jpeg"
-            if ! sips -s format jpeg -s formatOptions 55 -Z 120 "$f" --out "$thumb" >/dev/null 2>&1; then
-              thumb="$f"
-              mime="image/png"
-            fi
-            b64=$(base64 -i "$thumb" | tr -d '\n')
+            sips -s format jpeg -s formatOptions 35 -Z 96 "$f" --out "$thumb" >/dev/null 2>&1 || true
             echo "**${name}**" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "![${name}](data:${mime};base64,${b64})" >> "$GITHUB_STEP_SUMMARY"
+            if [ ! -s "$thumb" ]; then
+              echo "_Thumbnail unavailable; see the full-resolution artifact._" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            b64=$(base64 -i "$thumb" | tr -d '\n')
+            echo "![${name}](data:image/jpeg;base64,${b64})" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
           done
 

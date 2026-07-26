@@ -1,6 +1,7 @@
 import httpx
 
 from app.config import Settings
+from app.i18n import normalize_locale
 from app.otp.providers.base import OTPDispatch, OTPProviderError
 
 
@@ -29,12 +30,16 @@ class TwilioVerifyProvider:
     def _service_path(self) -> str:
         return f"/Services/{self.settings.twilio_verify_service_sid}"
 
-    def send(self, phone_number: str) -> OTPDispatch:
+    def send(self, phone_number: str, locale: str = "en") -> OTPDispatch:
         self._credentials_ready()
         try:
             response = self.client.post(
                 f"{self._service_path}/Verifications",
-                data={"To": phone_number, "Channel": "sms"},
+                data={
+                    "To": phone_number,
+                    "Channel": "sms",
+                    "Locale": normalize_locale(locale),
+                },
             )
             response.raise_for_status()
             reference = response.json().get("sid")

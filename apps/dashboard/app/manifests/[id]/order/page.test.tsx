@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ManifestOrderPage from "./page";

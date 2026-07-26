@@ -30,7 +30,7 @@ describe('requestOtp', () => {
       expect.stringContaining('/auth/otp/request'),
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ phone_number: '08012345678' }),
+        body: JSON.stringify({ phone_number: '08012345678', locale: 'en' }),
       }),
     );
   });
@@ -40,7 +40,7 @@ describe('requestOtp', () => {
 
     await expect(requestOtp('08012345678')).rejects.toMatchObject({
       code: 'account_exists',
-      message: 'Please log in.',
+      message: 'Something went wrong. Please try again.',
     });
   });
 
@@ -78,6 +78,7 @@ describe('verifyOtp', () => {
         last_name: '',
         email: null,
         verified_cli: true,
+        locale: 'en' as const,
         platform: 'android',
         status: 'active',
       },
@@ -90,7 +91,12 @@ describe('verifyOtp', () => {
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/auth/otp/verify'),
       expect.objectContaining({
-        body: JSON.stringify({ phone_number: '08012345678', otp: '123456', platform: 'android' }),
+        body: JSON.stringify({
+          phone_number: '08012345678',
+          otp: '123456',
+          platform: 'android',
+          locale: 'en',
+        }),
       }),
     );
   });
@@ -127,7 +133,7 @@ describe('requestPinRecovery', () => {
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/auth/pin/recovery/request'),
       expect.objectContaining({
-        body: JSON.stringify({ phone_number: '08012345678' }),
+        body: JSON.stringify({ phone_number: '08012345678', locale: 'en' }),
       }),
     );
   });
@@ -157,6 +163,7 @@ describe('verifyPinRecovery', () => {
         last_name: '',
         email: null,
         verified_cli: true,
+        locale: 'en' as const,
         platform: 'android',
         status: 'active',
       },
@@ -169,7 +176,12 @@ describe('verifyPinRecovery', () => {
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/auth/pin/recovery/verify'),
       expect.objectContaining({
-        body: JSON.stringify({ phone_number: '08012345678', otp: '123456', platform: 'android' }),
+        body: JSON.stringify({
+          phone_number: '08012345678',
+          otp: '123456',
+          platform: 'android',
+          locale: 'en',
+        }),
       }),
     );
   });

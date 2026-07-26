@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_core import PydanticCustomError
 
-from app.auth.models import HTOApprovalStatus, Platform
+from app.auth.models import HTOApprovalStatus, Locale, Platform
 
 NIGERIAN_PHONE_PATTERN = re.compile(r"^0(?:70|80|81|90|91)\d{8}$")
 
@@ -33,6 +33,7 @@ def is_strong_pin(value: str) -> bool:
 
 class OTPRequest(BaseModel):
     phone_number: str
+    locale: Locale = Locale.EN
 
     _validate_phone = field_validator("phone_number")(validate_nigerian_phone)
 
@@ -89,6 +90,7 @@ class UserResponse(BaseModel):
     email: str | None
     verified_cli: bool
     departure_date: date | None
+    locale: Locale
     platform: str
     status: str
 
@@ -112,6 +114,7 @@ class HTORegistrationRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     phone_number: str
     nahcon_licence_number: str = Field(min_length=1, max_length=50)
+    locale: Locale = Locale.EN
 
     _validate_phone = field_validator("phone_number")(validate_nigerian_phone)
 
@@ -156,6 +159,7 @@ class HTOOperatorResponse(BaseModel):
     nahcon_licence_number: str
     email_verified: bool
     approval_status: HTOApprovalStatus
+    locale: Locale
     created_at: datetime
 
 

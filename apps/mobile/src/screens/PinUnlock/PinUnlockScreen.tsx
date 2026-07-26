@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import {useTranslation} from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
 import { AuthResponse } from '../../api/authClient';
 import { Banner } from '../../components/Banner/Banner';
@@ -23,6 +24,7 @@ export function PinUnlockScreen({
   phoneNumber,
   onUnlocked,
 }: PinUnlockScreenProps): React.JSX.Element {
+  const {t} = useTranslation('auth');
   const {
     stage,
     value,
@@ -52,7 +54,7 @@ export function PinUnlockScreen({
           onPress={cancelRecovery}
           style={styles.footerLink}
         >
-          Back to PIN entry
+          {t('pinUnlock.back')}
         </Text>
       </View>
     );
@@ -61,7 +63,7 @@ export function PinUnlockScreen({
   if (stage === 'checking') {
     return (
       <View style={styles.screen}>
-        <Text style={styles.title}>Unlock DamDam</Text>
+        <Text style={styles.title}>{t('pinUnlock.title')}</Text>
       </View>
     );
   }
@@ -69,14 +71,14 @@ export function PinUnlockScreen({
   if (stage === 'no-local-pin') {
     return (
       <View style={styles.screen}>
-        <Text style={styles.title}>Verify it&apos;s you</Text>
+        <Text style={styles.title}>{t('pinUnlock.verifyTitle')}</Text>
         <Text style={styles.subtitle} testID="pin-unlock-helper-text">
-          This device doesn&apos;t have a PIN set up yet. Verify with a one-time code instead.
+          {t('pinUnlock.noLocalPin')}
         </Text>
         <View style={styles.footer}>
           <PrimaryButton
             testID="pin-unlock-start-recovery"
-            label="Verify via OTP"
+            label={t('pinUnlock.verifyViaOtp')}
             onPress={startRecovery}
           />
         </View>
@@ -86,12 +88,12 @@ export function PinUnlockScreen({
 
   const helperText =
     stage === 'locked'
-      ? `Too many attempts. Try again in ${lockoutSecondsRemaining}s, or verify via OTP.`
-      : 'Enter your 4-digit PIN to continue.';
+      ? t('pinUnlock.lockedCountdown', {seconds: lockoutSecondsRemaining})
+      : t('pinUnlock.helper');
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.title}>Unlock DamDam</Text>
+      <Text style={styles.title}>{t('pinUnlock.title')}</Text>
       <Text style={styles.subtitle} testID="pin-unlock-helper-text">
         {helperText}
       </Text>
@@ -106,7 +108,7 @@ export function PinUnlockScreen({
           onSubmit={submit}
           masked
           testID="pin-unlock-input"
-          accessibilityLabel="Enter PIN"
+          accessibilityLabel={t('pinUnlock.enterAccessibility')}
         />
       </View>
 
@@ -123,7 +125,7 @@ export function PinUnlockScreen({
       <View style={styles.footer}>
         <PrimaryButton
           testID="pin-unlock-submit"
-          label="Unlock"
+          label={t('pinUnlock.unlock')}
           onPress={submit}
           disabled={value.length !== PIN_LENGTH || stage === 'locked'}
         />
@@ -133,7 +135,7 @@ export function PinUnlockScreen({
           onPress={startRecovery}
           style={styles.footerLink}
         >
-          Forgot your PIN? Verify via OTP
+          {t('pinUnlock.forgot')}
         </Text>
       </View>
     </View>

@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
 import { OtpApiError, requestOtp } from '../../api/authClient';
+import {i18n} from '../../i18n';
+import {normalizeLocale} from '../../i18n/locale';
 import { digitsOnly, isValidNigerianPhoneNumber } from '../../utils/phoneNumber';
 
 export type PhoneEntryStatus = 'idle' | 'submitting';
@@ -41,7 +43,7 @@ export function usePhoneEntry({
     setStatus('submitting');
     setErrorMessage(null);
     try {
-      await requestOtp(phoneNumber);
+      await requestOtp(phoneNumber, normalizeLocale(i18n.language));
       onOtpSent(phoneNumber);
     } catch (err) {
       if (err instanceof OtpApiError && err.code === 'account_exists') {
@@ -49,7 +51,7 @@ export function usePhoneEntry({
       } else if (err instanceof OtpApiError) {
         setErrorMessage(err.message);
       } else {
-        setErrorMessage('Something went wrong. Please try again.');
+        setErrorMessage(i18n.t('errors.generic', {ns: 'auth'}));
       }
     } finally {
       setStatus('idle');

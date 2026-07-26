@@ -1,12 +1,17 @@
 import type {SOSOutboxItem} from '../services/sosOutbox';
 import {API_BASE_URL} from '../config/env';
+import {localeHeader} from '../i18n';
 
 export type SOSResponse = {id: string; status: 'active' | 'cancelled' | 'resolved'};
 
 async function request(path: string, token: string, init: RequestInit): Promise<SOSResponse> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...localeHeader(),
+    },
   });
   if (!response.ok) throw new Error('SOS request failed');
   return response.json() as Promise<SOSResponse>;

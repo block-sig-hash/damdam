@@ -31,18 +31,14 @@ def _device_token_service(request: Request) -> DeviceTokenService:
 
 
 def _emergency_contact_service(request: Request) -> EmergencyContactService:
-    return cast(
-        EmergencyContactService, request.app.state.emergency_contact_service
-    )
+    return cast(EmergencyContactService, request.app.state.emergency_contact_service)
 
 
 def _retention_service(request: Request) -> RetentionService:
     return cast(RetentionService, request.app.state.retention_service)
 
 
-@router.delete(
-    "/account", response_model=AccountDeletionResponse, status_code=202
-)
+@router.delete("/account", response_model=AccountDeletionResponse, status_code=202)
 def request_account_deletion(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
@@ -50,7 +46,7 @@ def request_account_deletion(
     with request.app.state.session_factory() as session:
         deleted_user = _retention_service(request).request_account_deletion(
             session, user.id
-    )
+        )
     assert deleted_user.deletion_requested_at is not None
     requested_at = deleted_user.deletion_requested_at
     if requested_at.tzinfo is None:

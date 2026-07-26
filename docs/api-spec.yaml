@@ -2647,6 +2647,9 @@ components:
             maxLength: 100
           - type: 'null'
           title: Name
+        locale:
+          $ref: '#/components/schemas/Locale'
+          default: en
       type: object
       required:
       - phone_number
@@ -2668,12 +2671,15 @@ components:
         notified_of_nomination:
           type: boolean
           title: Notified Of Nomination
+        locale:
+          $ref: '#/components/schemas/Locale'
       type: object
       required:
       - id
       - phone_number
       - name
       - notified_of_nomination
+      - locale
       title: FamilyContactResponse
     FamilyContactUpdate:
       properties:
@@ -2688,6 +2694,10 @@ components:
             maxLength: 100
           - type: 'null'
           title: Name
+        locale:
+          anyOf:
+          - $ref: '#/components/schemas/Locale'
+          - type: 'null'
       type: object
       title: FamilyContactUpdate
     FamilyGroupRequest:
@@ -2800,6 +2810,8 @@ components:
           title: Email Verified
         approval_status:
           $ref: '#/components/schemas/HTOApprovalStatus'
+        locale:
+          $ref: '#/components/schemas/Locale'
         created_at:
           type: string
           format: date-time
@@ -2814,6 +2826,7 @@ components:
       - nahcon_licence_number
       - email_verified
       - approval_status
+      - locale
       - created_at
       title: HTOOperatorResponse
     HTORegistrationRequest:
@@ -2846,6 +2859,9 @@ components:
           maxLength: 50
           minLength: 1
           title: Nahcon Licence Number
+        locale:
+          $ref: '#/components/schemas/Locale'
+          default: en
       type: object
       required:
       - business_name
@@ -3006,6 +3022,12 @@ components:
           default: alive
       type: object
       title: LivenessResponse
+    Locale:
+      type: string
+      enum:
+      - en
+      - fr
+      title: Locale
     ManifestConfirmResponse:
       properties:
         status:
@@ -3323,6 +3345,9 @@ components:
         phone_number:
           type: string
           title: Phone Number
+        locale:
+          $ref: '#/components/schemas/Locale'
+          default: en
       type: object
       required:
       - phone_number
@@ -3332,6 +3357,9 @@ components:
         phone_number:
           type: string
           title: Phone Number
+        locale:
+          $ref: '#/components/schemas/Locale'
+          default: en
         otp:
           type: string
           title: Otp
@@ -3357,6 +3385,9 @@ components:
         phone_number:
           type: string
           title: Phone Number
+        locale:
+          $ref: '#/components/schemas/Locale'
+          default: en
       type: object
       required:
       - phone_number
@@ -3828,6 +3859,8 @@ components:
             format: date
           - type: 'null'
           title: Departure Date
+        locale:
+          $ref: '#/components/schemas/Locale'
         platform:
           type: string
           title: Platform
@@ -3843,6 +3876,7 @@ components:
       - email
       - verified_cli
       - departure_date
+      - locale
       - platform
       - status
       title: UserResponse

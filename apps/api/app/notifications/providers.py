@@ -1,15 +1,19 @@
 import base64
 from decimal import Decimal
-from html import escape
 from typing import Any
 
 import httpx
 
 from app.config import Settings
+from app.i18n.notifications import NotificationRenderer
 from app.notifications.service import NotificationError
 
 
 class ResendEmailSender:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+        self.renderer = NotificationRenderer()
+
     def send_sos(
         self,
         email: str,
@@ -19,25 +23,22 @@ class ResendEmailSender:
         maps_url: str | None,
         cancelled: bool,
         notification_id: str,
+        locale: str = "en",
     ) -> None:
-        verb = "cancelled their SOS" if cancelled else "triggered an SOS and needs help"
-        location = (
-            f'<p><a href="{escape(maps_url, quote=True)}">View location</a></p>'
-            if maps_url
-            else "<p>Location unavailable.</p>"
+        content = self.renderer.email_sos(
+            pilgrim_name,
+            pilgrim_phone,
+            timestamp,
+            maps_url,
+            cancelled,
+            locale,
         )
         self._send(
             email,
-            "SOS cancelled" if cancelled else "URGENT: pilgrim SOS",
-            (
-                f"<p>{escape(pilgrim_name)} ({escape(pilgrim_phone)}) "
-                f"{verb} at {escape(timestamp)}.</p>{location}"
-            ),
+            content.subject,
+            content.html,
             idempotency_key=f"damdam-sos-notification-{notification_id}-v1",
         )
-
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
 
     def _send(
         self,
@@ -70,27 +71,20 @@ class ResendEmailSender:
             raise NotificationError("Email delivery failed") from exc
 
     def send_verification(
-        self, email: str, operator_name: str, verification_url: str
+        self,
+        email: str,
+        operator_name: str,
+        verification_url: str,
+        locale: str = "en",
     ) -> None:
-        safe_name = escape(operator_name)
-        safe_url = escape(verification_url, quote=True)
-        self._send(
-            email,
-            "Verify your DamDam operator account",
-            (
-                f"<p>Hello {safe_name},</p>"
-                f'<p><a href="{safe_url}">Verify your email address</a>. '
-                "This link expires in 24 hours.</p>"
-            ),
+        content = self.renderer.email_verification(
+            operator_name, verification_url, locale
         )
+        self._send(email, content.subject, content.html)
 
-    def send_approval(self, email: str, operator_name: str) -> None:
-        safe_name = escape(operator_name)
-        self._send(
-            email,
-            "Your DamDam operator account is approved",
-            f"<p>Hello {safe_name}, your DamDam operator account is approved.</p>",
-        )
+    def send_approval(self, email: str, operator_name: str, locale: str = "en") -> None:
+        content = self.renderer.email_approval(operator_name, locale)
+        self._send(email, content.subject, content.html)
 
     def send_invoice(
         self,
@@ -99,17 +93,15 @@ class ResendEmailSender:
         order_id: str,
         total_ngn: Decimal,
         pdf: bytes,
+        locale: str = "en",
     ) -> None:
-        safe_name = escape(operator_name)
-        safe_order = escape(order_id)
+        content = self.renderer.email_invoice(
+            operator_name, order_id, total_ngn, locale
+        )
         self._send(
             email,
-            f"DamDam invoice {safe_order}",
-            (
-                f"<p>Hello {safe_name},</p>"
-                f"<p>Your HTO order invoice for NGN {total_ngn:,.2f} is attached. "
-                f"Use {safe_order} as the bank-transfer reference.</p>"
-            ),
+            content.subject,
+            content.html,
             [
                 {
                     "content": base64.b64encode(pdf).decode(),
@@ -120,18 +112,18 @@ class ResendEmailSender:
         )
 
     def send_receipt(
-        self, email: str, tier_name: str, amount_ngn: Decimal, reference: str
+        self,
+        email: str,
+        tier_name: str,
+        amount_ngn: Decimal,
+        reference: str,
+        locale: str = "en",
     ) -> None:
-        safe_tier = escape(tier_name)
-        safe_reference = escape(reference)
+        content = self.renderer.email_receipt(tier_name, amount_ngn, reference, locale)
         self._send(
             email,
-            "Your DamDam payment receipt",
-            (
-                f"<p>Payment received for your {safe_tier} package.</p>"
-                f"<p>Amount: NGN {amount_ngn:,.2f}<br>"
-                f"Reference: {safe_reference}</p>"
-            ),
+            content.subject,
+            content.html,
             idempotency_key=f"damdam-retail-receipt-{reference}",
         )
 
@@ -139,18 +131,20 @@ class ResendEmailSender:
 class MetaWhatsAppSender:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        self.renderer = NotificationRenderer()
 
     def _send_template(
         self,
         phone_number: str,
         template_name: str,
+        language: str = "en",
         parameters: list[dict[str, str]] | None = None,
     ) -> str | None:
         if not self.settings.whatsapp_access_token:
             raise NotificationError("WhatsApp is not configured")
         template: dict[str, Any] = {
             "name": template_name,
-            "language": {"code": "en"},
+            "language": {"code": language},
         }
         if parameters:
             template["components"] = [{"type": "body", "parameters": parameters}]
@@ -184,48 +178,98 @@ class MetaWhatsAppSender:
         except httpx.HTTPError as exc:
             raise NotificationError("WhatsApp delivery failed") from exc
 
-    def send_approval(self, phone_number: str, operator_name: str) -> None:
+    def send_approval(
+        self, phone_number: str, operator_name: str, locale: str = "en"
+    ) -> None:
+        template = self.renderer.whatsapp_template(
+            self.settings.whatsapp_approval_template,
+            self.settings.whatsapp_approval_template_fr,
+            locale,
+        )
         self._send_template(
             phone_number,
-            self.settings.whatsapp_approval_template,
+            template.name,
+            template.language,
             [{"type": "text", "text": operator_name}],
         )
 
-    def send_esim_ready(self, phone_number: str, qr_code_url: str) -> None:
+    def send_esim_ready(
+        self, phone_number: str, qr_code_url: str, locale: str = "en"
+    ) -> None:
+        template = self.renderer.whatsapp_template(
+            self.settings.whatsapp_esim_ready_template,
+            self.settings.whatsapp_esim_ready_template_fr,
+            locale,
+        )
         self._send_template(
             phone_number,
-            self.settings.whatsapp_esim_ready_template,
+            template.name,
+            template.language,
             [{"type": "text", "text": qr_code_url}],
         )
 
-    def send_family_nomination(self, phone_number: str) -> None:
+    def send_family_nomination(self, phone_number: str, locale: str = "en") -> None:
+        template = self.renderer.whatsapp_template(
+            self.settings.whatsapp_family_nomination_template,
+            self.settings.whatsapp_family_nomination_template_fr,
+            locale,
+        )
         self._send_template(
             phone_number,
-            self.settings.whatsapp_family_nomination_template,
+            template.name,
+            template.language,
         )
 
     def send_activation(
-        self, phone_number: str, pilgrim_name: str, tier_name: str, url: str
+        self,
+        phone_number: str,
+        pilgrim_name: str,
+        tier_name: str,
+        url: str,
+        locale: str = "en",
     ) -> None:
+        template = self.renderer.whatsapp_template(
+            self.settings.whatsapp_activation_template,
+            self.settings.whatsapp_activation_template_fr,
+            locale,
+        )
         self._send_template(
             phone_number,
-            self.settings.whatsapp_activation_template,
+            template.name,
+            template.language,
             [
                 {"type": "text", "text": pilgrim_name},
-                {"type": "text", "text": tier_name},
+                {
+                    "type": "text",
+                    "text": self.renderer.tier_name(tier_name, locale),
+                },
                 {"type": "text", "text": url},
             ],
         )
 
     def send_receipt(
-        self, phone_number: str, tier_name: str, amount_ngn: Decimal, reference: str
+        self,
+        phone_number: str,
+        tier_name: str,
+        amount_ngn: Decimal,
+        reference: str,
+        locale: str = "en",
     ) -> None:
+        template = self.renderer.whatsapp_template(
+            self.settings.whatsapp_receipt_template,
+            self.settings.whatsapp_receipt_template_fr,
+            locale,
+        )
         self._send_template(
             phone_number,
-            self.settings.whatsapp_receipt_template,
+            template.name,
+            template.language,
             [
-                {"type": "text", "text": tier_name},
-                {"type": "text", "text": f"NGN {amount_ngn:,.2f}"},
+                {
+                    "type": "text",
+                    "text": self.renderer.tier_name(tier_name, locale),
+                },
+                {"type": "text", "text": self.renderer.amount_ngn(amount_ngn, locale)},
                 {"type": "text", "text": reference},
             ],
         )
@@ -236,13 +280,23 @@ class MetaWhatsAppSender:
         pilgrim_name: str,
         checked_in_at: str,
         maps_url: str | None,
+        locale: str = "en",
     ) -> str:
+        template = self.renderer.whatsapp_template(
+            self.settings.whatsapp_checkin_template,
+            self.settings.whatsapp_checkin_template_fr,
+            locale,
+        )
         message_id = self._send_template(
             phone_number,
-            self.settings.whatsapp_checkin_template,
+            template.name,
+            template.language,
             [
                 {"type": "text", "text": pilgrim_name},
-                {"type": "text", "text": checked_in_at},
+                {
+                    "type": "text",
+                    "text": self.renderer.timestamp(checked_in_at, locale),
+                },
                 {"type": "text", "text": maps_url or ""},
             ],
         )
@@ -258,16 +312,30 @@ class MetaWhatsAppSender:
         maps_url: str | None,
         hto_phone: str,
         cancelled: bool,
+        locale: str = "en",
     ) -> str:
-        message_id = self._send_template(
-            phone_number,
+        base_name = (
             self.settings.whatsapp_sos_cancelled_template
             if cancelled
-            else self.settings.whatsapp_sos_template,
+            else self.settings.whatsapp_sos_template
+        )
+        french_name = (
+            self.settings.whatsapp_sos_cancelled_template_fr
+            if cancelled
+            else self.settings.whatsapp_sos_template_fr
+        )
+        template = self.renderer.whatsapp_template(base_name, french_name, locale)
+        message_id = self._send_template(
+            phone_number,
+            template.name,
+            template.language,
             [
                 {"type": "text", "text": pilgrim_name},
-                {"type": "text", "text": timestamp},
-                {"type": "text", "text": maps_url or "Location unavailable"},
+                {"type": "text", "text": self.renderer.timestamp(timestamp, locale)},
+                {
+                    "type": "text",
+                    "text": maps_url or self.renderer.location_unavailable(locale),
+                },
                 {"type": "text", "text": hto_phone},
             ],
         )

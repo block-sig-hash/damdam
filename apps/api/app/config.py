@@ -51,13 +51,21 @@ class Settings(BaseSettings):
     whatsapp_phone_number_id: str = ""
     whatsapp_api_version: str = "v23.0"
     whatsapp_approval_template: str = "hto_account_approved"
+    whatsapp_approval_template_fr: str = ""
     whatsapp_family_nomination_template: str = "family_contact_nominated"
+    whatsapp_family_nomination_template_fr: str = ""
     whatsapp_activation_template: str = "hto_package_activation"
+    whatsapp_activation_template_fr: str = ""
     whatsapp_receipt_template: str = "retail_payment_receipt"
+    whatsapp_receipt_template_fr: str = ""
     whatsapp_esim_ready_template: str = "esim_profile_ready"
+    whatsapp_esim_ready_template_fr: str = ""
     whatsapp_checkin_template: str = "pilgrim_safe_checkin"
+    whatsapp_checkin_template_fr: str = ""
     whatsapp_sos_template: str = "pilgrim_urgent_sos"
+    whatsapp_sos_template_fr: str = ""
     whatsapp_sos_cancelled_template: str = "pilgrim_sos_cancelled"
+    whatsapp_sos_cancelled_template_fr: str = ""
     firebase_project_id: str = ""
     firebase_access_token: str = ""
     whatsapp_app_secret: str = ""
@@ -225,9 +233,7 @@ class Settings(BaseSettings):
         # change from "must contain SA:" to something destination-aware
         # (e.g. "must contain an entry for the purchasing user's
         # destination"), not be silently satisfied or removed.
-        if not any(
-            key.startswith("SA:") for key in self.esim_access_package_codes
-        ):
+        if not any(key.startswith("SA:") for key in self.esim_access_package_codes):
             raise ValueError(
                 "ESIM_ACCESS_PACKAGE_CODES is configured but has no 'SA:' "
                 "entries; SA is the only real destination sold today, so "

@@ -97,6 +97,7 @@ describe('OnboardingNavigator', () => {
         last_name: '',
         email: null,
         verified_cli: false,
+        locale: 'en' as const,
         platform: 'android',
         status: 'active',
       },
@@ -179,6 +180,7 @@ describe('OnboardingNavigator', () => {
         last_name: '',
         email: null,
         verified_cli: true,
+        locale: 'en' as const,
         platform: 'android',
         status: 'active',
       },
@@ -207,12 +209,17 @@ describe('OnboardingNavigator', () => {
 
     // account_exists routes to ReturningPilgrimScreen instead of OTP
     // Verification — same 6-digit input, different backend flow.
-    expect(mockRequestPinRecovery).toHaveBeenCalledWith('08012345678');
+    expect(mockRequestPinRecovery).toHaveBeenCalledWith('08012345678', 'en');
     await act(async () => {
       fireEvent.changeText(screen.getByTestId('otp-code-input'), '123456');
     });
 
-    expect(mockVerifyPinRecovery).toHaveBeenCalledWith('08012345678', '123456', expect.any(String));
+    expect(mockVerifyPinRecovery).toHaveBeenCalledWith(
+      '08012345678',
+      '123456',
+      expect.any(String),
+      'en',
+    );
     expect(await screen.findByTestId('activation-success')).toBeTruthy();
     expect(mockRedeem).toHaveBeenCalledWith('access-token', 'ABCD1234');
 
@@ -241,6 +248,7 @@ describe('OnboardingNavigator', () => {
         last_name: '',
         email: null,
         verified_cli: true,
+        locale: 'en' as const,
         platform: 'android',
         status: 'active',
       },
@@ -253,7 +261,7 @@ describe('OnboardingNavigator', () => {
     await act(async () => {
       fireEvent.press(screen.getByTestId('phone-entry-submit'));
     });
-    expect(mockRequestPinRecovery).toHaveBeenCalledWith('08012345678');
+    expect(mockRequestPinRecovery).toHaveBeenCalledWith('08012345678', 'en');
     await act(async () => {
       fireEvent.changeText(screen.getByTestId('otp-code-input'), '123456');
     });
@@ -279,6 +287,7 @@ describe('OnboardingNavigator', () => {
         last_name: '',
         email: null,
         verified_cli: false,
+        locale: 'en' as const,
         platform: 'android',
         status: 'active',
       },
@@ -315,6 +324,7 @@ describe('OnboardingNavigator', () => {
         email: null,
         verified_cli: true,
         departure_date: '2026-08-01',
+        locale: 'en',
         platform: 'android',
         status: 'active',
       },

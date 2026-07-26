@@ -4,6 +4,7 @@ import { DeviceCompatibilityPayload, logDeviceCompatibility } from '../../api/es
 import { SUPPORT_WHATSAPP_NUMBER } from '../../config/env';
 import { checkEsimCompatibility } from '../../utils/esimCompatibility';
 import { hasSeenEsimWarning, markEsimWarningSeen } from '../../utils/esimWarningSeen';
+import {i18n} from '../../i18n';
 
 export type EsimSetupStage = 'checking' | 'compatible' | 'warning' | 'qr-only';
 
@@ -91,7 +92,7 @@ export function useEsimSetupIntro({
 
   const handleWarningSupport = useCallback(async () => {
     const message = encodeURIComponent(
-      `Hi, I need help with my DamDam eSIM setup. Order reference: ${packageId}`,
+      i18n.t('compatibility.supportMessage', {ns: 'esim', reference: packageId}),
     );
     Linking.openURL(`https://wa.me/${SUPPORT_WHATSAPP_NUMBER}?text=${message}`).catch(() => {
       // Best-effort — WhatsApp not being installed shouldn't block

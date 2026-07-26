@@ -9,7 +9,7 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from app.auth.models import AccountSource, Platform, User
+from app.auth.models import AccountSource, Locale, Platform, User
 from app.auth.schemas import to_e164
 from app.auth.tokens import TokenService
 from app.config import Settings
@@ -69,6 +69,7 @@ class Challenge:
     secondary_provider: str
     secondary_reference: str | None = None
     secondary_delivery_reference: str | None = None
+    locale: str = Locale.EN.value
 
 
 @dataclass(frozen=True)
@@ -155,7 +156,11 @@ class OTPService:
         self.redis.expire(key, 3600)
 
     def request(
-        self, session: Session, phone_number: str, allow_existing: bool = False
+        self,
+        session: Session,
+        phone_number: str,
+        allow_existing: bool = False,
+        locale: Locale = Locale.EN,
     ) -> None:
         e164 = to_e164(phone_number)
         existing = session.exec(select(User).where(User.phone_number == e164)).first()
@@ -169,21 +174,31 @@ class OTPService:
         primary_name = self.settings.otp_provider_primary
         secondary_name = self.settings.otp_provider_secondary
         try:
-            dispatch = self.providers[primary_name].send(e164)
+            dispatch = self.providers[primary_name].send(e164, locale.value)
         except OTPProviderError:
             try:
-                dispatch = self.providers[secondary_name].send(e164)
+                dispatch = self.providers[secondary_name].send(e164, locale.value)
             except OTPProviderError as exc:
                 raise OTPError("otp_unavailable") from exc
             challenge = self._new_challenge(
-                phone_number, rate_scope, secondary_name, dispatch, primary_name
+                phone_number,
+                rate_scope,
+                secondary_name,
+                dispatch,
+                primary_name,
+                locale,
             )
             challenge.primary_delivered = True
             self._save(challenge)
             return
 
         challenge = self._new_challenge(
-            phone_number, rate_scope, primary_name, dispatch, secondary_name
+            phone_number,
+            rate_scope,
+            primary_name,
+            dispatch,
+            secondary_name,
+            locale,
         )
         self._save(challenge)
         self._remember_delivery(challenge, dispatch)
@@ -200,6 +215,7 @@ class OTPService:
         primary_name: str,
         dispatch: OTPDispatch,
         secondary_name: str,
+        locale: Locale,
     ) -> Challenge:
         now = self.clock()
         return Challenge(
@@ -217,6 +233,7 @@ class OTPService:
             primary_delivery_reference=dispatch.delivery_reference,
             primary_delivered=False,
             secondary_provider=secondary_name,
+            locale=locale.value,
         )
 
     def failover(self, phone_number: str, challenge_id: str | None = None) -> bool:
@@ -236,7 +253,7 @@ class OTPService:
             return False
         try:
             dispatch = self.providers[challenge.secondary_provider].send(
-                to_e164(phone_number)
+                to_e164(phone_number), challenge.locale
             )
         except OTPProviderError:
             return False
@@ -267,6 +284,7 @@ class OTPService:
         phone_number: str,
         code: str,
         platform: Platform,
+        locale: Locale = Locale.EN,
         purpose: str = "signup",
     ) -> AuthResult:
         challenge = self._load(phone_number)
@@ -307,6 +325,7 @@ class OTPService:
                 last_name="",
                 platform=platform,
                 account_source=AccountSource.DIRECT,
+                locale=locale,
                 last_login_at=now,
             )
             session.add(user)
@@ -318,6 +337,7 @@ class OTPService:
                 is_new_user = False
         else:
             user.last_login_at = now
+            user.locale = locale
 
         pair = self.tokens.issue(session, user, now)
         session.commit()

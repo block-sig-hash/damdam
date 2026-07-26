@@ -20,6 +20,7 @@ export interface ActiveSession {
   phoneNumber: string;
   departureDate: string | null;
   packageId?: string;
+  locale: 'en' | 'fr';
 }
 
 export interface UseSessionGateResult {
@@ -55,6 +56,7 @@ function toActiveSession(persisted: PersistedSession): ActiveSession {
     phoneNumber: persisted.phoneNumber,
     departureDate: persisted.departureDate,
     packageId: persisted.packageId,
+    locale: persisted.locale,
   };
 }
 
@@ -160,6 +162,7 @@ export function useSessionGate(): UseSessionGateResult {
           phoneNumber: recovered.user.phone_number,
           departureDate: recovered.user.departure_date ?? null,
           packageId,
+          locale: recovered.user.locale,
         };
         await saveSession(next);
         setSession(next);

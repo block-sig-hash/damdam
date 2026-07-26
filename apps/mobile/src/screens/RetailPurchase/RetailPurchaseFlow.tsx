@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import {useTranslation} from 'react-i18next';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import {
@@ -12,6 +13,7 @@ import { Banner } from '../../components/Banner/Banner';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
 import { color, minTouchTarget, space, typography } from '../../theme/tokens';
 import { PackageSelectionScreen } from '../PackageSelection/PackageSelectionScreen';
+import {i18n} from '../../i18n';
 
 const POLL_INTERVAL_MS = 10_000;
 const MAX_POLL_ATTEMPTS = 30;
@@ -30,15 +32,9 @@ function failureReason(url: string): string | null {
   if (!/[?&]status=(failed|cancelled)/i.test(url)) {
     return null;
   }
-  const matched = url.match(/[?&](?:message|reason)=([^&]+)/i);
-  if (!matched) {
-    return 'The payment was not completed.';
-  }
-  try {
-    return decodeURIComponent(matched[1].replace(/\+/g, ' '));
-  } catch {
-    return 'The payment was not completed.';
-  }
+  // Provider-controlled prose is intentionally not rendered. The status is
+  // mapped to a first-party, locale-aware message.
+  return i18n.t('purchase.failedDefault', {ns: 'payments'});
 }
 
 function SuccessScreen({
@@ -50,16 +46,16 @@ function SuccessScreen({
   status: PackagePaymentStatus;
   onContinue?: (packageId: string) => void;
 }) {
+  const {t} = useTranslation(['payments', 'common']);
   return (
     <View style={[styles.screen, styles.centered]} testID="purchase-success-screen">
-      <Text style={styles.successTitle}>Payment successful</Text>
+      <Text style={styles.successTitle}>{t('purchase.successful')}</Text>
       <Text style={styles.successBody}>
-        Your package is active with {status.data_gb_remaining} GB and{' '}
-        {status.pstn_minutes_remaining} calling minutes.
+        {t('purchase.activePackage', {data: status.data_gb_remaining, minutes: status.pstn_minutes_remaining})}
       </Text>
-      <Text style={styles.receiptNote}>Your receipt is being sent by WhatsApp and email where available.</Text>
+      <Text style={styles.receiptNote}>{t('purchase.receipt')}</Text>
       <PrimaryButton
-        label="Continue"
+        label={t('actions.continue', {ns: 'common'})}
         onPress={() => onContinue?.(checkout.package_id)}
         testID="purchase-success-continue"
       />
@@ -71,6 +67,7 @@ export function RetailPurchaseFlow({
   accessToken,
   onPurchaseComplete,
 }: RetailPurchaseFlowProps): React.JSX.Element {
+  const {t} = useTranslation(['payments', 'common']);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [checkout, setCheckout] = useState<PurchaseCheckout | null>(null);
   const [confirmed, setConfirmed] = useState<PackagePaymentStatus | null>(null);
@@ -91,11 +88,11 @@ export function RetailPurchaseFlow({
       );
       setCheckout(result);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Payment could not be started.');
+      setError(caught instanceof Error ? caught.message : t('purchase.startFailed'));
     } finally {
       setStarting(false);
     }
-  }, [accessToken]);
+  }, [accessToken, t]);
 
   useEffect(() => {
     if (!checkout || error || confirmed) {
@@ -114,7 +111,7 @@ export function RetailPurchaseFlow({
           return;
         }
         if (result.status === 'expired') {
-          setError('This payment session has expired. Please try again.');
+          setError(t('purchase.expired'));
           return;
         }
       } catch {
@@ -123,7 +120,7 @@ export function RetailPurchaseFlow({
       if (!cancelled && attempts < MAX_POLL_ATTEMPTS) {
         timer = setTimeout(poll, POLL_INTERVAL_MS);
       } else if (!cancelled) {
-        setError('Payment confirmation is taking longer than expected. Contact support if you were charged.');
+        setError(t('purchase.delayed'));
       }
     };
     poll().catch(() => undefined);
@@ -131,7 +128,7 @@ export function RetailPurchaseFlow({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [accessToken, checkout, confirmed, error]);
+  }, [accessToken, checkout, confirmed, error, t]);
 
   if (checkout && confirmed) {
     return (
@@ -146,10 +143,10 @@ export function RetailPurchaseFlow({
   if (error && selection) {
     return (
       <View style={[styles.screen, styles.failure]} testID="payment-failure-screen">
-        <Text style={styles.title}>Payment not completed</Text>
+        <Text style={styles.title}>{t('purchase.notCompleted')}</Text>
         <Banner tone="error" message={error} />
         <PrimaryButton
-          label="Try again"
+          label={t('actions.retry', {ns: 'common'})}
           onPress={() => start(selection).catch(() => undefined)}
           testID="payment-retry"
         />
@@ -162,7 +159,7 @@ export function RetailPurchaseFlow({
           }}
           style={styles.backButton}
         >
-          <Text style={styles.backLabel}>Choose another package</Text>
+          <Text style={styles.backLabel}>{t('purchase.chooseAnother')}</Text>
         </Pressable>
       </View>
     );
@@ -172,8 +169,8 @@ export function RetailPurchaseFlow({
     return (
       <View style={[styles.screen, styles.centered]} testID="payment-starting-screen">
         <ActivityIndicator size="large" color={color.primary500} />
-        <Text style={styles.title}>Preparing secure payment</Text>
-        <Text style={styles.body}>This usually takes only a few seconds.</Text>
+        <Text style={styles.title}>{t('purchase.preparing')}</Text>
+        <Text style={styles.body}>{t('purchase.preparingBody')}</Text>
       </View>
     );
   }
@@ -182,14 +179,14 @@ export function RetailPurchaseFlow({
     return (
       <View style={styles.screen} testID="payment-checkout-screen">
         <View style={styles.checkoutHeader}>
-          <Text style={styles.title}>Complete payment</Text>
-          <Text style={styles.body}>Card, bank transfer, USSD, OPay and PalmPay are supported.</Text>
+          <Text style={styles.title}>{t('purchase.complete')}</Text>
+          <Text style={styles.body}>{t('purchase.methods')}</Text>
         </View>
         <WebView
           source={{ uri: checkout.checkout_url }}
           testID="payment-webview"
-          onError={() => setError('The secure checkout page could not load. Check your connection and try again.')}
-          onHttpError={() => setError('The secure checkout page could not load. Check your connection and try again.')}
+          onError={() => setError(t('purchase.checkoutLoadFailed'))}
+          onHttpError={() => setError(t('purchase.checkoutLoadFailed'))}
           onNavigationStateChange={(navigation: WebViewNavigation): void => {
             const reason = failureReason(navigation.url);
             if (reason) setError(reason);

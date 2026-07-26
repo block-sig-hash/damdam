@@ -2,18 +2,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import {useLocale, useTranslations} from "next-intl";
 
 import { getHtoPilgrims, HtoPilgrim } from "@/lib/api";
 import { isStaleCheckIn, matchesPilgrimSearch, sortPilgrimsByRisk } from "@/lib/pilgrimRisk";
 
 const AUTO_REFRESH_MS = 60_000;
 
-function formatLastCheckIn(lastCheckinAt: string | null): string {
-  if (!lastCheckinAt) return "No check-in yet";
-  return new Date(lastCheckinAt).toLocaleString();
-}
-
 export default function ManifestDetailPage() {
+  const t = useTranslations("home");
+  const locale = useLocale();
   const { id } = useParams<{ id: string }>();
   const [pilgrims, setPilgrims] = useState<HtoPilgrim[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,11 +24,11 @@ export default function ManifestDetailPage() {
     try {
       setPilgrims(await getHtoPilgrims(id));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load pilgrims.");
+      setError(caught instanceof Error ? caught.message : t("loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     const initial = window.setTimeout(() => { load(); }, 0);
@@ -52,48 +50,47 @@ export default function ManifestDetailPage() {
       <section className="manifest-card wide-card">
         <div className="page-heading">
           <div>
-            <p className="eyebrow">Manifest</p>
-            <h1>Pilgrim roster</h1>
+            <p className="eyebrow">{t("manifest")}</p>
+            <h1>{t("roster")}</h1>
           </div>
           <button disabled={loading} onClick={() => load()}>
-            {loading ? "Refreshing…" : "Refresh"}
+            {loading ? t("refreshing") : t("refresh")}
           </button>
         </div>
-        <p>Sorted by risk. Auto-refreshes every 60 seconds.</p>
+        <p>{t("riskRefresh")}</p>
         {unresolvedSOSCount > 0 ? (
           <aside className="sos-home-banner" role="alert">
             <strong>
-              {unresolvedSOSCount} unresolved SOS {unresolvedSOSCount === 1 ? "alert" : "alerts"}{" "}
-              on this manifest
+              {t("manifestSos", {count: unresolvedSOSCount})}
             </strong>
-            <a href="/sos-alerts">Open SOS Alerts</a>
+            <a href="/sos-alerts">{t("openSos")}</a>
           </aside>
         ) : null}
         <input
-          aria-label="Search pilgrims by name or phone"
+          aria-label={t("searchAria")}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by name or phone"
+          placeholder={t("searchPlaceholder")}
           type="search"
           value={search}
         />
         {error ? <p className="error" role="alert">{error}</p> : null}
         {loading && pilgrims.length === 0 ? (
-          <p>Loading pilgrims…</p>
+          <p>{t("loadingPilgrims")}</p>
         ) : pilgrims.length === 0 ? (
-          <p>No pilgrims on this manifest yet.</p>
+          <p>{t("noManifestPilgrims")}</p>
         ) : visiblePilgrims.length === 0 ? (
-          <p>No pilgrims match &quot;{search}&quot;.</p>
+          <p>{t("noSearchMatches", {search})}</p>
         ) : (
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Phone</th>
-                  <th>Tier</th>
-                  <th>Activation</th>
+                  <th>{t("name")}</th>
+                  <th>{t("phone")}</th>
+                  <th>{t("tier")}</th>
+                  <th>{t("activation")}</th>
                   <th>eSIM</th>
-                  <th>Last check-in</th>
+                  <th>{t("lastCheckIn")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,13 +115,13 @@ export default function ManifestDetailPage() {
                           }`}
                         >
                           {pilgrim.activation_status === "activated"
-                            ? "Activated"
-                            : "Not activated"}
+                            ? t("activated")
+                            : t("notActivated")}
                         </span>
                       </td>
                       <td>
                         {pilgrim.esim_status === "incompatible" ? (
-                          <span className="status-badge status-follow-up">Follow up</span>
+                          <span className="status-badge status-follow-up">{t("followUp")}</span>
                         ) : ["issued", "downloaded", "activated"].includes(
                             pilgrim.esim_status,
                           ) ? (
@@ -136,14 +133,13 @@ export default function ManifestDetailPage() {
                                 : ""
                             }`}
                           >
-                            {pilgrim.esim_status.charAt(0).toUpperCase() +
-                              pilgrim.esim_status.slice(1)}
+                            {t(`esimStatuses.${pilgrim.esim_status as "issued" | "downloaded" | "activated"}`)}
                           </span>
                         ) : (
                           "—"
                         )}
                       </td>
-                      <td>{formatLastCheckIn(pilgrim.last_checkin_at)}</td>
+                      <td>{pilgrim.last_checkin_at ? new Date(pilgrim.last_checkin_at).toLocaleString(locale) : t("noCheckIn")}</td>
                     </tr>
                   );
                 })}

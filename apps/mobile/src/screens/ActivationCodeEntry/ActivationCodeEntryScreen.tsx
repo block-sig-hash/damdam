@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import {useTranslation} from 'react-i18next';
 import {
   KeyboardAvoidingView,
   Platform as RNPlatform,
@@ -25,6 +26,7 @@ export function ActivationCodeEntryScreen({
   initialCode,
   onContinue,
 }: ActivationCodeEntryScreenProps): React.JSX.Element {
+  const {t} = useTranslation(['auth', 'common']);
   const { code, setCode, status, preview, errorMessage, canContinue, checkCode } =
     useActivationCodeEntry({ initialCode });
 
@@ -39,12 +41,10 @@ export function ActivationCodeEntryScreen({
       behavior={RNPlatform.OS === 'ios' ? 'padding' : undefined}
       style={styles.screen}
     >
-      <Text style={styles.title}>Activate your package</Text>
-      <Text style={styles.subtitle}>
-        Enter the activation code your HTO sent you on WhatsApp.
-      </Text>
+      <Text style={styles.title}>{t('activation.entryTitle')}</Text>
+      <Text style={styles.subtitle}>{t('activation.entrySubtitle')}</Text>
 
-      <Text style={styles.label}>Activation code</Text>
+      <Text style={styles.label}>{t('activation.codeLabel')}</Text>
       <TextInput
         testID="activation-code-input"
         value={code}
@@ -54,15 +54,15 @@ export function ActivationCodeEntryScreen({
         autoCapitalize="characters"
         autoCorrect={false}
         maxLength={ACTIVATION_CODE_LENGTH}
-        accessibilityLabel="Activation code"
+        accessibilityLabel={t('activation.codeLabel')}
         style={[styles.input, status === 'invalid' && styles.inputError]}
       />
 
       {status === 'valid' && preview ? (
         <View style={styles.previewCard} testID="activation-preview-card">
-          <Text style={styles.previewLabel}>Issued by</Text>
+          <Text style={styles.previewLabel}>{t('activation.issuedBy')}</Text>
           <Text style={styles.previewValue}>{preview.organization_name}</Text>
-          <Text style={styles.previewLabel}>Package</Text>
+          <Text style={styles.previewLabel}>{t('activation.package')}</Text>
           <Text style={styles.previewValue}>{preview.pricing_tier_name}</Text>
         </View>
       ) : null}
@@ -76,7 +76,7 @@ export function ActivationCodeEntryScreen({
       <View style={styles.footer}>
         <PrimaryButton
           testID="activation-code-continue"
-          label="Continue"
+          label={t('actions.continue', {ns: 'common'})}
           onPress={() => onContinue(code)}
           disabled={!canContinue}
           loading={status === 'checking'}

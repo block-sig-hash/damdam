@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/env';
+import {i18n, localeHeader} from '../i18n';
 
 export type ActivationErrorCode =
   | 'activation_code_invalid'
@@ -54,11 +55,16 @@ async function parseErrorResponse(response: Response): Promise<ActivationApiErro
     const code = KNOWN_CODES.includes(payload.error as ActivationErrorCode)
       ? (payload.error as ActivationErrorCode)
       : 'validation_error';
-    return new ActivationApiError(code, payload.message);
+    const key =
+      code === 'activation_code_already_used' ? 'activationUsed'
+      : code === 'activation_code_expired' ? 'activationExpired'
+      : code === 'activation_code_invalid' ? 'activationInvalid'
+      : 'generic';
+    return new ActivationApiError(code, i18n.t(`errors.${key}`, {ns: 'auth'}));
   } catch {
     return new ActivationApiError(
       'network_error',
-      'Something went wrong. Please try again.',
+      i18n.t('errors.generic', {ns: 'auth'}),
     );
   }
 }
@@ -70,11 +76,12 @@ export async function previewActivationCode(
   try {
     response = await fetch(
       `${API_BASE_URL}/activation/${encodeURIComponent(activationCode)}`,
+      { headers: localeHeader() },
     );
   } catch {
     throw new ActivationApiError(
       'network_error',
-      'Check your connection and try again.',
+      i18n.t('errors.network', {ns: 'auth'}),
     );
   }
 
@@ -95,13 +102,14 @@ export async function redeemActivationCode(
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        ...localeHeader(),
       },
       body: JSON.stringify({ activation_code: activationCode }),
     });
   } catch {
     throw new ActivationApiError(
       'network_error',
-      'Check your connection and try again.',
+      i18n.t('errors.network', {ns: 'auth'}),
     );
   }
 

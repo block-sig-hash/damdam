@@ -6,11 +6,31 @@ appId: com.damdam.app
 # a populated one. "Caller ID" is present in every state, so it's the
 # stable thing to assert on.
 - launchApp
+- tapOn:
+    id: "harness-locale-en"
+- assertVisible:
+    id: "harness-locale-active-en"
 - scrollUntilVisible:
     element:
       id: "harness-target-cli-manage"
     direction: DOWN
 - tapOn:
     id: "harness-target-cli-manage"
-- assertVisible: "Caller ID"
-- takeScreenshot: cli-manage
+- assertVisible:
+    id: "cli-manage-title"
+- takeScreenshot: cli-manage-en
+- stopApp
+- launchApp
+- tapOn:
+    id: "harness-locale-fr"
+- assertVisible:
+    id: "harness-locale-active-fr"
+- scrollUntilVisible:
+    element:
+      id: "harness-target-cli-manage"
+    direction: DOWN
+- tapOn:
+    id: "harness-target-cli-manage"
+- assertVisible:
+    id: "cli-manage-title"
+- takeScreenshot: cli-manage-fr

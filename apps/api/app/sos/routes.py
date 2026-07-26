@@ -25,9 +25,7 @@ def _service(request: Request) -> SOSService:
 
 
 def _push_subscriptions(request: Request) -> PushSubscriptionService:
-    return cast(
-        PushSubscriptionService, request.app.state.push_subscription_service
-    )
+    return cast(PushSubscriptionService, request.app.state.push_subscription_service)
 
 
 @router.post("/sos", response_model=SOSCreateResponse)

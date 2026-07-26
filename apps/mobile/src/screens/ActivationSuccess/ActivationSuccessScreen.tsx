@@ -1,4 +1,5 @@
 import React from 'react';
+import {useTranslation} from 'react-i18next';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Banner } from '../../components/Banner/Banner';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
@@ -26,6 +27,7 @@ export function ActivationSuccessScreen({
   activationCode,
   onContinue,
 }: ActivationSuccessScreenProps): React.JSX.Element {
+  const {t} = useTranslation(['auth', 'common']);
   const { status, result, errorMessage, retry } = useActivationRedeem({
     accessToken,
     activationCode,
@@ -35,7 +37,7 @@ export function ActivationSuccessScreen({
     return (
       <View style={[styles.screen, styles.centered]} testID="activation-redeeming">
         <ActivityIndicator color={color.primary500} size="large" />
-        <Text style={styles.redeemingText}>Attaching your package...</Text>
+        <Text style={styles.redeemingText}>{t('activation.attaching')}</Text>
       </View>
     );
   }
@@ -43,18 +45,18 @@ export function ActivationSuccessScreen({
   if (status === 'error') {
     return (
       <View style={styles.screen}>
-        <Text style={styles.title}>Couldn't attach your package</Text>
+        <Text style={styles.title}>{t('activation.attachFailed')}</Text>
         <View style={styles.bannerSpacing}>
           <Banner
             tone="error"
-            message={errorMessage ?? 'Something went wrong. Please try again.'}
+            message={errorMessage ?? t('errors.generic')}
             testID="activation-redeem-error"
           />
         </View>
         <View style={styles.footer}>
           <PrimaryButton
             testID="activation-redeem-retry"
-            label="Try again"
+            label={t('actions.tryAgain', {ns: 'common'})}
             onPress={retry}
           />
         </View>
@@ -64,24 +66,23 @@ export function ActivationSuccessScreen({
 
   return (
     <View style={styles.screen} testID="activation-success">
-      <Text style={styles.eyebrow}>Package activated</Text>
-      <Text style={styles.headline}>You're all set!</Text>
+      <Text style={styles.eyebrow}>{t('activation.activated')}</Text>
+      <Text style={styles.headline}>{t('activation.allSet')}</Text>
       <Text style={styles.subtitle}>
-        Your {result?.pricing_tier_name} package is ready — no payment needed,
-        your HTO already covered it.
+        {t('activation.ready', {tier: result?.pricing_tier_name})}
       </Text>
 
       <View style={styles.summaryCard}>
-        <Text style={styles.summaryValue}>{result?.data_gb_total} GB</Text>
-        <Text style={styles.summaryLabel}>data</Text>
-        <Text style={styles.summaryValue}>{result?.pstn_minutes_total} minutes</Text>
-        <Text style={styles.summaryLabel}>calling</Text>
+        <Text style={styles.summaryValue}>{t('activation.dataAmount', {amount: result?.data_gb_total})}</Text>
+        <Text style={styles.summaryLabel}>{t('activation.data')}</Text>
+        <Text style={styles.summaryValue}>{t('activation.minutesAmount', {amount: result?.pstn_minutes_total})}</Text>
+        <Text style={styles.summaryLabel}>{t('activation.calling')}</Text>
       </View>
 
       <View style={styles.footer}>
         <PrimaryButton
           testID="activation-success-continue"
-          label="Continue"
+          label={t('actions.continue', {ns: 'common'})}
           onPress={() => result && onContinue(result)}
         />
       </View>

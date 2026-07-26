@@ -25,6 +25,7 @@ const AUTH_RESPONSE = {
     last_name: '',
     email: null,
     verified_cli: true,
+    locale: 'en' as const,
     platform: 'android',
     status: 'active',
   },
@@ -46,7 +47,7 @@ describe('useReturningPilgrimLogin', () => {
       }),
     );
 
-    expect(mockRequest).toHaveBeenCalledWith('08012345678');
+    expect(mockRequest).toHaveBeenCalledWith('08012345678', 'en');
     expect(result.current.status).toBe('awaiting_code');
   });
 
@@ -69,7 +70,7 @@ describe('useReturningPilgrimLogin', () => {
       await result.current.submit();
     });
 
-    expect(mockVerify).toHaveBeenCalledWith('08012345678', '123456', 'android');
+    expect(mockVerify).toHaveBeenCalledWith('08012345678', '123456', 'android', 'en');
     expect(onVerified).toHaveBeenCalledWith(AUTH_RESPONSE);
   });
 

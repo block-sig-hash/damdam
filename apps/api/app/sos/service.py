@@ -142,9 +142,7 @@ class SOSService:
         self._schedule(rows)
         return alert
 
-    def _organization_user_ids(
-        self, session: Session, organization_id: UUID
-    ) -> Any:
+    def _organization_user_ids(self, session: Session, organization_id: UUID) -> Any:
         return (
             select(ManifestPilgrim.user_id)
             .join(Manifest, col(Manifest.id) == col(ManifestPilgrim.manifest_id))

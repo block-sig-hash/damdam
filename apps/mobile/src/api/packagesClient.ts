@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/env';
+import {i18n, localeHeader} from '../i18n';
 
 /**
  * Mirrors docs/api-spec.md's `GET /me/packages` response shape --
@@ -22,13 +23,13 @@ export async function getMyPackages(accessToken: string): Promise<MePackage[]> {
   try {
     response = await fetch(`${API_BASE_URL}/me/packages`, {
       method: 'GET',
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${accessToken}`, ...localeHeader() },
     });
   } catch {
-    throw new PackagesApiError('Check your connection and try again.');
+    throw new PackagesApiError(i18n.t('errors.network', {ns: 'auth'}));
   }
   if (!response.ok) {
-    throw new PackagesApiError('Could not load packages.');
+    throw new PackagesApiError(i18n.t('packages.unavailable', {ns: 'payments'}));
   }
   const body = (await response.json()) as { packages: MePackage[] };
   return body.packages;

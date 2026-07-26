@@ -4,6 +4,7 @@ import {
   ActivationPreview,
   previewActivationCode,
 } from '../../api/activationClient';
+import {i18n} from '../../i18n';
 
 export const ACTIVATION_CODE_LENGTH = 8;
 
@@ -68,18 +69,18 @@ export function useActivationCodeEntry({
       setStatus('invalid');
       setErrorMessage(
         result.reason === 'activation_code_already_used'
-          ? 'This activation code has already been used.'
-          : 'This activation code has expired. Ask your HTO for a new one.',
+          ? i18n.t('errors.activationUsed', {ns: 'auth'})
+          : i18n.t('errors.activationExpired', {ns: 'auth'}),
       );
     } catch (err) {
       setPreview(null);
       setStatus('invalid');
       if (err instanceof ActivationApiError && err.code === 'activation_code_invalid') {
-        setErrorMessage("That code doesn't look right. Check it and try again.");
+        setErrorMessage(i18n.t('errors.activationInvalid', {ns: 'auth'}));
       } else if (err instanceof ActivationApiError) {
         setErrorMessage(err.message);
       } else {
-        setErrorMessage('Something went wrong. Please try again.');
+        setErrorMessage(i18n.t('errors.generic', {ns: 'auth'}));
       }
     }
   }, [code, status]);

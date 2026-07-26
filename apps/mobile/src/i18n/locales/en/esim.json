@@ -1,0 +1,87 @@
+{
+  "arrival": {
+    "title": "You’ve arrived",
+    "message": "You've arrived in Saudi Arabia. Tap to activate your DamDam data — takes 30 seconds.",
+    "showGuide": "Show activation guide",
+    "activateNow": "Activate now",
+    "manualGuide": "Use manual guide"
+  },
+  "activation": {
+    "title": "Activate your eSIM",
+    "intro": "Follow these steps for {{device}}. Keep DamDam open.",
+    "placeholderNotice": "Device-specific screenshots are being verified on real phones. These generic steps are safe to use now.",
+    "showQr": "Show my QR code",
+    "confirmed": "I've activated it",
+    "loadFailed": "Your eSIM details could not load. Please try again.",
+    "notConnected": "DamDam could not confirm mobile data yet. Check your eSIM is selected, then try again.",
+    "failed": "Activation could not complete. Use the manual guide instead."
+  },
+  "guide": {
+    "android": {
+      "openSettings": "Open Settings.",
+      "settingsHome": "Settings home",
+      "openSim": "Open SIM cards, Mobile network, or Connections.",
+      "simSettings": "SIM settings",
+      "enable": "Select the DamDam eSIM and turn it on.",
+      "switch": "DamDam eSIM switch",
+      "chooseData": "Choose DamDam for mobile data.",
+      "dataSelection": "Mobile data selection",
+      "genericDevice": "Android"
+    },
+    "ios": {
+      "openCellular": "Open Settings, then Cellular.",
+      "cellularSettings": "Settings → Cellular",
+      "addEsim": "Tap Add eSIM.",
+      "addEsimLabel": "Add eSIM",
+      "chooseQr": "Choose Use QR Code.",
+      "chooseQrLabel": "Use QR Code",
+      "scanQr": "Scan the DamDam QR code shown in the app.",
+      "scanQrLabel": "Scan QR code",
+      "enableData": "Turn on the new line for Cellular Data.",
+      "dataSelection": "Cellular Data selection"
+    }
+  },
+  "compatibility": {
+    "checking": "Checking your device...",
+    "title": "Set up your eSIM",
+    "supported": "Your device supports eSIM. Download it directly, or scan a QR code instead.",
+    "download": "Download to device",
+    "qrOnly": "Use the QR code to activate your DamDam package on a compatible device.",
+    "viewQr": "View QR code",
+    "warningTitle": "Your device may not support eSIM",
+    "warningBody": "Your device does not appear to support eSIM. You can still use your DamDam package by scanning the QR code on a compatible device. Tap Continue to download your QR code, or tap Support to get help.",
+    "support": "Support",
+    "supportMessage": "Hi, I need help with my DamDam eSIM setup. Order reference: {{reference}}"
+  },
+  "qr": {
+    "preparing": "Preparing your eSIM...",
+    "queuedTitle": "Your eSIM is queued",
+    "queuedFallback": "We will retry automatically and notify you when it is ready.",
+    "queuedBody": "You can leave this screen. We will notify you when your QR code is ready.",
+    "tryNow": "Try now",
+    "readyTitle": "Your eSIM is ready",
+    "installWindow": "Install it 2–7 days before your departure.",
+    "recorded": "eSIM download recorded successfully.",
+    "downloaded": "Downloaded",
+    "readyToDownload": "Ready to download",
+    "accessibility": "eSIM installation QR code",
+    "activationCode": "Activation code",
+    "installed": "I installed this eSIM",
+    "save": "Save QR code",
+    "offlineNote": "Keep this QR code saved offline. Open it full-screen, then use your device's Save Image action."
+  },
+  "banner": {
+    "title": "Activate eSIM",
+    "message": "Set up your Saudi Arabia data before you travel.",
+    "action": "Activate now",
+    "dismiss": "Dismiss until next app open"
+  },
+  "errors": {
+    "queued": "Download failed. It is queued and will retry automatically.",
+    "queuedFallback": "Your eSIM is queued for retry.",
+    "downloadFailed": "Download could not start.",
+    "statusFailed": "Status could not be updated.",
+    "manualOnly": "Use the manual activation guide on this device.",
+    "directUnavailable": "Direct eSIM download is unavailable on this build."
+  }
+}

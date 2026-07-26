@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect} from 'react';
 import { SafeAreaView, StatusBar, StyleSheet, View } from 'react-native';
 import { AuthenticatedApp } from './src/navigation/AuthenticatedApp';
 import { OnboardingNavigator } from './src/navigation/OnboardingNavigator';
@@ -6,6 +6,7 @@ import { PinUnlockScreen } from './src/screens/PinUnlock/PinUnlockScreen';
 import { useSessionGate } from './src/hooks/useSessionGate';
 import { PostHogMonitoringProvider } from './src/monitoring/PostHogMonitoringProvider';
 import { color } from './src/theme/tokens';
+import {i18n} from './src/i18n';
 
 /**
  * AC-23.1/AC-23.2/AC-23.3/AC-23.4 -- useSessionGate decides whether a
@@ -15,6 +16,12 @@ import { color } from './src/theme/tokens';
  */
 function App(): React.JSX.Element {
   const { phase, session, onOnboarded, onPinUnlocked } = useSessionGate();
+
+  useEffect(() => {
+    if (session?.locale && i18n.language !== session.locale) {
+      i18n.changeLanguage(session.locale).catch(() => undefined);
+    }
+  }, [session?.locale]);
 
   let content: React.JSX.Element;
   if (phase === 'loading') {

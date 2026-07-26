@@ -37,6 +37,12 @@ jest.mock('@react-native-community/geolocation', () => ({
   },
 }));
 
+jest.mock('react-native-localize', () => ({
+  findBestLanguageTag: jest.fn(() => ({languageTag: 'en', isRTL: false})),
+  getLocales: jest.fn(() => [{languageCode: 'en', languageTag: 'en-US', isRTL: false}]),
+  addEventListener: jest.fn(() => ({remove: jest.fn()})),
+}));
+
 // Both react-native-callkeep and react-native-voip-push-notification build a
 // NativeEventEmitter around NativeModules.RNCallKeep/RNVoipPushNotificationManager
 // at import time -- neither exists in the Jest environment (no real native
@@ -73,3 +79,6 @@ jest.mock('react-native-voip-push-notification', () => ({
     onVoipNotificationCompleted: jest.fn(),
   },
 }));
+
+// Initialize the production i18next singleton for isolated component tests.
+require('./src/i18n');

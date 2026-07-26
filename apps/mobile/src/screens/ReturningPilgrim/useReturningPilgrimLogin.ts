@@ -6,6 +6,8 @@ import {
   requestPinRecovery,
   verifyPinRecovery,
 } from '../../api/authClient';
+import {i18n} from '../../i18n';
+import {normalizeLocale} from '../../i18n/locale';
 import { useCountdownSeconds } from '../../hooks/useCountdownSeconds';
 import { useElapsedSeconds } from '../../hooks/useElapsedSeconds';
 
@@ -83,7 +85,7 @@ export function useReturningPilgrimLogin({
   const sendCode = useCallback(async () => {
     setErrorMessage(null);
     try {
-      await requestPinRecovery(phoneNumber);
+      await requestPinRecovery(phoneNumber, normalizeLocale(i18n.language));
       setSentAt(Date.now());
       setCodeState('');
       setStatus('awaiting_code');
@@ -91,11 +93,11 @@ export function useReturningPilgrimLogin({
       setStatus('awaiting_code');
       if (err instanceof OtpApiError && err.code === 'rate_limited') {
         setResendBlockedTotalSeconds(err.retryAfter ?? MANUAL_RESEND_THRESHOLD_SECONDS);
-        setErrorMessage('Please wait before requesting another code.');
+        setErrorMessage(i18n.t('errors.waitBeforeCode', {ns: 'auth'}));
       } else if (err instanceof OtpApiError) {
         setErrorMessage(err.message);
       } else {
-        setErrorMessage('Something went wrong. Please try again.');
+        setErrorMessage(i18n.t('errors.generic', {ns: 'auth'}));
       }
     }
   }, [phoneNumber]);
@@ -124,27 +126,32 @@ export function useReturningPilgrimLogin({
     setStatus('verifying');
     setErrorMessage(null);
     try {
-      const result = await verifyPinRecovery(phoneNumber, code, platform);
+      const result = await verifyPinRecovery(
+        phoneNumber,
+        code,
+        platform,
+        normalizeLocale(i18n.language),
+      );
       onVerified(result);
     } catch (err) {
       if (err instanceof OtpApiError && err.code === 'locked') {
         setStatus('locked');
         setLockoutTotalSeconds(err.retryAfter ?? 60);
-        setErrorMessage('Too many attempts. Please wait before trying again.');
+        setErrorMessage(i18n.t('errors.tooManyAttempts', {ns: 'auth'}));
       } else if (err instanceof OtpApiError && err.code === 'otp_expired') {
         setStatus('awaiting_code');
         setCodeState('');
-        setErrorMessage('That code expired. Send a new one.');
+        setErrorMessage(i18n.t('errors.expiredCode', {ns: 'auth'}));
       } else if (err instanceof OtpApiError && err.code === 'invalid_otp') {
         setStatus('awaiting_code');
         setCodeState('');
-        setErrorMessage('That code is incorrect. Try again.');
+        setErrorMessage(i18n.t('errors.incorrectCode', {ns: 'auth'}));
       } else if (err instanceof OtpApiError) {
         setStatus('awaiting_code');
         setErrorMessage(err.message);
       } else {
         setStatus('awaiting_code');
-        setErrorMessage('Something went wrong. Please try again.');
+        setErrorMessage(i18n.t('errors.generic', {ns: 'auth'}));
       }
     }
   }, [code, status, phoneNumber, platform, onVerified]);

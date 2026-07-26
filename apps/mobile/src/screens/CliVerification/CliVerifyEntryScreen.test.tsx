@@ -68,7 +68,7 @@ describe('CliVerifyEntryScreen', () => {
     await fireEvent.press(screen.getByTestId('cli-verify-entry-submit'));
 
     expect(screen.getByTestId('cli-verify-entry-error')).toBeTruthy();
-    expect(screen.getByText('Enter a valid number.')).toBeTruthy();
+    expect(screen.getByText('Enter a valid Nigerian mobile number.')).toBeTruthy();
   });
 
   it('calls onCancel from the "Not now" link', async () => {

@@ -68,7 +68,7 @@ class DeviceCompatibilityLog(SQLModel, table=True):
                 values_callable=lambda choices: [choice.value for choice in choices],
             ),
             nullable=True,
-        )
+        ),
     )
     device_model: str | None = Field(
         default=None, sa_column=Column(String(100), nullable=True)
@@ -150,9 +150,7 @@ class UsagePoll(SQLModel, table=True):
     polled_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False, index=True)
     )
-    data_used_gb: Decimal = Field(
-        sa_column=Column(Numeric(6, 2), nullable=False)
-    )
+    data_used_gb: Decimal = Field(sa_column=Column(Numeric(6, 2), nullable=False))
     poll_success: bool = Field(sa_column=Column(Boolean(), nullable=False))
 
 
@@ -175,12 +173,8 @@ class DailyUsageSummary(SQLModel, table=True):
     last_polled_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False)
     )
-    first_data_used_gb: Decimal = Field(
-        sa_column=Column(Numeric(6, 2), nullable=False)
-    )
-    last_data_used_gb: Decimal = Field(
-        sa_column=Column(Numeric(6, 2), nullable=False)
-    )
+    first_data_used_gb: Decimal = Field(sa_column=Column(Numeric(6, 2), nullable=False))
+    last_data_used_gb: Decimal = Field(sa_column=Column(Numeric(6, 2), nullable=False))
     successful_poll_count: int = Field(sa_column=Column(Integer(), nullable=False))
     failed_poll_count: int = Field(sa_column=Column(Integer(), nullable=False))
 
@@ -199,9 +193,7 @@ class EsimIssuanceJob(SQLModel, table=True):
             index=True,
         )
     )
-    attempt_count: int = Field(
-        default=0, sa_column=Column(Integer(), nullable=False)
-    )
+    attempt_count: int = Field(default=0, sa_column=Column(Integer(), nullable=False))
     next_attempt_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )

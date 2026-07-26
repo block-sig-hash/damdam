@@ -4,6 +4,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { getEmergencyContact } from '../../api/emergencyContactClient';
 import { EMERGENCY_PHRASES } from '../../content/emergencyEssentials';
 import { EmergencyEssentials } from './EmergencyEssentials';
+import {i18n} from '../../i18n';
 
 jest.mock('../../api/emergencyContactClient', () => ({
   getEmergencyContact: jest.fn(),
@@ -64,7 +65,7 @@ it('AC-12.2: renders all five key phrases in English and Arabic', async () => {
   for (const phrase of EMERGENCY_PHRASES) {
     const row = view.getByTestId(`emergency-phrase-${phrase.key}`);
     expect(row).toBeTruthy();
-    expect(view.getByText(phrase.english)).toBeTruthy();
+    expect(view.getByText(i18n.t(`phrases.${phrase.key}`, {ns: 'safety'}))).toBeTruthy();
     expect(view.getByText(phrase.arabic)).toBeTruthy();
   }
 });

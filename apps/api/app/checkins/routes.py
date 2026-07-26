@@ -81,9 +81,12 @@ async def meta_webhook(request: Request) -> MetaWebhookResponse:
     body = await request.body()
     settings = cast(Settings, request.app.state.settings)
     provided = request.headers.get("x-hub-signature-256", "")
-    expected = "sha256=" + hmac.new(
-        settings.whatsapp_app_secret.encode(), body, hashlib.sha256
-    ).hexdigest()
+    expected = (
+        "sha256="
+        + hmac.new(
+            settings.whatsapp_app_secret.encode(), body, hashlib.sha256
+        ).hexdigest()
+    )
     if (
         not settings.whatsapp_app_secret
         or not provided

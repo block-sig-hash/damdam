@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import {useTranslation} from 'react-i18next';
 import { AuthResponse } from '../api/authClient';
 import { ActivationCodeEntryScreen } from '../screens/ActivationCodeEntry/ActivationCodeEntryScreen';
 import { ActivationSuccessScreen } from '../screens/ActivationSuccess/ActivationSuccessScreen';
@@ -22,6 +23,7 @@ type OnboardingStep =
       isNewUser: boolean;
       departureDate: string | null;
       packageId: string;
+      locale: 'en' | 'fr';
     }
   | { name: 'onboarded' };
 
@@ -34,6 +36,7 @@ export interface AuthenticatedMobileSession {
   phoneNumber: string;
   departureDate: string | null;
   packageId?: string;
+  locale: 'en' | 'fr';
 }
 
 interface OnboardingNavigatorProps {
@@ -56,10 +59,11 @@ function AuthenticationHandoff({
   onAuthenticated?: (session: AuthenticatedMobileSession) => void;
   title: string;
 }): React.JSX.Element {
+  const {t} = useTranslation('common');
   useEffect(() => {
     onAuthenticated?.(session);
   }, [onAuthenticated, session]);
-  return <PlaceholderScreen title={title} note="Opening Home..." />;
+  return <PlaceholderScreen title={title} note={t('onboarding.openingHome')} />;
 }
 
 /**
@@ -74,6 +78,7 @@ export function OnboardingNavigator({
   initialActivationCode,
   onAuthenticated,
 }: OnboardingNavigatorProps = {}): React.JSX.Element {
+  const {t} = useTranslation('common');
   const [step, setStep] = useState<OnboardingStep>(
     initialActivationCode ? { name: 'activation-entry' } : { name: 'phone' },
   );
@@ -148,6 +153,7 @@ export function OnboardingNavigator({
                 isNewUser: step.result.is_new_user,
                 departureDate: step.result.user.departure_date ?? null,
                 packageId: redemption.package_id,
+                locale: step.result.user.locale,
               })
             }
           />
@@ -161,9 +167,10 @@ export function OnboardingNavigator({
               refreshToken: step.result.refresh_token,
               phoneNumber: step.result.user.phone_number,
               departureDate: step.result.user.departure_date ?? null,
+              locale: step.result.user.locale,
             }}
             onAuthenticated={onAuthenticated}
-            title="Welcome back"
+            title={t('onboarding.welcomeBack')}
           />
         );
       }
@@ -177,6 +184,7 @@ export function OnboardingNavigator({
                 refreshToken: step.result.refresh_token,
                 phoneNumber: step.result.user.phone_number,
                 departureDate: step.result.user.departure_date ?? null,
+                locale: step.result.user.locale,
               });
             } else {
               setStep({ name: 'onboarded' });
@@ -198,9 +206,10 @@ export function OnboardingNavigator({
               phoneNumber: step.phoneNumber,
               departureDate: step.departureDate,
               packageId: step.packageId,
+              locale: step.locale,
             }}
             onAuthenticated={onAuthenticated}
-            title="Package active"
+            title={t('onboarding.packageActive')}
           />
         );
       }
@@ -215,6 +224,7 @@ export function OnboardingNavigator({
                 phoneNumber: step.phoneNumber,
                 departureDate: step.departureDate,
                 packageId: step.packageId,
+                locale: step.locale,
               });
             } else {
               setStep({ name: 'onboarded' });
@@ -225,8 +235,8 @@ export function OnboardingNavigator({
     case 'onboarded':
       return (
         <PlaceholderScreen
-          title="PIN set"
-          note="Next: family contact and departure date — coming in later stories."
+          title={t('onboarding.pinSet')}
+          note={t('onboarding.nextSteps')}
         />
       );
   }

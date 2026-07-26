@@ -4,7 +4,22 @@ tags:
 ---
 - launchApp
 - tapOn:
+    id: "harness-locale-en"
+- assertVisible:
+    id: "harness-locale-active-en"
+- tapOn:
     id: "harness-target-esim-activation-prompt-android"
 - assertVisible:
     id: "esim-arrival-prompt"
-- takeScreenshot: esim-activation-prompt-android
+- takeScreenshot: esim-activation-prompt-android-en
+- stopApp
+- launchApp
+- tapOn:
+    id: "harness-locale-fr"
+- assertVisible:
+    id: "harness-locale-active-fr"
+- tapOn:
+    id: "harness-target-esim-activation-prompt-android"
+- assertVisible:
+    id: "esim-arrival-prompt"
+- takeScreenshot: esim-activation-prompt-android-fr

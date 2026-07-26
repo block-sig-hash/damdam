@@ -48,6 +48,7 @@ from app.esim.service import (
     NoopEsimIssuanceScheduler,
 )
 from app.health import LivenessResponse, ReadinessResponse, check_readiness
+from app.i18n import api_message, localize_validation_errors, request_locale
 from app.manifests.invoices import InvoiceStorage, build_invoice_storage
 from app.manifests.orders import ManifestOrderService, ProvisioningScheduler
 from app.manifests.routes import pricing_router
@@ -266,49 +267,40 @@ def create_app(
     async def checkin_error_handler(
         request: Request, exc: CheckInError
     ) -> JSONResponse:
-        del request
         statuses = {
             "checkin_rate_limited": 429,
             "checkin_id_conflict": 409,
             "invalid_webhook_signature": 401,
             "invalid_webhook_payload": 400,
         }
-        messages = {
-            "checkin_rate_limited": "You can check in once every 15 minutes.",
-            "checkin_id_conflict": "This check-in identifier is already in use.",
-            "invalid_webhook_signature": "Webhook signature is invalid.",
-            "invalid_webhook_payload": "Webhook payload is invalid.",
-        }
         return JSONResponse(
             status_code=statuses[exc.code],
-            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
         )
 
     @api.exception_handler(EsimError)
     async def esim_error_handler(request: Request, exc: EsimError) -> JSONResponse:
-        del request
         statuses = {
             "aggregator_unavailable": 502,
             "package_not_found": 404,
             "package_not_active": 409,
             "esim_profile_not_found": 404,
         }
-        messages = {
-            "aggregator_unavailable": (
-                "eSIM issuance is queued and will retry automatically."
-            ),
-            "package_not_found": "The package was not found.",
-            "package_not_active": "The package is not active yet.",
-            "esim_profile_not_found": "The eSIM profile has not been issued yet.",
-        }
         return JSONResponse(
             status_code=statuses[exc.code],
-            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
         )
 
     @api.exception_handler(OTPError)
     async def otp_error_handler(request: Request, exc: OTPError) -> JSONResponse:
-        del request
         statuses = {
             "invalid_otp": 400,
             "otp_expired": 400,
@@ -325,22 +317,6 @@ def create_app(
             "pin_not_set": 400,
             "invalid_access_token": 401,
         }
-        messages = {
-            "invalid_otp": "The verification code is incorrect.",
-            "otp_expired": "The verification code has expired.",
-            "rate_limited": "Please wait before requesting another code.",
-            "locked": "Too many attempts. Please wait before trying again.",
-            "account_exists": "This number already has an account. Please log in.",
-            "account_not_found": "No account exists for this phone number.",
-            "otp_unavailable": "Verification is temporarily unavailable.",
-            "invalid_refresh_token": "The refresh token is invalid or expired.",
-            "invalid_webhook_signature": "Webhook signature is invalid.",
-            "invalid_webhook_payload": "Webhook payload is invalid.",
-            "pin_too_weak": "Choose a non-repeated, non-sequential 4-digit PIN.",
-            "invalid_pin": "The PIN is incorrect.",
-            "pin_not_set": "Set a PIN before trying to unlock the app.",
-            "invalid_access_token": "The access token is invalid or expired.",
-        }
         details: dict[str, Any] = {}
         if exc.retry_after is not None:
             details["retry_after"] = exc.retry_after
@@ -348,7 +324,7 @@ def create_app(
             status_code=statuses.get(exc.code, 400),
             content={
                 "error": exc.code,
-                "message": messages[exc.code],
+                "message": api_message(request, exc.code),
                 "details": details,
             },
         )
@@ -357,14 +333,13 @@ def create_app(
     async def validation_error_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        del request
-        errors = exc.errors()
+        errors = localize_validation_errors(exc.errors(), request_locale(request))
         if any(error["type"] == "pin_too_weak" for error in errors):
             return JSONResponse(
                 status_code=400,
                 content={
                     "error": "pin_too_weak",
-                    "message": ("Choose a non-repeated, non-sequential 4-digit PIN."),
+                    "message": api_message(request, "pin_too_weak"),
                     "details": {},
                 },
             )
@@ -380,14 +355,13 @@ def create_app(
             status_code=422,
             content={
                 "error": "validation_error",
-                "message": "The request contains invalid fields.",
+                "message": api_message(request, "validation_error"),
                 "details": {"errors": serializable_errors},
             },
         )
 
     @api.exception_handler(HTOAuthError)
     async def hto_error_handler(request: Request, exc: HTOAuthError) -> JSONResponse:
-        del request
         statuses = {
             "email_already_registered": 409,
             "invalid_verification_token": 400,
@@ -401,35 +375,19 @@ def create_app(
             "notification_unavailable": 503,
             "invalid_operator_token": 401,
         }
-        messages = {
-            "email_already_registered": "This email already has an account.",
-            "invalid_verification_token": (
-                "The verification link is invalid or expired."
-            ),
-            "invalid_credentials": "The email or password is incorrect.",
-            "email_not_verified": "Verify your email before continuing.",
-            "pending_approval": "Your account is pending admin approval.",
-            "rejected": "Your operator registration was rejected.",
-            "invalid_admin_token": "A valid administrator session is required.",
-            "operator_not_found": "The operator account was not found.",
-            "invalid_approval_transition": (
-                "The account cannot be updated from its current approval state."
-            ),
-            "notification_unavailable": (
-                "Notification delivery is temporarily unavailable."
-            ),
-            "invalid_operator_token": "A valid HTO operator session is required.",
-        }
         return JSONResponse(
             status_code=statuses[exc.code],
-            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
         )
 
     @api.exception_handler(ManifestError)
     async def manifest_error_handler(
         request: Request, exc: ManifestError
     ) -> JSONResponse:
-        del request
         statuses = {
             "csv_required": 415,
             "malformed_csv": 400,
@@ -458,57 +416,11 @@ def create_app(
             "activation_code_unavailable": 503,
             "activation_delivery_incomplete": 503,
         }
-        messages = {
-            "csv_required": "Upload a CSV file.",
-            "malformed_csv": "The CSV file could not be parsed.",
-            "missing_required_columns": (
-                "The CSV must include first_name, last_name, and phone_number."
-            ),
-            "row_limit_exceeded": "A manifest can contain at most 500 rows.",
-            "manifest_not_found": "The manifest was not found.",
-            "manifest_already_confirmed": "This manifest has already been confirmed.",
-            "no_valid_rows": "The manifest has no valid rows to confirm.",
-            "manifest_not_confirmed": "Confirm the manifest before placing orders.",
-            "pricing_tier_not_found": "The selected pricing tier is unavailable.",
-            "pricing_unavailable": "Current package pricing is unavailable.",
-            "invalid_pilgrim_selection": "Select valid pilgrims from this manifest.",
-            "pilgrims_already_grouped": (
-                "One or more pilgrims already belong to a family group."
-            ),
-            "family_group_not_found": "The family group was not found.",
-            "invalid_family_group_size": (
-                "The family group size is outside the tier limits."
-            ),
-            "family_group_required": "Select one complete Family group for this tier.",
-            "complete_family_group_required": (
-                "Every member of the Family group must be selected."
-            ),
-            "individual_pilgrims_required": "Grouped pilgrims require the Family tier.",
-            "pilgrims_already_ordered": (
-                "One or more pilgrims are already included in an order."
-            ),
-            "manifest_order_not_found": "The manifest order was not found.",
-            "invoice_unavailable": "Invoice generation is temporarily unavailable.",
-            "invoice_email_unavailable": (
-                "The order was saved, but invoice email delivery is unavailable."
-            ),
-            "invalid_payment_transition": (
-                "This order cannot be confirmed from its current state."
-            ),
-            "provisioning_unavailable": (
-                "Payment was recorded, but provisioning could not be queued."
-            ),
-            "payment_not_confirmed": "Payment must be confirmed before provisioning.",
-            "activation_code_unavailable": "An activation code could not be generated.",
-            "activation_delivery_incomplete": (
-                "One or more activation links could not be delivered."
-            ),
-        }
         return JSONResponse(
             status_code=statuses[exc.code],
             content={
                 "error": exc.code,
-                "message": messages[exc.code],
+                "message": api_message(request, exc.code),
                 "details": jsonable_encoder(exc.details),
             },
         )
@@ -517,57 +429,48 @@ def create_app(
     async def family_contact_error_handler(
         request: Request, exc: FamilyContactError
     ) -> JSONResponse:
-        del request
         statuses = {
             "family_contact_exists": 409,
             "family_contact_not_found": 404,
             "notification_unavailable": 503,
         }
-        messages = {
-            "family_contact_exists": (
-                "A family contact already exists. Update it instead."
-            ),
-            "family_contact_not_found": "No family contact has been nominated.",
-            "notification_unavailable": (
-                "The nomination was saved, but WhatsApp is temporarily unavailable."
-            ),
-        }
         return JSONResponse(
             status_code=statuses[exc.code],
-            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+            content={
+                "error": exc.code,
+                "message": api_message(
+                    request,
+                    "family_contact_notification_unavailable"
+                    if exc.code == "notification_unavailable"
+                    else exc.code,
+                ),
+                "details": {},
+            },
         )
 
     @api.exception_handler(ActivationError)
     async def activation_error_handler(
         request: Request, exc: ActivationError
     ) -> JSONResponse:
-        del request
         statuses = {
             "activation_code_invalid": 404,
             "activation_code_already_used": 409,
             "activation_code_expired": 410,
             "activation_code_phone_mismatch": 403,
         }
-        messages = {
-            "activation_code_invalid": "This activation code is invalid.",
-            "activation_code_already_used": (
-                "This activation code has already been used."
-            ),
-            "activation_code_expired": "This activation code has expired.",
-            "activation_code_phone_mismatch": (
-                "This activation code was issued to a different phone number."
-            ),
-        }
         return JSONResponse(
             status_code=statuses[exc.code],
-            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
         )
 
     @api.exception_handler(PaymentError)
     async def payment_error_handler(
         request: Request, exc: PaymentError
     ) -> JSONResponse:
-        del request
         statuses = {
             "pricing_tier_not_found": 404,
             "invalid_group_size": 400,
@@ -578,40 +481,31 @@ def create_app(
             "package_not_found": 404,
             "destination_geofence_not_configured": 404,
         }
-        messages = {
-            "pricing_tier_not_found": "The selected pricing tier is unavailable.",
-            "invalid_group_size": "Choose a valid group size for this package.",
-            "payment_unavailable": (
-                "Both payment services are unavailable. Please try again."
-            ),
-            "invalid_processor": "The payment processor is not supported.",
-            "invalid_webhook_signature": "Webhook signature is invalid.",
-            "invalid_webhook_payload": "Webhook payload is invalid.",
-            "package_not_found": "The package was not found.",
-            "destination_geofence_not_configured": (
-                "Arrival alerts are not configured for this destination."
-            ),
-        }
         return JSONResponse(
             status_code=statuses[exc.code],
-            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
         )
 
     @api.exception_handler(PackageError)
     async def package_error_handler(
         request: Request, exc: PackageError
     ) -> JSONResponse:
-        del request
         statuses = {"package_not_found": 404}
-        messages = {"package_not_found": "The package was not found."}
         return JSONResponse(
             status_code=statuses[exc.code],
-            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
         )
 
     @api.exception_handler(VoiceError)
     async def voice_error_handler(request: Request, exc: VoiceError) -> JSONResponse:
-        del request
         statuses = {
             "invalid_webhook_signature": 401,
             "invalid_webhook_payload": 400,
@@ -619,23 +513,19 @@ def create_app(
             "pstn_balance_exhausted": 409,
             "voice_unavailable": 503,
         }
-        messages = {
-            "invalid_webhook_signature": "Webhook signature is invalid.",
-            "invalid_webhook_payload": "Webhook payload is invalid.",
-            "cli_not_verified": "Verify your Nigerian number before making PSTN calls.",
-            "pstn_balance_exhausted": "No PSTN minutes remain on your package.",
-            "voice_unavailable": "Calling is temporarily unavailable.",
-        }
         return JSONResponse(
             status_code=statuses[exc.code],
-            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
         )
 
     @api.exception_handler(CallerIdentityError)
     async def caller_identity_error_handler(
         request: Request, exc: CallerIdentityError
     ) -> JSONResponse:
-        del request
         statuses = {
             "invalid_phone_number": 400,
             "phone_verification_unavailable": 503,
@@ -646,30 +536,17 @@ def create_app(
             "number_already_verified_elsewhere": 409,
             "no_active_caller_id": 404,
         }
-        messages = {
-            "invalid_phone_number": "Enter a valid Nigerian mobile number.",
-            "phone_verification_unavailable": (
-                "Phone verification is temporarily unavailable."
-            ),
-            "cli_verification_rate_limited": (
-                "Too many verification attempts. Try again later."
-            ),
-            "caller_identity_not_found": "Verification not found.",
-            "invalid_state": "This action is not valid for the current step.",
-            "verification_code_invalid": "That code did not match. Try again.",
-            "number_already_verified_elsewhere": (
-                "This number is already verified on another account."
-            ),
-            "no_active_caller_id": "No verified caller ID to revoke.",
-        }
         return JSONResponse(
             status_code=statuses[exc.code],
-            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
         )
 
     @api.exception_handler(SOSError)
     async def sos_error_handler(request: Request, exc: SOSError) -> JSONResponse:
-        del request
         statuses = {
             "sos_id_conflict": 409,
             "sos_not_found": 404,
@@ -681,7 +558,7 @@ def create_app(
             status_code=statuses[exc.code],
             content={
                 "error": exc.code,
-                "message": exc.code.replace("_", " ").capitalize(),
+                "message": api_message(request, exc.code),
                 "details": {},
             },
         )

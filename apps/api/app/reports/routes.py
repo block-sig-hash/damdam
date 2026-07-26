@@ -28,8 +28,6 @@ def download_provisioning_report(
         content=csv_text,
         media_type="text/csv",
         headers={
-            "Content-Disposition": (
-                'attachment; filename="provisioning-report.csv"'
-            )
+            "Content-Disposition": ('attachment; filename="provisioning-report.csv"')
         },
     )

@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/env';
+import {i18n, localeHeader} from '../i18n';
 
 export type FamilyContactErrorCode =
   | 'family_contact_exists'
@@ -51,7 +52,7 @@ async function parseError(response: Response): Promise<FamilyContactApiError> {
       : 'validation_error';
     return new FamilyContactApiError(code, payload.message);
   } catch {
-    return new FamilyContactApiError('network_error', 'Something went wrong. Please try again.');
+    return new FamilyContactApiError('network_error', i18n.t('errors.generic', {ns: 'auth'}));
   }
 }
 
@@ -67,11 +68,12 @@ async function saveFamilyContact(
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
+        ...localeHeader(),
       },
       body: JSON.stringify(input),
     });
   } catch {
-    throw new FamilyContactApiError('network_error', 'Check your connection and try again.');
+    throw new FamilyContactApiError('network_error', i18n.t('errors.network', {ns: 'auth'}));
   }
 
   if (!response.ok) {

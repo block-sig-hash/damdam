@@ -262,7 +262,7 @@ class CallLog(SQLModel, table=True):
         default=None,
         sa_column=Column(
             ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
-        )
+        ),
     )
     telnyx_call_leg_id: str = Field(
         sa_column=Column(String(64), unique=True, nullable=False, index=True)

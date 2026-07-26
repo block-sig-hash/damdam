@@ -1,0 +1,31 @@
+{
+  "essentials": {
+    "title": "Ressources d'urgence",
+    "htoOperator": "Votre opérateur HTO",
+    "support": "Assistance DamDam (WhatsApp)",
+    "phrasesTitle": "Phrases utiles"
+  },
+  "phrases": {
+    "help": "À l'aide",
+    "thank_you": "Merci",
+    "where_is": "Où se trouve... ?",
+    "i_dont_understand": "Je ne comprends pas",
+    "i_need_a_doctor": "J'ai besoin d'un médecin"
+  },
+  "sos": {
+    "confirmTitle": "SOS d'urgence",
+    "confirmInstructions": "Maintenez le bouton ci-dessous enfoncé pendant 3 secondes pour alerter votre opérateur et votre famille.",
+    "accessibilityLabel": "SOS / Urgence",
+    "accessibilityHint": "Maintenir enfoncé pendant 3 secondes pour envoyer une alerte d'urgence",
+    "sentTitle": "SOS envoyé — les secours arrivent",
+    "notified": "Votre opérateur et votre famille ont été prévenus",
+    "pending": "Envoi en cours... votre opérateur et votre famille seront prévenus dès que vous aurez du réseau",
+    "sentAt": "Envoyé le {{timestamp}}",
+    "callNow": "Appeler maintenant",
+    "cancel": "Annuler le SOS",
+    "cancelTitle": "Voulez-vous vraiment annuler ce SOS ?",
+    "cancelBody": "Votre opérateur et votre famille ont déjà été prévenus. Annulez uniquement si ce SOS a été envoyé par erreur.",
+    "confirmCancellation": "Confirmer l'annulation",
+    "keepActive": "Maintenir le SOS actif"
+  }
+}

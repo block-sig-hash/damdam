@@ -57,9 +57,7 @@ async def package_status(
         )
 
 
-@router.get(
-    "/packages/{package_id}/geofence", response_model=PackageGeofenceResponse
-)
+@router.get("/packages/{package_id}/geofence", response_model=PackageGeofenceResponse)
 async def package_geofence(
     package_id: UUID,
     request: Request,

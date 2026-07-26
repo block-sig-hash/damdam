@@ -100,9 +100,7 @@ class RetentionService:
             .where(SOSAlert.timestamp <= cutoff)
             .with_for_update(skip_locked=True)
         ).all()
-        return self._delete_rows(
-            session, rows, AuditOutcome.SOS_ALERT_DELETED, cutoff
-        )
+        return self._delete_rows(session, rows, AuditOutcome.SOS_ALERT_DELETED, cutoff)
 
     def collapse_expired_usage_polls(self, session: Session) -> int:
         if not self._acquire_sweep_lock(session):
@@ -178,9 +176,7 @@ class RetentionService:
             .where(CallLog.started_at <= cutoff)
             .with_for_update(skip_locked=True)
         ).all()
-        return self._delete_rows(
-            session, rows, AuditOutcome.CALL_LOG_DELETED, cutoff
-        )
+        return self._delete_rows(session, rows, AuditOutcome.CALL_LOG_DELETED, cutoff)
 
     def hard_delete_expired_accounts(self, session: Session) -> int:
         if not self._acquire_sweep_lock(session):
@@ -264,9 +260,7 @@ class RetentionService:
             .where(DeviceCompatibilityLog.checked_at <= cutoff)
             .with_for_update(skip_locked=True)
         ).all()
-        return self._delete_rows(
-            session, rows, AuditOutcome.DEVICE_LOG_DELETED, cutoff
-        )
+        return self._delete_rows(session, rows, AuditOutcome.DEVICE_LOG_DELETED, cutoff)
 
     def delete_expired_transactions(self, session: Session) -> int:
         if not self._acquire_sweep_lock(session):

@@ -1068,3 +1068,17 @@ internal testing track. This should be treated as added scope
 against the existing timeline, not absorbed silently — see
 infrastructure.md §11.4 for the CI/CD implications and §11.8 for
 the added Apple Developer Program cost.
+
+---
+
+## 9. Amendment — English/French Product Support
+
+NG8’s “English only for MVP” statement is superseded. DamDam now supports
+explicit English/French selection across mobile, dashboard, API responses, and
+transactional/safety notifications. Locale is a recipient preference and must
+not be inferred from country where a market is multilingual.
+
+This does not greenlight a new country by itself. Nigerian phone, NAHCON,
+NGN/payment, identity, and market-specific legal assumptions remain separate
+expansion work. French production launch is gated by the native, safety, legal,
+vendor-template, and screenshot reviews in `localization.md`.

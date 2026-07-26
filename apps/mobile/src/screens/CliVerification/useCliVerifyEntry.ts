@@ -1,10 +1,7 @@
 import { useCallback, useState } from 'react';
-import {
-  CliApiError,
-  startCliVerification,
-  type VerifiedCallerIdentity,
-} from '../../api/cliClient';
+import { startCliVerification, type VerifiedCallerIdentity } from '../../api/cliClient';
 import { cliDigitsOnly, isValidCliPhoneNumber } from '../../utils/cliPhoneNumber';
+import { cliErrorMessage } from './cliErrorMessage';
 
 export type CliVerifyEntryStatus = 'idle' | 'submitting';
 
@@ -46,9 +43,7 @@ export function useCliVerifyEntry({
       const identity = await startCliVerification(accessToken, phoneNumber);
       onStarted(identity);
     } catch (err) {
-      setErrorMessage(
-        err instanceof CliApiError ? err.message : 'Something went wrong. Please try again.',
-      );
+      setErrorMessage(cliErrorMessage(err));
     } finally {
       setStatus('idle');
     }

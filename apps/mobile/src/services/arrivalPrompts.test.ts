@@ -2,7 +2,7 @@ import { Linking, NativeModules, PermissionsAndroid, Platform } from 'react-nati
 import { registerDeviceToken } from '../api/pushClient';
 import { getPackageGeofence } from '../api/paymentClient';
 import {
-  ARRIVAL_NOTIFICATION_COPY,
+  getArrivalNotificationCopy,
   optIntoArrivalGeofence,
   parseActivationDeepLink,
   registerPushInstallation,
@@ -31,7 +31,7 @@ it('AC-13.7: starts exactly seven days before departure and does not depend on l
 });
 
 it('AC-13.2/13.3: preserves exact copy and parses the package deep link', () => {
-  expect(ARRIVAL_NOTIFICATION_COPY).toBe("You've arrived in Saudi Arabia. Tap to activate your DamDam data — takes 30 seconds.");
+  expect(getArrivalNotificationCopy()).toBe("You've arrived in Saudi Arabia. Tap to activate your DamDam data — takes 30 seconds.");
   expect(parseActivationDeepLink('damdam://esim/activate?packageId=package-42')).toBe('package-42');
   expect(parseActivationDeepLink('damdam://other/path?packageId=package-42')).toBeNull();
 });

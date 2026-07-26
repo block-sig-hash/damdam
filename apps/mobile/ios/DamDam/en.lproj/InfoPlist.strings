@@ -1,0 +1,2 @@
+"NSLocationWhenInUseUsageDescription" = "DamDam uses your location to attach it to a check-in and to detect arrival in Saudi Arabia so your eSIM can be activated automatically.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "DamDam uses your location in the background to detect arrival in Saudi Arabia so your eSIM can be activated automatically, even if the app isn't open.";

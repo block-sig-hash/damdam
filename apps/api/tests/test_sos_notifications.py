@@ -36,12 +36,27 @@ class FakeEmail:
         self.sos_calls: list[tuple] = []
 
     def send_sos(
-        self, email, pilgrim_name, pilgrim_phone, timestamp, maps_url, cancelled,
+        self,
+        email,
+        pilgrim_name,
+        pilgrim_phone,
+        timestamp,
+        maps_url,
+        cancelled,
         notification_id,
+        locale="en",
     ) -> None:
+        del locale
         self.sos_calls.append(
-            (email, pilgrim_name, pilgrim_phone, timestamp, maps_url, cancelled,
-             notification_id)
+            (
+                email,
+                pilgrim_name,
+                pilgrim_phone,
+                timestamp,
+                maps_url,
+                cancelled,
+                notification_id,
+            )
         )
 
     def send_verification(self, *a, **k):
@@ -62,8 +77,16 @@ class FakeWhatsApp:
         self.sos_calls: list[tuple] = []
 
     def send_sos(
-        self, phone_number, pilgrim_name, timestamp, maps_url, hto_phone, cancelled,
+        self,
+        phone_number,
+        pilgrim_name,
+        timestamp,
+        maps_url,
+        hto_phone,
+        cancelled,
+        locale="en",
     ) -> str:
+        del locale
         self.sos_calls.append(
             (phone_number, pilgrim_name, timestamp, maps_url, hto_phone, cancelled)
         )
@@ -154,9 +177,7 @@ def test_whatsapp_operator_channel_sends_to_hto_phone_not_family() -> None:
         NotificationService(email=FakeEmail(), whatsapp=whatsapp), FakePush()
     )
 
-    adapter.send(
-        _context(SOSNotificationChannel.WHATSAPP_OPERATOR, "+2348088888888")
-    )
+    adapter.send(_context(SOSNotificationChannel.WHATSAPP_OPERATOR, "+2348088888888"))
 
     assert len(whatsapp.sos_calls) == 1
     assert whatsapp.sos_calls[0][0] == "+2348099999999"  # hto_phone destination

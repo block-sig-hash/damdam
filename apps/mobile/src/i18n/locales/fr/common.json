@@ -1,0 +1,35 @@
+{
+  "language": {
+    "label": "Langue",
+    "english": "English",
+    "french": "Français"
+  },
+  "actions": {
+    "continue": "Continuer",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "retry": "Réessayer",
+    "back": "Retour",
+    "done": "Terminé",
+    "save": "Enregistrer"
+  },
+  "state": {
+    "loading": "Chargement…"
+  },
+  "onboarding": {
+    "openingHome": "Ouverture de l'accueil...",
+    "welcomeBack": "Bon retour",
+    "packageActive": "Forfait actif",
+    "pinSet": "Code PIN défini",
+    "nextSteps": "Étape suivante : contact familial et date de départ — bientôt disponibles."
+  },
+  "native": {
+    "unknown": "Inconnu",
+    "callingPermissionTitle": "Autorisation d'appel requise",
+    "callingPermissionBody": "DamDam doit être activé comme compte d'appel pour afficher les appels entrants et sortants sur votre écran verrouillé.",
+    "enable": "Activer",
+    "callChannel": "Appels DamDam",
+    "callInProgress": "Appel DamDam en cours",
+    "incomingCall": "Appel entrant"
+  }
+}

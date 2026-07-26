@@ -2,10 +2,13 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import {useTranslations} from "next-intl";
 
+import {LocaleSwitcher} from "@/components/LocaleSwitcher";
 import { loginHTO } from "@/lib/api";
 
 export default function LoginPage() {
+  const t = useTranslations("auth");
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,7 +23,7 @@ export default function LoginPage() {
       await loginHTO(email, password);
       router.push("/home");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Sign in failed.");
+      setError(caught instanceof Error ? caught.message : t("signInFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -29,12 +32,13 @@ export default function LoginPage() {
   return (
     <main className="auth-shell">
       <section className="auth-card compact-card">
-        <p className="eyebrow">HTO dashboard</p>
-        <h1>Sign in</h1>
-        <p className="intro">Use your approved operator account.</p>
+        <LocaleSwitcher />
+        <p className="eyebrow">{t("dashboard")}</p>
+        <h1>{t("signIn")}</h1>
+        <p className="intro">{t("signInIntro")}</p>
         <form onSubmit={submit} className="single-column-form">
           <label>
-            Email address
+            {t("email")}
             <input
               required
               type="email"
@@ -44,7 +48,7 @@ export default function LoginPage() {
             />
           </label>
           <label>
-            Password
+            {t("password")}
             <input
               required
               type="password"
@@ -55,7 +59,7 @@ export default function LoginPage() {
           </label>
           {error ? <p className="error" role="alert">{error}</p> : null}
           <button type="submit" disabled={submitting}>
-            {submitting ? "Signing in…" : "Sign in"}
+            {submitting ? t("signingIn") : t("signIn")}
           </button>
         </form>
       </section>

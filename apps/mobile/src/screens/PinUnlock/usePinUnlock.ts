@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AuthResponse } from '../../api/authClient';
 import { useCountdownSeconds } from '../../hooks/useCountdownSeconds';
+import {i18n} from '../../i18n';
 import {
   clearLocalPinLock,
   getLocalPinState,
@@ -115,11 +116,11 @@ export function usePinUnlock({ onUnlocked }: UsePinUnlockArgs): UsePinUnlockResu
     if (updated?.lockedUntil) {
       setLockoutTotalSeconds(secondsUntil(updated.lockedUntil));
       setStage('locked');
-      setErrorMessage('Too many attempts. Verify via OTP or wait for the lock to clear.');
+      setErrorMessage(i18n.t('errors.pinLocked', {ns: 'auth'}));
       return;
     }
     const remaining = PIN_UNLOCK_ATTEMPT_LIMIT - (updated?.failedAttempts ?? 0);
-    setErrorMessage(`Incorrect PIN. ${remaining} attempt${remaining === 1 ? '' : 's'} left.`);
+    setErrorMessage(i18n.t('errors.incorrectPin', {ns: 'auth', count: remaining}));
   }, [value, stage, onUnlocked]);
 
   const startRecovery = useCallback(() => {

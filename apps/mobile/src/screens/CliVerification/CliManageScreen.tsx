@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Banner } from '../../components/Banner/Banner';
 import { DestructiveButton } from '../../components/DestructiveButton/DestructiveButton';
@@ -18,29 +19,6 @@ interface CliManageScreenProps {
 
 type ConfirmingAction = 'revoke' | 'lost_sim' | null;
 
-const STATUS_LABEL: Partial<Record<VerifiedCallerIdentity['status'], string>> = {
-  active: 'Verified',
-  suspended: 'Suspended',
-  expired: 'Expired',
-  revoked: 'Revoked',
-};
-
-const CONFIRM_COPY: Record<
-  Exclude<ConfirmingAction, null>,
-  { title: string; body: string; confirmLabel: string }
-> = {
-  revoke: {
-    title: 'Revoke this caller ID?',
-    body: 'New calls will stop showing this number. Any call already in progress is not affected.',
-    confirmLabel: 'Yes, revoke',
-  },
-  lost_sim: {
-    title: 'Report this SIM as lost?',
-    body: 'New calls will stop showing this number until you verify again. Any call already in progress is not affected.',
-    confirmLabel: 'Yes, report lost',
-  },
-};
-
 /**
  * The single entry point for both first-time CLI verification and ongoing
  * management (AC-14.11's revoke/lost-SIM). Resumes an in-progress
@@ -53,6 +31,7 @@ export function CliManageScreen({
   onResumeConfirm,
   onResumeConsent,
 }: CliManageScreenProps): React.JSX.Element {
+  const { t } = useTranslation(['home', 'common']);
   const { identity, errorMessage, actionInFlight, revoke, reportLostSim } = useCliManage({
     accessToken,
   });
@@ -61,8 +40,8 @@ export function CliManageScreen({
   if (identity === undefined) {
     return (
       <View style={styles.screen}>
-        <Text style={styles.title}>Caller ID</Text>
-        <Text style={styles.subtitle}>Loading...</Text>
+        <Text style={styles.title} testID="cli-manage-title">{t('callerId.title')}</Text>
+        <Text style={styles.subtitle}>{t('callerId.loading')}</Text>
       </View>
     );
   }
@@ -76,10 +55,29 @@ export function CliManageScreen({
   const isActive = identity?.status === 'active';
   const needsConfirm = identity?.status === 'phone_verification_pending';
   const needsConsent = identity?.status === 'consent_required';
+  const formattedPhone = identity
+    ? formatNigerianPhoneForDisplay(identity.phone_number.replace('+234', '0'))
+    : '';
+  const statusLabel = identity
+    ? t(`callerId.status.${identity.status}`, {
+        defaultValue: t('callerId.status.notVerified'),
+      })
+    : t('callerId.status.notVerified');
+  const confirmCopy = confirming === 'revoke'
+    ? {
+        title: t('callerId.manage.revokeTitle'),
+        body: t('callerId.manage.revokeBody'),
+        confirmLabel: t('callerId.manage.revokeConfirm'),
+      }
+    : {
+        title: t('callerId.manage.lostTitle'),
+        body: t('callerId.manage.lostBody'),
+        confirmLabel: t('callerId.manage.lostConfirm'),
+      };
 
   return (
     <ScrollView contentContainerStyle={styles.screen}>
-      <Text style={styles.title}>Caller ID</Text>
+      <Text style={styles.title} testID="cli-manage-title">{t('callerId.title')}</Text>
 
       {errorMessage ? (
         <Banner tone="error" message={errorMessage} testID="cli-manage-error" />
@@ -88,37 +86,33 @@ export function CliManageScreen({
       {!identity ? (
         <>
           <Text style={styles.subtitle}>
-            Verify a Nigerian number so family sees it when you call, instead
-            of an unrecognized number.
+            {t('callerId.manage.empty')}
           </Text>
           <PrimaryButton
             testID="cli-manage-verify"
-            label="Verify a number"
+            label={t('callerId.manage.verifyNumber')}
             onPress={onVerifyNumber}
           />
         </>
       ) : needsConfirm ? (
         <>
           <Text style={styles.subtitle}>
-            You started verifying{' '}
-            {formatNigerianPhoneForDisplay(identity.phone_number.replace('+234', '0'))}. Enter
-            the code we sent to finish.
+            {t('callerId.manage.pendingCode', { phone: formattedPhone })}
           </Text>
           <PrimaryButton
             testID="cli-manage-continue-confirm"
-            label="Continue"
+            label={t('common:actions.continue')}
             onPress={() => onResumeConfirm(identity)}
           />
         </>
       ) : needsConsent ? (
         <>
           <Text style={styles.subtitle}>
-            {formatNigerianPhoneForDisplay(identity.phone_number.replace('+234', '0'))} is
-            verified. Confirm you want to use it as your caller ID.
+            {t('callerId.manage.pendingConsent', { phone: formattedPhone })}
           </Text>
           <PrimaryButton
             testID="cli-manage-continue-consent"
-            label="Continue"
+            label={t('common:actions.continue')}
             onPress={() => onResumeConsent(identity)}
           />
         </>
@@ -127,44 +121,42 @@ export function CliManageScreen({
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardNumber} testID="cli-manage-active-number">
-                {formatNigerianPhoneForDisplay(identity.phone_number.replace('+234', '0'))}
+                {formattedPhone}
               </Text>
               <View style={styles.badge}>
-                <Text style={styles.badgeLabel}>{STATUS_LABEL[identity.status]}</Text>
+                <Text style={styles.badgeLabel}>{statusLabel}</Text>
               </View>
             </View>
             <Text style={styles.cardText}>
-              This is the number family and other recipients see when you
-              call them.
+              {t('callerId.manage.activeDescription')}
             </Text>
           </View>
 
           <SecondaryButton
             testID="cli-manage-verify-different"
-            label="Verify a different number"
+            label={t('callerId.manage.verifyDifferent')}
             onPress={onVerifyNumber}
           />
 
           <DestructiveButton
             testID="cli-manage-revoke"
-            label="Revoke"
+            label={t('callerId.manage.revoke')}
             onPress={() => setConfirming('revoke')}
           />
           <DestructiveButton
             testID="cli-manage-lost-sim"
-            label="Report lost SIM"
+            label={t('callerId.manage.reportLost')}
             onPress={() => setConfirming('lost_sim')}
           />
         </>
       ) : (
         <>
           <Text style={styles.subtitle}>
-            {STATUS_LABEL[identity.status] ?? 'Not verified'}. Verify a number
-            to make PSTN calls again.
+            {t('callerId.manage.inactive', { status: statusLabel })}
           </Text>
           <PrimaryButton
             testID="cli-manage-verify"
-            label="Verify a number"
+            label={t('callerId.manage.verifyNumber')}
             onPress={onVerifyNumber}
           />
         </>
@@ -182,17 +174,17 @@ export function CliManageScreen({
           <View style={styles.modalCard}>
             {confirming ? (
               <>
-                <Text style={styles.modalTitle}>{CONFIRM_COPY[confirming].title}</Text>
-                <Text style={styles.modalBody}>{CONFIRM_COPY[confirming].body}</Text>
+                <Text style={styles.modalTitle}>{confirmCopy.title}</Text>
+                <Text style={styles.modalBody}>{confirmCopy.body}</Text>
                 <DestructiveButton
                   testID={`cli-manage-${confirming === 'revoke' ? 'revoke' : 'lost-sim'}-confirm`}
-                  label={CONFIRM_COPY[confirming].confirmLabel}
+                  label={confirmCopy.confirmLabel}
                   onPress={() => runConfirmed(confirming)}
                   loading={actionInFlight === confirming}
                 />
                 <SecondaryButton
                   testID={`cli-manage-${confirming === 'revoke' ? 'revoke' : 'lost-sim'}-cancel`}
-                  label="Cancel"
+                  label={t('common:actions.cancel')}
                   onPress={() => setConfirming(null)}
                 />
               </>

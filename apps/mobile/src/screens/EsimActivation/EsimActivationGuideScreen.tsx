@@ -1,5 +1,6 @@
 import { ImageSquare } from 'phosphor-react-native';
 import React from 'react';
+import {useTranslation} from 'react-i18next';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
 import { SecondaryButton } from '../../components/SecondaryButton/SecondaryButton';
@@ -21,15 +22,16 @@ export function EsimActivationGuideScreen({
   onConfirmActivated,
   confirming = false,
 }: EsimActivationGuideScreenProps): React.JSX.Element {
+  const {t} = useTranslation('esim');
   const guide = activationGuideFor(platform, deviceModel);
   return (
-    <ScrollView contentContainerStyle={styles.screen}>
-      <Text style={styles.title}>Activate your eSIM</Text>
-      <Text style={styles.intro}>Follow these steps for {guide.name}. Keep DamDam open.</Text>
+    <ScrollView contentContainerStyle={styles.screen} testID="esim-activation-guide">
+      <Text style={styles.title}>{t('activation.title')}</Text>
+      <Text style={styles.intro}>{t('activation.intro', {device: guide.name})}</Text>
       {guide.contentStatus === 'placeholder' ? (
         <View style={styles.contentNotice} testID="android-guide-content-gap">
           <Text style={styles.contentNoticeText}>
-            Device-specific screenshots are being verified on real phones. These generic steps are safe to use now.
+            {t('activation.placeholderNotice')}
           </Text>
         </View>
       ) : null}
@@ -49,9 +51,9 @@ export function EsimActivationGuideScreen({
           </View>
         ))}
       </View>
-      <SecondaryButton label="Show my QR code" onPress={onShowQrCode} />
+      <SecondaryButton label={t('activation.showQr')} onPress={onShowQrCode} />
       <PrimaryButton
-        label="I've activated it"
+        label={t('activation.confirmed')}
         onPress={onConfirmActivated}
         loading={confirming}
         testID="confirm-esim-activated"

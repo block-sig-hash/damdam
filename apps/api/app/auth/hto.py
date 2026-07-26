@@ -65,6 +65,7 @@ class HTOService:
             ).decode(),
             phone_number=to_e164(payload.phone_number),
             nahcon_licence_number=payload.nahcon_licence_number,
+            locale=payload.locale,
         )
         try:
             session.add(organization)
@@ -74,6 +75,7 @@ class HTOService:
                 organization.email,
                 organization.primary_contact_name,
                 verification_url,
+                organization.locale.value,
             )
             session.commit()
         except NotificationError as exc:
@@ -100,7 +102,7 @@ class HTOService:
             self.settings.jwt_secret,
             algorithm="HS256",
         )
-        query = urlencode({"token": token})
+        query = urlencode({"token": token, "lang": organization.locale.value})
         return f"{self.settings.dashboard_base_url}/verify-email?{query}"
 
     def verify_email(self, session: Session, token: str) -> Organization:
@@ -141,10 +143,7 @@ class HTOService:
         password_hash = (
             organization.password_hash.encode() if organization else _DUMMY_HASH
         )
-        if (
-            not bcrypt.checkpw(password.encode(), password_hash)
-            or organization is None
-        ):
+        if not bcrypt.checkpw(password.encode(), password_hash) or organization is None:
             raise HTOAuthError("invalid_credentials")
         if organization.org_type != OrganizationType.HTO_OPERATOR:
             raise HTOAuthError("invalid_credentials")
@@ -235,7 +234,9 @@ class HTOService:
         if organization.approval_email_sent_at is None:
             try:
                 self.notifications.send_approval_email(
-                    organization.email, organization.primary_contact_name
+                    organization.email,
+                    organization.primary_contact_name,
+                    organization.locale.value,
                 )
             except NotificationError:
                 notification_failed = True
@@ -250,6 +251,7 @@ class HTOService:
                 self.notifications.send_approval_whatsapp(
                     organization.phone_number,
                     organization.primary_contact_name,
+                    organization.locale.value,
                 )
             except NotificationError:
                 notification_failed = True

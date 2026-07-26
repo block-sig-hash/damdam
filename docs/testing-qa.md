@@ -487,7 +487,7 @@ corresponding `maestro/screens/cli-*.yaml` flow, so `claude-review.yml`'s
 rendered-screenshot check actually captures them (a registry entry
 alone isn't enough for CI to reach the screen); the Manage screen
 (22d) makes a real `getCliStatus` request the harness doesn't mock,
-so its flow asserts on the "Caller ID" title text and captures the
+so its flow asserts on the localized title test ID and captures the
 loading state rather than a populated one there.
 
 ---
@@ -595,3 +595,18 @@ registered targets) with real, independently-inspected screenshots
 matching the harness's fixture data. Treat this the way `testing-qa.md`
 treats PR #41 in §14.2: a concrete example of why CI passing on
 first write is not the same as CI passing for real.
+
+---
+
+## 14.12 Amendment — Bilingual Screenshot Matrix
+
+Each applicable Maestro flow now captures English and French after waiting for
+the harness to confirm the selected runtime locale. The platform completeness
+gate is therefore 32 PNGs (16 applicable targets × 2 locales), named with
+`-en`/`-fr` suffixes. Existing Android per-PR and iOS nightly/on-demand cadence
+is unchanged.
+
+Review must explicitly check French expansion/wrapping, inaccessible actions,
+SOS hierarchy, and the Android-automatic/iOS-manual eSIM divergence. The guide
+frame is covered; final localized OS walkthrough imagery remains the content
+gate documented in `localization.md` §6.

@@ -1,7 +1,9 @@
 import React from 'react';
+import {useTranslation} from 'react-i18next';
 import { KeyboardAvoidingView, Platform as RNPlatform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Banner } from '../../components/Banner/Banner';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
+import {LocaleSelector} from '../../components/LocaleSelector/LocaleSelector';
 import { color, space, typography } from '../../theme/tokens';
 import { formatNigerianPhoneForDisplay } from '../../utils/phoneNumber';
 import { usePhoneEntry } from './usePhoneEntry';
@@ -19,6 +21,7 @@ export function PhoneEntryScreen({
   onOtpSent,
   onAccountExists,
 }: PhoneEntryScreenProps): React.JSX.Element {
+  const {t} = useTranslation('auth');
   const { phoneNumber, setPhoneNumber, isValid, status, errorMessage, submit } = usePhoneEntry({
     onOtpSent,
     onAccountExists,
@@ -30,12 +33,11 @@ export function PhoneEntryScreen({
       behavior={RNPlatform.OS === 'ios' ? 'padding' : undefined}
       style={styles.screen}
     >
-      <Text style={styles.title}>What's your phone number?</Text>
-      <Text style={styles.subtitle}>
-        We'll text you a 6-digit code to verify it's you.
-      </Text>
+      <LocaleSelector />
+      <Text style={styles.title}>{t('phone.title')}</Text>
+      <Text style={styles.subtitle}>{t('phone.subtitle')}</Text>
 
-      <Text style={styles.label}>Nigerian mobile number</Text>
+      <Text style={styles.label}>{t('phone.label')}</Text>
       <TextInput
         testID="phone-entry-input"
         value={formatNigerianPhoneForDisplay(phoneNumber)}
@@ -44,12 +46,12 @@ export function PhoneEntryScreen({
         placeholderTextColor={color.gray500}
         keyboardType="number-pad"
         maxLength={13}
-        accessibilityLabel="Nigerian mobile number"
+        accessibilityLabel={t('phone.label')}
         style={[styles.input, showFormatHint && styles.inputError]}
       />
       {showFormatHint ? (
         <Text style={styles.hint}>
-          Enter an 11-digit Nigerian mobile number, e.g. 080 1234 5678.
+          {t('phone.hint')}
         </Text>
       ) : null}
 
@@ -62,7 +64,7 @@ export function PhoneEntryScreen({
       <View style={styles.footer}>
         <PrimaryButton
           testID="phone-entry-submit"
-          label="Send code"
+          label={t('phone.sendCode')}
           onPress={submit}
           disabled={!isValid}
           loading={status === 'submitting'}

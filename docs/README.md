@@ -22,6 +22,7 @@ security, and infrastructure decisions. Read in this order:
 | 9 | [`corporate-structure.md`](./corporate-structure.md) | Entity structure (UAE parent + Nigeria OpCo), payment rail allocation, pre-launch legal action items |
 | 10 | [`testing-qa.md`](./testing-qa.md) | TDD policy, coverage targets mapped to acceptance criteria, device matrix, offline/chaos testing for check-in & SOS |
 | 11 | [`design-system.md`](./design-system.md) | Mobile app design tokens/patterns; produced and required for all Codex-implemented screens |
+| 12 | [`localization.md`](./localization.md) | English/French key, recipient-locale, notification, review, and screenshot process |
 
 ## Status
 

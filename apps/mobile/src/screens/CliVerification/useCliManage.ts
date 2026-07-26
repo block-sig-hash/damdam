@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  CliApiError,
   getCliStatus,
   reportCliLostSim,
   revokeCli,
   type VerifiedCallerIdentity,
 } from '../../api/cliClient';
+import { cliErrorMessage } from './cliErrorMessage';
 
 export type CliManageAction = 'revoke' | 'lost_sim';
 
@@ -34,9 +34,7 @@ export function useCliManage({ accessToken }: UseCliManageArgs): UseCliManageRes
     try {
       setIdentity(await getCliStatus(accessToken));
     } catch (err) {
-      setErrorMessage(
-        err instanceof CliApiError ? err.message : 'Something went wrong. Please try again.',
-      );
+      setErrorMessage(cliErrorMessage(err));
     }
   }, [accessToken]);
 
@@ -52,9 +50,7 @@ export function useCliManage({ accessToken }: UseCliManageArgs): UseCliManageRes
         await run();
         await refresh();
       } catch (err) {
-        setErrorMessage(
-          err instanceof CliApiError ? err.message : 'Something went wrong. Please try again.',
-        );
+        setErrorMessage(cliErrorMessage(err));
       } finally {
         setActionInFlight(null);
       }

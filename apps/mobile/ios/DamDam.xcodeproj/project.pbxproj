@@ -12,6 +12,8 @@
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		9B8AEB86ACFC4F6DAD97EB67 /* VoipCallKitBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = 96F0A6A6BA1F4FA2A07F644F /* VoipCallKitBridge.m */; };
+		A10000000000000000000001 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000007 /* InfoPlist.strings */; };
+		A10000000000000000000002 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* Localizable.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,6 +31,10 @@
 		96F0A6A6BA1F4FA2A07F644F /* VoipCallKitBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = VoipCallKitBridge.m; path = DamDam/VoipCallKitBridge.m; sourceTree = "<group>"; };
 		E54971DB77644791BCE05A93 /* DamDam-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "DamDam-Bridging-Header.h"; path = "DamDam/DamDam-Bridging-Header.h"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		A10000000000000000000003 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = DamDam/en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A10000000000000000000004 /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = DamDam/fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A10000000000000000000005 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = DamDam/en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		A10000000000000000000006 /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = DamDam/fr.lproj/Localizable.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -51,6 +57,8 @@
 				E54971DB77644791BCE05A93 /* DamDam-Bridging-Header.h */,
 				39B54F98AE7D4FAFB71A043C /* DamDam.entitlements */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
+				A10000000000000000000007 /* InfoPlist.strings */,
+				A10000000000000000000008 /* Localizable.strings */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
 				AA1376AF848B4FDFBE728554 /* VoipCallKitBridge.h */,
@@ -149,6 +157,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				fr,
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
@@ -168,10 +177,33 @@
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
+				A10000000000000000000001 /* InfoPlist.strings in Resources */,
+				A10000000000000000000002 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		A10000000000000000000007 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				A10000000000000000000003 /* en */,
+				A10000000000000000000004 /* fr */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000008 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				A10000000000000000000005 /* en */,
+				A10000000000000000000006 /* fr */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin PBXShellScriptBuildPhase section */
 		00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */ = {

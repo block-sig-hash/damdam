@@ -1,4 +1,5 @@
 import React from 'react';
+import {useTranslation} from 'react-i18next';
 import { Modal, StyleSheet, Text, View } from 'react-native';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
 import { SecondaryButton } from '../../components/SecondaryButton/SecondaryButton';
@@ -25,6 +26,7 @@ export function DeviceCompatibilityWarningModal({
   onContinue,
   onSupport,
 }: DeviceCompatibilityWarningModalProps): React.JSX.Element {
+  const {t} = useTranslation(['esim', 'common']);
   return (
     <Modal
       visible={visible}
@@ -35,22 +37,18 @@ export function DeviceCompatibilityWarningModal({
     >
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <Text style={styles.title}>Your device may not support eSIM</Text>
-          <Text style={styles.body}>
-            Your device does not appear to support eSIM. You can still use your DamDam
-            package by scanning the QR code on a compatible device. Tap Continue to
-            download your QR code, or tap Support to get help.
-          </Text>
+          <Text style={styles.title}>{t('compatibility.warningTitle')}</Text>
+          <Text style={styles.body}>{t('compatibility.warningBody')}</Text>
           <View style={styles.actions}>
             <PrimaryButton
               testID="esim-warning-continue"
-              label="Continue"
+              label={t('actions.continue', {ns: 'common'})}
               onPress={onContinue}
             />
             <View style={styles.actionSpacing} />
             <SecondaryButton
               testID="esim-warning-support"
-              label="Support"
+              label={t('compatibility.support')}
               onPress={onSupport}
             />
           </View>

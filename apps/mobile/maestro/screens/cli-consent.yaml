@@ -1,6 +1,10 @@
 appId: com.damdam.app
 ---
 - launchApp
+- tapOn:
+    id: "harness-locale-en"
+- assertVisible:
+    id: "harness-locale-active-en"
 - scrollUntilVisible:
     element:
       id: "harness-target-cli-consent"
@@ -9,4 +13,19 @@ appId: com.damdam.app
     id: "harness-target-cli-consent"
 - assertVisible:
     id: "cli-consent-submit"
-- takeScreenshot: cli-consent
+- takeScreenshot: cli-consent-en
+- stopApp
+- launchApp
+- tapOn:
+    id: "harness-locale-fr"
+- assertVisible:
+    id: "harness-locale-active-fr"
+- scrollUntilVisible:
+    element:
+      id: "harness-target-cli-consent"
+    direction: DOWN
+- tapOn:
+    id: "harness-target-cli-consent"
+- assertVisible:
+    id: "cli-consent-submit"
+- takeScreenshot: cli-consent-fr

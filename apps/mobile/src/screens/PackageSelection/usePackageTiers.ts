@@ -4,6 +4,7 @@ import {
   PricingApiError,
   PricingTier,
 } from '../../api/pricingClient';
+import {i18n} from '../../i18n';
 
 type PackageTierStatus = 'loading' | 'ready' | 'error';
 
@@ -31,7 +32,7 @@ export function usePackageTiers(): UsePackageTiersResult {
         )
       ) {
         throw new PricingApiError(
-          'Package prices are unavailable. Please try again.',
+          i18n.t('packages.unavailable', {ns: 'payments'}),
         );
       }
       setTiers(currentTiers);
@@ -42,7 +43,7 @@ export function usePackageTiers(): UsePackageTiersResult {
       setErrorMessage(
         error instanceof PricingApiError
           ? error.message
-          : 'Package prices are unavailable. Please try again.',
+          : i18n.t('packages.unavailable', {ns: 'payments'}),
       );
     }
   }, []);

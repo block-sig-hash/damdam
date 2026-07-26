@@ -1,4 +1,5 @@
 import { NativeModules, Platform } from 'react-native';
+import {i18n} from '../i18n';
 
 interface EsimDownloadModule {
   downloadProfile(activationCodeLpa: string): Promise<void>;
@@ -15,7 +16,7 @@ export async function downloadEsimProfile(
   }
   const module = NativeModules.EsimDownloadModule as EsimDownloadModule | undefined;
   if (!module) {
-    throw new Error('Direct eSIM download is unavailable on this build.');
+    throw new Error(i18n.t('errors.directUnavailable', {ns: 'esim'}));
   }
   await module.downloadProfile(activationCodeLpa);
   return 'invoked';

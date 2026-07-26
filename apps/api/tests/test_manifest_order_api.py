@@ -58,11 +58,13 @@ class OrderEmailSender:
         self.invoices: list[tuple[str, str, str, Decimal, bytes]] = []
         self.fail_invoice = False
 
-    def send_verification(self, email: str, name: str, url: str) -> None:
-        del email, name, url
+    def send_verification(
+        self, email: str, name: str, url: str, locale: str = "en"
+    ) -> None:
+        del email, name, url, locale
 
-    def send_approval(self, email: str, name: str) -> None:
-        del email, name
+    def send_approval(self, email: str, name: str, locale: str = "en") -> None:
+        del email, name, locale
 
     def send_invoice(
         self,
@@ -71,7 +73,9 @@ class OrderEmailSender:
         order_id: str,
         total_ngn: Decimal,
         pdf: bytes,
+        locale: str = "en",
     ) -> None:
+        del locale
         if self.fail_invoice:
             raise NotificationError("email unavailable")
         self.invoices.append((email, operator_name, order_id, total_ngn, pdf))
@@ -82,15 +86,21 @@ class OrderWhatsAppSender:
         self.activations: list[tuple[str, str, str, str]] = []
         self.fail_numbers: set[str] = set()
 
-    def send_approval(self, phone_number: str, name: str) -> None:
-        del phone_number, name
+    def send_approval(self, phone_number: str, name: str, locale: str = "en") -> None:
+        del phone_number, name, locale
 
-    def send_family_nomination(self, phone_number: str) -> None:
-        del phone_number
+    def send_family_nomination(self, phone_number: str, locale: str = "en") -> None:
+        del phone_number, locale
 
     def send_activation(
-        self, phone_number: str, pilgrim_name: str, tier_name: str, url: str
+        self,
+        phone_number: str,
+        pilgrim_name: str,
+        tier_name: str,
+        url: str,
+        locale: str = "en",
     ) -> None:
+        del locale
         if phone_number in self.fail_numbers:
             raise NotificationError("WhatsApp unavailable")
         self.activations.append((phone_number, pilgrim_name, tier_name, url))
@@ -320,16 +330,20 @@ def test_family_and_individual_orders_preserve_unordered_pool_and_prices(
     )
     assert invoice.status_code == 200
     assert invoice.headers["content-type"] == "application/pdf"
-    assert client.get(
-        f"/v1/hto/manifests/{manifest.id}/order/{uuid4()}/invoice",
-        headers=headers,
-    ).status_code == 404
+    assert (
+        client.get(
+            f"/v1/hto/manifests/{manifest.id}/order/{uuid4()}/invoice",
+            headers=headers,
+        ).status_code
+        == 404
+    )
 
     remaining = client.get(
         f"/v1/hto/manifests/{manifest.id}/unordered-pilgrims", headers=headers
     )
     assert [item["id"] for item in remaining.json()["pilgrims"]] == [
-        str(rows[3].id), str(rows[4].id)
+        str(rows[3].id),
+        str(rows[4].id),
     ]
 
     for row in rows[3:]:
@@ -343,9 +357,7 @@ def test_family_and_individual_orders_preserve_unordered_pool_and_prices(
         )
         assert placed.status_code == 200
 
-    listing = client.get(
-        f"/v1/hto/manifests/{manifest.id}/orders", headers=headers
-    )
+    listing = client.get(f"/v1/hto/manifests/{manifest.id}/orders", headers=headers)
     assert listing.status_code == 200
     assert len(listing.json()["orders"]) == 3
     with session_factory() as session:
@@ -448,10 +460,13 @@ def test_family_group_rules_and_cross_tenant_isolation(
         headers=owner_headers,
     )
     assert deleted.status_code == 204
-    assert client.delete(
-        f"/v1/hto/manifests/{manifest.id}/group/{group_id}",
-        headers=owner_headers,
-    ).status_code == 404
+    assert (
+        client.delete(
+            f"/v1/hto/manifests/{manifest.id}/group/{group_id}",
+            headers=owner_headers,
+        ).status_code
+        == 404
+    )
 
     placed = client.post(
         f"/v1/hto/manifests/{manifest.id}/order",
@@ -463,17 +478,26 @@ def test_family_group_rules_and_cross_tenant_isolation(
     )
     assert placed.status_code == 200
     order_id = placed.json()["manifest_order_id"]
-    assert client.get(
-        f"/v1/hto/manifests/{manifest.id}/orders", headers=attacker_headers
-    ).status_code == 404
-    assert client.get(
-        f"/v1/hto/manifests/{manifest.id}/order/{order_id}",
-        headers=attacker_headers,
-    ).status_code == 404
-    assert client.get(
-        f"/v1/hto/manifests/{manifest.id}/order/{order_id}/invoice",
-        headers=attacker_headers,
-    ).status_code == 404
+    assert (
+        client.get(
+            f"/v1/hto/manifests/{manifest.id}/orders", headers=attacker_headers
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            f"/v1/hto/manifests/{manifest.id}/order/{order_id}",
+            headers=attacker_headers,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            f"/v1/hto/manifests/{manifest.id}/order/{order_id}/invoice",
+            headers=attacker_headers,
+        ).status_code
+        == 404
+    )
 
 
 def test_invoice_email_failure_retries_without_duplicate_order(
@@ -556,9 +580,12 @@ def test_admin_confirmation_is_idempotent_and_gates_activation_dispatch(
     )
     assert admin_invoice.status_code == 200
     assert admin_invoice.headers["content-type"] == "application/pdf"
-    assert client.get(
-        f"/v1/admin/manifest-orders/{uuid4()}/invoice", headers=headers
-    ).status_code == 404
+    assert (
+        client.get(
+            f"/v1/admin/manifest-orders/{uuid4()}/invoice", headers=headers
+        ).status_code
+        == 404
+    )
     assert client.get("/v1/admin/manifest-orders").status_code == 401
 
     confirmed = client.post(
@@ -814,9 +841,9 @@ def test_admin_lists_and_updates_pricing_tier_price(
 
     # AC-26.2: the new price takes effect immediately for subsequent reads.
     refreshed = client.get("/v1/admin/pricing-tiers", headers=headers)
-    assert {
-        tier["name"]: tier["ngn_price"] for tier in refreshed.json()["tiers"]
-    }["Basic"] == 176000.00
+    assert {tier["name"]: tier["ngn_price"] for tier in refreshed.json()["tiers"]}[
+        "Basic"
+    ] == 176000.00
 
 
 def test_admin_pricing_update_rejects_unknown_tier_invalid_price_and_auth(

@@ -21,9 +21,7 @@ class EmergencyContactService:
         organization = session.exec(
             select(Organization)
             .join(Manifest, col(Manifest.organization_id) == col(Organization.id))
-            .join(
-                ManifestPilgrim, col(ManifestPilgrim.manifest_id) == col(Manifest.id)
-            )
+            .join(ManifestPilgrim, col(ManifestPilgrim.manifest_id) == col(Manifest.id))
             .where(col(ManifestPilgrim.user_id) == user_id)
             .order_by(col(ManifestPilgrim.id))
         ).first()

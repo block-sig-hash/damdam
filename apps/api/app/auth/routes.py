@@ -26,6 +26,7 @@ from app.auth.schemas import (
     UserResponse,
 )
 from app.auth.tokens import InvalidRefreshTokenError
+from app.i18n import translate
 from app.otp.service import AuthResult, OTPError, OTPService
 from app.voice.models import VerifiedCallerIdentity, VerifiedCallerIdentityStatus
 
@@ -47,8 +48,8 @@ def _hto_service(request: Request) -> HTOService:
 @router.post("/otp/request", response_model=MessageResponse)
 def request_otp(payload: OTPRequest, request: Request) -> MessageResponse:
     with request.app.state.session_factory() as session:
-        _service(request).request(session, payload.phone_number)
-    return MessageResponse(message="OTP sent")
+        _service(request).request(session, payload.phone_number, locale=payload.locale)
+    return MessageResponse(message=translate("otp_sent", payload.locale))
 
 
 def _auth_response(session: Session, result: AuthResult) -> AuthResponse:
@@ -79,7 +80,11 @@ def _auth_response(session: Session, result: AuthResult) -> AuthResponse:
 def verify_otp(payload: OTPVerifyRequest, request: Request) -> AuthResponse:
     with request.app.state.session_factory() as session:
         result = _service(request).verify(
-            session, payload.phone_number, payload.otp, payload.platform
+            session,
+            payload.phone_number,
+            payload.otp,
+            payload.platform,
+            payload.locale,
         )
         return _auth_response(session, result)
 
@@ -92,7 +97,7 @@ def set_pin(
 ) -> MessageResponse:
     with request.app.state.session_factory() as session:
         _pin_service(request).set_pin(session, user.id, payload.pin)
-    return MessageResponse(message="PIN set")
+    return MessageResponse(message=translate("pin_set", user.locale))
 
 
 @router.post("/pin/verify", response_model=PINVerifyResponse)
@@ -111,8 +116,13 @@ def request_pin_recovery(
     payload: PINRecoveryRequest, request: Request
 ) -> MessageResponse:
     with request.app.state.session_factory() as session:
-        _service(request).request(session, payload.phone_number, allow_existing=True)
-    return MessageResponse(message="OTP sent")
+        _service(request).request(
+            session,
+            payload.phone_number,
+            allow_existing=True,
+            locale=payload.locale,
+        )
+    return MessageResponse(message=translate("otp_sent", payload.locale))
 
 
 @router.post("/pin/recovery/verify", response_model=AuthResponse)
@@ -123,6 +133,7 @@ def verify_pin_recovery(payload: OTPVerifyRequest, request: Request) -> AuthResp
             payload.phone_number,
             payload.otp,
             payload.platform,
+            payload.locale,
             purpose="recovery",
         )
     with request.app.state.session_factory() as session:
@@ -145,12 +156,10 @@ def refresh_token(payload: RefreshRequest, request: Request) -> TokenResponse:
 
 
 @router.post("/hto/register", response_model=MessageResponse, status_code=201)
-def register_hto(
-    payload: HTORegistrationRequest, request: Request
-) -> MessageResponse:
+def register_hto(payload: HTORegistrationRequest, request: Request) -> MessageResponse:
     with request.app.state.session_factory() as session:
         _hto_service(request).register(session, payload)
-    return MessageResponse(message="Verification email sent")
+    return MessageResponse(message=translate("verification_email_sent", payload.locale))
 
 
 @router.post("/hto/verify-email", response_model=MessageResponse)
@@ -158,8 +167,8 @@ def verify_hto_email(
     payload: HTOVerifyEmailRequest, request: Request
 ) -> MessageResponse:
     with request.app.state.session_factory() as session:
-        _hto_service(request).verify_email(session, payload.token)
-    return MessageResponse(message="Email verified, pending admin approval")
+        organization = _hto_service(request).verify_email(session, payload.token)
+    return MessageResponse(message=translate("email_verified", organization.locale))
 
 
 @router.post("/hto/login", response_model=HTOLoginResponse)

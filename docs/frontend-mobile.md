@@ -629,3 +629,18 @@ infrastructure.md §11.4/§11.8).
 | Native call UI integration | ConnectionService -- **built** (Headless JS Task + FCM wake), `CallHeadlessTaskService.kt` -- higher residual uncertainty, unverified without a physical device | CallKit + PushKit -- **built**, `src/services/callKit.ts` |
 | Distribution | Google Play (internal testing → production track) | TestFlight (pilot) → App Store (production) |
 | Review process predictability | Generally faster, more predictable | Can be slower and less predictable — build extra buffer into the timeline, see prd.md §6 |
+
+---
+
+## 8.8 Amendment — English/French Rendering
+
+Every user-facing screen, state, accessibility label, offline fallback, and
+native arrival/call notification renders through the bundled resources in
+`localization.md`. Saved account locale wins over device inference; language
+remains explicitly selectable during pre-account flows.
+
+The offline Arabic phrasebook keeps Arabic speech text and transliteration
+unchanged while localizing its explanatory UI. The screenshot matrix captures
+English and French variants, including Android automatic eSIM activation and
+the iOS manual guide. Final French safety/legal copy and real localized OS
+walkthrough imagery remain release gates in `localization.md` §§6–7.

@@ -1,5 +1,6 @@
 import { Info, X } from 'phosphor-react-native';
 import React from 'react';
+import {useTranslation} from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { color, minTouchTarget, radius, space, typography } from '../../theme/tokens';
 
@@ -12,23 +13,24 @@ export function EsimActivationBanner({
   onActivate,
   onDismiss,
 }: EsimActivationBannerProps): React.JSX.Element {
+  const {t} = useTranslation('esim');
   return (
     <View style={styles.banner} testID="esim-activation-banner">
       <Info color={color.info500} size={20} weight="bold" />
       <View style={styles.copy}>
-        <Text style={styles.title}>Activate eSIM</Text>
-        <Text style={styles.message}>Set up your Saudi Arabia data before you travel.</Text>
+        <Text style={styles.title}>{t('banner.title')}</Text>
+        <Text style={styles.message}>{t('banner.message')}</Text>
         <Pressable
           accessibilityRole="button"
           onPress={onActivate}
           style={styles.action}
           testID="esim-banner-activate"
         >
-          <Text style={styles.actionLabel}>Activate now</Text>
+          <Text style={styles.actionLabel}>{t('banner.action')}</Text>
         </Pressable>
       </View>
       <Pressable
-        accessibilityLabel="Dismiss until next app open"
+        accessibilityLabel={t('banner.dismiss')}
         accessibilityRole="button"
         onPress={onDismiss}
         style={styles.dismiss}

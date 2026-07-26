@@ -134,9 +134,7 @@ def create_family_group(
     return FamilyGroupResponse(family_group_id=group_id)
 
 
-@router.put(
-    "/{manifest_id}/group/{group_id}", response_model=FamilyGroupResponse
-)
+@router.put("/{manifest_id}/group/{group_id}", response_model=FamilyGroupResponse)
 def update_family_group(
     manifest_id: UUID,
     group_id: UUID,

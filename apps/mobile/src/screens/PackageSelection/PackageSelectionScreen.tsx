@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import {useTranslation} from 'react-i18next';
 import {
   AccessibilityInfo,
   Modal,
@@ -20,6 +21,7 @@ import {
   typography,
 } from '../../theme/tokens';
 import { usePackageTiers } from './usePackageTiers';
+import {i18n} from '../../i18n';
 
 interface PackageSelectionScreenProps {
   onSelectTier: (tier: PricingTier, groupSize?: number) => void;
@@ -33,16 +35,17 @@ const TIER_ORDER: Record<string, number> = {
 };
 
 function formatNaira(value: number): string {
-  const rounded = Math.round(value);
-  return `₦${String(rounded).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+  return new Intl.NumberFormat(i18n.language === 'fr' ? 'fr-NG' : 'en-NG', {
+    style: 'currency', currency: 'NGN', maximumFractionDigits: 0,
+  }).format(value);
 }
 
 function tierFeatures(tier: PricingTier): string[] {
-  const suffix = tier.is_group_tier ? ' per pilgrim' : '';
+  const suffix = tier.is_group_tier ? i18n.t('packages.perPilgrim', {ns: 'payments'}) : '';
   return [
-    `${tier.data_gb} GB eSIM data${suffix}`,
-    `${tier.pstn_minutes} Nigerian calling minutes${suffix}`,
-    'Offline check-in and SOS tools',
+    i18n.t('packages.dataFeature', {ns: 'payments', amount: tier.data_gb, suffix}),
+    i18n.t('packages.minutesFeature', {ns: 'payments', amount: tier.pstn_minutes, suffix}),
+    i18n.t('packages.offlineFeature', {ns: 'payments'}),
   ];
 }
 
@@ -75,6 +78,7 @@ function FamilySelector({
   onDismiss,
   onContinue,
 }: FamilySelectorProps): React.JSX.Element | null {
+  const {t} = useTranslation('payments');
   const minimum = tier?.min_group_size ?? 2;
   const maximum = tier?.max_group_size ?? 8;
   const [groupSizeText, setGroupSizeText] = useState(String(minimum));
@@ -110,7 +114,7 @@ function FamilySelector({
         <View style={styles.modalSheet} testID="family-size-modal">
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Close group size selector"
+            accessibilityLabel={t('packages.closeGroup')}
             hitSlop={space.space2}
             onPress={onDismiss}
             style={styles.closeButton}
@@ -118,16 +122,16 @@ function FamilySelector({
           >
             <Text style={styles.closeLabel}>×</Text>
           </Pressable>
-          <Text style={styles.modalTitle}>How many pilgrims?</Text>
+          <Text style={styles.modalTitle}>{t('packages.familyTitle')}</Text>
           <Text style={styles.modalBody}>
-            Family pricing is per person. Choose between {minimum} and {maximum} pilgrims.
+            {t('packages.familyBody', {minimum, maximum})}
           </Text>
 
-          <Text style={styles.stepperFieldLabel}>Group size</Text>
+          <Text style={styles.stepperFieldLabel}>{t('packages.groupSize')}</Text>
           <View style={styles.stepper}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Remove one pilgrim"
+              accessibilityLabel={t('packages.removePilgrim')}
               disabled={valid && groupSize === minimum}
               onPress={() => adjust(-1)}
               style={({ pressed }) => [
@@ -147,7 +151,7 @@ function FamilySelector({
               </Text>
             </Pressable>
             <TextInput
-              accessibilityLabel="Family group size"
+              accessibilityLabel={t('packages.familyAccessibility')}
               keyboardType="number-pad"
               maxLength={1}
               onChangeText={(value) => setGroupSizeText(value.replace(/[^0-9]/g, ''))}
@@ -158,7 +162,7 @@ function FamilySelector({
             />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Add one pilgrim"
+              accessibilityLabel={t('packages.addPilgrim')}
               disabled={valid && groupSize === maximum}
               onPress={() => adjust(1)}
               style={({ pressed }) => [
@@ -183,21 +187,21 @@ function FamilySelector({
             <View accessibilityRole="alert" style={styles.inputErrorRow}>
               <Text style={styles.inputErrorIcon}>!</Text>
               <Text style={styles.inputError}>
-                Enter a number from {minimum} to {maximum}.
+                {t('packages.groupError', {minimum, maximum})}
               </Text>
             </View>
           ) : null}
-          <Text style={styles.totalLabel}>Total package price</Text>
+          <Text style={styles.totalLabel}>{t('packages.total')}</Text>
           <Text style={styles.totalValue} testID="family-total-price">
             {valid ? formatNaira(total) : '—'}
           </Text>
           <Text style={styles.perPersonPrice}>
-            {formatNaira(tier.ngn_price)} per pilgrim
+            {t('packages.perPilgrimPrice', {price: formatNaira(tier.ngn_price)})}
           </Text>
 
           <PrimaryButton
             disabled={!valid}
-            label="Continue to payment"
+            label={t('packages.continuePayment')}
             onPress={() => onContinue(tier, groupSize)}
             testID="family-size-continue"
           />
@@ -211,6 +215,7 @@ function FamilySelector({
 export function PackageSelectionScreen({
   onSelectTier,
 }: PackageSelectionScreenProps): React.JSX.Element {
+  const {t} = useTranslation(['payments', 'common']);
   const { status, tiers, errorMessage, retry } = usePackageTiers();
   const [familyTier, setFamilyTier] = useState<PricingTier | null>(null);
   const [includedOpen, setIncludedOpen] = useState(false);
@@ -245,13 +250,13 @@ export function PackageSelectionScreen({
   if (status === 'error') {
     return (
       <View style={[styles.screen, styles.errorScreen]} testID="pricing-error-screen">
-        <Text style={styles.title}>Choose your package</Text>
+        <Text style={styles.title}>{t('packages.title')}</Text>
         <Banner
-          message={errorMessage ?? 'Package prices are unavailable. Please try again.'}
+          message={errorMessage ?? t('packages.unavailable')}
           tone="error"
         />
         <PrimaryButton
-          label="Try again"
+          label={t('actions.retry', {ns: 'common'})}
           onPress={() => retry().catch(() => undefined)}
           testID="pricing-retry"
         />
@@ -266,10 +271,10 @@ export function PackageSelectionScreen({
         style={styles.screen}
         testID="package-selection-screen"
       >
-        <Text style={styles.eyebrow}>Stay connected in Saudi Arabia</Text>
-        <Text style={styles.title}>Choose your package</Text>
+        <Text style={styles.eyebrow}>{t('packages.eyebrow')}</Text>
+        <Text style={styles.title}>{t('packages.title')}</Text>
         <Text style={styles.subtitle}>
-          Clear Naira pricing, with data and calls included.
+          {t('packages.subtitle')}
         </Text>
 
         {status === 'loading' ? (
@@ -279,7 +284,7 @@ export function PackageSelectionScreen({
             {visibleTiers.map((tier) => (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Choose ${tier.name} package`}
+                accessibilityLabel={t('packages.chooseTier', {tier: t(`packages.tierNames.${tier.name}`, {defaultValue: tier.name})})}
                 key={tier.id}
                 onPress={() => chooseTier(tier)}
                 style={({ pressed }) => [
@@ -290,18 +295,18 @@ export function PackageSelectionScreen({
                 testID={`tier-${tier.name}`}
               >
                 <View style={styles.cardHeading}>
-                  <Text style={styles.tierName}>{tier.name}</Text>
+                  <Text style={styles.tierName}>{t(`packages.tierNames.${tier.name}`, {defaultValue: tier.name})}</Text>
                   {tier.name === 'Standard' ? (
                     <View style={styles.recommendedBadge}>
-                      <Text style={styles.recommendedText}>Recommended</Text>
+                      <Text style={styles.recommendedText}>{t('packages.recommended')}</Text>
                     </View>
                   ) : null}
                 </View>
                 <Text style={styles.price}>
-                  {tier.is_group_tier ? 'From ' : ''}{formatNaira(tier.ngn_price)}
+                  {tier.is_group_tier ? t('packages.from') : ''}{formatNaira(tier.ngn_price)}
                 </Text>
                 {tier.is_group_tier ? (
-                  <Text style={styles.priceCaption}>per pilgrim · choose 2–8 people</Text>
+                  <Text style={styles.priceCaption}>{t('packages.groupCaption')}</Text>
                 ) : null}
                 <View style={styles.featureList}>
                   {tierFeatures(tier).map((feature) => (
@@ -320,15 +325,15 @@ export function PackageSelectionScreen({
           style={({ pressed }) => [styles.accordionTrigger, pressed && styles.pressed]}
           testID="whats-included-toggle"
         >
-          <Text style={styles.accordionLabel}>What's included</Text>
+          <Text style={styles.accordionLabel}>{t('packages.included')}</Text>
           <Text style={styles.accordionSymbol}>{includedOpen ? '−' : '+'}</Text>
         </Pressable>
         {includedOpen ? (
           <View style={styles.includedPanel} testID="whats-included-content">
-            <Text style={styles.includedHeading}>Every package includes</Text>
-            <Text style={styles.includedText}>•  eSIM data for Saudi Arabia</Text>
-            <Text style={styles.includedText}>•  Calls with your Nigerian caller ID</Text>
-            <Text style={styles.includedText}>•  Offline-ready check-in and SOS tools</Text>
+            <Text style={styles.includedHeading}>{t('packages.includedTitle')}</Text>
+            <Text style={styles.includedText}>•  {t('packages.includedData')}</Text>
+            <Text style={styles.includedText}>•  {t('packages.includedCalls')}</Text>
+            <Text style={styles.includedText}>•  {t('packages.includedSafety')}</Text>
           </View>
         ) : null}
       </ScrollView>

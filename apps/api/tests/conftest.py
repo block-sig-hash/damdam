@@ -43,7 +43,8 @@ class FakeProvider:
         self.fail_send = False
         self.fail_verify = False
 
-    def send(self, phone_number: str) -> OTPDispatch:
+    def send(self, phone_number: str, locale: str = "en") -> OTPDispatch:
+        del locale
         if self.fail_send:
             raise OTPProviderError(f"{self.name} unavailable")
         self.send_calls.append(phone_number)

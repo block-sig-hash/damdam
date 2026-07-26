@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/env';
+import {i18n, localeHeader} from '../i18n';
 
 /**
  * Mirrors apps/api/app/auth/schemas.py and the error codes raised by
@@ -6,6 +7,7 @@ import { API_BASE_URL } from '../config/env';
  * apps/api/app/main.py's OTPError exception handler.
  */
 export type Platform = 'ios' | 'android';
+export type AppLocale = 'en' | 'fr';
 
 export type OtpErrorCode =
   | 'account_exists'
@@ -27,6 +29,7 @@ export interface UserResponse {
   email: string | null;
   verified_cli: boolean;
   departure_date?: string | null;
+  locale: AppLocale;
   platform: string;
   status: string;
 }
@@ -74,9 +77,15 @@ async function parseErrorResponse(response: Response): Promise<OtpApiError> {
     const code = KNOWN_CODES.includes(payload.error as OtpErrorCode)
       ? (payload.error as OtpErrorCode)
       : 'validation_error';
-    return new OtpApiError(code, payload.message, payload.details?.retry_after);
+    const key =
+      code === 'invalid_otp' ? 'incorrectCode'
+      : code === 'otp_expired' ? 'expiredCode'
+      : code === 'locked' ? 'tooManyAttempts'
+      : code === 'rate_limited' ? 'waitBeforeCode'
+      : 'generic';
+    return new OtpApiError(code, i18n.t(`errors.${key}`, {ns: 'auth'}), payload.details?.retry_after);
   } catch {
-    return new OtpApiError('network_error', 'Something went wrong. Please try again.');
+    return new OtpApiError('network_error', i18n.t('errors.generic', {ns: 'auth'}));
   }
 }
 
@@ -85,11 +94,11 @@ async function post<TResponse>(path: string, body: unknown): Promise<TResponse> 
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...localeHeader() },
       body: JSON.stringify(body),
     });
   } catch {
-    throw new OtpApiError('network_error', 'Check your connection and try again.');
+    throw new OtpApiError('network_error', i18n.t('errors.network', {ns: 'auth'}));
   }
 
   if (!response.ok) {
@@ -99,16 +108,17 @@ async function post<TResponse>(path: string, body: unknown): Promise<TResponse> 
   return (await response.json()) as TResponse;
 }
 
-export function requestOtp(phoneNumber: string): Promise<{ message: string }> {
-  return post('/auth/otp/request', { phone_number: phoneNumber });
+export function requestOtp(phoneNumber: string, locale: AppLocale = 'en'): Promise<{ message: string }> {
+  return post('/auth/otp/request', { phone_number: phoneNumber, locale });
 }
 
 export function verifyOtp(
   phoneNumber: string,
   otp: string,
   platform: Platform,
+  locale: AppLocale = 'en',
 ): Promise<AuthResponse> {
-  return post('/auth/otp/verify', { phone_number: phoneNumber, otp, platform });
+  return post('/auth/otp/verify', { phone_number: phoneNumber, otp, platform, locale });
 }
 
 /**
@@ -119,16 +129,17 @@ export function verifyOtp(
  * OTP-based recovery pair US-02 built for "forgot my PIN," per
  * docs/api-spec.md §7.1's documented contract for these routes.
  */
-export function requestPinRecovery(phoneNumber: string): Promise<{ message: string }> {
-  return post('/auth/pin/recovery/request', { phone_number: phoneNumber });
+export function requestPinRecovery(phoneNumber: string, locale: AppLocale = 'en'): Promise<{ message: string }> {
+  return post('/auth/pin/recovery/request', { phone_number: phoneNumber, locale });
 }
 
 export function verifyPinRecovery(
   phoneNumber: string,
   otp: string,
   platform: Platform,
+  locale: AppLocale = 'en',
 ): Promise<AuthResponse> {
-  return post('/auth/pin/recovery/verify', { phone_number: phoneNumber, otp, platform });
+  return post('/auth/pin/recovery/verify', { phone_number: phoneNumber, otp, platform, locale });
 }
 
 export interface RefreshResponse {

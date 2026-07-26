@@ -1,9 +1,11 @@
 "use client";
 
 import {useEffect, useState} from "react";
+import {useTranslations} from "next-intl";
 import {downloadProvisioningReport, getManifests, type Manifest} from "../../lib/api";
 
 export default function ReportsPage() {
+  const t = useTranslations("reports");
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [manifestId, setManifestId] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -14,8 +16,8 @@ export default function ReportsPage() {
   useEffect(() => {
     getManifests()
       .then(setManifests)
-      .catch(cause => setError(cause instanceof Error ? cause.message : "Could not load manifests."));
-  }, []);
+      .catch(cause => setError(cause instanceof Error ? cause.message : t("loadFailed")));
+  }, [t]);
 
   async function download() {
     setGenerating(true);
@@ -27,49 +29,50 @@ export default function ReportsPage() {
         dateTo: dateTo || undefined,
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not generate the report.");
+      setError(cause instanceof Error ? cause.message : t("generateFailed"));
     } finally {
       setGenerating(false);
     }
   }
 
   const manifestLabel = manifestId
-    ? (manifests.find(m => m.id === manifestId)?.name ?? "the selected manifest")
-    : "all manifests";
-  const rangeLabel = dateFrom || dateTo ? `${dateFrom || "the start"} to ${dateTo || "now"}` : "your full provisioning history";
+    ? (manifests.find(m => m.id === manifestId)?.name ?? t("selectedManifest"))
+    : t("allManifests");
+  const rangeLabel = dateFrom || dateTo
+    ? t("range", {from: dateFrom || t("start"), to: dateTo || t("now")})
+    : t("fullHistory");
 
   return (
     <main className="dashboard-page">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">HTO records &amp; compliance</p>
-          <h1>Provisioning Report</h1>
+          <p className="eyebrow">{t("eyebrow")}</p>
+          <h1>{t("title")}</h1>
         </div>
       </header>
 
       <p>
-        Downloads a CSV covering {manifestLabel}, {rangeLabel} — name, phone, tier, purchase date, eSIM
-        status, check-in count, and SOS events per pilgrim.
+        {t("description", {manifest: manifestLabel, range: rangeLabel})}
       </p>
 
       <div className="report-controls">
         <label>
-          Manifest
+          {t("manifest")}
           <select value={manifestId} onChange={event => setManifestId(event.target.value)}>
-            <option value="">All manifests</option>
+            <option value="">{t("allOption")}</option>
             {manifests.map(manifest => (
               <option key={manifest.id} value={manifest.id}>
-                {manifest.name ?? "Unnamed manifest"}
+                {manifest.name ?? t("unnamed")}
               </option>
             ))}
           </select>
         </label>
         <label>
-          From
+          {t("from")}
           <input type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} />
         </label>
         <label>
-          To
+          {t("to")}
           <input type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} />
         </label>
       </div>
@@ -78,9 +81,9 @@ export default function ReportsPage() {
 
       <div className="action-row">
         <button disabled={generating} onClick={download}>
-          {generating ? "Generating…" : "Download CSV"}
+          {generating ? t("generating") : t("download")}
         </button>
-        {generating ? <p>This can take up to 30 seconds for large manifests.</p> : null}
+        {generating ? <p>{t("duration")}</p> : null}
       </div>
     </main>
   );

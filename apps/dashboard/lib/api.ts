@@ -1,3 +1,5 @@
+import {clientMessage, localeHeader} from "./clientI18n";
+
 export type HTORegistration = {
   business_name: string;
   operator_name: string;
@@ -5,6 +7,7 @@ export type HTORegistration = {
   password: string;
   phone_number: string;
   nahcon_licence_number: string;
+  locale: "en" | "fr";
 };
 
 export type SOSAlert = {
@@ -44,7 +47,7 @@ export async function subscribeToPushTopic(fcmToken: string): Promise<void> {
   });
   if (!response.ok) {
     const error = (await response.json().catch(() => ({}))) as APIError;
-    throw new Error(error.message ?? "Could not enable browser alerts.");
+    throw new Error(error.message ?? clientMessage("common.errors.push"));
   }
   // 204 No Content on success -- nothing to parse.
 }
@@ -76,6 +79,7 @@ export type ManifestUploadResult = {
 export type HTOLoginResult = {
   access_token: string;
   refresh_token: string;
+  operator: {locale: "en" | "fr"};
 };
 
 const API_BASE_URL =
@@ -84,19 +88,19 @@ const API_BASE_URL =
 async function request(path: string, body: unknown): Promise<void> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...localeHeader() },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
     const error = (await response.json().catch(() => ({}))) as APIError;
-    throw new Error(error.message ?? "Something went wrong. Please try again.");
+    throw new Error(error.message ?? clientMessage("common.errors.generic"));
   }
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const error = (await response.json().catch(() => ({}))) as APIError;
-    throw new Error(error.message ?? "Something went wrong. Please try again.");
+    throw new Error(error.message ?? clientMessage("common.errors.generic"));
   }
   return (await response.json()) as T;
 }
@@ -104,9 +108,9 @@ async function parseResponse<T>(response: Response): Promise<T> {
 function operatorHeaders(): HeadersInit {
   const token = window.localStorage.getItem("hto_access_token");
   if (!token) {
-    throw new Error("Sign in to continue.");
+    throw new Error(clientMessage("common.errors.signInRequired"));
   }
-  return { Authorization: `Bearer ${token}` };
+  return { Authorization: `Bearer ${token}`, ...localeHeader() };
 }
 
 export async function registerHTO(payload: HTORegistration): Promise<void> {
@@ -120,12 +124,14 @@ export async function verifyHTOEmail(token: string): Promise<void> {
 export async function loginHTO(email: string, password: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/auth/hto/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...localeHeader() },
     body: JSON.stringify({ email, password }),
   });
   const result = await parseResponse<HTOLoginResult>(response);
   window.localStorage.setItem("hto_access_token", result.access_token);
   window.localStorage.setItem("hto_refresh_token", result.refresh_token);
+  window.localStorage.setItem("damdam_locale", result.operator.locale);
+  document.cookie = `damdam_locale=${result.operator.locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
 }
 
 export async function createManifest(name?: string): Promise<string> {
@@ -349,8 +355,8 @@ export async function downloadProvisioningReport(
 
 function adminHeaders(): HeadersInit {
   const token = window.localStorage.getItem("admin_access_token");
-  if (!token) throw new Error("An administrator session is required.");
-  return { Authorization: `Bearer ${token}` };
+  if (!token) throw new Error(clientMessage("common.errors.adminRequired"));
+  return { Authorization: `Bearer ${token}`, ...localeHeader() };
 }
 
 export type AdminManifestOrder = {

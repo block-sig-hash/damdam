@@ -13,7 +13,6 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 
 object ArrivalNotification {
-  const val COPY = "You've arrived in Saudi Arabia. Tap to activate your DamDam data — takes 30 seconds."
   private const val CHANNEL_ID = "esim_arrival"
 
   fun show(context: Context, packageId: String) {
@@ -24,7 +23,7 @@ object ArrivalNotification {
     val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       manager.createNotificationChannel(
-        NotificationChannel(CHANNEL_ID, "eSIM arrival reminders", NotificationManager.IMPORTANCE_HIGH),
+        NotificationChannel(CHANNEL_ID, context.getString(R.string.arrival_channel), NotificationManager.IMPORTANCE_HIGH),
       )
     }
     val destination = Uri.parse("damdam://esim/activate?packageId=$packageId")
@@ -36,9 +35,9 @@ object ArrivalNotification {
     )
     val notification = NotificationCompat.Builder(context, CHANNEL_ID)
       .setSmallIcon(com.damdam.app.R.mipmap.ic_launcher)
-      .setContentTitle("Activate your DamDam eSIM")
-      .setContentText(COPY)
-      .setStyle(NotificationCompat.BigTextStyle().bigText(COPY))
+      .setContentTitle(context.getString(R.string.arrival_title))
+      .setContentText(context.getString(R.string.arrival_copy))
+      .setStyle(NotificationCompat.BigTextStyle().bigText(context.getString(R.string.arrival_copy)))
       .setContentIntent(tapIntent)
       .setAutoCancel(true)
       .build()
