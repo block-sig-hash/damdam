@@ -8,5 +8,5 @@ appId: com.damdam.app
 - tapOn:
     id: "harness-target-cli-verify-confirm"
 - assertVisible:
-    id: "cli-confirm-code-input"
+    id: "cli-confirm-submit"
 - takeScreenshot: cli-verify-confirm
