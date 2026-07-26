@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Request
+from sqlmodel import Session, select
 
 from app.auth.dependencies import get_current_user
 from app.auth.hto import HTOService
@@ -22,9 +23,11 @@ from app.auth.schemas import (
     PINVerifyResponse,
     RefreshRequest,
     TokenResponse,
+    UserResponse,
 )
 from app.auth.tokens import InvalidRefreshTokenError
-from app.otp.service import OTPError, OTPService
+from app.otp.service import AuthResult, OTPError, OTPService
+from app.voice.models import VerifiedCallerIdentity, VerifiedCallerIdentityStatus
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -48,13 +51,37 @@ def request_otp(payload: OTPRequest, request: Request) -> MessageResponse:
     return MessageResponse(message="OTP sent")
 
 
+def _auth_response(session: Session, result: AuthResult) -> AuthResponse:
+    # `User.verified_cli` is a retired, legacy flag (data-model.md §6.40) --
+    # the login OTP no longer sets it. `active` VerifiedCallerIdentity
+    # status is the current source of truth for CLI verification.
+    has_active_cli = (
+        session.exec(
+            select(VerifiedCallerIdentity).where(
+                VerifiedCallerIdentity.user_id == result.user.id,
+                VerifiedCallerIdentity.status == VerifiedCallerIdentityStatus.ACTIVE,
+            )
+        ).first()
+        is not None
+    )
+    user = UserResponse.model_validate(result.user).model_copy(
+        update={"verified_cli": has_active_cli}
+    )
+    return AuthResponse(
+        access_token=result.access_token,
+        refresh_token=result.refresh_token,
+        user=user,
+        is_new_user=result.is_new_user,
+    )
+
+
 @router.post("/otp/verify", response_model=AuthResponse)
 def verify_otp(payload: OTPVerifyRequest, request: Request) -> AuthResponse:
     with request.app.state.session_factory() as session:
         result = _service(request).verify(
             session, payload.phone_number, payload.otp, payload.platform
         )
-    return AuthResponse.model_validate(result, from_attributes=True)
+        return _auth_response(session, result)
 
 
 @router.post("/pin/set", response_model=MessageResponse)
@@ -100,7 +127,7 @@ def verify_pin_recovery(payload: OTPVerifyRequest, request: Request) -> AuthResp
         )
     with request.app.state.session_factory() as session:
         _pin_service(request).clear_lock_after_otp(session, result.user.id)
-    return AuthResponse.model_validate(result, from_attributes=True)
+        return _auth_response(session, result)
 
 
 @router.post("/token/refresh", response_model=TokenResponse)

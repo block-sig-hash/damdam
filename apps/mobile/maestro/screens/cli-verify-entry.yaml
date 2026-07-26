@@ -1,0 +1,12 @@
+appId: com.damdam.app
+---
+- launchApp
+- scrollUntilVisible:
+    element:
+      id: "harness-target-cli-verify-entry"
+    direction: DOWN
+- tapOn:
+    id: "harness-target-cli-verify-entry"
+- assertVisible:
+    id: "cli-verify-entry-input"
+- takeScreenshot: cli-verify-entry

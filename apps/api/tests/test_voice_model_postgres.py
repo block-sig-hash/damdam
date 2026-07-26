@@ -15,7 +15,14 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from app.auth.models import PricingTier, User
 from app.config import Settings
 from app.packages.models import Package, PackageSource, PackageStatus
-from app.voice.models import CallLog
+from app.voice.models import (
+    CallLog,
+    IdentityVerificationStatus,
+    PhoneVerificationProviderName,
+    PhoneVerificationStatus,
+    VerifiedCallerIdentity,
+    VerifiedCallerIdentityStatus,
+)
 from app.voice.service import VoiceService
 
 
@@ -55,9 +62,7 @@ def test_concurrent_hangups_lock_balance_at_exactly_zero() -> None:
     )
     service = VoiceService(settings, UnusedProvider(), lambda: now)
     with Session(engine) as session:
-        user = User(
-            phone_number=f"+23480{suffix}", platform="android", verified_cli=True
-        )
+        user = User(phone_number=f"+23480{suffix}", platform="android")
         tier = PricingTier(
             name=f"Voice-race-{suffix}",
             usd_reference_price=Decimal("100"),
@@ -79,6 +84,22 @@ def test_concurrent_hangups_lock_balance_at_exactly_zero() -> None:
                 pstn_minutes_total=1,
                 pstn_minutes_remaining=Decimal("0.50"),
                 purchased_at=now,
+            )
+        )
+        session.add(
+            VerifiedCallerIdentity(
+                user_id=user.id,
+                phone_number=user.phone_number,
+                detected_country="NG",
+                phone_verification_provider=PhoneVerificationProviderName.TELNYX,
+                phone_verification_status=PhoneVerificationStatus.VERIFIED,
+                phone_verified_at=now,
+                identity_verification_status=IdentityVerificationStatus.NOT_REQUIRED,
+                status=VerifiedCallerIdentityStatus.ACTIVE,
+                consent_version="v1",
+                consent_at=now,
+                created_at=now,
+                updated_at=now,
             )
         )
         session.commit()

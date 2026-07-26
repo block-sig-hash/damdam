@@ -88,6 +88,8 @@ def test_initiate_call_encodes_client_state_and_clamps_time_limit(monkeypatch) -
         caller_id="+2348012345678",
         to_number="+2348099999999",
         time_limit_seconds=0,
+        verified_caller_identity_id="identity-1",
+        idempotency_key="idem-1",
     )
 
     body = captured["json"]
@@ -95,7 +97,12 @@ def test_initiate_call_encodes_client_state_and_clamps_time_limit(monkeypatch) -
     assert body["to"] == "+2348099999999"  # type: ignore[index]
     assert body["time_limit_secs"] == 1  # type: ignore[index]
     state = json.loads(base64.b64decode(body["client_state"]))  # type: ignore[index]
-    assert state == {"user_id": "user-1", "webrtc_call_control_id": "webrtc-control"}
+    assert state == {
+        "user_id": "user-1",
+        "webrtc_call_control_id": "webrtc-control",
+        "verified_caller_identity_id": "identity-1",
+        "idempotency_key": "idem-1",
+    }
 
 
 def test_bridge_call_posts_to_bridge_action(monkeypatch) -> None:

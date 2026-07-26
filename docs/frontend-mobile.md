@@ -47,6 +47,11 @@ path — the primary and only path on iOS).
 
 **Calling**
 22. Dial Pad
+22a. Verified Caller ID — Enter Number
+22b. Verified Caller ID — Enter Code
+22c. Verified Caller ID — Consent
+22d. Verified Caller ID — Manage (status/revoke/lost-SIM; reachable from
+     Dial Pad, doubles as the resume point for an interrupted 22a-22c flow)
 23. Active Call
 24. Call History
 
@@ -397,6 +402,59 @@ contacts), recent-calls quick access.
 - *No connectivity:* Call button disabled, banner: "Calling
   requires an internet connection"
 - *Low minutes (<5):* warning banner, does not block
+- *`cli_not_verified` eligibility reason (AC-14.1):* Call button
+  disabled for the PSTN case, `info`-tone banner ("Verify your
+  Nigerian number to call numbers outside DamDam.") with a "Verify
+  now" trailing action opening Screen 22d. App-to-app remains
+  unaffected. A persistent low-emphasis "Caller ID" text link in the
+  header opens Screen 22d regardless of verification state.
+
+---
+
+### Screens: Verified Caller ID (Screens 22a–22d)
+
+**Added by the US-14 CLI-hardening amendment**
+(`verified-cli-scoping.md` §5, `data-model.md` §6.40) — no prior spec
+existed for these screens, so this section is new rather than a
+revision. AC-14.1/AC-14.10/AC-14.11.
+
+**Screen 22a — Enter Number.** Same input pattern as Phone Number
+Entry (Screen 2): single Nigerian-number text field, `Send code`
+primary button disabled until valid, `Not now` tertiary link back to
+Dial Pad. Deliberately **not** pre-filled with the account's login
+number (AC-14.10) — a pilgrim may verify possession of any Nigerian
+mobile number here.
+
+**Screen 22b — Enter Code.** Same six-box code-entry component as
+OTP Verification (Screen 3), reused rather than re-invented. Wrong
+code shows an inline error and does not clear the input; a
+provider-rate-limit response (too many wrong attempts against this
+verification) disables further submission with a warning-tone
+message. `Use a different number` link returns to Screen 22a.
+
+**Screen 22c — Consent.** Explicit, versioned consent copy stating
+the number is now used as caller ID and that revocation/lost-SIM
+reporting is always available and takes effect immediately without
+affecting an in-flight call. Single `Agree and activate` primary
+button — no separate opt-out control on this screen itself (that
+lives in Screen 22d after activation).
+
+**Screen 22d — Manage.** The single entry point for both first-time
+verification and ongoing management, rather than a separate settings
+screen (no `apps/mobile` Settings screen exists yet to host this).
+Data displayed depends on state:
+- *No identity yet:* explanation + `Verify a number` button (opens
+  Screen 22a).
+- *Mid-verification (`phone_verification_pending` /
+  `consent_required`):* resumes directly at Screen 22b or 22c rather
+  than restarting.
+- *`active`:* verified number in a card with a "Verified" status
+  pill, `Verify a different number` (secondary button, opens Screen
+  22a — activating a new number automatically revokes the old one),
+  `Revoke` and `Report lost SIM` (destructive buttons). Per
+  `design-system.md` §7's "always a custom in-app modal, never a
+  native alert" rule, both destructive actions reveal an inline
+  confirmation (not a native `Alert`) before calling the API.
 
 ---
 
@@ -515,7 +573,9 @@ onboarding through first purchase.
 - Modals: Family Group Size Selector, Device Compatibility
   Warning, SOS Cancel Confirmation
 - Stack (back-navigable): all onboarding screens, Package
-  Selection, eSIM flow, Dial Pad → Active Call
+  Selection, eSIM flow, Dial Pad → Active Call, Dial Pad ↔ Verified
+  Caller ID Manage (22d) → Enter Number (22a) → Enter Code (22b) →
+  Consent (22c) → back to Dial Pad on activation
 - Non-dismissible full-screen: SOS Hold-to-Confirm once triggered
   → Sent Confirmation (must actively choose Cancel)
 

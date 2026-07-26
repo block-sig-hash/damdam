@@ -44,6 +44,7 @@ it('allows the screenshot harness to replace native calling setup', async () => 
       accessToken="access"
       pstnMinutesRemaining={10}
       onCallStarted={jest.fn()}
+      onManageCli={jest.fn()}
       callingReadiness={callingReadiness}
     />,
   );
@@ -58,6 +59,7 @@ it('allows the screenshot harness to replace the simulator network snapshot', as
       accessToken="access"
       pstnMinutesRemaining={10}
       onCallStarted={jest.fn()}
+      onManageCli={jest.fn()}
       networkQualityOverride={{ connected: true, quality: 'excellent' }}
     />,
   );
@@ -74,6 +76,7 @@ it('AC-14.2/8: zero-minute users can pick a contact and place a free app-to-app 
       accessToken="access"
       pstnMinutesRemaining={0}
       onCallStarted={onStarted}
+      onManageCli={jest.fn()}
       voiceGateway={gateway}
       contactsLoader={async () => [{ id: '1', name: 'Amina', phoneNumber: '08098765432' }]}
     />,
@@ -91,7 +94,8 @@ it('AC-14.2/8: zero-minute users can pick a contact and place a free app-to-app 
 it('AC-14.6: no connectivity shows the exact banner and disables calling', async () => {
   network.mockReturnValue({ connected: false, quality: 'poor' });
   await render(
-    <DialPadScreen accessToken="access" pstnMinutesRemaining={10} onCallStarted={jest.fn()} />,
+    <DialPadScreen accessToken="access" pstnMinutesRemaining={10} onCallStarted={jest.fn()}
+      onManageCli={jest.fn()} />,
   );
   expect(screen.getByText('Calling requires an internet connection')).toBeTruthy();
   expect(screen.getByTestId('start-call').props.accessibilityState.disabled).toBe(true);
@@ -106,9 +110,51 @@ it('AC-14.7: low minutes warn without blocking a valid PSTN call', async () => {
     pstn_minutes_remaining: 4.5,
   });
   await render(
-    <DialPadScreen accessToken="access" pstnMinutesRemaining={4.5} onCallStarted={jest.fn()} />,
+    <DialPadScreen accessToken="access" pstnMinutesRemaining={4.5} onCallStarted={jest.fn()}
+      onManageCli={jest.fn()} />,
   );
   expect(screen.getByText('Only 4.5 PSTN minutes remaining')).toBeTruthy();
   await enterNumber();
   expect(screen.getByTestId('start-call').props.accessibilityState.disabled).toBe(false);
+});
+
+it('AC-14.1: an unverified caller ID blocks PSTN dialing with a banner offering to verify', async () => {
+  eligibility.mockResolvedValue({
+    allowed: false,
+    call_type: 'pstn',
+    destination: null,
+    reason: 'cli_not_verified',
+    pstn_minutes_remaining: 10,
+  });
+  const onManageCli = jest.fn();
+  await render(
+    <DialPadScreen
+      accessToken="access"
+      pstnMinutesRemaining={10}
+      onCallStarted={jest.fn()}
+      onManageCli={onManageCli}
+    />,
+  );
+
+  await enterNumber();
+  expect(screen.getByTestId('cli-not-verified-banner')).toBeTruthy();
+  expect(screen.getByTestId('start-call').props.accessibilityState.disabled).toBe(true);
+
+  await fireEvent.press(screen.getByTestId('cli-not-verified-banner-action'));
+  expect(onManageCli).toHaveBeenCalledTimes(1);
+});
+
+it('opens caller ID management from the header link', async () => {
+  const onManageCli = jest.fn();
+  await render(
+    <DialPadScreen
+      accessToken="access"
+      pstnMinutesRemaining={10}
+      onCallStarted={jest.fn()}
+      onManageCli={onManageCli}
+    />,
+  );
+
+  await fireEvent.press(screen.getByTestId('manage-cli-link'));
+  expect(onManageCli).toHaveBeenCalledTimes(1);
 });

@@ -371,6 +371,70 @@ GET    /me/calls
           pstn_minutes_charged, started_at }] }
 ```
 
+**CLI-verification amendment (AC-14.1/AC-14.10/AC-14.11, data-model.md
+§6.40):** the `VerifiedCallerIdentity` state machine replaces the retired
+`verified_cli` login-OTP shortcut. `POST /voice/token` and
+`GET /voice/eligibility` now require an `active` `VerifiedCallerIdentity`
+row for PSTN, not `users.verified_cli` (unchanged for `app_to_app`).
+
+```
+POST   /voice/cli/verify
+  Auth required
+  Body: { phone_number: string }
+  201: VerifiedCallerIdentity (id, phone_number, status: "phone_verification_pending",
+       phone_verification_status, consent_version, consent_at, created_at, updated_at)
+  Starts Telnyx Verified Numbers phone-possession proof for any Nigerian
+  number, independent of the account's login number (AC-14.10). Subject to
+  a per-user sliding-window rate limit.
+  400 invalid_phone_number
+  429 cli_verification_rate_limited
+  503 phone_verification_unavailable
+
+POST   /voice/cli/{identity_id}/confirm
+  Auth required
+  Body: { code: string }
+  200: VerifiedCallerIdentity, status advances to "consent_required"
+       (or "identity_verification_pending" if NIN_VERIFICATION_ENABLED,
+       disabled by default -- see verified-cli-scoping.md §4)
+  Subject to a per-identity attempt lockout on top of the phone-number rate
+  limit above -- distinct from it, since this guards the code guess itself,
+  not how many codes get issued (data-model.md §6.40).
+  400 verification_code_invalid | invalid_state
+  404 caller_identity_not_found
+  429 cli_verification_rate_limited (too many wrong codes against this
+      identity_id; locked out for CLI_VERIFICATION_CONFIRM_LOCKOUT_SECONDS)
+
+POST   /voice/cli/{identity_id}/consent
+  Auth required
+  Body: { consent_version: string, device_session_id?: string }
+  200: VerifiedCallerIdentity, status: "active"
+  Records a versioned, revocable CallerIdConsent row (IP address taken
+  from the request, not the body). Activating a new number automatically
+  revokes any prior `active` identity for the same user -- at most one
+  active CLI per user (data-model.md §6.40's partial unique index).
+  409 invalid_state | number_already_verified_elsewhere (the number is
+      already `active` on a different account)
+
+POST   /voice/cli/revoke
+  Auth required
+  204: no body
+  AC-14.11: immediately prevents new PSTN calls; does not force-terminate
+  an in-flight call.
+  404 no_active_caller_id
+
+POST   /voice/cli/lost-sim
+  Auth required
+  204: no body
+  Same effect as /voice/cli/revoke, recorded with revocation_reason
+  "lost_sim" for audit purposes.
+
+GET    /voice/cli/status
+  Auth required
+  200: VerifiedCallerIdentity | null
+  Returns the current `active` identity, or the most recent attempt if
+  none is active.
+```
+
 ---
 
 ## 7.6 Check-in & SOS

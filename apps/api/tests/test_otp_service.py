@@ -76,7 +76,9 @@ def test_success_creates_account_and_returns_session(
     assert user is not None
     assert user.phone_number == "+2348012345678"
     assert user.platform == "ios"
-    assert user.verified_cli is True
+    # prd.md §5.5's CLI-verification amendment retires this login-OTP
+    # shortcut; CLI verification is now a separate flow (voice/cli/*).
+    assert user.verified_cli is False
 
 
 def test_existing_account_is_directed_to_login(

@@ -431,6 +431,65 @@ handling; it is used for US-14. Device contacts use maintained
 with `READ_CONTACTS`/Contacts-framework autolinking. No custom WebRTC, CallKit,
 ConnectionService, or contacts native bridge is justified or implemented.
 
+**CLI-verification hardening (AC-14.1/AC-14.10/AC-14.11, data-model.md
+§6.40, `docs/verified-cli-scoping.md`):** strict-TDD category (auth) per
+§14.1 -- `test_caller_identity.py` and `test_verified_numbers.py` were
+written alongside the `VerifiedCallerIdentity` state machine, not after.
+Required automated evidence in the feature PR:
+
+- Phone-possession verification is decoupled from the account login
+  number: a user may start verification for a Nigerian number other than
+  the one they signed in with (AC-14.10), and the resulting
+  `VerifiedCallerIdentity.phone_number` is what PSTN calls use as caller
+  ID, not `users.phone_number`.
+- Consent capture is a distinct, required step after phone verification
+  (`consent_required` -> `active`); attempting consent before
+  confirmation, or confirming with the wrong code, is rejected without
+  advancing state.
+- Revocation and lost-SIM reporting immediately flip PSTN eligibility back
+  to `cli_not_verified` (AC-14.11) without needing to touch an in-flight
+  call.
+- Re-verifying a different number automatically revokes the previous
+  `active` identity for the same user (at most one `active` CLI per user);
+  a number already `active` on a different account is rejected
+  (`number_already_verified_elsewhere`) rather than silently reassigned.
+- CLI-verification-specific rate limiting is exercised independently of
+  the general OTP rate limiter.
+- The code-confirmation step is separately guarded against brute-forcing the
+  SMS code itself: repeated wrong codes against one `identity_id` lock out
+  further confirm attempts for `CLI_VERIFICATION_CONFIRM_LOCKOUT_SECONDS`,
+  mirroring `OTPService`'s own attempts/lockout pattern rather than relying
+  only on the coarser per-user `start_verification` rate limit.
+- The retired `users.verified_cli` login-OTP shortcut no longer grants CLI
+  rights: a fresh login does not itself unlock PSTN calling.
+- `MockIdentityProvider` never reports a real identity match regardless of
+  input, and `NIN_VERIFICATION_ENABLED`/`STRICT_NIN_MSISDN_MATCH_REQUIRED`
+  default off -- both are founder/legal decisions per
+  `verified-cli-scoping.md` §4, not engineering defaults.
+
+**Mobile (Screens 22a-22d, `frontend-mobile.md`'s new per-screen
+specification):** no prior spec existed for these screens, so
+`apps/mobile/src/screens/CliVerification/*.test.tsx` is this
+feature's first test coverage, not a revision of existing tests.
+Covers: number-entry validation disabling submit until a valid
+Nigerian number is entered (mirroring, not reusing, Phone Number
+Entry's narrower login-number pattern -- AC-14.10 accepts any
+Nigerian mobile number); a wrong code showing an inline error without
+clearing the input; a rate-limited confirm response disabling further
+submission; consent capture; and Screen 22d's three states (no
+identity, mid-verification resume, active with revoke/lost-SIM
+confirmation via the same custom `<Modal>` pattern as `SosSentScreen`'s
+cancel confirmation and `DeviceCompatibilityWarningModal`, never a
+native `Alert`). Dial Pad's `cli_not_verified` banner and its "Verify
+now" action are covered in `DialPadScreen.test.tsx`. All four screens
+are registered in `screenshotHarness/registry.tsx` *and* have a
+corresponding `maestro/screens/cli-*.yaml` flow, so `claude-review.yml`'s
+rendered-screenshot check actually captures them (a registry entry
+alone isn't enough for CI to reach the screen); the Manage screen
+(22d) makes a real `getCliStatus` request the harness doesn't mock,
+so its flow asserts on the "Caller ID" title text and captures the
+loading state rather than a populated one there.
+
 ---
 
 ## 14.10 Home Package Balance Verification — US-17

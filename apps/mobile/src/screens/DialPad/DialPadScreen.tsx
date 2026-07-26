@@ -28,6 +28,7 @@ interface DialPadScreenProps {
   accessToken: string;
   pstnMinutesRemaining: number;
   onCallStarted: (call: VoiceCallSession, recipientName?: string) => void;
+  onManageCli: () => void;
   voiceGateway?: VoiceGateway;
   contactsLoader?: () => Promise<DialContact[]>;
   callingReadiness?: () => Promise<void>;
@@ -42,6 +43,7 @@ export function DialPadScreen({
   accessToken,
   pstnMinutesRemaining,
   onCallStarted,
+  onManageCli,
   voiceGateway = telnyxVoiceGateway,
   contactsLoader = loadDialContacts,
   callingReadiness = ensureAndroidCallingReady,
@@ -88,15 +90,24 @@ export function DialPadScreen({
 
   const currentMinutes = eligibility?.pstn_minutes_remaining ?? pstnMinutesRemaining;
   const noMinutesForPstn = currentMinutes <= 0 && eligibility?.call_type !== 'app_to_app';
+  const cliNotVerified = eligibility?.reason === 'cli_not_verified';
   const disabled =
-    !network.connected || !isDialable(number) || checking || calling || noMinutesForPstn;
+    !network.connected ||
+    !isDialable(number) ||
+    checking ||
+    calling ||
+    noMinutesForPstn ||
+    cliNotVerified;
   const disabledHint = useMemo(() => {
     if (!network.connected) return undefined;
+    if (cliNotVerified && isDialable(number)) {
+      return 'Verify your Nigerian number above to call this number.';
+    }
     if (noMinutesForPstn && isDialable(number)) {
       return 'No PSTN minutes remain. DamDam-to-DamDam calls are still free.';
     }
     return undefined;
-  }, [network.connected, noMinutesForPstn, number]);
+  }, [network.connected, cliNotVerified, noMinutesForPstn, number]);
 
   async function openContacts(): Promise<void> {
     setError(undefined);
@@ -135,9 +146,28 @@ export function DialPadScreen({
       contentContainerStyle={styles.screen}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.title}>Call</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Call</Text>
+        <Text
+          testID="manage-cli-link"
+          accessibilityRole="button"
+          onPress={onManageCli}
+          style={styles.manageCliLink}
+        >
+          Caller ID
+        </Text>
+      </View>
       {!network.connected ? (
         <Banner tone="error" message="Calling requires an internet connection" testID="offline-banner" />
+      ) : null}
+      {eligibility?.reason === 'cli_not_verified' && isDialable(number) ? (
+        <Banner
+          tone="info"
+          message="Verify your Nigerian number to call numbers outside DamDam."
+          actionLabel="Verify now"
+          onAction={onManageCli}
+          testID="cli-not-verified-banner"
+        />
       ) : null}
       {currentMinutes > 0 && currentMinutes < 5 ? (
         <Banner
@@ -255,7 +285,15 @@ export function DialPadScreen({
 
 const styles = StyleSheet.create({
   screen: { flexGrow: 1, backgroundColor: color.gray50, padding: space.space5, gap: space.space4 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { ...typography.heading1, color: color.gray900 },
+  manageCliLink: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: color.primary500,
+    minHeight: minTouchTarget,
+    textAlignVertical: 'center',
+  },
   numberRow: {
     minHeight: 64,
     borderBottomWidth: 1,

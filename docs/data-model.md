@@ -12,13 +12,14 @@ behaviourally relevant).
 
 ```
 User (pilgrim)
-  ├── has one → CallerIdVerification
+  ├── has one → VerifiedCallerIdentity   (see §6.40 — supersedes CallerIdVerification)
   ├── has one → FamilyContact
   ├── has many → Package
   ├── has many → EsimProfile (via Package)
   ├── has many → CheckIn
   ├── has many → SosAlert
   ├── has many → CallLog
+  ├── has many → CallerIdConsent (via VerifiedCallerIdentity, see §6.40)
   ├── belongs to → ManifestPilgrim (nullable, if HTO-sourced)
   └── has many → RefreshToken
 
@@ -95,7 +96,7 @@ DeviceCompatibilityLog
 | pin_failed_attempts | INTEGER | DEFAULT 0 | Resets on success |
 | pin_locked_until | TIMESTAMPTZ | NULLABLE | |
 | account_source | ENUM | NOT NULL | `direct` \| `hto_manifest` |
-| verified_cli | BOOLEAN | DEFAULT FALSE | True once the account-setup OTP ownership check succeeds through `caller_id_verifications` (`termii` or `twilio`) |
+| verified_cli | BOOLEAN | DEFAULT FALSE | Legacy flag, superseded by `verified_caller_identities.status = active` (§6.40); retained only to drive the one-time login-state migration described there |
 | departure_date | DATE | NULLABLE | Drives the eSIM banner timing |
 | destination_country | VARCHAR(2) | DEFAULT 'SA' | ISO code; hardcoded SA for MVP |
 | platform | ENUM | NOT NULL | `ios` \| `android` — set at registration |
@@ -119,20 +120,15 @@ is carried forward in §6.20.
 
 ---
 
-### `caller_id_verifications`
+### `caller_id_verifications` — superseded, see §6.40
 
-**Design note:** Kept provider-agnostic to match the OTP failover
-in §5.1 — the CLI-verification OTP may succeed via either the
-primary or secondary OTP provider, and this table records which
-one, rather than hardcoding a single vendor's identifier field.
-
-| Field | Type | Constraints | Notes |
-|---|---|---|---|
-| id | UUID | PK | |
-| user_id | UUID | FK → users, UNIQUE | One per user |
-| otp_provider | ENUM | NOT NULL | `termii` \| `twilio` — whichever provider actually delivered this verification |
-| provider_reference | VARCHAR(64) | NOT NULL | Opaque verification ID/SID from whichever provider succeeded |
-| verified_at | TIMESTAMPTZ | NOT NULL | |
+This table was speced here ahead of US-14's implementation and was
+never migrated or built — the shipped code took a shortcut instead
+(`users.verified_cli` set directly from the account-setup login OTP,
+with no separate verification row at all). §6.40 replaces this
+design with `verified_caller_identities`, which fixes the shortcut
+this table's own absence enabled: CLI verification decoupled from
+login OTP entirely, not just provider-agnostic within it.
 
 ### `refresh_tokens`
 
@@ -477,8 +473,13 @@ the other four (§6.27).
 | pstn_minutes_charged | DECIMAL(6,2) | DEFAULT 0 | 0 for app-to-app |
 | started_at | TIMESTAMPTZ | NOT NULL | |
 | ended_at | TIMESTAMPTZ | NULLABLE | |
+| verified_caller_identity_id | UUID | FK → verified_caller_identities, NULLABLE, ON DELETE SET NULL | NULL for `app_to_app`; added by §6.40, the CLI actually used for a `pstn` leg |
+| idempotency_key | VARCHAR(64) | NULLABLE | Added by §6.40; client-generated key from the call-initiation request, distinct from `telnyx_call_leg_id` which only exists once Telnyx accepts the leg |
+| requested_provider | ENUM | NULLABLE | Added by §6.40; `telnyx` \| `idt` — which configured provider the backend selected, independent of `idt_calling_enabled` ever being true in this MVP |
+| failure_code | VARCHAR(64) | NULLABLE | Added by §6.40; provider or internal rejection reason (e.g. `cli_policy_rejected`, `insufficient_balance`) |
+| failure_description | VARCHAR(255) | NULLABLE | Added by §6.40; safe, user-facing text — never a raw provider error body |
 
-**Indexes:** `user_id`, `telnyx_call_leg_id` (unique)
+**Indexes:** `user_id`, `telnyx_call_leg_id` (unique), `verified_caller_identity_id`, `idempotency_key`
 
 ---
 
@@ -1734,3 +1735,138 @@ previously confirmed HTO order without one before creating the unique index.
 Confirmation locks the order, writes its state and transaction atomically, and
 heals a missing transaction when an already-confirmed order is retried;
 provisioning dispatch remains a separate, safely retryable post-commit step.
+
+---
+
+## 6.40 Amendment — Verified Caller Identity (US-14 CLI Hardening)
+
+Replaces the never-implemented `caller_id_verifications` design (§6's
+original, now superseded) with a CLI authorization model decoupled
+from account login OTP entirely. See `docs/verified-cli-scoping.md`
+for the full gap analysis and the founder/product decisions this
+amendment defers rather than assumes (NIN identity verification,
+IDT Express timing).
+
+### `verified_caller_identities`
+
+| Field | Type | Constraints | Notes |
+|---|---|---|---|
+| id | UUID | PK | |
+| user_id | UUID | FK → users, NOT NULL | One active row per user for MVP — see uniqueness note below |
+| phone_number | VARCHAR(14) | NOT NULL | E.164; independent of `users.phone_number` — AC-14.10 |
+| detected_country | VARCHAR(2) | NOT NULL | ISO code from normalization; `NG` only accepted for MVP |
+| detected_carrier | VARCHAR(32) | NULLABLE | Reserved for a future carrier-lookup vendor integration — deliberately deferred, not stubbed, in this MVP pass (`docs/verified-cli-scoping.md` §5); no vendor is chosen yet, so this column is always `NULL` for now and must never be inferred from number prefix alone, since numbers port between carriers |
+| phone_verification_provider | ENUM | NOT NULL | `telnyx` for MVP; kept as an enum, not hardcoded, matching the OTP/payment/eSIM provider-abstraction pattern used throughout this doc |
+| phone_verification_reference | VARCHAR(64) | NULLABLE | Telnyx Verified Numbers reference; opaque, not the verification code itself |
+| phone_verification_status | ENUM | NOT NULL, DEFAULT `not_started` | `not_started` \| `pending` \| `verified` \| `failed` \| `expired` |
+| phone_verified_at | TIMESTAMPTZ | NULLABLE | |
+| identity_provider | ENUM | NULLABLE | `mock` for MVP (`NIN_VERIFICATION_ENABLED=false`); real providers added only once the founder/legal review in `docs/verified-cli-scoping.md` §4 resolves |
+| identity_verification_reference | VARCHAR(64) | NULLABLE | Provider reference, never a raw identity document number |
+| identity_verification_status | ENUM | NOT NULL, DEFAULT `not_required` | `not_required` \| `pending` \| `approved` \| `rejected` — `not_required` is the MVP default while identity verification stays disabled |
+| nin_msisdn_match_status | ENUM | NOT NULL, DEFAULT `not_checked` | `not_checked` \| `matched` \| `not_matched` \| `unavailable` — must never be set to `matched` unless a provider explicitly returned that match; defaults toward `unavailable`, not a silent pass |
+| status | ENUM | NOT NULL, DEFAULT `unverified` | State machine below |
+| consent_version | VARCHAR(20) | NULLABLE | Set on activation; matches the version in the linked `caller_id_consents` row |
+| consent_at | TIMESTAMPTZ | NULLABLE | Denormalized from `caller_id_consents` for fast activation checks |
+| expires_at | TIMESTAMPTZ | NULLABLE | Reverification interval, configurable; NULL means no forced expiry in MVP |
+| last_reverified_at | TIMESTAMPTZ | NULLABLE | |
+| risk_status | ENUM | NOT NULL, DEFAULT `normal` | `normal` \| `elevated` \| `blocked` — fraud-control input, not a replacement for `status` |
+| suspension_reason | VARCHAR(255) | NULLABLE | Set on `suspended`/`revoked`; safe, user-facing text |
+| created_at | TIMESTAMPTZ | NOT NULL | |
+| updated_at | TIMESTAMPTZ | NOT NULL | |
+
+**State machine:** `unverified` → `phone_verification_pending` →
+`phone_verified` → (`identity_verification_pending` →
+`identity_verified`, skipped entirely while
+`NIN_VERIFICATION_ENABLED=false`, in which case `phone_verified`
+goes directly to `consent_required`) → `consent_required` →
+`active`. `active` may transition to `suspended` (reversible, e.g.
+risk hold), `expired` (reversible via reverification), or `revoked`
+(terminal — a fresh `verified_caller_identities` row is required to
+re-authorize the same number). Only service-layer transition
+methods may change `status`; no route or admin action writes this
+column directly, matching the existing `manifest_orders.status`
+pattern (`data-model.md` §6.5) of explicit, auditable transitions
+rather than arbitrary updates.
+
+**Confirm-attempt lockout:** `phone_verification_pending` → `confirm` is
+guarded by its own Redis-backed attempt lockout
+(`CallerIdentityService._enforce_confirm_lock`), keyed by `identity_id` and
+distinct from `start_verification`'s per-user rate limit. Without this, the
+SMS code could be brute-forced against a single already-issued
+`phone_verification_reference` with no limit on guesses, defeating the
+phone-possession proof this table exists to establish. After
+`cli_verification_confirm_attempt_limit` wrong codes (default 3), further
+confirm attempts against that `identity_id` are rejected
+(`cli_verification_rate_limited`) for `cli_verification_confirm_lockout_seconds`
+(default 60s) — the same shape as `OTPService`'s `otp_attempt_limit`/
+`otp_lockout_seconds`. This state lives in Redis, not a DB column, matching
+where the analogous OTP challenge/attempt state already lives.
+
+A CLI is usable for an outbound `pstn` call only when `status =
+active`. `users.verified_cli` is retained (see the table note where
+it's defined) purely to drive a one-time migration: existing rows
+with `verified_cli = true` get a `verified_caller_identities` row
+created at `phone_verified` (not `active`) using `users.phone_number`
+as a starting point, since the account already proved possession of
+that specific number through the (soon-superseded) login-OTP
+shortcut — but `active` still requires a fresh consent capture,
+because consent was never actually collected under that shortcut.
+
+**Uniqueness:** `user_id` is NOT unique alone — a user may have
+multiple non-`active` rows across verification attempts (e.g. a
+failed attempt followed by a retry with a different number), but a
+partial unique index enforces at most one `active` row per user:
+
+```sql
+CREATE UNIQUE INDEX ux_verified_caller_identities_active_user
+  ON verified_caller_identities (user_id)
+  WHERE status = 'active';
+```
+
+A second partial unique index prevents the same Nigerian number
+from being `active` on two unrelated accounts at once (SIM-swap and
+number-recycling risk):
+
+```sql
+CREATE UNIQUE INDEX ux_verified_caller_identities_active_number
+  ON verified_caller_identities (phone_number)
+  WHERE status = 'active';
+```
+
+**Indexes:** `user_id`, `phone_number`, the two partial unique
+indexes above.
+
+### `caller_id_consents`
+
+| Field | Type | Constraints | Notes |
+|---|---|---|---|
+| id | UUID | PK | |
+| user_id | UUID | FK → users, NOT NULL | Denormalized from the identity row for direct audit queries |
+| verified_caller_identity_id | UUID | FK → verified_caller_identities, NOT NULL | |
+| consent_version | VARCHAR(20) | NOT NULL | References the exact consent copy shown, matching the `prd.md` §5.5 consent text pattern |
+| consented_at | TIMESTAMPTZ | NOT NULL | |
+| ip_address | VARCHAR(45) | NULLABLE | IPv4/IPv6; audit context, not used for access control |
+| device_session_id | VARCHAR(64) | NULLABLE | Correlates to the existing session/device tracking used elsewhere (`refresh_tokens`, `device_tokens`) rather than inventing a new identifier scheme |
+| revoked_at | TIMESTAMPTZ | NULLABLE | Set by explicit revocation, lost-SIM report, or admin suspension; immediately blocks new calls per AC-14.11 regardless of `verified_caller_identities.status` |
+| revocation_reason | VARCHAR(255) | NULLABLE | `user_revoked` \| `lost_sim` \| `admin_suspended` \| `admin_fraud_hold`, free text allowed for admin actions |
+
+**Indexes:** `verified_caller_identity_id`, `user_id`
+
+### `call_logs` additive columns
+
+See the updated `call_logs` table above (§6 base schema) —
+`verified_caller_identity_id`, `idempotency_key`,
+`requested_provider`, `failure_code`, `failure_description` are
+added by this amendment's migration rather than a new parallel call-
+record table, since `call_logs` already carries the correlation ID,
+duration, and billing fields a second table would only duplicate.
+
+### Why not a wallet/ledger table
+
+The proposal this amendment responds to assumed money-denominated
+wallet billing with temporary reservations. DamDam's actual billing
+for voice is minutes decremented from a `destination_country`-scoped
+`packages.pstn_minutes_remaining` (§5.7, `_handle_hangup`'s row-locked
+read-then-charge). This amendment does not introduce a parallel
+billing model; CLI verification is orthogonal to how a call, once
+authorized, gets charged.
