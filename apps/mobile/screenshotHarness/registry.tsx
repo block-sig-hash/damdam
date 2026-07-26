@@ -19,6 +19,10 @@ import { SosConfirmScreen } from '../src/screens/SosConfirm/SosConfirmScreen';
 import { SosSentScreen } from '../src/screens/SosSent/SosSentScreen';
 import { DialPadScreen } from '../src/screens/DialPad/DialPadScreen';
 import { ActiveCallScreen } from '../src/screens/ActiveCall/ActiveCallScreen';
+import { CliManageScreen } from '../src/screens/CliVerification/CliManageScreen';
+import { CliVerifyEntryScreen } from '../src/screens/CliVerification/CliVerifyEntryScreen';
+import { CliVerifyConfirmScreen } from '../src/screens/CliVerification/CliVerifyConfirmScreen';
+import { CliConsentScreen } from '../src/screens/CliVerification/CliConsentScreen';
 import { savePinLocally } from '../src/utils/pinLocalStore';
 import {
   FIXTURE_ACCESS_TOKEN,
@@ -135,10 +139,51 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
         accessToken={FIXTURE_ACCESS_TOKEN}
         pstnMinutesRemaining={30}
         onCallStarted={noop}
+        onManageCli={noop}
         voiceGateway={{ startCall: () => Promise.reject(new Error('not used in harness')) }}
         contactsLoader={() => Promise.resolve([])}
         callingReadiness={() => Promise.resolve()}
         networkQualityOverride={{ connected: true, quality: 'excellent' }}
+      />
+    ),
+  },
+  'cli-verify-entry': {
+    label: 'Verified Caller ID -- Enter Number',
+    render: () => (
+      <CliVerifyEntryScreen accessToken={FIXTURE_ACCESS_TOKEN} onStarted={noop} onCancel={noop} />
+    ),
+  },
+  'cli-verify-confirm': {
+    label: 'Verified Caller ID -- Enter Code',
+    render: () => (
+      <CliVerifyConfirmScreen
+        accessToken={FIXTURE_ACCESS_TOKEN}
+        identityId="harness-fixture-identity-id"
+        phoneNumber={FIXTURE_PHONE_NUMBER}
+        onConfirmed={noop}
+        onUseDifferentNumber={noop}
+      />
+    ),
+  },
+  'cli-consent': {
+    label: 'Verified Caller ID -- Consent',
+    render: () => (
+      <CliConsentScreen
+        accessToken={FIXTURE_ACCESS_TOKEN}
+        identityId="harness-fixture-identity-id"
+        phoneNumber={FIXTURE_PHONE_NUMBER}
+        onConsented={noop}
+      />
+    ),
+  },
+  'cli-manage': {
+    label: 'Verified Caller ID -- Manage (real fetch; likely shows Loading in harness)',
+    render: () => (
+      <CliManageScreen
+        accessToken={FIXTURE_ACCESS_TOKEN}
+        onVerifyNumber={noop}
+        onResumeConfirm={noop}
+        onResumeConsent={noop}
       />
     ),
   },

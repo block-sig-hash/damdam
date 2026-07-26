@@ -467,6 +467,25 @@ Required automated evidence in the feature PR:
   default off -- both are founder/legal decisions per
   `verified-cli-scoping.md` §4, not engineering defaults.
 
+**Mobile (Screens 22a-22d, `frontend-mobile.md`'s new per-screen
+specification):** no prior spec existed for these screens, so
+`apps/mobile/src/screens/CliVerification/*.test.tsx` is this
+feature's first test coverage, not a revision of existing tests.
+Covers: number-entry validation disabling submit until a valid
+Nigerian number is entered (mirroring, not reusing, Phone Number
+Entry's narrower login-number pattern -- AC-14.10 accepts any
+Nigerian mobile number); a wrong code showing an inline error without
+clearing the input; a rate-limited confirm response disabling further
+submission; consent capture; and Screen 22d's three states (no
+identity, mid-verification resume, active with inline
+revoke/lost-SIM confirmation rather than a native `Alert`). Dial
+Pad's `cli_not_verified` banner and its "Verify now" action are
+covered in `DialPadScreen.test.tsx`. All four screens are registered
+in `screenshotHarness/registry.tsx` for `claude-review.yml`'s
+rendered-screenshot check; the Manage screen (22d) makes a real
+`getCliStatus` request the harness doesn't mock, so it renders its
+loading state rather than a populated one there.
+
 ---
 
 ## 14.10 Home Package Balance Verification — US-17

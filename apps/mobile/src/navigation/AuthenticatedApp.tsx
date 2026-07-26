@@ -12,6 +12,11 @@ import { HomeDashboardScreen } from '../screens/HomeDashboard/HomeDashboardScree
 import {useHomePackageStatus} from '../screens/HomeDashboard/useHomePackageStatus';
 import { ActiveCallScreen } from '../screens/ActiveCall/ActiveCallScreen';
 import { DialPadScreen } from '../screens/DialPad/DialPadScreen';
+import { CliManageScreen } from '../screens/CliVerification/CliManageScreen';
+import { CliVerifyEntryScreen } from '../screens/CliVerification/CliVerifyEntryScreen';
+import { CliVerifyConfirmScreen } from '../screens/CliVerification/CliVerifyConfirmScreen';
+import { CliConsentScreen } from '../screens/CliVerification/CliConsentScreen';
+import type { VerifiedCallerIdentity } from '../api/cliClient';
 import type { VoiceCallSession } from '../services/voiceGateway';
 import { createCallKitVoiceGateway, initializeCallKit } from '../services/callKit';
 import {configureCheckInBackgroundSync} from '../services/checkInBackground';
@@ -34,7 +39,18 @@ type AuthenticatedAppProps = Pick<
   'accessToken' | 'departureDate' | 'packageId'
 >;
 
-type Screen = 'home' | 'activation' | 'qr' | 'dial' | 'active-call' | 'sos-confirm' | 'sos-sent';
+type Screen =
+  | 'home'
+  | 'activation'
+  | 'qr'
+  | 'dial'
+  | 'active-call'
+  | 'sos-confirm'
+  | 'sos-sent'
+  | 'cli-manage'
+  | 'cli-verify-entry'
+  | 'cli-verify-confirm'
+  | 'cli-consent';
 
 /**
  * The smallest authenticated host for the eSIM stories. It deliberately leaves
@@ -61,6 +77,7 @@ export function AuthenticatedApp({
   const [sosServerId, setSosServerId] = useState<string>();
   const [sosSynced, setSosSynced] = useState(false);
   const [htoPhone, setHtoPhone] = useState('');
+  const [cliIdentity, setCliIdentity] = useState<VerifiedCallerIdentity>();
   const cancelRequested = useRef(false);
   const networkState = useRef<NetInfoState>({
     type: NetInfoStateType.unknown,
@@ -268,6 +285,62 @@ export function AuthenticatedApp({
           setActiveCall(call);
           setRecipientName(name);
           setScreen('active-call');
+        }}
+        onManageCli={() => setScreen('cli-manage')}
+      />
+    );
+  }
+  if (screen === 'cli-manage') {
+    return (
+      <CliManageScreen
+        accessToken={accessToken}
+        onVerifyNumber={() => setScreen('cli-verify-entry')}
+        onResumeConfirm={(identity) => {
+          setCliIdentity(identity);
+          setScreen('cli-verify-confirm');
+        }}
+        onResumeConsent={(identity) => {
+          setCliIdentity(identity);
+          setScreen('cli-consent');
+        }}
+      />
+    );
+  }
+  if (screen === 'cli-verify-entry') {
+    return (
+      <CliVerifyEntryScreen
+        accessToken={accessToken}
+        onStarted={(identity) => {
+          setCliIdentity(identity);
+          setScreen('cli-verify-confirm');
+        }}
+        onCancel={() => setScreen('cli-manage')}
+      />
+    );
+  }
+  if (screen === 'cli-verify-confirm' && cliIdentity) {
+    return (
+      <CliVerifyConfirmScreen
+        accessToken={accessToken}
+        identityId={cliIdentity.id}
+        phoneNumber={cliIdentity.phone_number}
+        onConfirmed={(identity) => {
+          setCliIdentity(identity);
+          setScreen('cli-consent');
+        }}
+        onUseDifferentNumber={() => setScreen('cli-verify-entry')}
+      />
+    );
+  }
+  if (screen === 'cli-consent' && cliIdentity) {
+    return (
+      <CliConsentScreen
+        accessToken={accessToken}
+        identityId={cliIdentity.id}
+        phoneNumber={cliIdentity.phone_number}
+        onConsented={() => {
+          setCliIdentity(undefined);
+          setScreen('dial');
         }}
       />
     );
