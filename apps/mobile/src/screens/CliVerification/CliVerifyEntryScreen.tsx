@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform as RNPlatform, StyleSheet, Text, TextInput } from 'react-native';
 import { Banner } from '../../components/Banner/Banner';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
@@ -23,6 +24,7 @@ export function CliVerifyEntryScreen({
   onStarted,
   onCancel,
 }: CliVerifyEntryScreenProps): React.JSX.Element {
+  const { t } = useTranslation('home');
   const { phoneNumber, setPhoneNumber, isValid, status, errorMessage, submit } =
     useCliVerifyEntry({ accessToken, onStarted });
   const showFormatHint = phoneNumber.length > 0 && !isValid;
@@ -32,13 +34,12 @@ export function CliVerifyEntryScreen({
       behavior={RNPlatform.OS === 'ios' ? 'padding' : undefined}
       style={styles.screen}
     >
-      <Text style={styles.title}>Verify your caller ID</Text>
+      <Text style={styles.title}>{t('callerId.entry.title')}</Text>
       <Text style={styles.subtitle}>
-        Family see this exact number when you call them. It doesn't have to be
-        the number you signed in with.
+        {t('callerId.entry.subtitle')}
       </Text>
 
-      <Text style={styles.label}>Nigerian mobile number</Text>
+      <Text style={styles.label}>{t('callerId.entry.label')}</Text>
       <TextInput
         testID="cli-verify-entry-input"
         value={formatNigerianPhoneForDisplay(phoneNumber)}
@@ -47,12 +48,12 @@ export function CliVerifyEntryScreen({
         placeholderTextColor={color.gray500}
         keyboardType="number-pad"
         maxLength={13}
-        accessibilityLabel="Nigerian mobile number"
+        accessibilityLabel={t('callerId.entry.label')}
         style={[styles.input, showFormatHint && styles.inputError]}
       />
       {showFormatHint ? (
         <Text style={styles.hint}>
-          Enter an 11-digit Nigerian mobile number, e.g. 080 1234 5678.
+          {t('callerId.entry.formatHint')}
         </Text>
       ) : null}
 
@@ -62,7 +63,7 @@ export function CliVerifyEntryScreen({
 
       <PrimaryButton
         testID="cli-verify-entry-submit"
-        label="Send code"
+        label={t('callerId.entry.sendCode')}
         onPress={submit}
         disabled={!isValid}
         loading={status === 'submitting'}
@@ -73,7 +74,7 @@ export function CliVerifyEntryScreen({
         onPress={onCancel}
         style={styles.cancelLink}
       >
-        Not now
+        {t('callerId.entry.notNow')}
       </Text>
     </KeyboardAvoidingView>
   );

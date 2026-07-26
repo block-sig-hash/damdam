@@ -487,7 +487,7 @@ corresponding `maestro/screens/cli-*.yaml` flow, so `claude-review.yml`'s
 rendered-screenshot check actually captures them (a registry entry
 alone isn't enough for CI to reach the screen); the Manage screen
 (22d) makes a real `getCliStatus` request the harness doesn't mock,
-so its flow asserts on the "Caller ID" title text and captures the
+so its flow asserts on the localized title test ID and captures the
 loading state rather than a populated one there.
 
 ---
@@ -602,7 +602,7 @@ first write is not the same as CI passing for real.
 
 Each applicable Maestro flow now captures English and French after waiting for
 the harness to confirm the selected runtime locale. The platform completeness
-gate is therefore 24 PNGs (12 applicable targets × 2 locales), named with
+gate is therefore 32 PNGs (16 applicable targets × 2 locales), named with
 `-en`/`-fr` suffixes. Existing Android per-PR and iOS nightly/on-demand cadence
 is unchanged.
 

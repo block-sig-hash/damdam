@@ -559,7 +559,7 @@ dashboard, backend, and verification/docs.
   Termii/Twilio OTP, fallback SMS, Firebase SOS push, receipts, eSIM-ready,
   verification, invoices, and activation.
 - Runtime component tests in both languages, catalog parity tests, and
-  bilingual Maestro targets with 24-artifact gates per platform.
+  bilingual Maestro targets with 32-artifact gates per platform.
 
 The 299 mobile and 287 dashboard figures remain audited **source sites**.
 Extraction deduplicated repeated labels/fallbacks and combined concatenations

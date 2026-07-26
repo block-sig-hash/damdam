@@ -1,7 +1,7 @@
 """Persist English/French recipient locale preferences.
 
-Revision ID: 0025_i18n_locales
-Revises: 0024_retention_payment_gaps
+Revision ID: 0026_i18n_locales
+Revises: 0025_verified_caller_identity
 """
 
 from collections.abc import Sequence
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0025_i18n_locales"
-down_revision: str | None = "0024_retention_payment_gaps"
+revision: str = "0026_i18n_locales"
+down_revision: str | None = "0025_verified_caller_identity"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

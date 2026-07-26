@@ -526,7 +526,6 @@ def create_app(
     async def caller_identity_error_handler(
         request: Request, exc: CallerIdentityError
     ) -> JSONResponse:
-        del request
         statuses = {
             "invalid_phone_number": 400,
             "phone_verification_unavailable": 503,
@@ -537,25 +536,13 @@ def create_app(
             "number_already_verified_elsewhere": 409,
             "no_active_caller_id": 404,
         }
-        messages = {
-            "invalid_phone_number": "Enter a valid Nigerian mobile number.",
-            "phone_verification_unavailable": (
-                "Phone verification is temporarily unavailable."
-            ),
-            "cli_verification_rate_limited": (
-                "Too many verification attempts. Try again later."
-            ),
-            "caller_identity_not_found": "Verification not found.",
-            "invalid_state": "This action is not valid for the current step.",
-            "verification_code_invalid": "That code did not match. Try again.",
-            "number_already_verified_elsewhere": (
-                "This number is already verified on another account."
-            ),
-            "no_active_caller_id": "No verified caller ID to revoke.",
-        }
         return JSONResponse(
             status_code=statuses[exc.code],
-            content={"error": exc.code, "message": messages[exc.code], "details": {}},
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
         )
 
     @api.exception_handler(SOSError)

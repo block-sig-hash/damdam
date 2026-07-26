@@ -1880,7 +1880,7 @@ authorized, gets charged.
 
 ## 6.41 Amendment — English/French Recipient Locale
 
-Migration `0025_i18n_locales` creates the shared `locale` enum (`en`, `fr`) and
+Migration `0026_i18n_locales` creates the shared `locale` enum (`en`, `fr`) and
 adds a non-null, English-defaulted preference to `users`, `organizations`,
 `admin_users`, `family_contacts`, and `manifest_pilgrims`. Existing records are
 backfilled to English.

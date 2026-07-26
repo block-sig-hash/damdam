@@ -63,6 +63,8 @@ describe('CliConsentScreen', () => {
     await fireEvent.press(screen.getByTestId('cli-consent-submit'));
 
     expect(screen.getByTestId('cli-consent-error')).toBeTruthy();
-    expect(screen.getByText('Already verified elsewhere.')).toBeTruthy();
+    expect(
+      screen.getByText('This number is already verified on another account.'),
+    ).toBeTruthy();
   });
 });

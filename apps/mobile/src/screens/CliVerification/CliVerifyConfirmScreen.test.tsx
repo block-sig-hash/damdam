@@ -86,7 +86,7 @@ describe('CliVerifyConfirmScreen', () => {
     await fireEvent.press(screen.getByTestId('cli-confirm-submit'));
 
     expect(screen.getByTestId('cli-confirm-error')).toBeTruthy();
-    expect(screen.getByText('That code did not match.')).toBeTruthy();
+    expect(screen.getByText('That code did not match. Try again.')).toBeTruthy();
     expect(
       screen.getByTestId('cli-confirm-submit').props.accessibilityState.disabled,
     ).toBe(false);

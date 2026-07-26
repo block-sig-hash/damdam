@@ -60,6 +60,66 @@
     "chooseContact": "Choose a contact",
     "noContacts": "No contacts available"
   },
+  "callerId": {
+    "title": "Caller ID",
+    "loading": "Loading…",
+    "status": {
+      "active": "Verified",
+      "suspended": "Suspended",
+      "expired": "Expired",
+      "revoked": "Revoked",
+      "notVerified": "Not verified"
+    },
+    "manage": {
+      "empty": "Verify a Nigerian number so family sees it when you call, instead of an unrecognized number.",
+      "verifyNumber": "Verify a number",
+      "pendingCode": "You started verifying {{phone}}. Enter the code we sent to finish.",
+      "pendingConsent": "{{phone}} is verified. Confirm you want to use it as your caller ID.",
+      "activeDescription": "This is the number family and other recipients see when you call them.",
+      "verifyDifferent": "Verify a different number",
+      "revoke": "Revoke",
+      "reportLost": "Report lost SIM",
+      "inactive": "{{status}}. Verify a number to make PSTN calls again.",
+      "revokeTitle": "Revoke this caller ID?",
+      "revokeBody": "New calls will stop showing this number. Any call already in progress is not affected.",
+      "revokeConfirm": "Yes, revoke",
+      "lostTitle": "Report this SIM as lost?",
+      "lostBody": "New calls will stop showing this number until you verify again. Any call already in progress is not affected.",
+      "lostConfirm": "Yes, report lost"
+    },
+    "entry": {
+      "title": "Verify your caller ID",
+      "subtitle": "Family see this exact number when you call them. It doesn't have to be the number you signed in with.",
+      "label": "Nigerian mobile number",
+      "formatHint": "Enter an 11-digit Nigerian mobile number, e.g. 080 1234 5678.",
+      "sendCode": "Send code",
+      "notNow": "Not now"
+    },
+    "confirm": {
+      "title": "Enter your code",
+      "subtitle": "Enter the code sent to {{phone}}.",
+      "codeAccessibility": "Verification code",
+      "verify": "Verify",
+      "differentNumber": "Use a different number"
+    },
+    "consent": {
+      "title": "Use this number as your caller ID",
+      "subtitle": "{{phone}} is verified. Confirm you want family and other recipients to see this number when you call them from DamDam.",
+      "details": "You can change your mind at any time. Revoking, or reporting the SIM as lost, immediately stops new calls from showing this number — any call already in progress is not affected.",
+      "agree": "Agree and activate"
+    },
+    "errors": {
+      "invalid_phone_number": "Enter a valid Nigerian mobile number.",
+      "phone_verification_unavailable": "Phone verification is temporarily unavailable.",
+      "cli_verification_rate_limited": "Too many verification attempts. Try again later.",
+      "caller_identity_not_found": "Verification not found.",
+      "invalid_state": "This action is not valid for the current step.",
+      "verification_code_invalid": "That code did not match. Try again.",
+      "number_already_verified_elsewhere": "This number is already verified on another account.",
+      "no_active_caller_id": "No verified caller ID to revoke.",
+      "network_error": "Check your connection and try again."
+    }
+  },
   "activeCall": {
     "qualityAccessibility": "Call quality {{quality}}",
     "quality": "{{quality}} quality",

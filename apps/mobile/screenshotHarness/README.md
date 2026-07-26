@@ -59,7 +59,7 @@ screen in place once tapped.
    match visible text instead (see `sos-confirm.yaml` for an example).
    Every flow must then relaunch the harness, select
    `harness-locale-fr`, repeat the assertion, and capture
-   `<key>-fr`. CI requires 24 non-empty images per platform (12
+   `<key>-fr`. CI requires 32 non-empty images per platform (16
    platform-applicable targets × 2 locales).
 3. If the screen renders differently per platform in a way worth
    capturing separately (like the eSIM activation flow), add

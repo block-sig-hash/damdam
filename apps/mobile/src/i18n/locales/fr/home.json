@@ -60,6 +60,66 @@
     "chooseContact": "Choisissez un contact",
     "noContacts": "Aucun contact disponible"
   },
+  "callerId": {
+    "title": "Identité de l'appelant",
+    "loading": "Chargement…",
+    "status": {
+      "active": "Vérifié",
+      "suspended": "Suspendu",
+      "expired": "Expiré",
+      "revoked": "Révoqué",
+      "notVerified": "Non vérifié"
+    },
+    "manage": {
+      "empty": "Vérifiez un numéro nigérian afin que votre famille le voie lorsque vous appelez, au lieu d'un numéro inconnu.",
+      "verifyNumber": "Vérifier un numéro",
+      "pendingCode": "Vous avez commencé à vérifier le {{phone}}. Saisissez le code envoyé pour terminer.",
+      "pendingConsent": "Le {{phone}} est vérifié. Confirmez que vous souhaitez l'utiliser comme identité d'appelant.",
+      "activeDescription": "C'est le numéro que votre famille et les autres destinataires voient lorsque vous les appelez.",
+      "verifyDifferent": "Vérifier un autre numéro",
+      "revoke": "Révoquer",
+      "reportLost": "Signaler la perte de la SIM",
+      "inactive": "{{status}}. Vérifiez un numéro pour passer de nouveau des appels téléphoniques.",
+      "revokeTitle": "Révoquer cette identité d'appelant ?",
+      "revokeBody": "Ce numéro ne s'affichera plus lors des nouveaux appels. Les appels déjà en cours ne sont pas affectés.",
+      "revokeConfirm": "Oui, révoquer",
+      "lostTitle": "Signaler la perte de cette SIM ?",
+      "lostBody": "Ce numéro ne s'affichera plus lors des nouveaux appels jusqu'à ce que vous le vérifiiez de nouveau. Les appels déjà en cours ne sont pas affectés.",
+      "lostConfirm": "Oui, signaler la perte"
+    },
+    "entry": {
+      "title": "Vérifiez votre identité d'appelant",
+      "subtitle": "Votre famille voit ce numéro exact lorsque vous l'appelez. Il peut être différent du numéro utilisé pour vous connecter.",
+      "label": "Numéro mobile nigérian",
+      "formatHint": "Saisissez un numéro mobile nigérian à 11 chiffres, par ex. 080 1234 5678.",
+      "sendCode": "Envoyer le code",
+      "notNow": "Pas maintenant"
+    },
+    "confirm": {
+      "title": "Saisissez votre code",
+      "subtitle": "Saisissez le code envoyé au {{phone}}.",
+      "codeAccessibility": "Code de vérification",
+      "verify": "Vérifier",
+      "differentNumber": "Utiliser un autre numéro"
+    },
+    "consent": {
+      "title": "Utiliser ce numéro comme identité d'appelant",
+      "subtitle": "Le {{phone}} est vérifié. Confirmez que vous souhaitez que votre famille et les autres destinataires voient ce numéro lorsque vous les appelez depuis DamDam.",
+      "details": "Vous pouvez changer d'avis à tout moment. La révocation ou le signalement de la perte de la SIM empêche immédiatement ce numéro de s'afficher lors des nouveaux appels — les appels déjà en cours ne sont pas affectés.",
+      "agree": "Accepter et activer"
+    },
+    "errors": {
+      "invalid_phone_number": "Saisissez un numéro mobile nigérian valide.",
+      "phone_verification_unavailable": "La vérification du téléphone est temporairement indisponible.",
+      "cli_verification_rate_limited": "Trop de tentatives de vérification. Réessayez plus tard.",
+      "caller_identity_not_found": "Vérification introuvable.",
+      "invalid_state": "Cette action n'est pas valide à l'étape actuelle.",
+      "verification_code_invalid": "Ce code ne correspond pas. Réessayez.",
+      "number_already_verified_elsewhere": "Ce numéro est déjà vérifié sur un autre compte.",
+      "no_active_caller_id": "Aucune identité d'appelant vérifiée à révoquer.",
+      "network_error": "Vérifiez votre connexion et réessayez."
+    }
+  },
   "activeCall": {
     "qualityAccessibility": "Qualité de l'appel : {{quality}}",
     "quality": "Qualité {{quality}}",

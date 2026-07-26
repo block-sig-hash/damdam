@@ -4,6 +4,7 @@ import {
   confirmCliVerification,
   type VerifiedCallerIdentity,
 } from '../../api/cliClient';
+import { cliErrorMessage } from './cliErrorMessage';
 
 export type CliVerifyConfirmStatus = 'awaiting_code' | 'verifying';
 
@@ -50,9 +51,7 @@ export function useCliVerifyConfirm({
       if (err instanceof CliApiError && err.code === 'cli_verification_rate_limited') {
         setLocked(true);
       }
-      setErrorMessage(
-        err instanceof CliApiError ? err.message : 'Something went wrong. Please try again.',
-      );
+      setErrorMessage(cliErrorMessage(err));
     } finally {
       setStatus('awaiting_code');
     }

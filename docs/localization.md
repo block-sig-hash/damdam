@@ -83,8 +83,8 @@ Native code must not reproduce frontend catalog strings in English.
 ## 6. Screenshot and layout verification
 
 Every Maestro flow selects and waits for a confirmed harness locale, then
-captures `*-en` and `*-fr`. Android and iOS jobs each require 24 PNG artifacts
-for the current 12 applicable targets. eSIM targets cover Android’s automatic
+captures `*-en` and `*-fr`. Android and iOS jobs each require 32 PNG artifacts
+for the current 16 applicable targets. eSIM targets cover Android’s automatic
 prompt and iOS’s manual guide.
 
 The manual guide contains designed screenshot placeholders because source OS

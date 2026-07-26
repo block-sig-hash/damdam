@@ -125,11 +125,14 @@ def test_start_verification_rejects_invalid_number(
     client, _ = _authenticated(api)
 
     response = client.post(
-        "/v1/voice/cli/verify", json={"phone_number": "not-a-number"}
+        "/v1/voice/cli/verify",
+        headers={"Accept-Language": "fr-NG"},
+        json={"phone_number": "not-a-number"},
     )
 
     assert response.status_code == 400
     assert response.json()["error"] == "invalid_phone_number"
+    assert response.json()["message"] == "Saisissez un numéro mobile nigérian valide."
 
 
 def test_start_verification_is_rate_limited(

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { CliApiError, captureCliConsent, type VerifiedCallerIdentity } from '../../api/cliClient';
+import { captureCliConsent, type VerifiedCallerIdentity } from '../../api/cliClient';
+import { cliErrorMessage } from './cliErrorMessage';
 
 /** Matches the consent copy shown below -- bump alongside any copy change. */
 export const CLI_CONSENT_VERSION = 'v1';
@@ -34,9 +35,7 @@ export function useCliConsent({
       const identity = await captureCliConsent(accessToken, identityId, CLI_CONSENT_VERSION);
       onConsented(identity);
     } catch (err) {
-      setErrorMessage(
-        err instanceof CliApiError ? err.message : 'Something went wrong. Please try again.',
-      );
+      setErrorMessage(cliErrorMessage(err));
     } finally {
       setStatus('idle');
     }

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Banner } from '../../components/Banner/Banner';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
@@ -25,6 +26,7 @@ export function CliConsentScreen({
   phoneNumber,
   onConsented,
 }: CliConsentScreenProps): React.JSX.Element {
+  const { t } = useTranslation('home');
   const { status, errorMessage, submit } = useCliConsent({
     accessToken,
     identityId,
@@ -33,18 +35,16 @@ export function CliConsentScreen({
 
   return (
     <ScrollView contentContainerStyle={styles.screen}>
-      <Text style={styles.title}>Use this number as your caller ID</Text>
+      <Text style={styles.title}>{t('callerId.consent.title')}</Text>
       <Text style={styles.subtitle}>
-        {formatNigerianPhoneForDisplay(phoneNumber.replace('+234', '0'))} is verified. Confirm
-        you want family and other recipients to see this number when you call
-        them from DamDam.
+        {t('callerId.consent.subtitle', {
+          phone: formatNigerianPhoneForDisplay(phoneNumber.replace('+234', '0')),
+        })}
       </Text>
 
       <View style={styles.card}>
         <Text style={styles.cardText}>
-          You can change your mind at any time. Revoking, or reporting the SIM
-          as lost, immediately stops new calls from showing this number -- any
-          call already in progress is not affected.
+          {t('callerId.consent.details')}
         </Text>
       </View>
 
@@ -54,7 +54,7 @@ export function CliConsentScreen({
 
       <PrimaryButton
         testID="cli-consent-submit"
-        label="Agree and activate"
+        label={t('callerId.consent.agree')}
         onPress={submit}
         loading={status === 'submitting'}
       />
