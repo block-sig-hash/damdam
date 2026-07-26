@@ -1,22 +1,2111 @@
+openapi: 3.1.0
+info:
+  title: DamDam API
+  version: 0.1.0
+paths:
+  /health/live:
+    get:
+      tags:
+      - system
+      summary: Liveness
+      operationId: liveness_health_live_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+  /health:
+    get:
+      tags:
+      - system
+      summary: Health
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: Not Ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+  /v1/auth/otp/request:
+    post:
+      tags:
+      - authentication
+      summary: Request Otp
+      operationId: request_otp_v1_auth_otp_request_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTPRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/otp/verify:
+    post:
+      tags:
+      - authentication
+      summary: Verify Otp
+      operationId: verify_otp_v1_auth_otp_verify_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTPVerifyRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/pin/set:
+    post:
+      tags:
+      - authentication
+      summary: Set Pin
+      operationId: set_pin_v1_auth_pin_set_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PINPayload'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/auth/pin/verify:
+    post:
+      tags:
+      - authentication
+      summary: Verify Pin
+      operationId: verify_pin_v1_auth_pin_verify_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PINPayload'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PINVerifyResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/auth/pin/recovery/request:
+    post:
+      tags:
+      - authentication
+      summary: Request Pin Recovery
+      operationId: request_pin_recovery_v1_auth_pin_recovery_request_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PINRecoveryRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/pin/recovery/verify:
+    post:
+      tags:
+      - authentication
+      summary: Verify Pin Recovery
+      operationId: verify_pin_recovery_v1_auth_pin_recovery_verify_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTPVerifyRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/token/refresh:
+    post:
+      tags:
+      - authentication
+      summary: Refresh Token
+      operationId: refresh_token_v1_auth_token_refresh_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/hto/register:
+    post:
+      tags:
+      - authentication
+      summary: Register Hto
+      operationId: register_hto_v1_auth_hto_register_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HTORegistrationRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/hto/verify-email:
+    post:
+      tags:
+      - authentication
+      summary: Verify Hto Email
+      operationId: verify_hto_email_v1_auth_hto_verify_email_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HTOVerifyEmailRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/hto/login:
+    post:
+      tags:
+      - authentication
+      summary: Login Hto
+      operationId: login_hto_v1_auth_hto_login_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HTOLoginRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTOLoginResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/sos-notifications/failed:
+    get:
+      tags:
+      - admin
+      summary: Failed Sos Notifications
+      operationId: failed_sos_notifications_v1_admin_sos_notifications_failed_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  items:
+                    additionalProperties: true
+                    type: object
+                  type: array
+                type: object
+                title: Response Failed Sos Notifications V1 Admin Sos Notifications
+                  Failed Get
+      security:
+      - HTTPBearer: []
+  /v1/admin/sos-notifications/retry-bulk:
+    post:
+      tags:
+      - admin
+      summary: Retry Sos Notifications Bulk
+      operationId: retry_sos_notifications_bulk_v1_admin_sos_notifications_retry_bulk_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SOSRetryBulkRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: integer
+                type: object
+                title: Response Retry Sos Notifications Bulk V1 Admin Sos Notifications
+                  Retry Bulk Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/admin/sos-notifications/{notification_id}/retry:
+    post:
+      tags:
+      - admin
+      summary: Retry Sos Notification
+      operationId: retry_sos_notification_v1_admin_sos_notifications__notification_id__retry_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: notification_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Notification Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+                title: Response Retry Sos Notification V1 Admin Sos Notifications  Notification
+                  Id  Retry Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/device-compatibility-log:
+    get:
+      tags:
+      - admin
+      summary: List Device Compatibility Log
+      operationId: list_device_compatibility_log_v1_admin_device_compatibility_log_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: platform
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/Platform'
+          - type: 'null'
+          title: Platform
+      - name: esim_supported
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Esim Supported
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCompatibilityLogListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/hto-operators:
+    get:
+      tags:
+      - admin
+      summary: List Hto Operators
+      operationId: list_hto_operators_v1_admin_hto_operators_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/HTOApprovalStatus'
+          - type: 'null'
+          title: Status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTOOperatorListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/hto-operators/{operator_id}/approve:
+    post:
+      tags:
+      - admin
+      summary: Approve Hto Operator
+      operationId: approve_hto_operator_v1_admin_hto_operators__operator_id__approve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: operator_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Operator Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTOApprovalResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/hto-operators/{operator_id}/reject:
+    post:
+      tags:
+      - admin
+      summary: Reject Hto Operator
+      operationId: reject_hto_operator_v1_admin_hto_operators__operator_id__reject_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: operator_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Operator Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HTORejectionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTOApprovalResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/manifest-orders:
+    get:
+      tags:
+      - admin
+      summary: List Manifest Orders
+      operationId: list_manifest_orders_v1_admin_manifest_orders_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/ManifestOrderStatus'
+          default: awaiting_payment
+      - name: search
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Search
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminManifestOrderListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/manifest-orders/{order_id}/invoice:
+    get:
+      tags:
+      - admin
+      summary: Download Manifest Invoice
+      operationId: download_manifest_invoice_v1_admin_manifest_orders__order_id__invoice_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/manifest-orders/{order_id}/confirm-payment:
+    post:
+      tags:
+      - admin
+      summary: Confirm Manifest Order Payment
+      operationId: confirm_manifest_order_payment_v1_admin_manifest_orders__order_id__confirm_payment_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentConfirmationResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/pricing-tiers:
+    get:
+      tags:
+      - admin
+      summary: List Admin Pricing Tiers
+      operationId: list_admin_pricing_tiers_v1_admin_pricing_tiers_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPricingTierListResponse'
+      security:
+      - HTTPBearer: []
+  /v1/admin/pricing-tiers/{tier_id}:
+    patch:
+      tags:
+      - admin
+      summary: Update Admin Pricing Tier
+      operationId: update_admin_pricing_tier_v1_admin_pricing_tiers__tier_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: tier_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Tier Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricingTierUpdateRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingTierUpdateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/packages/{package_id}/cancel:
+    post:
+      tags:
+      - admin
+      summary: Cancel Package
+      operationId: cancel_package_v1_admin_packages__package_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackageCancelResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests:
+    get:
+      tags:
+      - HTO manifests
+      summary: List Manifests
+      operationId: list_manifests_v1_hto_manifests_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestListResponse'
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - HTO manifests
+      summary: Create Manifest
+      operationId: create_manifest_v1_hto_manifests_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManifestCreateRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestCreateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/hto/manifests/{manifest_id}/upload:
+    post:
+      tags:
+      - HTO manifests
+      summary: Upload Manifest
+      operationId: upload_manifest_v1_hto_manifests__manifest_id__upload_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestUploadResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/confirm:
+    post:
+      tags:
+      - HTO manifests
+      summary: Confirm Manifest
+      operationId: confirm_manifest_v1_hto_manifests__manifest_id__confirm_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestConfirmResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/unordered-pilgrims:
+    get:
+      tags:
+      - HTO manifests
+      summary: List Unordered Pilgrims
+      operationId: list_unordered_pilgrims_v1_hto_manifests__manifest_id__unordered_pilgrims_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnorderedPilgrimListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/group:
+    post:
+      tags:
+      - HTO manifests
+      summary: Create Family Group
+      operationId: create_family_group_v1_hto_manifests__manifest_id__group_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FamilyGroupRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FamilyGroupResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/group/{group_id}:
+    put:
+      tags:
+      - HTO manifests
+      summary: Update Family Group
+      operationId: update_family_group_v1_hto_manifests__manifest_id__group__group_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Group Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FamilyGroupRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FamilyGroupResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - HTO manifests
+      summary: Delete Family Group
+      operationId: delete_family_group_v1_hto_manifests__manifest_id__group__group_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Group Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/order:
+    post:
+      tags:
+      - HTO manifests
+      summary: Place Manifest Order
+      operationId: place_manifest_order_v1_hto_manifests__manifest_id__order_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManifestOrderRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestOrderResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/orders:
+    get:
+      tags:
+      - HTO manifests
+      summary: List Manifest Orders
+      operationId: list_manifest_orders_v1_hto_manifests__manifest_id__orders_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestOrderListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/order/{order_id}:
+    get:
+      tags:
+      - HTO manifests
+      summary: Get Manifest Order
+      operationId: get_manifest_order_v1_hto_manifests__manifest_id__order__order_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestOrderDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/manifests/{manifest_id}/order/{order_id}/invoice:
+    get:
+      tags:
+      - HTO manifests
+      summary: Download Manifest Invoice
+      operationId: download_manifest_invoice_v1_hto_manifests__manifest_id__order__order_id__invoice_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Manifest Id
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/pricing-tiers:
+    get:
+      tags:
+      - HTO manifests
+      summary: List Pricing Tiers
+      operationId: list_pricing_tiers_v1_hto_pricing_tiers_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingTierListResponse'
+      security:
+      - HTTPBearer: []
+  /v1/webhooks/otp/termii:
+    post:
+      tags:
+      - webhooks
+      summary: Termii Delivery Report
+      operationId: termii_delivery_report_v1_webhooks_otp_termii_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: boolean
+                type: object
+                title: Response Termii Delivery Report V1 Webhooks Otp Termii Post
+  /v1/me/account:
+    delete:
+      tags:
+      - pilgrim-profile
+      summary: Request Account Deletion
+      operationId: request_account_deletion_v1_me_account_delete
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDeletionResponse'
+      security:
+      - HTTPBearer: []
+  /v1/me/device-token:
+    put:
+      tags:
+      - pilgrim-profile
+      summary: Register Device Token
+      operationId: register_device_token_v1_me_device_token_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceTokenUpsert'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceTokenResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/me/family-contact:
+    post:
+      tags:
+      - pilgrim-profile
+      summary: Create Family Contact
+      operationId: create_family_contact_v1_me_family_contact_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FamilyContactCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FamilyContactResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+    patch:
+      tags:
+      - pilgrim-profile
+      summary: Update Family Contact
+      operationId: update_family_contact_v1_me_family_contact_patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FamilyContactUpdate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FamilyContactResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/me/emergency-contact:
+    get:
+      tags:
+      - pilgrim-profile
+      summary: Get Emergency Contact
+      operationId: get_emergency_contact_v1_me_emergency_contact_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmergencyContactResponse'
+      security:
+      - HTTPBearer: []
+  /v1/activation/{activation_code}:
+    get:
+      tags:
+      - pilgrim-activation
+      summary: Preview Activation
+      operationId: preview_activation_v1_activation__activation_code__get
+      parameters:
+      - name: activation_code
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Activation Code
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivationPreviewResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/activation/redeem:
+    post:
+      tags:
+      - pilgrim-activation
+      summary: Redeem Activation
+      operationId: redeem_activation_v1_me_activation_redeem_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivationRedeemRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivationRedeemResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/pricing/tiers:
+    get:
+      tags:
+      - pricing
+      summary: List Retail Pricing Tiers
+      operationId: list_retail_pricing_tiers_v1_pricing_tiers_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetailPricingTierListResponse'
+  /v1/packages/purchase:
+    post:
+      tags:
+      - payments
+      summary: Purchase
+      operationId: purchase_v1_packages_purchase_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/packages/{package_id}/status:
+    get:
+      tags:
+      - payments
+      summary: Package Status
+      operationId: package_status_v1_packages__package_id__status_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackageStatusResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/packages/{package_id}/geofence:
+    get:
+      tags:
+      - payments
+      summary: Package Geofence
+      operationId: package_geofence_v1_packages__package_id__geofence_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PackageGeofenceResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/webhooks/{processor}:
+    post:
+      tags:
+      - payments
+      summary: Webhook
+      operationId: webhook_v1_webhooks__processor__post
+      parameters:
+      - name: processor
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Processor
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/packages/{package_id}/esim/issue:
+    post:
+      tags:
+      - esim
+      summary: Issue Esim
+      operationId: issue_esim_v1_packages__package_id__esim_issue_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EsimIssueResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/packages/{package_id}/esim:
+    get:
+      tags:
+      - esim
+      summary: Get Esim
+      operationId: get_esim_v1_packages__package_id__esim_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EsimProfileResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/packages/{package_id}/esim/mark-downloaded:
+    post:
+      tags:
+      - esim
+      summary: Mark Esim Downloaded
+      operationId: mark_esim_downloaded_v1_packages__package_id__esim_mark_downloaded_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EsimDownloadResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/packages/{package_id}/esim/mark-activated:
+    post:
+      tags:
+      - esim
+      summary: Mark Esim Activated
+      operationId: mark_esim_activated_v1_packages__package_id__esim_mark_activated_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: package_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Package Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EsimDownloadResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/device-compatibility:
+    post:
+      tags:
+      - esim
+      summary: Log Device Compatibility
+      operationId: log_device_compatibility_v1_me_device_compatibility_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCompatibilityCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceCompatibilityResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/hto/pilgrims:
+    get:
+      tags:
+      - esim
+      summary: List Hto Pilgrims
+      operationId: list_hto_pilgrims_v1_hto_pilgrims_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Manifest Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HtoPilgrimListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/reports/provisioning.csv:
+    get:
+      tags:
+      - HTO reports
+      summary: Download Provisioning Report
+      operationId: download_provisioning_report_v1_hto_reports_provisioning_csv_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: manifest_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Manifest Id
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/voice/eligibility:
+    get:
+      tags:
+      - voice
+      summary: Eligibility
+      operationId: eligibility_v1_voice_eligibility_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: phone_number
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Phone Number
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceEligibilityResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/voice/token:
+    post:
+      tags:
+      - voice
+      summary: Token
+      operationId: token_v1_voice_token_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoiceTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceTokenResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/voice/cli/verify:
+    post:
+      tags:
+      - voice
+      summary: Start Cli Verification
+      operationId: start_cli_verification_v1_voice_cli_verify_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CliVerificationStartRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifiedCallerIdentityResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/voice/cli/{identity_id}/confirm:
+    post:
+      tags:
+      - voice
+      summary: Confirm Cli Verification
+      operationId: confirm_cli_verification_v1_voice_cli__identity_id__confirm_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Identity Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CliVerificationConfirmRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifiedCallerIdentityResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/voice/cli/{identity_id}/consent:
+    post:
+      tags:
+      - voice
+      summary: Capture Cli Consent
+      operationId: capture_cli_consent_v1_voice_cli__identity_id__consent_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Identity Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CliConsentRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifiedCallerIdentityResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/voice/cli/revoke:
+    post:
+      tags:
+      - voice
+      summary: Revoke Cli
+      operationId: revoke_cli_v1_voice_cli_revoke_post
+      responses:
+        '204':
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+  /v1/voice/cli/lost-sim:
+    post:
+      tags:
+      - voice
+      summary: Report Lost Sim
+      operationId: report_lost_sim_v1_voice_cli_lost_sim_post
+      responses:
+        '204':
+          description: Successful Response
+      security:
+      - HTTPBearer: []
+  /v1/voice/cli/status:
+    get:
+      tags:
+      - voice
+      summary: Cli Status
+      operationId: cli_status_v1_voice_cli_status_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                anyOf:
+                - $ref: '#/components/schemas/VerifiedCallerIdentityResponse'
+                - type: 'null'
+                title: Response Cli Status V1 Voice Cli Status Get
+      security:
+      - HTTPBearer: []
+  /v1/webhooks/telnyx/call-events:
+    post:
+      tags:
+      - voice
+      summary: Webhook
+      operationId: webhook_v1_webhooks_telnyx_call_events_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+  /v1/me/calls:
+    get:
+      tags:
+      - voice
+      summary: History
+      operationId: history_v1_me_calls_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 20
+          minimum: 1
+          default: 20
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallHistoryResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/checkins:
+    post:
+      tags:
+      - check-ins
+      summary: Create Checkin
+      operationId: create_checkin_v1_checkins_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckInCreate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInCreateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/me/checkins:
+    get:
+      tags:
+      - check-ins
+      summary: History
+      operationId: history_v1_me_checkins_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 10
+          minimum: 1
+          default: 10
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInHistoryResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/webhooks/meta/whatsapp:
+    get:
+      tags:
+      - check-ins
+      summary: Verify Meta Webhook
+      operationId: verify_meta_webhook_v1_webhooks_meta_whatsapp_get
+      parameters:
+      - name: hub.mode
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Hub.Mode
+      - name: hub.verify_token
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Hub.Verify Token
+      - name: hub.challenge
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Hub.Challenge
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            text/plain:
+              schema:
+                type: string
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - check-ins
+      summary: Meta Webhook
+      operationId: meta_webhook_v1_webhooks_meta_whatsapp_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaWebhookResponse'
+  /v1/sos:
+    post:
+      tags:
+      - SOS
+      summary: Create Sos
+      operationId: create_sos_v1_sos_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SOSCreate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SOSCreateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/sos/{alert_id}/cancel:
+    post:
+      tags:
+      - SOS
+      summary: Cancel Sos
+      operationId: cancel_sos_v1_sos__alert_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: alert_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Alert Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SOSStatusResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/sos-alerts:
+    get:
+      tags:
+      - SOS
+      summary: List Sos
+      operationId: list_sos_v1_hto_sos_alerts_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/SOSStatus'
+          - type: 'null'
+          default: active
+          title: Status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HtoSOSAlertsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/sos-alerts/{alert_id}/resolve:
+    post:
+      tags:
+      - SOS
+      summary: Resolve Sos
+      operationId: resolve_sos_v1_hto_sos_alerts__alert_id__resolve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: alert_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Alert Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SOSStatusResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/hto/push-subscriptions:
+    post:
+      tags:
+      - SOS
+      summary: Create Push Subscription
+      operationId: create_push_subscription_v1_hto_push_subscriptions_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushSubscriptionCreate'
+        required: true
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
 components:
   schemas:
     AccountDeletionResponse:
       properties:
+        status:
+          type: string
+          const: pending_deletion
+          title: Status
+          default: pending_deletion
         deletion_scheduled_for:
+          type: string
           format: date-time
           title: Deletion Scheduled For
-          type: string
-        status:
-          const: pending_deletion
-          default: pending_deletion
-          title: Status
-          type: string
+      type: object
       required:
       - deletion_scheduled_for
       title: AccountDeletionResponse
-      type: object
     ActivationPreviewResponse:
       properties:
+        valid:
+          type: boolean
+          title: Valid
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
         organization_name:
           anyOf:
           - type: string
@@ -27,48 +2116,41 @@ components:
           - type: string
           - type: 'null'
           title: Pricing Tier Name
-        reason:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Reason
-        valid:
-          title: Valid
-          type: boolean
+      type: object
       required:
       - valid
       - reason
       - organization_name
       - pricing_tier_name
       title: ActivationPreviewResponse
-      type: object
     ActivationRedeemRequest:
       properties:
         activation_code:
-          title: Activation Code
           type: string
+          title: Activation Code
+      type: object
       required:
       - activation_code
       title: ActivationRedeemRequest
-      type: object
     ActivationRedeemResponse:
       properties:
-        data_gb_total:
-          title: Data Gb Total
-          type: integer
         package_id:
+          type: string
           format: uuid
           title: Package Id
-          type: string
         pricing_tier_name:
+          type: string
           title: Pricing Tier Name
-          type: string
-        pstn_minutes_total:
-          title: Pstn Minutes Total
+        data_gb_total:
           type: integer
+          title: Data Gb Total
+        pstn_minutes_total:
+          type: integer
+          title: Pstn Minutes Total
         status:
-          title: Status
           type: string
+          title: Status
+      type: object
       required:
       - package_id
       - pricing_tier_name
@@ -76,44 +2158,44 @@ components:
       - pstn_minutes_total
       - status
       title: ActivationRedeemResponse
-      type: object
     AdminManifestOrderListResponse:
       properties:
         orders:
           items:
             $ref: '#/components/schemas/AdminManifestOrderSummary'
-          title: Orders
           type: array
+          title: Orders
+      type: object
       required:
       - orders
       title: AdminManifestOrderListResponse
-      type: object
     AdminManifestOrderSummary:
       properties:
-        days_pending:
-          title: Days Pending
-          type: integer
-        hto_business_name:
-          title: Hto Business Name
-          type: string
         id:
+          type: string
           format: uuid
           title: Id
+        hto_business_name:
           type: string
-        invoice_url:
-          title: Invoice Url
-          type: string
+          title: Hto Business Name
         manifest_name:
           anyOf:
           - type: string
           - type: 'null'
           title: Manifest Name
         pilgrim_count:
-          title: Pilgrim Count
           type: integer
+          title: Pilgrim Count
         total_ngn:
-          title: Total Ngn
           type: number
+          title: Total Ngn
+        invoice_url:
+          type: string
+          title: Invoice Url
+        days_pending:
+          type: integer
+          title: Days Pending
+      type: object
       required:
       - id
       - hto_business_name
@@ -123,104 +2205,104 @@ components:
       - invoice_url
       - days_pending
       title: AdminManifestOrderSummary
-      type: object
     AdminPricingTierListResponse:
       properties:
         tiers:
           items:
             $ref: '#/components/schemas/AdminPricingTierResponse'
-          title: Tiers
           type: array
+          title: Tiers
+      type: object
       required:
       - tiers
       title: AdminPricingTierListResponse
-      type: object
     AdminPricingTierResponse:
       properties:
         id:
+          type: string
           format: uuid
           title: Id
-          type: string
-        is_group_tier:
-          title: Is Group Tier
-          type: boolean
         name:
-          title: Name
           type: string
+          title: Name
         ngn_price:
-          title: Ngn Price
           type: number
+          title: Ngn Price
+        is_group_tier:
+          type: boolean
+          title: Is Group Tier
+      type: object
       required:
       - id
       - name
       - ngn_price
       - is_group_tier
       title: AdminPricingTierResponse
-      type: object
     AuthResponse:
       properties:
         access_token:
+          type: string
           title: Access Token
-          type: string
-        is_new_user:
-          title: Is New User
-          type: boolean
         refresh_token:
-          title: Refresh Token
           type: string
+          title: Refresh Token
         user:
           $ref: '#/components/schemas/UserResponse'
+        is_new_user:
+          type: boolean
+          title: Is New User
+      type: object
       required:
       - access_token
       - refresh_token
       - user
       - is_new_user
       title: AuthResponse
-      type: object
     Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post:
       properties:
         file:
+          type: string
           format: binary
           title: File
-          type: string
+      type: object
       required:
       - file
       title: Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post
-      type: object
     CallHistoryResponse:
       properties:
         calls:
           items:
             $ref: '#/components/schemas/CallResponse'
-          title: Calls
           type: array
+          title: Calls
+      type: object
       required:
       - calls
       title: CallHistoryResponse
-      type: object
     CallResponse:
       properties:
-        call_type:
-          $ref: '#/components/schemas/CallType'
-        duration_seconds:
-          title: Duration Seconds
-          type: integer
         id:
+          type: string
           format: uuid
           title: Id
-          type: string
-        pstn_minutes_charged:
-          title: Pstn Minutes Charged
-          type: number
-        started_at:
-          format: date-time
-          title: Started At
-          type: string
+        call_type:
+          $ref: '#/components/schemas/CallType'
         to_number:
           anyOf:
           - type: string
           - type: 'null'
           title: To Number
+        duration_seconds:
+          type: integer
+          title: Duration Seconds
+        pstn_minutes_charged:
+          type: number
+          title: Pstn Minutes Charged
+        started_at:
+          type: string
+          format: date-time
+          title: Started At
+      type: object
       required:
       - id
       - call_type
@@ -229,74 +2311,77 @@ components:
       - pstn_minutes_charged
       - started_at
       title: CallResponse
-      type: object
     CallType:
+      type: string
       enum:
       - pstn
       - app_to_app
       title: CallType
-      type: string
     CheckInCreate:
       properties:
         client_generated_id:
+          type: string
           format: uuid
           title: Client Generated Id
+        timestamp:
           type: string
+          format: date-time
+          title: Timestamp
         latitude:
           anyOf:
-          - maximum: 90.0
+          - type: number
+            maximum: 90.0
             minimum: -90.0
-            type: number
           - type: 'null'
           title: Latitude
         longitude:
           anyOf:
-          - maximum: 180.0
+          - type: number
+            maximum: 180.0
             minimum: -180.0
-            type: number
           - type: 'null'
           title: Longitude
-        timestamp:
-          format: date-time
-          title: Timestamp
-          type: string
+      type: object
       required:
       - client_generated_id
       - timestamp
       title: CheckInCreate
-      type: object
     CheckInCreateResponse:
       properties:
         id:
+          type: string
           format: uuid
           title: Id
-          type: string
         received_at:
+          type: string
           format: date-time
           title: Received At
-          type: string
+      type: object
       required:
       - id
       - received_at
       title: CheckInCreateResponse
-      type: object
     CheckInHistoryResponse:
       properties:
         checkins:
           items:
             $ref: '#/components/schemas/CheckInResponse'
-          title: Checkins
           type: array
+          title: Checkins
+      type: object
       required:
       - checkins
       title: CheckInHistoryResponse
-      type: object
     CheckInResponse:
       properties:
         id:
+          type: string
           format: uuid
           title: Id
+        timestamp:
           type: string
+          format: date-time
+          title: Timestamp
         latitude:
           anyOf:
           - type: number
@@ -307,118 +2392,115 @@ components:
           - type: number
           - type: 'null'
           title: Longitude
-        timestamp:
-          format: date-time
-          title: Timestamp
-          type: string
+      type: object
       required:
       - id
       - timestamp
       - latitude
       - longitude
       title: CheckInResponse
-      type: object
     CliConsentRequest:
       properties:
         consent_version:
-          title: Consent Version
           type: string
+          title: Consent Version
         device_session_id:
           anyOf:
           - type: string
           - type: 'null'
           title: Device Session Id
+      type: object
       required:
       - consent_version
       title: CliConsentRequest
-      type: object
     CliVerificationConfirmRequest:
       properties:
         code:
-          title: Code
           type: string
+          title: Code
+      type: object
       required:
       - code
       title: CliVerificationConfirmRequest
-      type: object
     CliVerificationStartRequest:
       properties:
         phone_number:
-          title: Phone Number
           type: string
+          title: Phone Number
+      type: object
       required:
       - phone_number
       title: CliVerificationStartRequest
-      type: object
     DependencyChecks:
       properties:
         postgres:
+          type: string
           enum:
           - ok
           - unavailable
           title: Postgres
-          type: string
         redis:
+          type: string
           enum:
           - ok
           - unavailable
           title: Redis
-          type: string
+      type: object
       required:
       - postgres
       - redis
       title: DependencyChecks
-      type: object
     DeviceCompatibilityCreate:
       properties:
+        platform:
+          $ref: '#/components/schemas/Platform'
         device_model:
-          title: Device Model
           type: string
-        esim_supported:
-          title: Esim Supported
-          type: boolean
+          title: Device Model
         os_version:
           anyOf:
           - type: string
           - type: 'null'
           title: Os Version
-        platform:
-          $ref: '#/components/schemas/Platform'
+        esim_supported:
+          type: boolean
+          title: Esim Supported
+      type: object
       required:
       - platform
       - device_model
       - esim_supported
       title: DeviceCompatibilityCreate
-      type: object
     DeviceCompatibilityLogEntry:
       properties:
-        checked_at:
-          format: date-time
-          title: Checked At
+        id:
           type: string
+          format: uuid
+          title: Id
         device_model:
           anyOf:
           - type: string
           - type: 'null'
           title: Device Model
-        esim_supported:
+        platform:
           anyOf:
-          - type: boolean
+          - $ref: '#/components/schemas/Platform'
           - type: 'null'
-          title: Esim Supported
-        id:
-          format: uuid
-          title: Id
-          type: string
         os_version:
           anyOf:
           - type: string
           - type: 'null'
           title: Os Version
-        platform:
+        esim_supported:
           anyOf:
-          - $ref: '#/components/schemas/Platform'
+          - type: boolean
           - type: 'null'
+          title: Esim Supported
+        checked_at:
+          type: string
+          format: date-time
+          title: Checked At
+      type: object
       required:
       - id
       - device_model
@@ -427,48 +2509,47 @@ components:
       - esim_supported
       - checked_at
       title: DeviceCompatibilityLogEntry
-      type: object
     DeviceCompatibilityLogListResponse:
       properties:
         entries:
           items:
             $ref: '#/components/schemas/DeviceCompatibilityLogEntry'
-          title: Entries
           type: array
+          title: Entries
+      type: object
       required:
       - entries
       title: DeviceCompatibilityLogListResponse
-      type: object
     DeviceCompatibilityResponse:
       properties:
         logged:
-          default: true
-          title: Logged
           type: boolean
-      title: DeviceCompatibilityResponse
+          title: Logged
+          default: true
       type: object
+      title: DeviceCompatibilityResponse
     DeviceTokenResponse:
       properties:
         registered:
-          default: true
-          title: Registered
           type: boolean
-      title: DeviceTokenResponse
+          title: Registered
+          default: true
       type: object
+      title: DeviceTokenResponse
     DeviceTokenUpsert:
       properties:
         fcm_token:
+          type: string
           maxLength: 4096
           minLength: 20
           title: Fcm Token
-          type: string
         platform:
           $ref: '#/components/schemas/Platform'
+      type: object
       required:
       - fcm_token
       - platform
       title: DeviceTokenUpsert
-      type: object
     EmergencyContactResponse:
       properties:
         hto_operator_name:
@@ -481,38 +2562,39 @@ components:
           - type: string
           - type: 'null'
           title: Hto Operator Phone Number
+      type: object
       required:
       - hto_operator_name
       - hto_operator_phone_number
       title: EmergencyContactResponse
-      type: object
     EsimDownloadResponse:
       properties:
         status:
-          title: Status
           type: string
+          title: Status
+      type: object
       required:
       - status
       title: EsimDownloadResponse
-      type: object
     EsimIssueResponse:
       properties:
-        activation_code_lpa:
-          title: Activation Code Lpa
-          type: string
         esim_profile_id:
+          type: string
           format: uuid
           title: Esim Profile Id
-          type: string
         iccid:
+          type: string
           title: Iccid
+        activation_code_lpa:
           type: string
+          title: Activation Code Lpa
         qr_code_url:
+          type: string
           title: Qr Code Url
-          type: string
         status:
-          title: Status
           type: string
+          title: Status
+      type: object
       required:
       - esim_profile_id
       - iccid
@@ -520,209 +2602,209 @@ components:
       - qr_code_url
       - status
       title: EsimIssueResponse
-      type: object
     EsimProfileResponse:
       properties:
-        activated_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Activated At
-        downloaded_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Downloaded At
         esim_profile_id:
+          type: string
           format: uuid
           title: Esim Profile Id
-          type: string
         iccid:
+          type: string
           title: Iccid
-          type: string
         qr_code_url:
+          type: string
           title: Qr Code Url
-          type: string
         status:
-          title: Status
           type: string
+          title: Status
+        downloaded_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Downloaded At
+        activated_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Activated At
+      type: object
       required:
       - esim_profile_id
       - iccid
       - qr_code_url
       - status
       title: EsimProfileResponse
-      type: object
     FamilyContactCreate:
       properties:
+        phone_number:
+          type: string
+          title: Phone Number
         name:
           anyOf:
-          - maxLength: 100
-            type: string
+          - type: string
+            maxLength: 100
           - type: 'null'
           title: Name
-        phone_number:
-          title: Phone Number
-          type: string
+      type: object
       required:
       - phone_number
       title: FamilyContactCreate
-      type: object
     FamilyContactResponse:
       properties:
         id:
+          type: string
           format: uuid
           title: Id
+        phone_number:
           type: string
+          title: Phone Number
         name:
           anyOf:
           - type: string
           - type: 'null'
           title: Name
         notified_of_nomination:
-          title: Notified Of Nomination
           type: boolean
-        phone_number:
-          title: Phone Number
-          type: string
+          title: Notified Of Nomination
+      type: object
       required:
       - id
       - phone_number
       - name
       - notified_of_nomination
       title: FamilyContactResponse
-      type: object
     FamilyContactUpdate:
       properties:
-        name:
-          anyOf:
-          - maxLength: 100
-            type: string
-          - type: 'null'
-          title: Name
         phone_number:
           anyOf:
           - type: string
           - type: 'null'
           title: Phone Number
-      title: FamilyContactUpdate
+        name:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Name
       type: object
+      title: FamilyContactUpdate
     FamilyGroupRequest:
       properties:
+        manifest_pilgrim_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          minItems: 2
+          title: Manifest Pilgrim Ids
         group_size:
+          type: integer
           maximum: 500.0
           minimum: 2.0
           title: Group Size
-          type: integer
-        manifest_pilgrim_ids:
-          items:
-            format: uuid
-            type: string
-          minItems: 2
-          title: Manifest Pilgrim Ids
-          type: array
+      type: object
       required:
       - manifest_pilgrim_ids
       - group_size
       title: FamilyGroupRequest
-      type: object
     FamilyGroupResponse:
       properties:
         family_group_id:
+          type: string
           format: uuid
           title: Family Group Id
-          type: string
+      type: object
       required:
       - family_group_id
       title: FamilyGroupResponse
-      type: object
     HTOApprovalResponse:
       properties:
         approval_status:
           $ref: '#/components/schemas/HTOApprovalStatus'
+      type: object
       required:
       - approval_status
       title: HTOApprovalResponse
-      type: object
     HTOApprovalStatus:
+      type: string
       enum:
       - pending
       - approved
       - rejected
       title: HTOApprovalStatus
-      type: string
     HTOLoginRequest:
       properties:
         email:
+          type: string
           title: Email
-          type: string
         password:
-          title: Password
           type: string
+          title: Password
+      type: object
       required:
       - email
       - password
       title: HTOLoginRequest
-      type: object
     HTOLoginResponse:
       properties:
         access_token:
-          title: Access Token
           type: string
+          title: Access Token
+        refresh_token:
+          type: string
+          title: Refresh Token
         operator:
           $ref: '#/components/schemas/HTOOperatorResponse'
-        refresh_token:
-          title: Refresh Token
-          type: string
+      type: object
       required:
       - access_token
       - refresh_token
       - operator
       title: HTOLoginResponse
-      type: object
     HTOOperatorListResponse:
       properties:
         operators:
           items:
             $ref: '#/components/schemas/HTOOperatorResponse'
-          title: Operators
           type: array
+          title: Operators
+      type: object
       required:
       - operators
       title: HTOOperatorListResponse
-      type: object
     HTOOperatorResponse:
       properties:
-        approval_status:
-          $ref: '#/components/schemas/HTOApprovalStatus'
-        business_name:
-          title: Business Name
-          type: string
-        created_at:
-          format: date-time
-          title: Created At
-          type: string
-        email:
-          title: Email
-          type: string
-        email_verified:
-          title: Email Verified
-          type: boolean
         id:
+          type: string
           format: uuid
           title: Id
+        business_name:
           type: string
-        nahcon_licence_number:
-          title: Nahcon Licence Number
-          type: string
+          title: Business Name
         operator_name:
+          type: string
           title: Operator Name
+        email:
           type: string
+          title: Email
         phone_number:
-          title: Phone Number
           type: string
+          title: Phone Number
+        nahcon_licence_number:
+          type: string
+          title: Nahcon Licence Number
+        email_verified:
+          type: boolean
+          title: Email Verified
+        approval_status:
+          $ref: '#/components/schemas/HTOApprovalStatus'
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
       required:
       - id
       - business_name
@@ -734,37 +2816,37 @@ components:
       - approval_status
       - created_at
       title: HTOOperatorResponse
-      type: object
     HTORegistrationRequest:
       properties:
         business_name:
+          type: string
           maxLength: 255
           minLength: 1
           title: Business Name
-          type: string
-        email:
-          maxLength: 255
-          minLength: 3
-          title: Email
-          type: string
-        nahcon_licence_number:
-          maxLength: 50
-          minLength: 1
-          title: Nahcon Licence Number
-          type: string
         operator_name:
+          type: string
           maxLength: 100
           minLength: 1
           title: Operator Name
+        email:
           type: string
+          maxLength: 255
+          minLength: 3
+          title: Email
         password:
+          type: string
           maxLength: 128
           minLength: 8
           title: Password
-          type: string
         phone_number:
-          title: Phone Number
           type: string
+          title: Phone Number
+        nahcon_licence_number:
+          type: string
+          maxLength: 50
+          minLength: 1
+          title: Nahcon Licence Number
+      type: object
       required:
       - business_name
       - operator_name
@@ -773,89 +2855,89 @@ components:
       - phone_number
       - nahcon_licence_number
       title: HTORegistrationRequest
-      type: object
     HTORejectionRequest:
       properties:
         reason:
+          type: string
           maxLength: 500
           minLength: 1
           title: Reason
-          type: string
+      type: object
       required:
       - reason
       title: HTORejectionRequest
-      type: object
     HTOVerifyEmailRequest:
       properties:
         token:
+          type: string
           minLength: 1
           title: Token
-          type: string
+      type: object
       required:
       - token
       title: HTOVerifyEmailRequest
-      type: object
     HTTPValidationError:
       properties:
         detail:
           items:
             $ref: '#/components/schemas/ValidationError'
-          title: Detail
           type: array
-      title: HTTPValidationError
+          title: Detail
       type: object
+      title: HTTPValidationError
     HtoPilgrimListResponse:
       properties:
         pilgrims:
           items:
             $ref: '#/components/schemas/HtoPilgrimSummary'
-          title: Pilgrims
           type: array
+          title: Pilgrims
+      type: object
       required:
       - pilgrims
       title: HtoPilgrimListResponse
-      type: object
     HtoPilgrimSummary:
       properties:
-        activation_status:
-          title: Activation Status
-          type: string
-        esim_status:
-          title: Esim Status
-          type: string
         id:
+          type: string
           format: uuid
           title: Id
+        name:
           type: string
-        last_checkin_at:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Last Checkin At
+          title: Name
+        phone_number:
+          type: string
+          title: Phone Number
         manifest_id:
+          type: string
           format: uuid
           title: Manifest Id
-          type: string
         manifest_name:
           anyOf:
           - type: string
           - type: 'null'
           title: Manifest Name
-        name:
-          title: Name
-          type: string
-        phone_number:
-          title: Phone Number
-          type: string
-        sos_status:
-          default: none
-          title: Sos Status
-          type: string
         tier:
           anyOf:
           - type: string
           - type: 'null'
           title: Tier
+        esim_status:
+          type: string
+          title: Esim Status
+        activation_status:
+          type: string
+          title: Activation Status
+        last_checkin_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Checkin At
+        sos_status:
+          type: string
+          title: Sos Status
+          default: none
+      type: object
       required:
       - id
       - name
@@ -866,13 +2948,22 @@ components:
       - esim_status
       - activation_status
       title: HtoPilgrimSummary
-      type: object
     HtoSOSAlertResponse:
       properties:
         id:
+          type: string
           format: uuid
           title: Id
+        pilgrim_name:
           type: string
+          title: Pilgrim Name
+        pilgrim_phone:
+          type: string
+          title: Pilgrim Phone
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
         latitude:
           anyOf:
           - type: number
@@ -883,18 +2974,9 @@ components:
           - type: number
           - type: 'null'
           title: Longitude
-        pilgrim_name:
-          title: Pilgrim Name
-          type: string
-        pilgrim_phone:
-          title: Pilgrim Phone
-          type: string
         status:
           $ref: '#/components/schemas/SOSStatus'
-        timestamp:
-          format: date-time
-          title: Timestamp
-          type: string
+      type: object
       required:
       - id
       - pilgrim_name
@@ -904,119 +2986,119 @@ components:
       - longitude
       - status
       title: HtoSOSAlertResponse
-      type: object
     HtoSOSAlertsResponse:
       properties:
         alerts:
           items:
             $ref: '#/components/schemas/HtoSOSAlertResponse'
-          title: Alerts
           type: array
+          title: Alerts
+      type: object
       required:
       - alerts
       title: HtoSOSAlertsResponse
-      type: object
     LivenessResponse:
       properties:
         status:
-          const: alive
-          default: alive
-          title: Status
           type: string
-      title: LivenessResponse
+          const: alive
+          title: Status
+          default: alive
       type: object
+      title: LivenessResponse
     ManifestConfirmResponse:
       properties:
-        pilgrim_count:
-          title: Pilgrim Count
-          type: integer
         status:
-          const: validated
-          default: validated
-          title: Status
           type: string
+          const: validated
+          title: Status
+          default: validated
+        pilgrim_count:
+          type: integer
+          title: Pilgrim Count
+      type: object
       required:
       - pilgrim_count
       title: ManifestConfirmResponse
-      type: object
     ManifestCreateRequest:
       properties:
         name:
           anyOf:
-          - maxLength: 255
-            type: string
+          - type: string
+            maxLength: 255
           - type: 'null'
           title: Name
-      title: ManifestCreateRequest
       type: object
+      title: ManifestCreateRequest
     ManifestCreateResponse:
       properties:
         manifest_id:
+          type: string
           format: uuid
           title: Manifest Id
-          type: string
         status:
-          const: draft
-          default: draft
-          title: Status
           type: string
+          const: draft
+          title: Status
+          default: draft
+      type: object
       required:
       - manifest_id
       title: ManifestCreateResponse
-      type: object
     ManifestIssue:
       properties:
-        reason:
-          title: Reason
-          type: string
         row_number:
-          title: Row Number
           type: integer
+          title: Row Number
+        reason:
+          type: string
+          title: Reason
+      type: object
       required:
       - row_number
       - reason
       title: ManifestIssue
-      type: object
     ManifestListResponse:
       properties:
         manifests:
           items:
             $ref: '#/components/schemas/ManifestSummary'
-          title: Manifests
           type: array
+          title: Manifests
+      type: object
       required:
       - manifests
       title: ManifestListResponse
-      type: object
     ManifestOrderDetailResponse:
       properties:
         id:
+          type: string
           format: uuid
           title: Id
+        tier_name:
           type: string
-        invoice_url:
-          title: Invoice Url
-          type: string
-        payment_confirmed_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Payment Confirmed At
+          title: Tier Name
         pilgrim_count:
-          title: Pilgrim Count
           type: integer
+          title: Pilgrim Count
+        wholesale_price_ngn:
+          type: number
+          title: Wholesale Price Ngn
+        total_ngn:
+          type: number
+          title: Total Ngn
         status:
           $ref: '#/components/schemas/ManifestOrderStatus'
-        tier_name:
-          title: Tier Name
+        invoice_url:
           type: string
-        total_ngn:
-          title: Total Ngn
-          type: number
-        wholesale_price_ngn:
-          title: Wholesale Price Ngn
-          type: number
+          title: Invoice Url
+        payment_confirmed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Payment Confirmed At
+      type: object
       required:
       - id
       - tier_name
@@ -1027,79 +3109,79 @@ components:
       - invoice_url
       - payment_confirmed_at
       title: ManifestOrderDetailResponse
-      type: object
     ManifestOrderListResponse:
       properties:
         orders:
           items:
             $ref: '#/components/schemas/ManifestOrderSummary'
-          title: Orders
           type: array
+          title: Orders
+      type: object
       required:
       - orders
       title: ManifestOrderListResponse
-      type: object
     ManifestOrderRequest:
       properties:
-        manifest_pilgrim_ids:
-          items:
-            format: uuid
-            type: string
-          minItems: 1
-          title: Manifest Pilgrim Ids
-          type: array
         pricing_tier_id:
+          type: string
           format: uuid
           title: Pricing Tier Id
-          type: string
+        manifest_pilgrim_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          minItems: 1
+          title: Manifest Pilgrim Ids
+      type: object
       required:
       - pricing_tier_id
       - manifest_pilgrim_ids
       title: ManifestOrderRequest
-      type: object
     ManifestOrderResponse:
       properties:
-        invoice_url:
-          title: Invoice Url
-          type: string
         manifest_order_id:
+          type: string
           format: uuid
           title: Manifest Order Id
-          type: string
         total_ngn:
-          title: Total Ngn
           type: number
+          title: Total Ngn
+        invoice_url:
+          type: string
+          title: Invoice Url
+      type: object
       required:
       - manifest_order_id
       - total_ngn
       - invoice_url
       title: ManifestOrderResponse
-      type: object
     ManifestOrderStatus:
+      type: string
       enum:
       - awaiting_payment
       - paid
       - provisioning
       - provisioned
       title: ManifestOrderStatus
-      type: string
     ManifestOrderSummary:
       properties:
         id:
+          type: string
           format: uuid
           title: Id
+        tier_name:
           type: string
+          title: Tier Name
         pilgrim_count:
-          title: Pilgrim Count
           type: integer
+          title: Pilgrim Count
+        total_ngn:
+          type: number
+          title: Total Ngn
         status:
           $ref: '#/components/schemas/ManifestOrderStatus'
-        tier_name:
-          title: Tier Name
-          type: string
-        total_ngn:
-          title: Total Ngn
-          type: number
+      type: object
       required:
       - id
       - tier_name
@@ -1107,46 +3189,46 @@ components:
       - total_ngn
       - status
       title: ManifestOrderSummary
-      type: object
     ManifestPreviewRow:
       properties:
-        first_name:
-          title: First Name
-          type: string
         id:
+          type: string
           format: uuid
           title: Id
+        row_number:
+          type: integer
+          title: Row Number
+        first_name:
           type: string
+          title: First Name
         last_name:
-          title: Last Name
           type: string
+          title: Last Name
+        phone_number:
+          type: string
+          title: Phone Number
         passport_number:
           anyOf:
           - type: string
           - type: 'null'
           title: Passport Number
-        phone_number:
-          title: Phone Number
-          type: string
-        row_number:
-          title: Row Number
-          type: integer
         seat_number:
           anyOf:
           - type: string
           - type: 'null'
           title: Seat Number
         validation_status:
+          type: string
           enum:
           - valid
           - duplicate_warning
           title: Validation Status
-          type: string
         warning:
           anyOf:
           - type: string
           - type: 'null'
           title: Warning
+      type: object
       required:
       - id
       - row_number
@@ -1157,25 +3239,20 @@ components:
       - seat_number
       - validation_status
       title: ManifestPreviewRow
-      type: object
     ManifestStatus:
+      type: string
       enum:
       - draft
       - validated
       - partially_ordered
       - provisioned
       title: ManifestStatus
-      type: string
     ManifestSummary:
       properties:
-        created_at:
-          format: date-time
-          title: Created At
-          type: string
         id:
+          type: string
           format: uuid
           title: Id
-          type: string
         name:
           anyOf:
           - type: string
@@ -1184,8 +3261,13 @@ components:
         status:
           $ref: '#/components/schemas/ManifestStatus'
         valid_rows:
-          title: Valid Rows
           type: integer
+          title: Valid Rows
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
       required:
       - id
       - name
@@ -1193,158 +3275,158 @@ components:
       - valid_rows
       - created_at
       title: ManifestSummary
-      type: object
     ManifestUploadResponse:
       properties:
+        total_rows:
+          type: integer
+          title: Total Rows
+        valid_rows:
+          type: integer
+          title: Valid Rows
         invalid_rows:
           items:
             $ref: '#/components/schemas/ManifestIssue'
-          title: Invalid Rows
           type: array
+          title: Invalid Rows
         preview:
           items:
             $ref: '#/components/schemas/ManifestPreviewRow'
-          title: Preview
           type: array
-        total_rows:
-          title: Total Rows
-          type: integer
-        valid_rows:
-          title: Valid Rows
-          type: integer
+          title: Preview
+      type: object
       required:
       - total_rows
       - valid_rows
       - invalid_rows
       - preview
       title: ManifestUploadResponse
-      type: object
     MessageResponse:
       properties:
         message:
-          title: Message
           type: string
+          title: Message
+      type: object
       required:
       - message
       title: MessageResponse
-      type: object
     MetaWebhookResponse:
       properties:
         processed:
-          title: Processed
           type: integer
+          title: Processed
+      type: object
       required:
       - processed
       title: MetaWebhookResponse
-      type: object
     OTPRequest:
       properties:
         phone_number:
-          title: Phone Number
           type: string
+          title: Phone Number
+      type: object
       required:
       - phone_number
       title: OTPRequest
-      type: object
     OTPVerifyRequest:
       properties:
-        otp:
-          title: Otp
-          type: string
         phone_number:
-          title: Phone Number
           type: string
+          title: Phone Number
+        otp:
+          type: string
+          title: Otp
         platform:
           $ref: '#/components/schemas/Platform'
+      type: object
       required:
       - phone_number
       - otp
       - platform
       title: OTPVerifyRequest
-      type: object
     PINPayload:
       properties:
         pin:
-          title: Pin
           type: string
+          title: Pin
+      type: object
       required:
       - pin
       title: PINPayload
-      type: object
     PINRecoveryRequest:
       properties:
         phone_number:
-          title: Phone Number
           type: string
+          title: Phone Number
+      type: object
       required:
       - phone_number
       title: PINRecoveryRequest
-      type: object
     PINVerifyResponse:
       properties:
         unlocked:
-          const: true
-          default: true
-          title: Unlocked
           type: boolean
-      title: PINVerifyResponse
+          const: true
+          title: Unlocked
+          default: true
       type: object
+      title: PINVerifyResponse
     PackageCancelResponse:
       properties:
         id:
+          type: string
           format: uuid
           title: Id
-          type: string
         status:
-          title: Status
           type: string
+          title: Status
+      type: object
       required:
       - id
       - status
       title: PackageCancelResponse
-      type: object
     PackageGeofenceResponse:
       properties:
         latitude:
+          type: number
           title: Latitude
-          type: number
         longitude:
+          type: number
           title: Longitude
-          type: number
         radius_meters:
-          title: Radius Meters
           type: number
+          title: Radius Meters
         request_id:
-          title: Request Id
           type: string
+          title: Request Id
+      type: object
       required:
       - latitude
       - longitude
       - radius_meters
       - request_id
       title: PackageGeofenceResponse
-      type: object
     PackageStatusResponse:
       properties:
-        data_gb_remaining:
-          title: Data Gb Remaining
-          type: number
-        data_gb_total:
-          title: Data Gb Total
-          type: integer
-        pstn_minutes_remaining:
-          title: Pstn Minutes Remaining
-          type: number
-        pstn_minutes_total:
-          title: Pstn Minutes Total
-          type: integer
         status:
+          type: string
           enum:
           - pending
           - active
           - expired
           title: Status
-          type: string
+        data_gb_total:
+          type: integer
+          title: Data Gb Total
+        data_gb_remaining:
+          type: number
+          title: Data Gb Remaining
+        pstn_minutes_total:
+          type: integer
+          title: Pstn Minutes Total
+        pstn_minutes_remaining:
+          type: number
+          title: Pstn Minutes Remaining
+      type: object
       required:
       - status
       - data_gb_total
@@ -1352,16 +3434,16 @@ components:
       - pstn_minutes_total
       - pstn_minutes_remaining
       title: PackageStatusResponse
-      type: object
     PaymentConfirmationResponse:
       properties:
         status:
           $ref: '#/components/schemas/ManifestOrderStatus'
+      type: object
       required:
       - status
       title: PaymentConfirmationResponse
-      type: object
     PhoneVerificationStatus:
+      type: string
       enum:
       - not_started
       - pending
@@ -1369,55 +3451,55 @@ components:
       - failed
       - expired
       title: PhoneVerificationStatus
-      type: string
     Platform:
+      type: string
       enum:
       - ios
       - android
       title: Platform
-      type: string
     PricingTierListResponse:
       properties:
         tiers:
           items:
             $ref: '#/components/schemas/PricingTierResponse'
-          title: Tiers
           type: array
+          title: Tiers
+      type: object
       required:
       - tiers
       title: PricingTierListResponse
-      type: object
     PricingTierResponse:
       properties:
-        estimated_margin_ngn:
-          title: Estimated Margin Ngn
-          type: number
         id:
+          type: string
           format: uuid
           title: Id
+        name:
           type: string
+          title: Name
+        retail_price_ngn:
+          type: number
+          title: Retail Price Ngn
+        wholesale_price_ngn:
+          type: number
+          title: Wholesale Price Ngn
+        estimated_margin_ngn:
+          type: number
+          title: Estimated Margin Ngn
         is_group_tier:
-          title: Is Group Tier
           type: boolean
-        max_group_size:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Max Group Size
+          title: Is Group Tier
         min_group_size:
           anyOf:
           - type: integer
           - type: 'null'
           title: Min Group Size
-        name:
-          title: Name
-          type: string
-        retail_price_ngn:
-          title: Retail Price Ngn
-          type: number
-        wholesale_price_ngn:
-          title: Wholesale Price Ngn
-          type: number
+        max_group_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Group Size
+      type: object
       required:
       - id
       - name
@@ -1428,39 +3510,39 @@ components:
       - min_group_size
       - max_group_size
       title: PricingTierResponse
-      type: object
     PricingTierUpdateRequest:
       properties:
         ngn_price:
+          type: number
           exclusiveMinimum: 0.0
           title: Ngn Price
-          type: number
+      type: object
       required:
       - ngn_price
       title: PricingTierUpdateRequest
-      type: object
     PricingTierUpdateResponse:
       properties:
-        changed_at:
-          format: date-time
-          title: Changed At
-          type: string
         id:
+          type: string
           format: uuid
           title: Id
-          type: string
         name:
-          title: Name
           type: string
-        new_ngn_price:
-          title: New Ngn Price
-          type: number
+          title: Name
         old_ngn_price:
+          type: number
           title: Old Ngn Price
+        new_ngn_price:
           type: number
+          title: New Ngn Price
         percent_change:
-          title: Percent Change
           type: number
+          title: Percent Change
+        changed_at:
+          type: string
+          format: date-time
+          title: Changed At
+      type: object
       required:
       - id
       - name
@@ -1469,128 +3551,128 @@ components:
       - percent_change
       - changed_at
       title: PricingTierUpdateResponse
-      type: object
     PurchaseRequest:
       properties:
+        pricing_tier_id:
+          type: string
+          format: uuid
+          title: Pricing Tier Id
         group_size:
           anyOf:
           - type: integer
           - type: 'null'
           title: Group Size
-        pricing_tier_id:
-          format: uuid
-          title: Pricing Tier Id
-          type: string
+      type: object
       required:
       - pricing_tier_id
       title: PurchaseRequest
-      type: object
     PurchaseResponse:
       properties:
-        checkout_url:
-          title: Checkout Url
-          type: string
         package_id:
+          type: string
           format: uuid
           title: Package Id
-          type: string
         processor:
+          type: string
           enum:
           - paystack
           - flutterwave
           title: Processor
-          type: string
         processor_reference:
-          title: Processor Reference
           type: string
+          title: Processor Reference
+        checkout_url:
+          type: string
+          title: Checkout Url
+      type: object
       required:
       - package_id
       - processor
       - processor_reference
       - checkout_url
       title: PurchaseResponse
-      type: object
     PushSubscriptionCreate:
       properties:
         fcm_token:
+          type: string
           minLength: 1
           title: Fcm Token
-          type: string
+      type: object
       required:
       - fcm_token
       title: PushSubscriptionCreate
-      type: object
     ReadinessResponse:
       properties:
-        checks:
-          $ref: '#/components/schemas/DependencyChecks'
         status:
+          type: string
           enum:
           - ready
           - not_ready
           title: Status
-          type: string
+        checks:
+          $ref: '#/components/schemas/DependencyChecks'
+      type: object
       required:
       - status
       - checks
       title: ReadinessResponse
-      type: object
     RefreshRequest:
       properties:
         refresh_token:
-          title: Refresh Token
           type: string
+          title: Refresh Token
+      type: object
       required:
       - refresh_token
       title: RefreshRequest
-      type: object
     RetailPricingTierListResponse:
       properties:
         tiers:
           items:
             $ref: '#/components/schemas/RetailPricingTierResponse'
-          title: Tiers
           type: array
+          title: Tiers
+      type: object
       required:
       - tiers
       title: RetailPricingTierListResponse
-      type: object
     RetailPricingTierResponse:
       properties:
-        data_gb:
-          title: Data Gb
-          type: integer
         id:
+          type: string
           format: uuid
           title: Id
+        name:
           type: string
+          title: Name
+        ngn_price:
+          type: number
+          title: Ngn Price
+        data_gb:
+          type: integer
+          title: Data Gb
+        pstn_minutes:
+          type: integer
+          title: Pstn Minutes
         is_group_tier:
-          title: Is Group Tier
           type: boolean
-        max_group_size:
-          anyOf:
-          - type: integer
-          - type: 'null'
-          title: Max Group Size
+          title: Is Group Tier
         min_group_size:
           anyOf:
           - type: integer
           - type: 'null'
           title: Min Group Size
-        name:
-          title: Name
-          type: string
-        ngn_price:
-          title: Ngn Price
-          type: number
+        max_group_size:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Group Size
         per_person_ngn_rate:
           anyOf:
           - type: number
           - type: 'null'
           title: Per Person Ngn Rate
-        pstn_minutes:
-          title: Pstn Minutes
-          type: integer
+      type: object
       required:
       - id
       - name
@@ -1599,160 +3681,160 @@ components:
       - pstn_minutes
       - is_group_tier
       title: RetailPricingTierResponse
-      type: object
     SOSCreate:
       properties:
         client_generated_id:
+          type: string
           format: uuid
           title: Client Generated Id
+        timestamp:
           type: string
+          format: date-time
+          title: Timestamp
         latitude:
           anyOf:
-          - maximum: 90.0
+          - type: number
+            maximum: 90.0
             minimum: -90.0
-            type: number
           - type: 'null'
           title: Latitude
         longitude:
           anyOf:
-          - maximum: 180.0
+          - type: number
+            maximum: 180.0
             minimum: -180.0
-            type: number
           - type: 'null'
           title: Longitude
-        timestamp:
-          format: date-time
-          title: Timestamp
-          type: string
+      type: object
       required:
       - client_generated_id
       - timestamp
       title: SOSCreate
-      type: object
     SOSCreateResponse:
       properties:
         id:
+          type: string
           format: uuid
           title: Id
-          type: string
         status:
           $ref: '#/components/schemas/SOSStatus'
+      type: object
       required:
       - id
       - status
       title: SOSCreateResponse
-      type: object
     SOSRetryBulkRequest:
       properties:
         notification_ids:
           items:
-            format: uuid
             type: string
-          title: Notification Ids
+            format: uuid
           type: array
+          title: Notification Ids
+      type: object
       required:
       - notification_ids
       title: SOSRetryBulkRequest
-      type: object
     SOSStatus:
+      type: string
       enum:
       - active
       - resolved
       - cancelled
       title: SOSStatus
-      type: string
     SOSStatusResponse:
       properties:
         status:
           $ref: '#/components/schemas/SOSStatus'
+      type: object
       required:
       - status
       title: SOSStatusResponse
-      type: object
     TokenResponse:
       properties:
         access_token:
+          type: string
           title: Access Token
-          type: string
         refresh_token:
-          title: Refresh Token
           type: string
+          title: Refresh Token
+      type: object
       required:
       - access_token
       - refresh_token
       title: TokenResponse
-      type: object
     UnorderedPilgrim:
       properties:
-        family_group_id:
-          anyOf:
-          - format: uuid
-            type: string
-          - type: 'null'
-          title: Family Group Id
         id:
+          type: string
           format: uuid
           title: Id
-          type: string
         name:
+          type: string
           title: Name
-          type: string
         phone_number:
-          title: Phone Number
           type: string
+          title: Phone Number
+        family_group_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Family Group Id
+      type: object
       required:
       - id
       - name
       - phone_number
       - family_group_id
       title: UnorderedPilgrim
-      type: object
     UnorderedPilgrimListResponse:
       properties:
         pilgrims:
           items:
             $ref: '#/components/schemas/UnorderedPilgrim'
-          title: Pilgrims
           type: array
+          title: Pilgrims
+      type: object
       required:
       - pilgrims
       title: UnorderedPilgrimListResponse
-      type: object
     UserResponse:
       properties:
-        departure_date:
-          anyOf:
-          - format: date
-            type: string
-          - type: 'null'
-          title: Departure Date
+        id:
+          type: string
+          format: uuid
+          title: Id
+        phone_number:
+          type: string
+          title: Phone Number
+        first_name:
+          type: string
+          title: First Name
+        last_name:
+          type: string
+          title: Last Name
         email:
           anyOf:
           - type: string
           - type: 'null'
           title: Email
-        first_name:
-          title: First Name
-          type: string
-        id:
-          format: uuid
-          title: Id
-          type: string
-        last_name:
-          title: Last Name
-          type: string
-        phone_number:
-          title: Phone Number
-          type: string
-        platform:
-          title: Platform
-          type: string
-        status:
-          title: Status
-          type: string
         verified_cli:
-          title: Verified Cli
           type: boolean
+          title: Verified Cli
+        departure_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Departure Date
+        platform:
+          type: string
+          title: Platform
+        status:
+          type: string
+          title: Status
+      type: object
       required:
       - id
       - phone_number
@@ -1764,7 +3846,6 @@ components:
       - platform
       - status
       title: UserResponse
-      type: object
     ValidationError:
       properties:
         loc:
@@ -1772,52 +3853,53 @@ components:
             anyOf:
             - type: string
             - type: integer
-          title: Location
           type: array
+          title: Location
         msg:
+          type: string
           title: Message
-          type: string
         type:
-          title: Error Type
           type: string
+          title: Error Type
+      type: object
       required:
       - loc
       - msg
       - type
       title: ValidationError
-      type: object
     VerifiedCallerIdentityResponse:
       properties:
-        consent_at:
-          anyOf:
-          - format: date-time
-            type: string
-          - type: 'null'
-          title: Consent At
+        id:
+          type: string
+          format: uuid
+          title: Id
+        phone_number:
+          type: string
+          title: Phone Number
+        status:
+          $ref: '#/components/schemas/VerifiedCallerIdentityStatus'
+        phone_verification_status:
+          $ref: '#/components/schemas/PhoneVerificationStatus'
         consent_version:
           anyOf:
           - type: string
           - type: 'null'
           title: Consent Version
+        consent_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Consent At
         created_at:
+          type: string
           format: date-time
           title: Created At
-          type: string
-        id:
-          format: uuid
-          title: Id
-          type: string
-        phone_number:
-          title: Phone Number
-          type: string
-        phone_verification_status:
-          $ref: '#/components/schemas/PhoneVerificationStatus'
-        status:
-          $ref: '#/components/schemas/VerifiedCallerIdentityStatus'
         updated_at:
+          type: string
           format: date-time
           title: Updated At
-          type: string
+      type: object
       required:
       - id
       - phone_number
@@ -1826,8 +3908,8 @@ components:
       - created_at
       - updated_at
       title: VerifiedCallerIdentityResponse
-      type: object
     VerifiedCallerIdentityStatus:
+      type: string
       enum:
       - unverified
       - phone_verification_pending
@@ -1840,12 +3922,11 @@ components:
       - expired
       - revoked
       title: VerifiedCallerIdentityStatus
-      type: string
     VoiceEligibilityResponse:
       properties:
         allowed:
-          title: Allowed
           type: boolean
+          title: Allowed
         call_type:
           $ref: '#/components/schemas/CallType'
         destination:
@@ -1853,54 +3934,55 @@ components:
           - type: string
           - type: 'null'
           title: Destination
-        pstn_minutes_remaining:
-          title: Pstn Minutes Remaining
-          type: number
         reason:
           anyOf:
-          - enum:
+          - type: string
+            enum:
             - cli_not_verified
             - pstn_balance_exhausted
-            type: string
           - type: 'null'
           title: Reason
+        pstn_minutes_remaining:
+          type: number
+          title: Pstn Minutes Remaining
+      type: object
       required:
       - allowed
       - call_type
       - pstn_minutes_remaining
       title: VoiceEligibilityResponse
-      type: object
     VoiceTokenRequest:
       properties:
+        to_number:
+          type: string
+          title: To Number
         idempotency_key:
           anyOf:
           - type: string
           - type: 'null'
           title: Idempotency Key
-        to_number:
-          title: To Number
-          type: string
+      type: object
       required:
       - to_number
       title: VoiceTokenRequest
-      type: object
     VoiceTokenResponse:
       properties:
+        token:
+          type: string
+          title: Token
+        sip_username:
+          type: string
+          title: Sip Username
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
         call_type:
           $ref: '#/components/schemas/CallType'
         destination:
+          type: string
           title: Destination
-          type: string
-        expires_at:
-          format: date-time
-          title: Expires At
-          type: string
-        sip_username:
-          title: Sip Username
-          type: string
-        token:
-          title: Token
-          type: string
+      type: object
       required:
       - token
       - sip_username
@@ -1908,2098 +3990,16 @@ components:
       - call_type
       - destination
       title: VoiceTokenResponse
-      type: object
     WebhookResponse:
       properties:
         processed:
-          title: Processed
           type: boolean
+          title: Processed
+      type: object
       required:
       - processed
       title: WebhookResponse
-      type: object
   securitySchemes:
     HTTPBearer:
-      scheme: bearer
       type: http
-info:
-  title: DamDam API
-  version: 0.1.0
-openapi: 3.1.0
-paths:
-  /health:
-    get:
-      operationId: health_health_get
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ReadinessResponse'
-          description: Successful Response
-        '503':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ReadinessResponse'
-          description: Not Ready
-      summary: Health
-      tags:
-      - system
-  /health/live:
-    get:
-      operationId: liveness_health_live_get
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LivenessResponse'
-          description: Successful Response
-      summary: Liveness
-      tags:
-      - system
-  /v1/activation/{activation_code}:
-    get:
-      operationId: preview_activation_v1_activation__activation_code__get
-      parameters:
-      - in: path
-        name: activation_code
-        required: true
-        schema:
-          title: Activation Code
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ActivationPreviewResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Preview Activation
-      tags:
-      - pilgrim-activation
-  /v1/admin/device-compatibility-log:
-    get:
-      operationId: list_device_compatibility_log_v1_admin_device_compatibility_log_get
-      parameters:
-      - in: query
-        name: platform
-        required: false
-        schema:
-          anyOf:
-          - $ref: '#/components/schemas/Platform'
-          - type: 'null'
-          title: Platform
-      - in: query
-        name: esim_supported
-        required: false
-        schema:
-          anyOf:
-          - type: boolean
-          - type: 'null'
-          title: Esim Supported
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeviceCompatibilityLogListResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: List Device Compatibility Log
-      tags:
-      - admin
-  /v1/admin/hto-operators:
-    get:
-      operationId: list_hto_operators_v1_admin_hto_operators_get
-      parameters:
-      - in: query
-        name: status
-        required: false
-        schema:
-          anyOf:
-          - $ref: '#/components/schemas/HTOApprovalStatus'
-          - type: 'null'
-          title: Status
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTOOperatorListResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: List Hto Operators
-      tags:
-      - admin
-  /v1/admin/hto-operators/{operator_id}/approve:
-    post:
-      operationId: approve_hto_operator_v1_admin_hto_operators__operator_id__approve_post
-      parameters:
-      - in: path
-        name: operator_id
-        required: true
-        schema:
-          format: uuid
-          title: Operator Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTOApprovalResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Approve Hto Operator
-      tags:
-      - admin
-  /v1/admin/hto-operators/{operator_id}/reject:
-    post:
-      operationId: reject_hto_operator_v1_admin_hto_operators__operator_id__reject_post
-      parameters:
-      - in: path
-        name: operator_id
-        required: true
-        schema:
-          format: uuid
-          title: Operator Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/HTORejectionRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTOApprovalResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Reject Hto Operator
-      tags:
-      - admin
-  /v1/admin/manifest-orders:
-    get:
-      operationId: list_manifest_orders_v1_admin_manifest_orders_get
-      parameters:
-      - in: query
-        name: status
-        required: false
-        schema:
-          $ref: '#/components/schemas/ManifestOrderStatus'
-          default: awaiting_payment
-      - in: query
-        name: search
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Search
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminManifestOrderListResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: List Manifest Orders
-      tags:
-      - admin
-  /v1/admin/manifest-orders/{order_id}/confirm-payment:
-    post:
-      operationId: confirm_manifest_order_payment_v1_admin_manifest_orders__order_id__confirm_payment_post
-      parameters:
-      - in: path
-        name: order_id
-        required: true
-        schema:
-          format: uuid
-          title: Order Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaymentConfirmationResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Confirm Manifest Order Payment
-      tags:
-      - admin
-  /v1/admin/manifest-orders/{order_id}/invoice:
-    get:
-      operationId: download_manifest_invoice_v1_admin_manifest_orders__order_id__invoice_get
-      parameters:
-      - in: path
-        name: order_id
-        required: true
-        schema:
-          format: uuid
-          title: Order Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Download Manifest Invoice
-      tags:
-      - admin
-  /v1/admin/packages/{package_id}/cancel:
-    post:
-      operationId: cancel_package_v1_admin_packages__package_id__cancel_post
-      parameters:
-      - in: path
-        name: package_id
-        required: true
-        schema:
-          format: uuid
-          title: Package Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PackageCancelResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Cancel Package
-      tags:
-      - admin
-  /v1/admin/pricing-tiers:
-    get:
-      operationId: list_admin_pricing_tiers_v1_admin_pricing_tiers_get
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdminPricingTierListResponse'
-          description: Successful Response
-      security:
-      - HTTPBearer: []
-      summary: List Admin Pricing Tiers
-      tags:
-      - admin
-  /v1/admin/pricing-tiers/{tier_id}:
-    patch:
-      operationId: update_admin_pricing_tier_v1_admin_pricing_tiers__tier_id__patch
-      parameters:
-      - in: path
-        name: tier_id
-        required: true
-        schema:
-          format: uuid
-          title: Tier Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PricingTierUpdateRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PricingTierUpdateResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Update Admin Pricing Tier
-      tags:
-      - admin
-  /v1/admin/sos-notifications/failed:
-    get:
-      operationId: failed_sos_notifications_v1_admin_sos_notifications_failed_get
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                additionalProperties:
-                  items:
-                    additionalProperties: true
-                    type: object
-                  type: array
-                title: Response Failed Sos Notifications V1 Admin Sos Notifications
-                  Failed Get
-                type: object
-          description: Successful Response
-      security:
-      - HTTPBearer: []
-      summary: Failed Sos Notifications
-      tags:
-      - admin
-  /v1/admin/sos-notifications/retry-bulk:
-    post:
-      operationId: retry_sos_notifications_bulk_v1_admin_sos_notifications_retry_bulk_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SOSRetryBulkRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                additionalProperties:
-                  type: integer
-                title: Response Retry Sos Notifications Bulk V1 Admin Sos Notifications
-                  Retry Bulk Post
-                type: object
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Retry Sos Notifications Bulk
-      tags:
-      - admin
-  /v1/admin/sos-notifications/{notification_id}/retry:
-    post:
-      operationId: retry_sos_notification_v1_admin_sos_notifications__notification_id__retry_post
-      parameters:
-      - in: path
-        name: notification_id
-        required: true
-        schema:
-          format: uuid
-          title: Notification Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                additionalProperties:
-                  type: integer
-                title: Response Retry Sos Notification V1 Admin Sos Notifications  Notification
-                  Id  Retry Post
-                type: object
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Retry Sos Notification
-      tags:
-      - admin
-  /v1/auth/hto/login:
-    post:
-      operationId: login_hto_v1_auth_hto_login_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/HTOLoginRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTOLoginResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Login Hto
-      tags:
-      - authentication
-  /v1/auth/hto/register:
-    post:
-      operationId: register_hto_v1_auth_hto_register_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/HTORegistrationRequest'
-        required: true
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Register Hto
-      tags:
-      - authentication
-  /v1/auth/hto/verify-email:
-    post:
-      operationId: verify_hto_email_v1_auth_hto_verify_email_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/HTOVerifyEmailRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Verify Hto Email
-      tags:
-      - authentication
-  /v1/auth/otp/request:
-    post:
-      operationId: request_otp_v1_auth_otp_request_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OTPRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Request Otp
-      tags:
-      - authentication
-  /v1/auth/otp/verify:
-    post:
-      operationId: verify_otp_v1_auth_otp_verify_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OTPVerifyRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Verify Otp
-      tags:
-      - authentication
-  /v1/auth/pin/recovery/request:
-    post:
-      operationId: request_pin_recovery_v1_auth_pin_recovery_request_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PINRecoveryRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Request Pin Recovery
-      tags:
-      - authentication
-  /v1/auth/pin/recovery/verify:
-    post:
-      operationId: verify_pin_recovery_v1_auth_pin_recovery_verify_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OTPVerifyRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Verify Pin Recovery
-      tags:
-      - authentication
-  /v1/auth/pin/set:
-    post:
-      operationId: set_pin_v1_auth_pin_set_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PINPayload'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Set Pin
-      tags:
-      - authentication
-  /v1/auth/pin/verify:
-    post:
-      operationId: verify_pin_v1_auth_pin_verify_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PINPayload'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PINVerifyResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Verify Pin
-      tags:
-      - authentication
-  /v1/auth/token/refresh:
-    post:
-      operationId: refresh_token_v1_auth_token_refresh_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RefreshRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TokenResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Refresh Token
-      tags:
-      - authentication
-  /v1/checkins:
-    post:
-      operationId: create_checkin_v1_checkins_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CheckInCreate'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CheckInCreateResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Create Checkin
-      tags:
-      - check-ins
-  /v1/hto/manifests:
-    get:
-      operationId: list_manifests_v1_hto_manifests_get
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManifestListResponse'
-          description: Successful Response
-      security:
-      - HTTPBearer: []
-      summary: List Manifests
-      tags:
-      - HTO manifests
-    post:
-      operationId: create_manifest_v1_hto_manifests_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ManifestCreateRequest'
-        required: true
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManifestCreateResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Create Manifest
-      tags:
-      - HTO manifests
-  /v1/hto/manifests/{manifest_id}/confirm:
-    post:
-      operationId: confirm_manifest_v1_hto_manifests__manifest_id__confirm_post
-      parameters:
-      - in: path
-        name: manifest_id
-        required: true
-        schema:
-          format: uuid
-          title: Manifest Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManifestConfirmResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Confirm Manifest
-      tags:
-      - HTO manifests
-  /v1/hto/manifests/{manifest_id}/group:
-    post:
-      operationId: create_family_group_v1_hto_manifests__manifest_id__group_post
-      parameters:
-      - in: path
-        name: manifest_id
-        required: true
-        schema:
-          format: uuid
-          title: Manifest Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FamilyGroupRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FamilyGroupResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Create Family Group
-      tags:
-      - HTO manifests
-  /v1/hto/manifests/{manifest_id}/group/{group_id}:
-    delete:
-      operationId: delete_family_group_v1_hto_manifests__manifest_id__group__group_id__delete
-      parameters:
-      - in: path
-        name: manifest_id
-        required: true
-        schema:
-          format: uuid
-          title: Manifest Id
-          type: string
-      - in: path
-        name: group_id
-        required: true
-        schema:
-          format: uuid
-          title: Group Id
-          type: string
-      responses:
-        '204':
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Delete Family Group
-      tags:
-      - HTO manifests
-    put:
-      operationId: update_family_group_v1_hto_manifests__manifest_id__group__group_id__put
-      parameters:
-      - in: path
-        name: manifest_id
-        required: true
-        schema:
-          format: uuid
-          title: Manifest Id
-          type: string
-      - in: path
-        name: group_id
-        required: true
-        schema:
-          format: uuid
-          title: Group Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FamilyGroupRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FamilyGroupResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Update Family Group
-      tags:
-      - HTO manifests
-  /v1/hto/manifests/{manifest_id}/order:
-    post:
-      operationId: place_manifest_order_v1_hto_manifests__manifest_id__order_post
-      parameters:
-      - in: path
-        name: manifest_id
-        required: true
-        schema:
-          format: uuid
-          title: Manifest Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ManifestOrderRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManifestOrderResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Place Manifest Order
-      tags:
-      - HTO manifests
-  /v1/hto/manifests/{manifest_id}/order/{order_id}:
-    get:
-      operationId: get_manifest_order_v1_hto_manifests__manifest_id__order__order_id__get
-      parameters:
-      - in: path
-        name: manifest_id
-        required: true
-        schema:
-          format: uuid
-          title: Manifest Id
-          type: string
-      - in: path
-        name: order_id
-        required: true
-        schema:
-          format: uuid
-          title: Order Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManifestOrderDetailResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Get Manifest Order
-      tags:
-      - HTO manifests
-  /v1/hto/manifests/{manifest_id}/order/{order_id}/invoice:
-    get:
-      operationId: download_manifest_invoice_v1_hto_manifests__manifest_id__order__order_id__invoice_get
-      parameters:
-      - in: path
-        name: manifest_id
-        required: true
-        schema:
-          format: uuid
-          title: Manifest Id
-          type: string
-      - in: path
-        name: order_id
-        required: true
-        schema:
-          format: uuid
-          title: Order Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Download Manifest Invoice
-      tags:
-      - HTO manifests
-  /v1/hto/manifests/{manifest_id}/orders:
-    get:
-      operationId: list_manifest_orders_v1_hto_manifests__manifest_id__orders_get
-      parameters:
-      - in: path
-        name: manifest_id
-        required: true
-        schema:
-          format: uuid
-          title: Manifest Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManifestOrderListResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: List Manifest Orders
-      tags:
-      - HTO manifests
-  /v1/hto/manifests/{manifest_id}/unordered-pilgrims:
-    get:
-      operationId: list_unordered_pilgrims_v1_hto_manifests__manifest_id__unordered_pilgrims_get
-      parameters:
-      - in: path
-        name: manifest_id
-        required: true
-        schema:
-          format: uuid
-          title: Manifest Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UnorderedPilgrimListResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: List Unordered Pilgrims
-      tags:
-      - HTO manifests
-  /v1/hto/manifests/{manifest_id}/upload:
-    post:
-      operationId: upload_manifest_v1_hto_manifests__manifest_id__upload_post
-      parameters:
-      - in: path
-        name: manifest_id
-        required: true
-        schema:
-          format: uuid
-          title: Manifest Id
-          type: string
-      requestBody:
-        content:
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManifestUploadResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Upload Manifest
-      tags:
-      - HTO manifests
-  /v1/hto/pilgrims:
-    get:
-      operationId: list_hto_pilgrims_v1_hto_pilgrims_get
-      parameters:
-      - in: query
-        name: manifest_id
-        required: false
-        schema:
-          anyOf:
-          - format: uuid
-            type: string
-          - type: 'null'
-          title: Manifest Id
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HtoPilgrimListResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: List Hto Pilgrims
-      tags:
-      - esim
-  /v1/hto/pricing-tiers:
-    get:
-      operationId: list_pricing_tiers_v1_hto_pricing_tiers_get
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PricingTierListResponse'
-          description: Successful Response
-      security:
-      - HTTPBearer: []
-      summary: List Pricing Tiers
-      tags:
-      - HTO manifests
-  /v1/hto/push-subscriptions:
-    post:
-      operationId: create_push_subscription_v1_hto_push_subscriptions_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PushSubscriptionCreate'
-        required: true
-      responses:
-        '204':
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Create Push Subscription
-      tags:
-      - SOS
-  /v1/hto/reports/provisioning.csv:
-    get:
-      operationId: download_provisioning_report_v1_hto_reports_provisioning_csv_get
-      parameters:
-      - in: query
-        name: manifest_id
-        required: false
-        schema:
-          anyOf:
-          - format: uuid
-            type: string
-          - type: 'null'
-          title: Manifest Id
-      - in: query
-        name: date_from
-        required: false
-        schema:
-          anyOf:
-          - format: date
-            type: string
-          - type: 'null'
-          title: Date From
-      - in: query
-        name: date_to
-        required: false
-        schema:
-          anyOf:
-          - format: date
-            type: string
-          - type: 'null'
-          title: Date To
-      responses:
-        '200':
-          content:
-            application/json:
-              schema: {}
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Download Provisioning Report
-      tags:
-      - HTO reports
-  /v1/hto/sos-alerts:
-    get:
-      operationId: list_sos_v1_hto_sos_alerts_get
-      parameters:
-      - in: query
-        name: status
-        required: false
-        schema:
-          anyOf:
-          - $ref: '#/components/schemas/SOSStatus'
-          - type: 'null'
-          default: active
-          title: Status
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HtoSOSAlertsResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: List Sos
-      tags:
-      - SOS
-  /v1/hto/sos-alerts/{alert_id}/resolve:
-    post:
-      operationId: resolve_sos_v1_hto_sos_alerts__alert_id__resolve_post
-      parameters:
-      - in: path
-        name: alert_id
-        required: true
-        schema:
-          format: uuid
-          title: Alert Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SOSStatusResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Resolve Sos
-      tags:
-      - SOS
-  /v1/me/account:
-    delete:
-      operationId: request_account_deletion_v1_me_account_delete
-      responses:
-        '202':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountDeletionResponse'
-          description: Successful Response
-      security:
-      - HTTPBearer: []
-      summary: Request Account Deletion
-      tags:
-      - pilgrim-profile
-  /v1/me/activation/redeem:
-    post:
-      operationId: redeem_activation_v1_me_activation_redeem_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ActivationRedeemRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ActivationRedeemResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Redeem Activation
-      tags:
-      - pilgrim-activation
-  /v1/me/calls:
-    get:
-      operationId: history_v1_me_calls_get
-      parameters:
-      - in: query
-        name: limit
-        required: false
-        schema:
-          default: 20
-          maximum: 20
-          minimum: 1
-          title: Limit
-          type: integer
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CallHistoryResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: History
-      tags:
-      - voice
-  /v1/me/checkins:
-    get:
-      operationId: history_v1_me_checkins_get
-      parameters:
-      - in: query
-        name: limit
-        required: false
-        schema:
-          default: 10
-          maximum: 10
-          minimum: 1
-          title: Limit
-          type: integer
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CheckInHistoryResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: History
-      tags:
-      - check-ins
-  /v1/me/device-compatibility:
-    post:
-      operationId: log_device_compatibility_v1_me_device_compatibility_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DeviceCompatibilityCreate'
-        required: true
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeviceCompatibilityResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Log Device Compatibility
-      tags:
-      - esim
-  /v1/me/device-token:
-    put:
-      operationId: register_device_token_v1_me_device_token_put
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DeviceTokenUpsert'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeviceTokenResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Register Device Token
-      tags:
-      - pilgrim-profile
-  /v1/me/emergency-contact:
-    get:
-      operationId: get_emergency_contact_v1_me_emergency_contact_get
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EmergencyContactResponse'
-          description: Successful Response
-      security:
-      - HTTPBearer: []
-      summary: Get Emergency Contact
-      tags:
-      - pilgrim-profile
-  /v1/me/family-contact:
-    patch:
-      operationId: update_family_contact_v1_me_family_contact_patch
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FamilyContactUpdate'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FamilyContactResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Update Family Contact
-      tags:
-      - pilgrim-profile
-    post:
-      operationId: create_family_contact_v1_me_family_contact_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/FamilyContactCreate'
-        required: true
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FamilyContactResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Create Family Contact
-      tags:
-      - pilgrim-profile
-  /v1/packages/purchase:
-    post:
-      operationId: purchase_v1_packages_purchase_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PurchaseRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PurchaseResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Purchase
-      tags:
-      - payments
-  /v1/packages/{package_id}/esim:
-    get:
-      operationId: get_esim_v1_packages__package_id__esim_get
-      parameters:
-      - in: path
-        name: package_id
-        required: true
-        schema:
-          format: uuid
-          title: Package Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EsimProfileResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Get Esim
-      tags:
-      - esim
-  /v1/packages/{package_id}/esim/issue:
-    post:
-      operationId: issue_esim_v1_packages__package_id__esim_issue_post
-      parameters:
-      - in: path
-        name: package_id
-        required: true
-        schema:
-          format: uuid
-          title: Package Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EsimIssueResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Issue Esim
-      tags:
-      - esim
-  /v1/packages/{package_id}/esim/mark-activated:
-    post:
-      operationId: mark_esim_activated_v1_packages__package_id__esim_mark_activated_post
-      parameters:
-      - in: path
-        name: package_id
-        required: true
-        schema:
-          format: uuid
-          title: Package Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EsimDownloadResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Mark Esim Activated
-      tags:
-      - esim
-  /v1/packages/{package_id}/esim/mark-downloaded:
-    post:
-      operationId: mark_esim_downloaded_v1_packages__package_id__esim_mark_downloaded_post
-      parameters:
-      - in: path
-        name: package_id
-        required: true
-        schema:
-          format: uuid
-          title: Package Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EsimDownloadResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Mark Esim Downloaded
-      tags:
-      - esim
-  /v1/packages/{package_id}/geofence:
-    get:
-      operationId: package_geofence_v1_packages__package_id__geofence_get
-      parameters:
-      - in: path
-        name: package_id
-        required: true
-        schema:
-          format: uuid
-          title: Package Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PackageGeofenceResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Package Geofence
-      tags:
-      - payments
-  /v1/packages/{package_id}/status:
-    get:
-      operationId: package_status_v1_packages__package_id__status_get
-      parameters:
-      - in: path
-        name: package_id
-        required: true
-        schema:
-          format: uuid
-          title: Package Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PackageStatusResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Package Status
-      tags:
-      - payments
-  /v1/pricing/tiers:
-    get:
-      operationId: list_retail_pricing_tiers_v1_pricing_tiers_get
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RetailPricingTierListResponse'
-          description: Successful Response
-      summary: List Retail Pricing Tiers
-      tags:
-      - pricing
-  /v1/sos:
-    post:
-      operationId: create_sos_v1_sos_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SOSCreate'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SOSCreateResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Create Sos
-      tags:
-      - SOS
-  /v1/sos/{alert_id}/cancel:
-    post:
-      operationId: cancel_sos_v1_sos__alert_id__cancel_post
-      parameters:
-      - in: path
-        name: alert_id
-        required: true
-        schema:
-          format: uuid
-          title: Alert Id
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SOSStatusResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Cancel Sos
-      tags:
-      - SOS
-  /v1/voice/cli/lost-sim:
-    post:
-      operationId: report_lost_sim_v1_voice_cli_lost_sim_post
-      responses:
-        '204':
-          description: Successful Response
-      security:
-      - HTTPBearer: []
-      summary: Report Lost Sim
-      tags:
-      - voice
-  /v1/voice/cli/revoke:
-    post:
-      operationId: revoke_cli_v1_voice_cli_revoke_post
-      responses:
-        '204':
-          description: Successful Response
-      security:
-      - HTTPBearer: []
-      summary: Revoke Cli
-      tags:
-      - voice
-  /v1/voice/cli/status:
-    get:
-      operationId: cli_status_v1_voice_cli_status_get
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                anyOf:
-                - $ref: '#/components/schemas/VerifiedCallerIdentityResponse'
-                - type: 'null'
-                title: Response Cli Status V1 Voice Cli Status Get
-          description: Successful Response
-      security:
-      - HTTPBearer: []
-      summary: Cli Status
-      tags:
-      - voice
-  /v1/voice/cli/verify:
-    post:
-      operationId: start_cli_verification_v1_voice_cli_verify_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CliVerificationStartRequest'
-        required: true
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VerifiedCallerIdentityResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Start Cli Verification
-      tags:
-      - voice
-  /v1/voice/cli/{identity_id}/confirm:
-    post:
-      operationId: confirm_cli_verification_v1_voice_cli__identity_id__confirm_post
-      parameters:
-      - in: path
-        name: identity_id
-        required: true
-        schema:
-          format: uuid
-          title: Identity Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CliVerificationConfirmRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VerifiedCallerIdentityResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Confirm Cli Verification
-      tags:
-      - voice
-  /v1/voice/cli/{identity_id}/consent:
-    post:
-      operationId: capture_cli_consent_v1_voice_cli__identity_id__consent_post
-      parameters:
-      - in: path
-        name: identity_id
-        required: true
-        schema:
-          format: uuid
-          title: Identity Id
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CliConsentRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VerifiedCallerIdentityResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Capture Cli Consent
-      tags:
-      - voice
-  /v1/voice/eligibility:
-    get:
-      operationId: eligibility_v1_voice_eligibility_get
-      parameters:
-      - in: query
-        name: phone_number
-        required: true
-        schema:
-          title: Phone Number
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VoiceEligibilityResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Eligibility
-      tags:
-      - voice
-  /v1/voice/token:
-    post:
-      operationId: token_v1_voice_token_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/VoiceTokenRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VoiceTokenResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      security:
-      - HTTPBearer: []
-      summary: Token
-      tags:
-      - voice
-  /v1/webhooks/meta/whatsapp:
-    get:
-      operationId: verify_meta_webhook_v1_webhooks_meta_whatsapp_get
-      parameters:
-      - in: query
-        name: hub.mode
-        required: true
-        schema:
-          title: Hub.Mode
-          type: string
-      - in: query
-        name: hub.verify_token
-        required: true
-        schema:
-          title: Hub.Verify Token
-          type: string
-      - in: query
-        name: hub.challenge
-        required: true
-        schema:
-          title: Hub.Challenge
-          type: string
-      responses:
-        '200':
-          content:
-            text/plain:
-              schema:
-                type: string
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Verify Meta Webhook
-      tags:
-      - check-ins
-    post:
-      operationId: meta_webhook_v1_webhooks_meta_whatsapp_post
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MetaWebhookResponse'
-          description: Successful Response
-      summary: Meta Webhook
-      tags:
-      - check-ins
-  /v1/webhooks/otp/termii:
-    post:
-      operationId: termii_delivery_report_v1_webhooks_otp_termii_post
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                additionalProperties:
-                  type: boolean
-                title: Response Termii Delivery Report V1 Webhooks Otp Termii Post
-                type: object
-          description: Successful Response
-      summary: Termii Delivery Report
-      tags:
-      - webhooks
-  /v1/webhooks/telnyx/call-events:
-    post:
-      operationId: webhook_v1_webhooks_telnyx_call_events_post
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WebhookResponse'
-          description: Successful Response
-      summary: Webhook
-      tags:
-      - voice
-  /v1/webhooks/{processor}:
-    post:
-      operationId: webhook_v1_webhooks__processor__post
-      parameters:
-      - in: path
-        name: processor
-        required: true
-        schema:
-          title: Processor
-          type: string
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WebhookResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Webhook
-      tags:
-      - payments
+      scheme: bearer
