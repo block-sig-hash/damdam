@@ -8,7 +8,7 @@ appId: com.damdam.app
 - tapOn:
     id: "harness-target-pin-setup"
 - assertVisible:
-    id: "pin-setup-input"
+    id: "pin-setup-helper-text"
 - takeScreenshot: pin-setup-en
 - stopApp
 - launchApp
@@ -19,5 +19,5 @@ appId: com.damdam.app
 - tapOn:
     id: "harness-target-pin-setup"
 - assertVisible:
-    id: "pin-setup-input"
+    id: "pin-setup-helper-text"
 - takeScreenshot: pin-setup-fr
