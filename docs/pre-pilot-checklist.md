@@ -14,6 +14,25 @@ them are satisfied by simulator/emulator output, mocked vendor SDKs, or unit
 tests alone — those are already-completed evidence tiers (see each story's
 PR for that), not what's tracked here.
 
+**Last refreshed:** 2026-07-26, against `develop` @ `0fa3f53` (through PR
+#96, the Verified Caller Identity CLI-hardening merge). Previous version was
+current only through PR #79 (2026-07-19) — everything from PR #82 through
+#96, including the entire US-14 hardening pass, had landed since without
+this document being checked against it. See the Summary's changelog for
+exactly what changed in this refresh.
+
+**Tied to a real enforcement mechanism now, not just a document:** since PR
+#91 (`infrastructure.md` §11.14), a `staging → main` PR cannot merge without
+a `docs/release-signoffs/<sha>.md` file (template:
+`docs/release-signoffs/TEMPLATE.md`) whose device-matrix and
+critical-scenario tables map directly onto this document's §2/§3/§4/§6/§7 —
+`main`'s branch protection genuinely blocks the merge button on a missing or
+placeholder-filled signoff, confirmed by attempting real broken PRs. That
+gate does not verify the *content* is honest (photo/video evidence isn't
+required yet — see the template's own note on when that changes), but it
+does mean this checklist's real-device items are now mechanically forced
+into every release's attention, not something that can be quietly skipped.
+
 ---
 
 ## 1. Push / notification delivery
@@ -26,18 +45,31 @@ PR for that), not what's tracked here.
 | `FIREBASE_ACCESS_TOKEN` live rotation | US-16, PR #68 | The short-lived FCM HTTP v1 OAuth token is refreshed by a real deployment process at least once without manual intervention — "not testable locally" per the PR, so this can only be closed against a real deployment |
 | Real device-token registration end-to-end (`PUT /me/device-token`) | US-13, PR #64 | Firebase/Apple runtime configuration (recorded as "deployment-secret work, not committed configuration") is actually present in a deployed environment and a real device successfully registers a token against it |
 
+*Operational note (PR #89):* the admin dashboard's Failed Notification Queue
+(`/admin/sos-notifications`) now exists, so once real delivery attempts are
+happening against a deployed environment, failures in the above are
+observable and retriable from the dashboard rather than only from logs —
+doesn't close any row above by itself, but is the tool you'd use while
+closing them.
+
 ## 2. Voice / PSTN (US-14)
 
-All items below are from `testing-qa.md` §14.9's own explicit "Required
-real-device / real-network evidence before an HTO pilot" list, plus PR #66.
+Items below are from `testing-qa.md` §14.9's own explicit "Required
+real-device / real-network evidence before an HTO pilot" list, plus PR #66,
+updated for PR #87 (iOS CallKit/PushKit), PR #88 (Android ConnectionService),
+and PR #96 (Verified Caller Identity CLI hardening).
 
 | Item | Done looks like |
 |---|---|
 | One real Telnyx-account PSTN call | One actual outbound PSTN call placed per platform over real cellular/eSIM data, confirming the recipient sees the verified Nigerian CLI and the call reaches Telnyx's signed webhook endpoint — logged, not simulated |
 | Real call quality | Call quality observed on at least 4G, on degraded/packet-loss cellular data, and through a forced mid-call network drop, with the in-app quality indicator compared against actual audible behavior, and confirmation that only connected seconds are billed |
-| CallKit (iOS) / ConnectionService (Android) native integration | Native call UI and audio routing verified on physical iOS and Android hardware, including background/lock-screen behavior, microphone, mute, speaker, and Bluetooth routes — not the mocked Telnyx SDK transitions already covered in CI |
+| CallKit (iOS) / ConnectionService (Android) native integration | Native call UI and audio routing verified on physical iOS and Android hardware, including background/lock-screen behavior, microphone, mute, speaker, and Bluetooth routes — not the mocked Telnyx SDK transitions already covered in CI. This is the exact evidence `docs/release-signoffs/TEMPLATE.md`'s critical-scenario table now requires a PASS/FAIL on for every release: incoming call wake from killed/backgrounded state (both platforms), CallKit lock-screen UI, PushKit delivery |
+| Android incoming-call wake — specific disclosed risks (PR #88) | Four named uncertainties the PR itself flagged as real-device-only, not oversights: (1) FCM payload key names (`call_id`/`voice_sdk_id`/`metadata`) used to detect an incoming call are inferred from Telnyx's JS SDK source, never confirmed against a live Telnyx-delivered push; (2) the manually-added `VoiceConnectionService` entry in `AndroidManifest.xml` is unverified against a real Android Telecom framework bind (fails silently either way — no crash signal either direction); (3) `RNCallKeep.setup()` and its phone-account permission prompt only run once Dial Pad has been opened at least once on that device — until then ConnectionService cannot display an incoming call at all, a device-state dependency with no iOS equivalent; (4) the Headless-Task-to-live-app JS context handoff for a cold-start incoming call has never been verified end-to-end. All four require a physical Android device and a real incoming PSTN call |
 | Contextual Contacts permission | Verified on both physical platforms, including a denial path and a later Settings re-enable |
-| iOS native project generation | The repository has no `apps/mobile/ios` project directory as of PR #66/US-14; iOS AppDelegate/PushKit/CallKit autolinking cannot be built until this exists — blocking, not optional, per `testing-qa.md` §14.9 |
+| **Verified Caller ID phone-possession flow (PR #96, US-14 CLI hardening)** | One real Telnyx Verified Numbers SMS code actually delivered to a real Nigerian number, entered in the app, and confirmed — end-to-end through `POST /voice/cli/verify` → `/confirm` → `/consent` on a physical device — not the `FakePhoneVerificationProvider` test double CI uses. New since the previous version of this document; not yet run against any real Telnyx account |
+| iOS native project generation | **Resolved by PR #87** — `apps/mobile/ios` now exists with CallKit/PushKit wired; no longer blocking. Superseded by the EAS build-credential row below, which is the current blocker on getting a real signed build onto physical hardware |
+| **EAS iOS build — non-interactive distribution credentials** | All 5 on-demand `eas-verify-build.yml` runs to date (2026-07-22, both `development` and `production` profiles) failed identically: `Distribution Certificate is not validated for non-interactive builds` / `Credentials are not set up. Run this command again in interactive mode.` Someone with Apple Developer account access needs to run `eas credentials` interactively once to provision a distribution cert/profile EAS can reuse non-interactively; until then, no real iOS build (CI or local EAS) has ever succeeded past PR #87 landing. Ibrahim-owned, same category as the OCI/DNS items in §8 |
+| EAS Android build — never attempted | Zero of the 5 recorded `eas-verify-build.yml` runs targeted `android`; unlike iOS, Android EAS builds don't require an interactive certificate step (auto-generated keystore), so this is a much smaller gap — but it's still unconfirmed, not assumed working |
 
 ## 3. Check-in / offline queue (US-15)
 
@@ -50,7 +82,16 @@ Source: US-15 PR #67, `testing-qa.md` §14.3, §14.4.1, §14.4.3.
 | Actual Termii family SMS fallback | A real SMS delivered through Termii's live API when the 60-second WhatsApp delivery window is exercised for real (not the deterministic 59s/60s boundary test already in CI) |
 | Poor cellular / eSIM network testing | The intermittent-connectivity scenario (§14.4.1 — connection dropping every few seconds, matching the actual Mina/Arafat scenario) exercised on a real device over real degraded cellular/eSIM data, confirming no duplicate check-ins are created |
 | OS background-wake timing | The exact 30-second retry cadence is only proven deterministic while the JS runtime is alive (fake timers in CI); real OS background-wake timing (`react-native-background-fetch`, ~15-minute iOS minimum, Android scheduler deferral) must be observed on real devices, not inferred |
-| OEM battery-management survival | Budget Android devices' aggressive process-killing behavior — the exact failure mode the offline queue exists to survive — verified on the actual target device profile (see §5 below), not a generic Android emulator |
+| OEM battery-management survival | Budget Android devices' aggressive process-killing behavior — the exact failure mode the offline queue exists to survive — verified on the actual target device profile (see §6 below), not a generic Android emulator |
+
+Note: PR #86's US-23 session-persistence work (Keychain/Keystore-backed
+token storage, 30-day inactivity lifecycle, background-time PIN-gate) landed
+since the previous version of this document and touches the same
+foreground/background lifecycle this section's offline queue relies on. No
+new real-device gap is being asserted here beyond what's already listed
+above — flagged only so whoever runs the §6 device matrix exercises both
+paths together rather than assuming US-15's queue and US-23's session gate
+were independently re-verified on hardware.
 
 ## 4. SOS (US-16)
 
@@ -79,16 +120,22 @@ Source: US-10 PR #62, US-13 PR #64, `testing-qa.md` §14.3.
 
 ## 6. Physical device matrix (cross-cutting)
 
-Source: `testing-qa.md` §14.3, referenced by nearly every item above.
+Source: `testing-qa.md` §14.3, referenced by nearly every item above, and
+now also the required "Device matrix tested" table in
+`docs/release-signoffs/TEMPLATE.md`.
 
-**Required before pilot launch — same physical device set used across §3, §4, §5:**
+**Required before pilot launch — same physical device set used across §2–§5:**
 
 | Platform | Devices |
 |---|---|
 | Android | Tecno Camon (recent generation), Infinix Hot/Note (recent generation), itel (current budget model), Samsung Galaxy A-series |
 | iOS | One eSIM-capable iPhone (XS or later), one non-eSIM-capable or older iPhone still in reasonable use |
 
-**Done looks like:** every item in §2–§5 above that says "real device" has actually been run against this specific device set, not a substitute device or an emulator/simulator claiming to represent it.
+**Done looks like:** every item in §2–§5 above that says "real device" has
+actually been run against this specific device set, not a substitute device
+or an emulator/simulator claiming to represent it — and, since PR #91, the
+actual model/OS-version tested is recorded in the release signoff for the
+commit being promoted to `main`, not just asserted informally here.
 
 ## 7. HTO dashboard usability (US-05 family, `testing-qa.md` §14.5)
 
@@ -96,23 +143,33 @@ Source: `testing-qa.md` §14.3, referenced by nearly every item above.
 |---|---|
 | Usability testing with an actual HTO pilot partner | A real (or realistic proxy) operator attempts the manifest upload → order → monitor flow with minimal guidance, observed live, before general HTO rollout — qualitative, scheduled as its own milestone per §14.6, not assumed to happen informally |
 
+Scope note: PR #89 added three admin/dashboard surfaces since the previous
+version of this document (Failed Notification Queue, cross-manifest HTO
+Home, Device Compatibility Log) — all fully unit-tested, none flagged by
+their own PR as needing real-partner evidence the way the manifest-upload
+flow above is. Not adding a new row for them; noting so the usability
+session's scope is understood to be the current dashboard, not the
+narrower one this document originally described.
+
 ## 8. Infrastructure / deploy pipeline pre-promotion
 
-Source: PR #79 ("feat: implement deploy pipeline and readiness checks") —
-merged 2026-07-19, so `infrastructure.md` §11.11 (cited below) is on
-`develop`. The items in this section are still real, unfinished pre-launch
-work; only the PR-merge prerequisite itself is closed.
+Baseline: PR #79 (deploy pipeline, merged 2026-07-19). Updated for PR #82
+(WAL-G PITR), PR #84 (self-hosted Kuma), and PR #91 (three-branch promotion
+gate) — all merged since, all directly changing what's actually still open
+in this section.
 
 | Item | Done looks like |
 |---|---|
-| Isolated staging OCI host provisioned | A real staging OCI instance exists and is reachable — none is provisioned by PR #79 itself |
-| Staging GitHub Environment secrets configured | All four named secrets (`STAGING_OCI_HOST`, `STAGING_OCI_DEPLOY_USER`, `STAGING_OCI_SSH_KEY`, `STAGING_API_BASE_URL`) are set in the `staging` GitHub Environment — the workflow's own preflight check fails with one named error per missing secret until this is done |
+| Isolated staging OCI host provisioned | A real staging OCI instance exists and is reachable — none is provisioned by PR #79 itself. **Still open**, directly confirmed: `infrastructure.md` §11.14 records that the `staging` and `production` GitHub Environments both exist with **zero secrets configured in either**, as of PR #91 |
+| Staging GitHub Environment secrets configured | All four named secrets (`STAGING_OCI_HOST`, `STAGING_OCI_DEPLOY_USER`, `STAGING_OCI_SSH_KEY`, `STAGING_API_BASE_URL`) are set in the `staging` GitHub Environment — the workflow's own preflight check fails with one named error per missing secret until this is done. Also blocks the `staging` branch itself from ever auto-advancing past its bootstrap commit (PR #91) |
 | `/opt/damdam/.env.staging` created | Real staging environment file present on the staging host, not the committed `compose.env.example` placeholder |
 | First production Compose release manually bootstrapped | Explicitly documented as "manual and Ibrahim-owned" (PR #79) — automated production deploy refuses to proceed without a prior image to preserve as a rollback target, so this is a hard prerequisite, not automatable |
 | Cloudflare tunnel / DNS configured for production | Real tunnel token and DNS records in place — `compose.env.example`'s `CF_TUNNEL_TOKEN` is a placeholder (`replace-with-a-real-cloudflare-tunnel-token`) |
 | Production secrets supplied | Real values for every secret currently placeholder/example-only across `.env.example` and `compose.env.example` |
-| `ESIM_ACCESS_PACKAGE_CODES` format migration | **From PR #78 (merged 2026-07-18), deploy-safety fix landed separately:** the eSIM Access package-code config changed from integer keys (`{"5":"SA_5GB"}`) to destination-composite keys (`{"SA:5":"SA_5GB"}`). `Settings` now validates this at app boot (`esim_access_package_codes_must_use_composite_keys` in `app/config.py`) — an old-format or SA-less env var now crashes the app on startup instead of silently degrading eSIM Access into "every tier unconfigured" behind the vendor cascade. **Done:** production/staging's `ESIM_ACCESS_PACKAGE_CODES` env var is confirmed in the `"COUNTRY:GB"` composite format with at least one `SA:` entry, and a real deploy (or `Settings()` construction against the real production env values) boots cleanly — i.e. the startup validator has actually run against the real value, not just against a test fixture |
-| Kuma monitoring configured and alerting confirmed working | **From `infrastructure.md` §11.13:** self-hosted Uptime Kuma is deployed and isolated on Hermes, with the API readiness monitor and the WAL-G push/heartbeat monitor both configured, and a deliberately-triggered test alert (real induced Down/Up transition, or a real withheld heartbeat) was received via the real configured Telegram channel — not just "the monitor exists in Kuma's dashboard." The production readiness monitor will legitimately show Down until `api.damdam.app` actually resolves (tracked by the staging/production rows above); that is not this item's blocker. This item's blocker is confirming the *alert path itself* fires end to end, which was proven once during setup (see §11.13) but should be re-confirmed by Ibrahim after real production/staging deploys land, since that is the first time the readiness monitor will exercise a real transition rather than a substitute test target |
+| `ESIM_ACCESS_PACKAGE_CODES` format migration | From PR #78 (merged 2026-07-18): the eSIM Access package-code config changed from integer keys to destination-composite keys (`{"SA:5":"SA_5GB"}`), and `Settings` now refuses to boot on the old format. **Done** looks like: production/staging's real env var confirmed in the composite format, and a real deploy (or `Settings()` construction against the real production values) boots cleanly — i.e. the startup validator has actually run against the real value |
+| **`develop → staging → main` promotion has never been exercised for a real release** | As of this refresh: `main` is still at the repository's original "docs: initial spec suite" commit; `staging` is 4 commits behind `develop` (last advanced at PR #90, missing #91's own promotion-gate commit, #94's EAS workflow, #95, and the #96 CLI-hardening merge — `deploy-staging`'s health check has never actually passed against a real host, so `staging` has never auto-advanced past its bootstrap). The promotion tooling and signoff gate (PR #91) are built and independently verified to actually block a bad merge — but no commit has ever gone through it end-to-end. This is blocked on the two rows above (a real staging host), not on anything left to build |
+| WAL-G real restore drill against a real backup | PR #82 built and proved the mechanism against local MinIO (`scripts/test-walg-pitr.sh`) — archiving, recovery-target-time-scoped replay, and the runbook are real and tested. **Explicitly out of scope per `infrastructure.md` §11.12, not done**: provisioning the real R2 bucket, injecting its restricted credentials, and an actual point-in-time restore against production/staging data. This is a genuine restore-drill gap, distinct from "the mechanism works," and needs Ibrahim/the incident owner |
+| Kuma monitoring configured and alerting confirmed working | **Updated — the alert path itself is now done, per `infrastructure.md` §11.13**: self-hosted Uptime Kuma is deployed and isolated on Hermes; both the API readiness monitor and the WAL-G push/heartbeat monitor were proven with *real induced failures* (a real monitor stopped and confirmed Down, a real heartbeat withheld and confirmed timing out to Down), and the exact configured Telegram bot/chat was independently confirmed to deliver a real message. **What's left is the same staging/production host-provisioning gap already tracked above** — the readiness monitor will legitimately show Down until `api.damdam.app` resolves; that is not a Kuma problem, and re-confirming the alert path after the first real deploy is a re-confirmation, not new work |
 
 ## 9. Compliance (cross-reference, not duplicated)
 
@@ -128,36 +185,71 @@ overlap with this document:
   review can be rejected/delayed if disclosures don't match `security.md`
   §10.2's data classification exactly.
 
-See `security.md` §10.10 directly for the full list (privacy policy, ToS,
-processor DPAs, NDPA filing, retention automation).
+`security.md` §10.10's data-retention-automation row moved from unchecked to
+`[x]` since the previous version of this document (PR #85) — independently
+re-verified with real Postgres boundary tests and a genuine concurrency race
+test, not just marked done. Everything else in §10.10 (privacy policy, ToS,
+processor DPAs, NDPA filing) remains open and is pure legal/business work,
+not re-summarized here — see that section directly.
 
 ---
 
 ## Summary
 
-**37 distinct checklist rows** consolidated across 8 stories/PRs and 4 spec
-documents into the 9 categories above (counted directly from this
-document's tables). §6's 2 rows are the physical device roster itself —
-cross-cutting infrastructure that §2–§5's "real device" items depend on,
-not a separate set of gaps on top of them.
+**43 distinct checklist rows** (up from 37) consolidated across 16
+stories/PRs and 5 spec documents into the 9 categories above (counted
+directly from this document's tables). §6's 2 rows are the physical device
+roster itself — cross-cutting infrastructure that §2–§5's "real device"
+items depend on, not a separate set of gaps on top of them.
+
+**What changed in this refresh (2026-07-19 → 2026-07-26, PR #79 → #96):**
+- §2: iOS native project generation marked resolved (PR #87); added
+  Android's four specifically-disclosed incoming-call-wake risks (PR #88);
+  added the Verified Caller ID SMS-verification real-device gap and the EAS
+  iOS/Android build-credential gaps (all new, none previously tracked
+  anywhere)
+- §3: cross-referenced US-23's session-persistence lifecycle (PR #86)
+  against the existing offline-queue foreground/background item
+- §7: noted three new dashboard admin surfaces (PR #89) are in scope for
+  "the current dashboard" without adding new usability-testing rows
+- §8: added the never-yet-exercised `develop → staging → main` promotion
+  (PR #91) as its own row — arguably the single most important "what's
+  next" item now that every user story is implemented; added the WAL-G
+  real-restore-drill gap (PR #82); updated the Kuma row from "needs
+  confirming" to "alert path confirmed, blocked only on host provisioning"
+  (PR #84)
+- §9: data retention automation (PR #85) moved from open to done in
+  `security.md` §10.10, noted here rather than re-listed as a gap
+- Added the top-of-document note tying this checklist to the
+  `docs/release-signoffs/` promotion gate (PR #91), which didn't exist at
+  the previous refresh
 
 Sources pulled from, directly:
 - `testing-qa.md` §14.3 (device matrix), §14.4.1–§14.4.4 (check-in/SOS
   chaos scenarios + real-device boundaries), §14.5 (HTO usability), §14.9
   (voice real-device/real-account evidence)
 - `security.md` §10.10 (compliance — cross-referenced, not duplicated)
-- `infrastructure.md` §11.13 (self-hosted Uptime Kuma replacing UptimeRobot)
+- `infrastructure.md` §11.12 (WAL-G PITR), §11.13 (self-hosted Uptime Kuma),
+  §11.14 (three-branch promotion and release signoff gate)
+- `docs/release-signoffs/TEMPLATE.md` (the mechanically-enforced signoff
+  structure this document's §2/§3/§4/§6/§7 now feed into)
 - PR descriptions: #62 (US-10), #64 (US-13), #66 (US-14), #67 (US-15), #68
-  (US-16), #70 (US-18/19/22), #78 (destination-country Phase 3, merged
-  2026-07-18), #79 (deploy pipeline, merged 2026-07-19)
+  (US-16), #70 (US-18/19/22), #78 (destination-country Phase 3), #79
+  (deploy pipeline), #82 (WAL-G PITR), #84 (self-hosted Kuma), #86/#88
+  (US-23 session persistence + Android ConnectionService), #87 (iOS
+  CallKit/PushKit + native project generation), #89 (dashboard admin
+  surfaces), #91 (three-branch promotion), and the US-14 Verified Caller
+  Identity CLI-hardening merge (`0fa3f53`, #96)
 - `frontend-mobile.md` (Android screenshot content-production note)
+- Direct CI evidence: `gh run list --workflow=eas-verify-build.yml` (5/5
+  historical runs, all iOS, all failed identically on non-interactive
+  distribution credentials)
 
-**One item newly surfaced while compiling this document, not previously
-flagged anywhere:** PR #78's `ESIM_ACCESS_PACKAGE_CODES` key-format change
-needed an atomic production env-var update on deploy (§8) — this was recorded
-as a deploy note inside PR #78 itself but had not been pulled into any
-pre-pilot or pre-promotion checklist until this document. It has since moved
-from a documentation-only risk to a startup-time guardrail: `Settings` now
-refuses to boot on the old key format or on an SA-less config (see §8), so
-the remaining pre-pilot work on that item is confirming the real
-production/staging env var, not building anything further.
+**One item newly surfaced while compiling the original version of this
+document, carried forward:** PR #78's `ESIM_ACCESS_PACKAGE_CODES`
+key-format change needed an atomic production env-var update on deploy
+(§8) — recorded as a deploy note inside PR #78 itself but not pulled into
+any pre-pilot or pre-promotion checklist until the first version of this
+document. `Settings` now refuses to boot on the old key format or on an
+SA-less config, so the remaining pre-pilot work on that item is confirming
+the real production/staging env var, not building anything further.
