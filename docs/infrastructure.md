@@ -291,7 +291,7 @@ from Hermes' other services: a dedicated unprivileged user
 (`gha-runner`, no `sudo`/`docker` group membership, confirmed unable
 to read Hermes' secrets/TLS keys/Docker socket), rootless Docker
 instead of group membership, and systemd CPU/memory quotas protecting
-Hermes' real-time voice-relay service from build contention.
+Hermes' existing personal workloads from build contention.
 
 **What it actually surfaced:** the runner infrastructure itself
 worked as designed. But `apps/mobile`'s Android build hit a real,
@@ -318,15 +318,14 @@ x86_64 `aapt2` just works). Second, and more importantly: GitHub
 explicitly advises against self-hosted runners on public
 repositories, because any external contributor can open a PR that
 executes arbitrary code on the runner machine. Continuing to run a
-self-hosted runner on Ibrahim's personal system — which runs live
-personal integrations (Zoho Calendar, LinkedIn automation, a voice
-relay) — would have been a real, ongoing security exposure once the
-repo went public, independent of whether the Android/emulation work
-was finished. The runner was fully decommissioned the same day:
+self-hosted runner on Ibrahim's personal system — which runs unrelated
+personal workloads — would have been a real, ongoing security exposure
+once the repo went public, independent of whether the Android/emulation
+work was finished. The runner was fully decommissioned the same day:
 systemd service stopped/uninstalled, unregistered from GitHub,
 `gha-runner` user and its toolchain (JDK, Android SDK, rootless
-Docker data) removed, confirmed Hermes' own services (the 2-week-uptime
-personal automation container, Tailscale) were unaffected throughout.
+Docker data) removed, and confirmed Hermes' unrelated workloads were
+unaffected throughout.
 
 **If minutes pressure returns for a private repo in the future:**
 re-read this section before reproducing the approach — the ARM64
