@@ -475,6 +475,18 @@ symmetrically with IDT Express before that standing exists.
 
 ## 12.10 GitHub Actions Self-Hosted Runners — Flagged, Not Set Up
 
+**Update 2026-07-18:** this was tried for real when the account-level
+minutes limit hard-blocked `ci.yml` (on Hermes, Ibrahim's personal
+machine, rather than DamDam's own OCI instance as originally proposed
+below) and reverted the same day when the repo went public — public
+repos get free unlimited hosted-runner minutes, resolving the
+original problem directly, and GitHub advises against self-hosted
+runners on public repos given the arbitrary-code-execution risk from
+external contributor PRs. Full writeup in `infrastructure.md`
+§11.4.1. The original idea below (self-hosting on DamDam's own OCI
+box) was never actually tried and remains only a private-repo option
+if minutes pressure returns.
+
 **Not needed now.** Path-filtering CI jobs by what actually changed
 (`.github/workflows/ci.yml`, gating each job on `dorny/paths-filter`
 output rather than running unconditionally) is the first, cheaper
