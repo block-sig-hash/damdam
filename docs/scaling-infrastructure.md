@@ -1,4 +1,12 @@
 # Multi-Region Infrastructure & Global Payments — Scaling Roadmap
+
+> **Current scope:** the September 2026 reset in §12.11 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1
 
 ## 12.1 Scope and Relationship to `infrastructure.md`
@@ -516,3 +524,29 @@ path-filtering (e.g. once mobile-touching PR volume grows), this
 is the next lever — worth revisiting then, not before, and worth
 re-confirming the self-hosted-runner fee status at that time given
 it's an active, if currently paused, GitHub policy area.
+
+---
+
+## 12.11 Amendment — Product Reset Leaves This Document Forward-Looking
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only.
+
+`prd.md` §10 resets the product, and this document's status is unchanged: it
+remains **forward-looking and explicitly outside launch scope**. Multi-region
+deployment and a microservice split are still deferred. The launch architecture
+is a modular monolith with providers behind internal interfaces — modular code
+does not mean a plugin marketplace (see
+[`implementation/MODULE-OWNERSHIP.md`](./implementation/MODULE-OWNERSHIP.md)).
+
+Two items above are now live constraints rather than future planning:
+
+- **§12.2's `aarch64` rule still binds.** Any dependency reaching the OCI Ampere
+  A1 instance must have an arm64 wheel or binary. This is repeated in
+  `AGENTS.md` because it is easy to break.
+- **Global payments** move from "post-MVP scale" to a launch decision, but they
+  are still a **decision, not an assumption** — D3 (entity) and D4 (processor)
+  are both open in
+  [`implementation/DECISIONS.md`](./implementation/DECISIONS.md). The
+  Hajj-season capacity modelling above no longer describes the expected load
+  shape.

@@ -1,4 +1,12 @@
 # Security & Compliance Specification
+
+> **Current scope:** the September 2026 reset in §10.14 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1
 
 ## 10.1 Scope and Governing Framework
@@ -363,3 +371,45 @@ recovery path after a provisioning-queue outage, and a unique
 order that lacks a transaction. These rows use the same `created_at`-based
 six-year deletion task and deterministic `transaction_deleted` audit entry as
 automated Paystack/Flutterwave payments.
+
+---
+
+## 10.14 Amendment — Product Reset and the Security Surface
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only. **No control above is relaxed by this amendment.** Sections
+10.6 and 10.8 still require legal/GRC review before leaving draft.
+
+`prd.md` §10 resets the product. Consequences for this document:
+
+**Reduced data collection.** Retiring family contacts, SOS and arrival
+geofencing removes third-party contact details, emergency dispatch records and
+background location from the product. That is a net privacy improvement, but it
+becomes real only when chunk 04 completes deletion under the approved retention
+policy — not when the screens are removed. Until then, treat the retained data
+as live and in scope for every control here.
+
+**Broadened tenancy risk.** Individual memberships across many organizations
+replace single-HTO scoping. Object-level authorization must be enforced in APIs,
+background jobs, exports and storage access, and proven by negative cross-tenant
+tests (`US-29`, AC-29.3/AC-29.4). Administrator MFA is required, and session and
+token revocation must take effect immediately.
+
+**Broadened jurisdiction.** NDPA framing above assumed Nigerian users and a
+Nigerian pilot. A global product's applicable regimes depend on D2 (selling
+markets) and D3 (selling entity), both open. Do not narrow or widen a compliance
+claim before those are recorded.
+
+**New sensitive material.** Real eSIM activation credentials, secrets and tokens
+must never appear in code, logs, exports, fixtures or review evidence. Deliver
+installation credentials only through authorized protected installation flows.
+Carrier line identifiers and assigned numbers are personal/service data: mask
+them in diagnostic logs and public evidence, but permit authorized My Line,
+support and tenant-scoped reports to show the fields necessary for their purpose.
+Use synthetic identifiers in tests and scrubbed contract fixtures; no real
+customer activation credentials belong in fixtures. This distinction preserves
+both data protection and the required line-management/reporting experience.
+
+**Emergency calling is not settled by removing SOS.** Carrier emergency-calling
+obligations on a real cellular line are a separate supplier and legal question
+under D1 and must be answered before any market is sold.

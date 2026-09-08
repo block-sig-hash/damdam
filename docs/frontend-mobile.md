@@ -1,4 +1,12 @@
 # Frontend Specification — Mobile App
+
+> **Current scope:** the September 2026 reset in §8.9 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1 · React Native · iOS + Android
 
 Single React Native codebase targeting both platforms at MVP.
@@ -644,3 +652,39 @@ unchanged while localizing its explanatory UI. The screenshot matrix captures
 English and French variants, including Android automatic eSIM activation and
 the iOS manual guide. Final French safety/legal copy and real localized OS
 walkthrough imagery remain release gates in `localization.md` §§6–7.
+
+---
+
+## 8.9 Amendment — Product Reset Supersedes the Hajj Mobile Scope
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only — no screen or component change here.
+
+`prd.md` §10 resets the app to four surfaces: **Home, Plans, My Line, Account**.
+The SOS, family-nomination, arrival-geofence, verified-CLI and departure-date
+screens leave launch scope in chunk 04; chunks 18–21 build the replacement.
+Remaining check-in screens follow the proposed product-default disposition; do
+not treat that proposal as an already completed removal. `prd.md` §10.3 holds the revised journeys.
+
+Requirements that carry forward unchanged:
+
+- Offline-first behavior for what remains — secure installation details and a
+  timestamped last-known usage reading stay available offline. Do not weaken the
+  write-before-network pattern to simplify a feature.
+- Complete English and French coverage on every new surface.
+- Accessibility and rendered-state review, including error, loading and empty
+  states.
+
+Requirements that change:
+
+- Ordinary carrier calling needs **no** background location, contacts access or
+  microphone permission. Release builds must not request permissions the product
+  no longer uses (`US-30`, AC-30.5).
+- Native voice runs through the phone's own dialer on the carrier eSIM. App
+  calling is not the launch mechanism, so CallKit/PushKit app-call surfaces leave
+  the launch dependency graph.
+- Installation guidance must be real for the supported launch device matrix with
+  a QR fallback; no placeholder guide ships (`US-38`, AC-38.1).
+- The screen and locale screenshot matrix is re-cut in chunk 08 and enforced in
+  chunk 27. Neither the historical 0/32 count nor the 32 images observed on
+  2026-09-08 carries forward — both describe the old matrix.

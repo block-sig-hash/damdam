@@ -1,4 +1,12 @@
 # Data Model
+
+> **Current scope:** the September 2026 reset in §6.42 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1
 
 Database: PostgreSQL 16. ORM: SQLModel (Pydantic + SQLAlchemy). All
@@ -1897,3 +1905,46 @@ Auth and HTO login responses expose the persisted locale so mobile secure
 session state and dashboard locale cookies can restore an explicit choice
 before device/browser inference. Only `en` and `fr` are valid in this release;
 BCP 47 regional variants resolve to their base language at the client boundary.
+
+---
+
+## 6.42 Amendment — Product Reset Supersedes the Hajj Schema Scope
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only — no table, column, constraint or migration changes here.
+
+`prd.md` §10 resets the product to generic global consumer plus
+enterprise/government connectivity. That changes what this schema must describe,
+but **nothing above is deleted**: amendments §6.1–§6.41 remain the record of
+what was designed and shipped, and the tables they define still exist in
+deployed databases.
+
+Read every section above against
+[`implementation/SCOPE-DISPOSITION.md`](./implementation/SCOPE-DISPOSITION.md),
+which classifies each legacy concept as retired, generalized, deferred or
+historical. In particular:
+
+- `family_contacts`, `sos_alerts`, `sos_notifications` and
+  `destination_geofences` describe features scheduled for retirement. The
+  `check_ins` and `check_in_notifications` disposition remains a proposed
+  product default in `implementation/DECISIONS.md`.
+  Chunk 04 owns their removal, following the migration sequence in
+  `implementation/IMPLEMENTATION-PLAN.md` §7 Phase 1 — stop enrollment and
+  dispatch, drain queued work, delete per the retention policy, and drop schema
+  only after compatibility requirements end. Order, payment and audit history is
+  never erased because a screen was removed.
+- `caller_id_verifications` (already superseded by §6.40) and `verified_cli`
+  describe **deferred** scope. The launch outbound identity is the
+  carrier-assigned number.
+- `voice_credentials` describes the **retired** app/WebRTC calling mechanism.
+  Carrier line and number lifecycle replaces it in chunk 15.
+- `organizations`, `manifests`, `manifest_pilgrims` and `manifest_orders` are
+  **generalized** into organizations, memberships, people imports and bulk
+  allocations by chunks 07, 22 and 23.
+- NGN-only money and the `pricing_tiers` model are **generalized** into
+  multi-currency amounts with tariff versions by chunks 05, 09 and 10.
+
+The contracts the reset schema must satisfy are registered as `US-28`, `US-32`
+and `US-35` in `prd.md` §10.5. Chunk 05 introduces them as numbered amendments
+from §6.43 onward, additive first, preserving historical receipts, balances,
+orders and audit history through every upgrade.

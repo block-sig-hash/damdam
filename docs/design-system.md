@@ -1,4 +1,12 @@
 # Mobile App Design System
+
+> **Current scope:** the September 2026 reset in §15.3 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 1.0
 
 This is the visual and interaction vocabulary for `apps/mobile`.
@@ -432,3 +440,38 @@ boundaries. Do not reduce the documented type scale to make French fit.
 Visual review uses both locale matrices from `localization.md` §6. A component
 whose French text clips, overlaps, hides an action, or weakens the SOS visual
 hierarchy fails design review even when its unit tests pass.
+
+---
+
+## 15.3 Amendment — Product Reset Requires a Revised Design System
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only — no token, pattern or component change here. **Chunk 08 owns
+the revision.**
+
+`prd.md` §10 resets the product from a Hajj-pilgrim app to a global consumer and
+enterprise/government product. Two consequences for this document:
+
+- **The SOS and emergency patterns above are retired** along with the feature.
+  The reassurance-under-emergency design problem they solved no longer exists in
+  this product; do not carry those patterns forward into new screens looking for
+  a use.
+- **The system must now cover two audiences**, a consumer mobile app and an
+  enterprise/government dashboard, rather than a single pilgrim app with a
+  functional operator dashboard behind it.
+
+What carries forward unchanged: the token, typography, spacing and component
+foundations; accessibility requirements; and complete English/French support
+including layout behavior under longer French strings.
+
+Two governance changes:
+
+- **Who builds against it has changed.** The old split — Claude produces the
+  system, Codex implements screens against it, Claude reviews the render — is
+  superseded. Claude implements every screen and Codex independently reviews and
+  may refactor (see `AGENTS.md`). The design system is still a **prerequisite**
+  for screen work, and chunk 08 is a dependency of chunks 18–24.
+- **The screenshot matrix is re-cut here.** Chunk 08 defines the reset
+  screen/locale matrix; chunk 27 enforces a complete, nonempty manifest for it as
+  a release gate. Neither the historical 0/32 nor the 32 images observed on
+  2026-09-08 carries forward — both describe the old screen set.

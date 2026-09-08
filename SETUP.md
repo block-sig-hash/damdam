@@ -1,5 +1,13 @@
 # SETUP.md — From Zero to First Commit
 
+> **Historical bootstrap guide.** The 8 September 2026 product reset supersedes
+> this document's agent roles, first task, pilot scope and commit/push sequence.
+> Existing contributors should use [the build sequence](docs/implementation/README.md)
+> and [AGENTS.md](AGENTS.md): Claude implements one assigned chunk, Codex reviews
+> and may refactor, then the next dependent chunk begins. The old commands and
+> installation/account instructions below are retained as history, not current
+> instructions or authorization to push, merge, deploy or incur costs.
+
 This guide assumes you've never used a terminal, Git, or an AI coding
 agent before. Every command is copy-paste-able. Where you need to
 create an account or click through a website (not something a

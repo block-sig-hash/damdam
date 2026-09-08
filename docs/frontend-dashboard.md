@@ -1,4 +1,12 @@
 # Frontend Specification — HTO & Admin Dashboard
+
+> **Current scope:** the September 2026 reset in §9.9 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1 · Next.js · Cloudflare Workers · Web (desktop-first)
 
 One Next.js application, role-conditional routing between the HTO
@@ -481,3 +489,37 @@ client contract.
 New strings follow `localization.md` §3 and keep catalog parity. Desktop tables
 may expand or wrap headings for French; clipping or replacing translated
 labels with raw enum values is not acceptable.
+
+---
+
+## 9.9 Amendment — Product Reset Replaces the HTO Dashboard
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only — no screen change here.
+
+`prd.md` §10 replaces the tour-operator dashboard with an
+**enterprise/government** dashboard. Government is an organization category, not
+a separate product; launch claims no universal government certification or
+data-residency compliance.
+
+- **Scheduled for retirement:** SOS alert surfaces. Check-in rosters and
+  remaining welfare/duty-of-care tracking follow the proposed product-default
+  disposition in `implementation/DECISIONS.md`. The reset must not quietly
+  introduce enterprise monitoring as a substitute for removed consumer features.
+- **Generalized:** manifests become validated people imports; manifest orders
+  become bulk quotes and orders with per-line progress and partial-failure
+  recovery; HTO operators become organization members with owner, administrator,
+  billing and member roles, and administrator MFA.
+- **New:** prepaid funding, approved line budgets, top-ups, invoices, receipts,
+  departmental spend exports, activation requests and offboarding.
+
+The "functional, not polished" position in §9.5 no longer determines who builds
+it — Claude implements every surface and Codex reviews (see `AGENTS.md`). The
+dashboard is still held to the revised design system from chunk 08, and to
+rendered-state review including error, loading, empty and both locales.
+
+Boundaries that must hold: dashboard provisioning never installs an eSIM
+silently on an unmanaged phone — the employee installs and consents unless a
+separately supported managed-device workflow exists; organization credit is not
+automatically a shared carrier data pool; and offboarding respects personal
+services and carrier ownership rules. Chunks 22, 23 and 24 own the build.

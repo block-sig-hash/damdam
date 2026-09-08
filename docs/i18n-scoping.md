@@ -1,4 +1,12 @@
 # Internationalization Scoping — English and French
+
+> **Current scope:** the September 2026 reset in §11 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1 · Audit date: 23 July 2026
 
 ## 1. Decision summary
@@ -585,3 +593,29 @@ fabricated assets.
 
 The ongoing key, notification, screenshot, and review process is normative in
 [`localization.md`](./localization.md).
+
+---
+
+## 11. Amendment — Product Reset and This Document's Status
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only.
+
+`prd.md` §10 resets the product. This document's status splits:
+
+- **§10 (Implemented English/French Architecture) stays current.** The shipped
+  code architecture it records is real and is reused.
+- **§§1–9 become historical scoping.** They estimate and sequence localization
+  work for the Hajj-pilgrim product, including Arabic phrasebook content, SOS
+  and emergency string review, and pilgrim-market expansion. Those are scoping
+  inputs for a product that no longer exists; do not read them as a current
+  backlog.
+- **SOS and family string scope retires** with the feature in chunk 04,
+  including vendor notification templates. Remaining check-in/welfare scope
+  follows the proposed product-default decision and retains applicable tests
+  until the supported path is retired.
+- **The market-expansion analysis in §7.4 is superseded** by D2 (selling
+  markets, visited countries, calling destinations, supported devices), which is
+  open in [`implementation/DECISIONS.md`](./implementation/DECISIONS.md).
+
+Ongoing localization process lives in `localization.md`, which is current.
