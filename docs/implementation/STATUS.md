@@ -1,22 +1,24 @@
 # Implementation status
 
 Chunk 01 (documentation reset) is **ACCEPTED after independent Codex review and
-fixes**. No application chunk has been implemented; chunk 02 is NOT_STARTED.
+fixes**. Chunk 02 review fixes are committed and local checks pass; full
+acceptance is **EXTERNAL_BLOCKED** pending native/remote CI evidence and GitHub
+write access. See [reviews/02.md](reviews/02.md).
 
 **Original baseline:** `develop` @
 `6790c74707a0f3e52cfedb36bc173ec83ca26663`, confirmed current on 2026-09-08 —
 see [BASELINE.md](BASELINE.md).
 
-**Start chunk 02 from the accepted `chunk/01-scope-and-specifications` branch
-tip**, including the review-record commit. Corrected content is
-`36e9bf36a2827d108633730ff0899edbd17b97ef`; see [reviews/01.md](reviews/01.md).
-Do not reset to the original baseline and discard the reviewed specification.
+**Current reviewed chunk 02 content:**
+`4e5ecc9a55b4230c1b73923eff08fbf41b7f64bf`, based on accepted chunk 01 tip
+`178c448d503eb2c5733c2daa7e12ce65159be769`. Preserve both branches. Chunk 03's
+independent worktree is based on chunk 01; its work is not accepted by this review.
 
 | Chunk | Status | Base/head SHA | Review record | Remaining gate |
 |---|---|---|---|---|
 | 01 — Reset product specifications and working rules | ACCEPTED | base `6790c74` / corrected content `36e9bf36a2827d108633730ff0899edbd17b97ef` | [Independent review](reviews/01.md) | None blocking chunk 01; D1–D6 remain OPEN |
-| 02 — Repair the CI baseline and screenshot harness | READY_FOR_REVIEW | base `178c448` / head see [handoffs/02.md](handoffs/02.md) | pending | macOS CI unavailable: the iOS driver-timeout mitigation is committed but unverified |
-| 03 — Prove Telnyx feasibility and document the carrier contract | NOT_STARTED | — | — | See assignment |
+| 02 — Repair the CI baseline and screenshot harness | EXTERNAL_BLOCKED | base `178c448` / corrected content `4e5ecc9` | [Independent review](reviews/02.md) | Local software findings fixed; native and required branch CI still pending; GitHub account has READ access |
+| 03 — Prove Telnyx feasibility and document the carrier contract | IN_PROGRESS | separate `chunk/03-telnyx-feasibility` worktree based on `178c448` | Not reviewed here | Independent of chunk 02; see its own handoff when submitted |
 | 04 — Retire family, safety and app-calling features safely | NOT_STARTED | — | — | See assignment |
 | 05 — Introduce core domain models and migration boundaries | NOT_STARTED | — | — | See assignment |
 | 06 — Implement global identity and account recovery | NOT_STARTED | — | — | See assignment |
