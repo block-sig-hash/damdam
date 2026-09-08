@@ -363,3 +363,40 @@ recovery path after a provisioning-queue outage, and a unique
 order that lacks a transaction. These rows use the same `created_at`-based
 six-year deletion task and deterministic `transaction_deleted` audit entry as
 automated Paystack/Flutterwave payments.
+
+---
+
+## 10.14 Amendment — Product Reset and the Security Surface
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only. **No control above is relaxed by this amendment.** Sections
+10.6 and 10.8 still require legal/GRC review before leaving draft.
+
+`prd.md` §10 resets the product. Consequences for this document:
+
+**Reduced data collection.** Retiring family contacts, SOS and arrival
+geofencing removes third-party contact details, emergency dispatch records and
+background location from the product. That is a net privacy improvement, but it
+becomes real only when chunk 04 completes deletion under the approved retention
+policy — not when the screens are removed. Until then, treat the retained data
+as live and in scope for every control here.
+
+**Broadened tenancy risk.** Individual memberships across many organizations
+replace single-HTO scoping. Object-level authorization must be enforced in APIs,
+background jobs, exports and storage access, and proven by negative cross-tenant
+tests (`US-29`, AC-29.3/AC-29.4). Administrator MFA is required, and session and
+token revocation must take effect immediately.
+
+**Broadened jurisdiction.** NDPA framing above assumed Nigerian users and a
+Nigerian pilot. A global product's applicable regimes depend on D2 (selling
+markets) and D3 (selling entity), both open. Do not narrow or widen a compliance
+claim before those are recorded.
+
+**New sensitive material.** eSIM activation codes, carrier line identifiers and
+assigned numbers join the redaction rules that already cover secrets and tokens.
+They must not appear in code, logs, fixtures, exports, handoffs or review
+records.
+
+**Emergency calling is not settled by removing SOS.** Carrier emergency-calling
+obligations on a real cellular line are a separate supplier and legal question
+under D1 and must be answered before any market is sold.

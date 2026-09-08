@@ -610,3 +610,70 @@ Review must explicitly check French expansion/wrapping, inaccessible actions,
 SOS hierarchy, and the Android-automatic/iOS-manual eSIM divergence. The guide
 frame is covered; final localized OS walkthrough imagery remains the content
 gate documented in `localization.md` §6.
+
+---
+
+## 14.13 Amendment — Product Reset, Revised TDD Categories and Current Failures
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only — no test, threshold or CI configuration changed. **No
+coverage requirement above is lowered.**
+
+### 14.13.1 Revised strict-TDD categories
+
+§14.1's table is superseded by this one. The change is a consequence of the
+product reset: check-in and SOS are retired, and new categories carry the risk
+they used to.
+
+| Feature category | TDD requirement |
+|---|---|
+| Authentication, sessions, recovery (`US-29`) | **Strict TDD required.** Unchanged in substance from §14.1. |
+| Payments and idempotency (`US-32`, `US-33`, `US-34`) | **Strict TDD required.** Unchanged in substance from §14.1. |
+| Tenant isolation and object-level authorization (`US-29`, `US-39`) | **Strict TDD required.** New. A cross-tenant read is a breach, not a bug; negative tests come first. |
+| Order and provisioning idempotency, incl. accepted-but-response-lost (`US-32`, `US-35`) | **Strict TDD required.** New. This is the most expensive failure mode in the product and it is not reachable by manual testing. |
+| Safety-transition tests during feature retirement (`US-30`) | **Strict TDD required.** New and time-limited. Removal must not orphan queued work or rebind it to the wrong account. |
+| Ledger entry correctness and concurrency (`US-32`) | **Strict TDD required.** New. |
+| Carrier usage ingestion and reconciliation (`US-36`) | TDD recommended — correctness depends on real supplier behavior; see §14.13.3. |
+| eSIM provisioning device behavior (`US-35`, `US-38`) | TDD recommended — see the physical evidence requirement in AC-35.5. |
+| Dashboard and consumer CRUD surfaces | TDD recommended. |
+| UI polish, copy, styling | No TDD expectation. |
+
+Check-in and SOS (`US-15`, `US-16`, `US-24`) leave this table with the feature.
+Their **account-isolation obligation does not leave** — it becomes AC-30.4 and
+is strict-TDD under safety-transition testing.
+
+§14.4's offline/chaos suite likewise retires with its feature, **except** the
+account-switch, restart and delayed-callback isolation scenarios, which chunk 04
+must run against the retirement path.
+
+### 14.13.2 PostgreSQL is mandatory for database and concurrency behavior
+
+Anything asserting constraint, locking, isolation or concurrency behavior runs
+against PostgreSQL. SQLite does not reproduce it.
+
+### 14.13.3 Mocks are not external evidence
+
+A mock passing itself proves nothing about a vendor. Provider work needs a
+documented contract check against current official documentation with the date
+recorded, and the physical evidence in AC-35.5 for native voice. No screenshot
+proves a native call. Do not add tests that mirror the implementation or chase a
+coverage number.
+
+### 14.13.4 Current failures — observed, not fixed
+
+Observed 2026-09-08 against `develop` @ `6790c74`; full record in
+[`implementation/BASELINE.md`](./implementation/BASELINE.md).
+
+| Item | Status |
+|---|---|
+| `tests/test_auth_api.py::test_otp_request_and_verify_contract` | **Failing now.** `ExpiredSignatureError` → `InvalidRefreshTokenError` → `OTPError`. Owned by chunk 02, closed by AC-42.1. |
+| API suite otherwise | 335 passing, coverage 87.13% against an 85% threshold. |
+| iOS screenshot job | **Intermittent.** Failed 2026-09-07, succeeded 2026-09-08 with 33 PNGs on the same commit. Owned by chunk 02, closed by AC-42.2. |
+| Mobile / dashboard / Docker jobs | Passing. |
+| Staging deploy | Skipped on every run — blocked behind the API job. |
+
+The historical "0/32 iOS screenshots" figure describes the 2026-09-07 run only.
+It is **not** a current fact, and neither it nor the 33 images observed on
+2026-09-08 carries into the redesigned matrix. §14.11 and §14.12's screenshot
+matrices are re-cut against the reset screens in chunk 08 and enforced as a
+release gate in chunk 27.

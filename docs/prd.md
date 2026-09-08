@@ -1082,3 +1082,368 @@ This does not greenlight a new country by itself. Nigerian phone, NAHCON,
 NGN/payment, identity, and market-specific legal assumptions remain separate
 expansion work. French production launch is gated by the native, safety, legal,
 vendor-template, and screenshot reviews in `localization.md`.
+
+---
+
+## 10. Amendment — Product Reset to Global Consumer and Enterprise Connectivity
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+
+This amendment resets the product at the user's explicit request. Sections 1–9
+above are **not deleted** — they remain the record of the Hajj-pilgrim product
+and the decisions taken for it. Where §§1–9 and this section disagree, this
+section governs. The reference for which legacy concept is retired, generalized,
+deferred or purely historical is
+[`implementation/SCOPE-DISPOSITION.md`](./implementation/SCOPE-DISPOSITION.md).
+
+The full plan is [`implementation/IMPLEMENTATION-PLAN.md`](./implementation/IMPLEMENTATION-PLAN.md);
+the build sequence is [`implementation/README.md`](./implementation/README.md).
+
+### 10.1 Reset product definition
+
+DamDam is a global eSIM and carrier-voice platform for individual consumers and
+for enterprise and government organizations. A customer buys connectivity in
+DamDam, installs an eSIM, and uses their phone's **normal dialer and mobile
+data** — one carrier-enabled profile carries both. Global reach is the expansion
+objective; each released market, device, number type and roaming capability must
+be explicitly supported before it is sold.
+
+**In scope for the first production release:** consumer mobile app (Home, Plans,
+My Line, Account), enterprise/government dashboard, and a separate internal
+operations surface.
+
+**Removed:** family contacts, offline SOS, arrival geofencing, and the
+Hajj/pilgrim/NAHCON framing including mandatory departure dates and a fixed
+Saudi destination. Removing DamDam's SOS says nothing about carrier
+emergency-calling obligations on a real cellular line — that is a separate
+supplier and legal question under D1.
+
+**Removed as a proposed default, pending confirmation:** the remaining check-in
+and welfare workflow. It must not be quietly retained as enterprise tracking.
+
+**Deferred:** external verified caller ID, +234 retention and porting,
+app/browser VoIP, additional carrier integrations, SSO/SCIM, MDM deployment,
+reseller marketplace, PBX/SIP, referral rewards, AI call assistance and
+multi-region deployment. Recurring subscriptions may be promoted into scope
+after the D5 pricing decision; the data model should be able to support them
+without shipping them.
+
+### 10.2 User types replacing §3
+
+| §3 type | Disposition |
+|---|---|
+| Pilgrim | Replaced by **Consumer** — any individual buying connectivity for themselves. No pilgrimage, departure date or destination requirement. |
+| HTO Operator | Replaced by **Organization member**, with owner, administrator, billing and member roles. Government is an organization category, not a separate type. |
+| Family Contact | **Removed.** |
+| System Administrator | Replaced by **Internal operator**, on a distinct privileged surface. Enterprise administrators never inherit cross-customer internal access. |
+
+Launch claims no universal government certification or data-residency
+compliance; additional procurement and security requirements are evaluated per
+contract.
+
+### 10.3 Revised user journeys
+
+**Consumer purchase:** browse plans → check device and destination eligibility →
+sign up → immutable quote → pay → order provisioned → install eSIM → select the
+native line for voice and data → use → top up. Secure installation guidance and
+a timestamped last-known usage reading remain available offline. Ordinary
+carrier calling requires no background location, no contacts access and no
+microphone permission.
+
+**Consumer recovery:** a returning user restores their account and their
+existing service on a new device, without any family, SOS or verified-CLI
+dependency.
+
+**Enterprise:** create an organization → invite administrators (MFA required) →
+import people with row-level validation → bulk quote → fund a prepaid balance →
+order → assign to recipients → the employee installs and consents → reconciled
+spend and departmental exports → offboarding revokes work access and future
+spending while respecting personal services and carrier ownership rules.
+
+**Internal operations:** exception queue → supplier reconciliation → refund,
+dispute or audited adjustment → recorded outcome.
+
+Two boundaries hold everywhere: dashboard provisioning never installs an eSIM
+silently on an unmanaged phone, and a personal/work payer selection in the app
+never overrides which native SIM line the handset uses for a call. Organization
+credit is not automatically a shared carrier data pool.
+
+### 10.4 Disposition of US-01 – US-26
+
+These IDs are **retained as historical references** and are never reused for an
+unrelated requirement.
+
+| Legacy story | Disposition | Successor |
+|---|---|---|
+| US-01 Nigerian-phone signup | Replaced — identity is global and, as a proposed default, email-based | US-29 |
+| US-02 4-digit PIN | Replaced — device-appropriate app lock, defined with the identity model | US-29 |
+| US-03 Family contact nomination | **Retired** | — |
+| US-04 HTO business account | Replaced — organization creation and approval | US-29, US-39 |
+| US-05 CSV manifest upload | Replaced — validated people import | US-39 |
+| US-06 Bulk package purchase | Replaced — bulk quote and order with partial-failure recovery | US-40 |
+| US-07 WhatsApp redemption message | Replaced — invitation and redemption bound to the intended recipient | US-37, US-40 |
+| US-08 Browse packages | Replaced — supported-market catalog with eligibility | US-31, US-37 |
+| US-09 Naira card payment | Replaced — multi-currency routing; Paystack retained conditionally for approved local NGN | US-33 |
+| US-10 Device eSIM compatibility | Replaced — device eligibility checked before payment | US-31, US-37 |
+| US-11 eSIM download | Replaced — carrier profile, line and installation lifecycle | US-35, US-38 |
+| US-12 Emergency contacts content | **Retired** (already reduced by §6.20) | — |
+| US-13 Arrival activation prompt | **Retired** — geofencing removed | — |
+| US-14 Verified caller ID call | **Deferred** — outbound identity is the carrier-assigned number | US-35 |
+| US-15 Offline check-in | **Retired**, subject to the check-in confirmation in D2 | — |
+| US-16 SOS trigger | **Retired** | — |
+| US-17 Remaining data and minutes | Replaced — real supplier usage reconciliation with freshness | US-36, US-38 |
+| US-18 HTO check-in roster | **Retired** | — |
+| US-19 HTO SOS alerts | **Retired** | — |
+| US-20 HTO report download | Replaced — departmental spend and usage exports | US-40 |
+| US-21 Family WhatsApp check-in | **Retired** | — |
+| US-22 Family WhatsApp SOS | **Retired** | — |
+| US-23 Session persistence | Retained in substance; re-specified with the global identity model | US-29 |
+| US-24 Offline safety queue | **Retired** — with the account-isolation obligation carried into US-30 | US-30 |
+| US-25 Duplicate-purchase prevention | Retained and strengthened — durable operation reference and reconciliation | US-32 |
+| US-26 Manual Naira pricing | Replaced — multi-currency tariff versions and immutable quotes | US-31 |
+
+### 10.5 New stories US-27 – US-43
+
+`US-27` onward were free on the base commit `6790c74`; no existing ID was
+overwritten. Chunk-to-story routing is in
+[`implementation/STORY-MAP.md`](./implementation/STORY-MAP.md). Chunk files hold
+each chunk's own detailed criteria; the criteria below are what must hold across
+a story's chunks.
+
+**US-27** [P0] — As the product owner, I want the repository specifications to
+describe the reset product and the current working rules, so that every later
+chunk builds against one coherent scope.
+- AC-27.1: `AGENTS.md` states Claude implements and Codex independently reviews
+  and may refactor, with no conflicting per-area ownership table
+- AC-27.2: The develop/CI baseline is refreshed and recorded with an actual base
+  SHA, available deployment evidence, and the differences from the historical
+  6790c74 review — with no failure described as fixed
+- AC-27.3: The build pack, including the implementation plan, is present in
+  `docs/implementation/`
+- AC-27.4: Every one of the 30 chunks maps to a registered story, and every
+  legacy Hajj/family/SOS/WebRTC/verified-CLI/HTO reference in the active specs
+  is classified retired, generalized, deferred or historical
+- AC-27.5: D1–D6 are recorded OPEN with owner, required evidence and affected
+  chunks; proposed defaults are labelled as proposed, not as approvals
+- AC-27.6: Module ownership, the revised journeys and the revised screen/locale
+  matrix scope are defined; the docs index and release criteria are coherent
+- AC-27.7: Documentation links resolve and existing documentation checks pass
+
+**US-28** [P0] — As an engineer, I want core domain models and migration
+boundaries, so that money, orders, connectivity and tenancy have one contract.
+- AC-28.1: Seller, payer, service recipient, currency and settlement are
+  separate fields, not conflated
+- AC-28.2: Every money value carries an explicit ISO currency and a correctly
+  scaled amount; cross-currency addition is impossible by construction
+- AC-28.3: Migrations are additive first; upgrade from the existing schema
+  preserves historical receipts, balances, orders and audit history
+- AC-28.4: Each change is a numbered `data-model.md` amendment with the
+  `api-spec.md` contract kept in sync
+
+**US-29** [P0] — As a customer, I want a global account with reliable recovery,
+and as an organization I want isolated memberships, so that access is correct.
+- AC-29.1: Account identity and recovery are independent of any carrier-assigned
+  number
+- AC-29.2: Recovery works without family, SOS or verified-CLI dependencies
+- AC-29.3: Organization membership, roles and invitations are enforced in APIs,
+  background jobs, exports and storage access — not only in the UI
+- AC-29.4: A negative cross-tenant request fails at the object level, proven by
+  test, for every organization-scoped resource
+- AC-29.5: Administrator MFA is required; session and token revocation take
+  effect immediately
+
+**US-30** [P0] — As the product owner, I want family, safety and app-calling
+features retired safely, so that removal loses no history and orphans no work.
+- AC-30.1: New enrollment and dispatch stop before any data is deleted
+- AC-30.2: Queued work and old clients cannot revive a removed notification path
+- AC-30.3: Order, payment and audit history survives removal intact
+- AC-30.4: **Original finding 1** — user A queues an offline event and signs
+  out; user B signs in; no A event is dispatched or attributed as B, across app
+  restart and across a delayed callback arriving after the switch. Legacy rows
+  without trustworthy ownership are quarantined, never rebound
+- AC-30.5: Release builds request no contacts, background-location or app-call
+  permission that the product no longer uses
+- AC-30.6: Sensitive legacy records are deleted per the approved retention
+  policy; schema is dropped only after compatibility requirements end
+
+**US-31** [P0] — As a customer, I want to see only what I can actually buy and
+use, so that a purchase cannot promise unsupported service.
+- AC-31.1: Selling market, visited country, calling destination and device
+  support are four distinct concepts in the catalog
+- AC-31.2: A quote is immutable, priced against a named tariff version, and
+  expires
+- AC-31.3: An unsupported device or destination is refused **before** payment,
+  with useful guidance
+- AC-31.4: No public offer exists for a market not confirmed under D1/D2; a
+  test-only catalog is clearly marked as such
+
+**US-32** [P0] — As the business, I want orders and the ledger to be exactly
+correct under concurrency and failure, so that nobody is double-charged or
+double-provisioned.
+- AC-32.1: Ledger entries are immutable, balanced and currency-specific;
+  funding, reservation, consumption, release and compensating adjustment are
+  distinct entry types
+- AC-32.2: Concurrent purchases against one balance cannot oversell, proven on
+  PostgreSQL
+- AC-32.3: Repeated and reordered webhooks cannot double-credit or
+  double-provision
+- AC-32.4: **Original finding 4** — the operation reference and supplier attempt
+  are persisted before dispatch
+- AC-32.5: Accepted, definitively-rejected and outcome-unknown are classified
+  separately; an unknown outcome reconciles against the original supplier and
+  never fails over to another
+- AC-32.6: An accepted-but-response-lost attempt does not purchase a second
+  profile, including after a worker restart mid-flight
+
+**US-33** [P0] — As a customer, I want payment to work in my currency through an
+approved processor, so that checkout is trustworthy.
+- AC-33.1: Payment routing is a boundary; no processor-specific shape leaks into
+  the API contract
+- AC-33.2: Raw card details are never collected by the DamDam backend; checkout
+  is hosted or tokenized
+- AC-33.3: Paystack is retained only for approved eligible local NGN business
+  through a matching merchant entity
+- AC-33.4: Wallet checkout means Apple Pay/Google Pay through the processor
+  where supported
+- AC-33.5: Currency mismatch fails loudly; webhook authenticity is verified
+- AC-33.6: Live mode remains blocked until D3 and D4 are recorded; sandbox
+  evidence closes software work only
+
+**US-34** [P0] — As the business, I want refunds, disputes and settlement to
+reconcile, so that the books close.
+- AC-34.1: A refund maps to the correct original charge by its original
+  reference
+- AC-34.2: Tax, FX and fees reconcile against processor settlement records
+- AC-34.3: Receipts state the selling legal entity as data, never hardcoded
+- AC-34.4: A dispute has a recorded lifecycle and does not corrupt the ledger
+
+**US-35** [P0] — As a customer, I want a real carrier line with data and native
+voice, so that the product does what it claims.
+- AC-35.1: eSIM profile, carrier line, assigned number, service entitlement and
+  activation request are separate resources
+- AC-35.2: Provisioning is idempotent and supports lookup by the original
+  operation reference
+- AC-35.3: The assigned number is the outbound identity; no third-party verified
+  CLI is claimed, and no +234 retention or porting is promised
+- AC-35.4: Number, line and suspension lifecycles are complete, including
+  supplier-supported suspension distinguished from a merely requested one
+- AC-35.5: Physical proof — on approved iOS and Android devices, install the
+  eSIM, use data, and place a native-dialer call to Nigeria with DamDam closed;
+  capture visited network, device/OS, supplier reference and rate version.
+  **No simulator-only or WebRTC evidence closes this criterion**
+
+**US-36** [P0] — As a customer, I want my balance to reflect what I actually
+used, so that spending controls mean something.
+- AC-36.1: **Original finding 3** — real supplier usage ingestion reduces the
+  displayed allowance, with persistent cursors, retry and deduplication by
+  supplier event ID
+- AC-36.2: Delayed, reordered and corrected readings reconcile without double
+  debit; provisional usage is distinguished from finalized billing
+- AC-36.3: A stale reading is visibly stale, with its timestamp
+- AC-36.4: Caps and suspension are enforced supplier-side where the promised
+  contract requires it; an app-side balance derived from delayed records is
+  never presented as a guaranteed hard cap
+- AC-36.5: Tariff versions are recorded per charge
+
+**US-37** [P0] — As a new customer, I want one continuous journey from opening
+the app to using my line, so that nothing dead-ends.
+- AC-37.1: Home, Plans, My Line and Account are complete and reachable
+- AC-37.2: **Original finding 2** — signup → purchase *or* invitation/code
+  redemption → provisioning → installation → Home/My Line runs end to end
+  through production navigation
+- AC-37.3: An activation link works from both cold and warm launch; expired and
+  already-used codes, and back navigation, all behave correctly
+- AC-37.4: Redemption binds to the intended recipient
+- AC-37.5: Paid-but-pending, payment failure and installation failure each have
+  a tested route out
+- AC-37.6: English and French are complete for every new surface
+
+**US-38** [P0] — As a customer, I want My Line, installation, receipts, support
+and deletion to work, so that I can run my own account.
+- AC-38.1: Installation guidance is real for the supported launch device matrix,
+  with a QR fallback; no placeholder guides ship
+- AC-38.2: Native line selection guidance is correct for dual-SIM handsets
+- AC-38.3: Secure installation details and the last-known usage reading remain
+  available offline
+- AC-38.4: Receipts, support contact and account deletion work without any
+  family, SOS or verified-CLI dependency
+- AC-38.5: A returning user recovers their account and existing service on a new
+  device
+
+**US-39** [P0] — As an organization administrator, I want people, teams and
+imports, so that I can manage who gets connectivity.
+- AC-39.1: A person record is distinct from a member role
+- AC-39.2: CSV import validates row by row and reports per-row outcomes
+- AC-39.3: Teams, departments and cost centers are assignable and exportable
+- AC-39.4: Every list, export and background job is tenant-scoped
+
+**US-40** [P0] — As an organization, I want bulk provisioning, funding and
+offboarding, so that a real deployment is manageable.
+- AC-40.1: 50 recipients import, quote, fund, order and assign without duplicate
+  charges
+- AC-40.2: Partial bulk failure is recoverable per line, with visible per-line
+  progress
+- AC-40.3: An allocation is bound to its recipient; the employee installs and
+  consents
+- AC-40.4: Approved budgets and top-ups are enforced; a requested restriction is
+  visibly distinct from a confirmed carrier restriction
+- AC-40.5: Offboarding revokes work access and future spending while respecting
+  personal services and carrier ownership/reassignment rules
+- AC-40.6: A restricted administrator cannot cross a role or tenant boundary
+
+**US-41** [P0] — As an internal operator, I want exception queues and audited
+adjustments, so that support can resolve real failures.
+- AC-41.1: Internal operations are a distinct privileged surface; enterprise
+  administrators never inherit cross-customer access
+- AC-41.2: Supplier exception, payment reconciliation and refund queues are
+  actionable
+- AC-41.3: Every adjustment is audited with actor, reason and before/after state
+- AC-41.4: Exports redact secrets and activation material
+
+**US-42** [P0] — As the release owner, I want a trustworthy CI and production
+baseline, so that a green pipeline means something.
+- AC-42.1: **Original finding 5a** —
+  `tests/test_auth_api.py::test_otp_request_and_verify_contract` passes under
+  one controlled test clock shared by token creation and JWT validation, with
+  both valid and expired cases, and **without** disabling production expiry
+  checks
+- AC-42.2: **Original finding 5b** — the screenshot job asserts a complete,
+  nonempty manifest for the revised screen/locale matrix and fails when an
+  expected image is missing, so intermittency surfaces as a failure. The
+  historical 0/32 and the 33 images observed on 2026-09-08 both describe the old
+  matrix and neither carries forward
+- AC-42.3: Staging and production are isolated, with least-privilege
+  credentials, verified webhooks, tested backups and restoration, monitoring and
+  alerting
+- AC-42.4: iOS and Android builds are signed, with store privacy and payment
+  disclosures matching the actual product
+- AC-42.5: The release signoff validator and its scenario matrix match the reset
+  scope; no removed feature is still demanded as release evidence
+- AC-42.6: No production mock supplier mode can be enabled in a release build
+
+**US-43** [P0] — As the release owner, I want integrated, physical and pilot
+evidence, so that launch is a decision and not a hope.
+- AC-43.1: The integrated matrix passes: purchase, provisioning, installation,
+  usage, top-up, refund, enterprise bulk and offboarding
+- AC-43.2: Migration from the existing production schema is proven on
+  representative data
+- AC-43.3: Failure recovery is proven for supplier timeout, worker crash, double
+  webhook, partial bulk order and stale usage
+- AC-43.4: Physical device evidence exists per AC-35.5 on both platforms
+- AC-43.5: A real enterprise pilot administrator completes the flow, and
+  material issues found are fixed
+- AC-43.6: Every launch checklist item in
+  `implementation/IMPLEMENTATION-PLAN.md` §10 has evidence against the release
+  commit
+- AC-43.7: D1–D6 are recorded as resolved with evidence, or the affected scope
+  is explicitly not launched
+
+### 10.6 What this amendment does not do
+
+It changes no application code, no migration and no CI configuration. It does
+not claim any defect is fixed: the current, observed and historical failures are
+recorded in [`implementation/BASELINE.md`](./implementation/BASELINE.md). It does
+not close any external decision — D1–D6 are all open in
+[`implementation/DECISIONS.md`](./implementation/DECISIONS.md), and the proposed
+defaults recorded there (welfare removal, email-based recovery, a new assigned
+number, prepaid charging) are proposals awaiting the founder, not approvals.

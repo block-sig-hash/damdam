@@ -132,3 +132,34 @@ now.
       Nigeria OpCo (IP licensing, service fees, or equivalent) with
       tax counsel before the Nigeria OpCo begins processing real
       revenue
+
+---
+
+## 13.5 Amendment — The Entity Recommendation Is Not a Decision
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only.
+
+`prd.md` §10 resets the product to a global consumer and enterprise offering,
+which changes the inputs to every structuring question above.
+
+**The UAE parent + Nigeria OpCo structure recommended in this document is
+reclassified as a historical recommendation, not a decision.** It was not
+selected. US LLC (via Stripe Atlas), a UK operating company and Isle of Man were
+all evaluated in the 7–8 September planning conversation and **none was
+selected** either. Nigerian treatment must be assessed alongside whichever is
+chosen.
+
+This is decision **D3**, owned by the founder with cross-border tax and legal
+advisers, and it is **OPEN** — see
+[`implementation/DECISIONS.md`](./implementation/DECISIONS.md). It blocks
+merchant onboarding (D4), the seller identity shown on receipts, and tax
+configuration.
+
+Engineering constraint until D3 closes: the selling legal entity and its tax
+treatment are **data**, carried on quotes, orders and receipts. No chunk may
+hardcode an entity, a jurisdiction or a tax structure. The payment-provider
+enquiry retained at
+[`implementation/damdam-payment-provider-enquiry.md`](./implementation/damdam-payment-provider-enquiry.md)
+remains an **unsent draft** and must be revised for the chosen candidate entity
+before any authorized outreach.

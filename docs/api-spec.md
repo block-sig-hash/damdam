@@ -1107,3 +1107,32 @@ for receipts and eSIM-ready messages, and manifest-pilgrim locale for
 pre-account activation. Verification and activation links include a
 non-authoritative `lang` hint; the client still permits the recipient to change
 language.
+
+---
+
+## 7.26 Amendment — Product Reset Supersedes the Hajj API Scope
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only — no endpoint, schema or `api-spec.yaml` change here, so the
+committed spec and FastAPI's generated OpenAPI output remain in sync and the CI
+drift check is unaffected.
+
+`prd.md` §10 resets the product. Read every section above against
+[`implementation/SCOPE-DISPOSITION.md`](./implementation/SCOPE-DISPOSITION.md).
+
+- Check-in, SOS and family-contact endpoints describe **retired** features;
+  chunk 04 removes them, with old-client behavior handled explicitly rather than
+  by deleting a route and hoping.
+- Verified caller-ID endpoints describe **deferred** scope.
+- HTO-shaped organization and manifest endpoints are **generalized** into
+  organization, membership, people-import and bulk-allocation contracts by
+  chunks 07, 22 and 23.
+- NGN-only payment shapes are **generalized** into multi-currency contracts by
+  chunks 12 and 13.
+
+Contracts added by later chunks keep the existing convention: the API stays
+vendor-agnostic, no processor- or carrier-specific shape leaks into it, and a
+new endpoint is added here before it is implemented. New money fields carry an
+explicit ISO currency. Payment, provisioning, installation, activation and
+connectivity remain distinct states in every response — a paid order may be
+pending provisioning, and installation does not prove network attachment.

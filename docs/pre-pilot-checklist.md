@@ -317,3 +317,90 @@ any pre-pilot or pre-promotion checklist until the first version of this
 document. `Settings` now refuses to boot on the old key format or on an
 SA-less config, so the remaining pre-pilot work on that item is confirming
 the real production/staging env var, not building anything further.
+
+---
+
+## Amendment — Superseded as a Gate by the Product Reset
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only — `scripts/validate-release-signoff.sh`,
+`.github/workflows/release-promotion.yml` and
+`docs/release-signoffs/TEMPLATE.md` are **unchanged**; see "Known inconsistency"
+below.
+
+### Status change
+
+`prd.md` §10 resets the product to global consumer and enterprise/government
+connectivity. This checklist was written for a Hajj-season pilot of a product
+with SOS, check-ins, family contacts, verified caller ID and WebRTC calling.
+
+**Everything above is reclassified as historical.** It is retained as the record
+of what was demanded for the old pilot and as a source of still-useful evidence
+discipline. It is **not** the current release criteria, and no item above should
+be worked, closed or cited as a current gate.
+
+### The pilot feature freeze is lifted
+
+The "Pilot release-candidate control" section above froze the implementation to
+P0/P1 fixes and pipeline work ahead of a Hajj 2027 pilot. **That freeze is
+lifted.** The user has explicitly authorized the product redesign, so the reset
+is an authorized scope change, not an exception to a freeze.
+
+The tag `v0.1.0-rc.1` is **not moved, rewritten or deleted** — it stays as the
+record of the old release candidate, and existing release tags and historical
+migrations are all retained. A future candidate for the reset product is a new
+incrementing tag.
+
+Change control is now the chunk and review workflow in
+[`implementation/README.md`](./implementation/README.md): one chunk at a time,
+Claude implements, Codex independently reviews and records acceptance, and no
+chunk starts before its dependencies are accepted.
+
+### What replaces this document
+
+| Old role | Replacement |
+|---|---|
+| Consolidated pilot gate list | The 30 chunk assignments in [`implementation/chunks/`](./implementation/chunks/) |
+| Story-level acceptance criteria | `prd.md` §10.5 (`US-27`–`US-43`) |
+| External blockers | D1–D6 in [`implementation/DECISIONS.md`](./implementation/DECISIONS.md) |
+| "What is actually failing right now" | [`implementation/BASELINE.md`](./implementation/BASELINE.md), re-established by chunk 02 |
+| Launch checklist | `implementation/IMPLEMENTATION-PLAN.md` §10, enforced by `US-43` |
+| Device matrix and physical evidence | AC-35.5 and chunk 29, against the D2-confirmed device list |
+
+### Items that carry forward in substance
+
+Not as this document's items, but as requirements in the reset scope:
+
+- Push and notification delivery evidence → chunk 26.
+- Physical device matrix on real hardware, never simulator or emulator output →
+  AC-35.5, chunk 29, scoped by the D2 device decision rather than the Hajj
+  handset list.
+- Infrastructure and deploy-pipeline pre-promotion checks → chunks 26 and 27.
+- Compliance cross-references → `security.md` §10.14, re-scoped to the
+  jurisdictions D2 and D3 actually select.
+- Real-administrator usability observation → AC-43.5, with an enterprise pilot
+  administrator instead of an HTO operator.
+- English/French release gates → `localization.md` §9.
+
+### Items that retire with their features
+
+Voice/PSTN via verified CLI (`US-14`), check-in offline queue (`US-15`), SOS
+(`US-16`), eSIM geofencing (`US-13`) and HTO dashboard usability (`US-05`
+family) all retire. Their **only** surviving obligation is the account-isolation
+requirement, which becomes AC-30.4 under chunk 04 — offline events must never be
+attributed to the next signed-in account, including across restart and delayed
+callbacks.
+
+### Known inconsistency, deliberately left open
+
+`scripts/validate-release-signoff.sh` still requires "Offline check-in survival
+through force-quit/reboot" and "Offline SOS survival through force-quit/reboot"
+rows in every release signoff, and `main`'s branch protection genuinely blocks a
+merge without them. Those rows demand evidence for features this reset retires.
+
+Chunk 01 did **not** change that script: release automation is chunk 27's scope,
+and quietly weakening a release gate from a documentation chunk is exactly the
+kind of change that should be reviewed on its own. Until chunk 27 lands, a
+`staging → main` promotion still mechanically demands SOS evidence. This is
+tracked in [`implementation/STATUS.md`](./implementation/STATUS.md) and closed by
+AC-42.5.

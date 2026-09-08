@@ -585,3 +585,27 @@ fabricated assets.
 
 The ongoing key, notification, screenshot, and review process is normative in
 [`localization.md`](./localization.md).
+
+---
+
+## 11. Amendment — Product Reset and This Document's Status
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only.
+
+`prd.md` §10 resets the product. This document's status splits:
+
+- **§10 (Implemented English/French Architecture) stays current.** The shipped
+  code architecture it records is real and is reused.
+- **§§1–9 become historical scoping.** They estimate and sequence localization
+  work for the Hajj-pilgrim product, including Arabic phrasebook content, SOS
+  and emergency string review, and pilgrim-market expansion. Those are scoping
+  inputs for a product that no longer exists; do not read them as a current
+  backlog.
+- **SOS, emergency, check-in and family string scope is retired** with the
+  feature in chunk 04, including vendor notification templates.
+- **The market-expansion analysis in §7.4 is superseded** by D2 (selling
+  markets, visited countries, calling destinations, supported devices), which is
+  open in [`implementation/DECISIONS.md`](./implementation/DECISIONS.md).
+
+Ongoing localization process lives in `localization.md`, which is current.

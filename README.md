@@ -1,8 +1,16 @@
 # DamDam
 
-Connectivity, verified caller ID, and travel safety for Nigerian
-travelers — launching with Hajj & Umrah pilgrims, expanding to
-general travelers and enterprise/government contracts.
+A global eSIM and carrier-voice platform for individual consumers
+and for enterprise and government organizations. Buy connectivity in
+DamDam, install an eSIM, then use your phone's normal dialer and
+mobile data — one carrier-enabled profile carries both.
+
+> **The product was reset on 8 September 2026** from a Hajj-pilgrim
+> app to the description above. The specs in `/docs` have not been
+> rewritten yet — read [`docs/prd.md`](./docs/prd.md) §10 for the
+> reset scope and
+> [`docs/implementation/`](./docs/implementation/) for the build
+> sequence before working from any older spec text.
 
 ## New here? Start with SETUP.md
 
@@ -27,14 +35,23 @@ time. It points to `/docs` for full context and lists build/test
 commands and non-negotiable conventions. Keep it short; it's meant
 to route the agent to the real specs, not duplicate them.
 
+**The working split, since 8 September 2026: Claude implements,
+Codex independently reviews and may refactor.** Work goes one chunk
+at a time from
+[`docs/implementation/chunks/`](./docs/implementation/chunks/);
+Claude returns a handoff, Codex reviews and records acceptance, and
+only then does the next chunk start. Claude never marks its own work
+accepted.
+
 ## Repository structure
 
 ```
 /apps
   /api          ← FastAPI (Python) backend
   /mobile       ← React Native app (iOS + Android)
-  /dashboard    ← Next.js HTO & Admin web dashboard
+  /dashboard    ← Next.js enterprise & internal web dashboard
 /docs           ← All specs — read this first
+  /implementation ← Build chunks, plan, status, decisions, handoffs
 /scripts
   /db           ← Alembic migrations
   /deploy       ← Deployment scripts
@@ -64,6 +81,14 @@ production reference compose file this is based on.
 
 ## Status
 
-Pre-MVP. Spec-complete as of July 2026, entering build phase.
-Target: HTO pilot onboarding by February 2027, ahead of Hajj 2027
-(~May 14, 2027).
+Pre-MVP, rebaselining after the 8 September 2026 product reset. The
+old Hajj-pilot target and its feature freeze are lifted; see
+[`docs/pre-pilot-checklist.md`](./docs/pre-pilot-checklist.md)'s
+closing amendment. No new launch date is set — it depends on the
+external decisions D1–D6, all of which are open in
+[`docs/implementation/DECISIONS.md`](./docs/implementation/DECISIONS.md).
+
+CI is currently failing on `develop`. What is actually passing,
+failing and merely historical is recorded in
+[`docs/implementation/BASELINE.md`](./docs/implementation/BASELINE.md);
+chunk 02 owns the repair.

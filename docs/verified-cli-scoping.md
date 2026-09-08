@@ -204,3 +204,36 @@ the rendered mobile screens against `design-system.md` as usual.
 
 See the accompanying amendments:
 `docs/prd.md` §5.5 Amendment and `docs/data-model.md` §6.40.
+
+---
+
+## 7. Amendment — Deferred in Full by the Product Reset
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only.
+
+**This entire document is now DEFERRED.** `prd.md` §10 resets the product, and
+external verified caller ID is not in launch scope. The launch outbound identity
+is the **carrier-assigned number** on the eSIM.
+
+Consequences:
+
+- §5's recommended MVP scope is **not a commitment**, and §4's open decisions are
+  not required before launch.
+- The `US-14` verified-CLI call test is no longer a release criterion. It leaves
+  the release gates when chunk 27 re-cuts them.
+- Do **not** promise +234 retention or porting. That is a separate question from
+  verified CLI, and it is also deferred — the proposed default recorded in
+  [`implementation/DECISIONS.md`](./implementation/DECISIONS.md) under D2 is a
+  new assigned number with no retention promise, and it is a proposal awaiting
+  the founder, not an approval.
+- The Telnyx documentation review dated 8 September 2026
+  (`implementation/IMPLEMENTATION-PLAN.md` §5) found that the mobile-number
+  guide documents an assigned number as outbound caller ID, and does **not**
+  establish arbitrary third-party verified +234 presentation on a cellular line.
+  Deferring this is therefore not a launch disqualifier; it is a future
+  commercial question.
+
+The document is retained as the record of that deferred question, and as the
+audit of what exists in the code today — which chunk 04 uses when it removes
+verified CLI from the launch dependency graph.

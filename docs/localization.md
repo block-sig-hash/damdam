@@ -125,3 +125,35 @@ cd apps/api && pytest --cov=app && ruff check . && mypy app
 
 API changes also run OpenAPI drift verification. Mobile pull requests run the
 Android bilingual screenshot job; iOS runs nightly or by workflow dispatch.
+
+---
+
+## 9. Amendment — Product Reset and Localized Content Scope
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only — no catalog, key or check changed.
+
+`prd.md` §10 resets the product. This guide's process is retained in full:
+locale ownership and resolution, catalog conventions, the string-change
+workflow, backend and notification localization, screenshot and layout
+verification, translation provenance, and the required checks in §8.
+
+What changes is the **content** those processes apply to:
+
+- Safety, SOS, check-in and family-notification strings are **retired** with
+  their features in chunk 04. Remove their keys and their vendor notification
+  templates as part of that retirement, so no removed feature can still be
+  dispatched by an old worker or client.
+- New consumer surfaces (Home, Plans, My Line, Account) and the enterprise
+  dashboard need complete English and French coverage from the start — this is
+  AC-37.6, not a follow-up.
+- Locale stays a **recipient preference**, never inferred from country. That
+  matters more, not less, in a global product: a plan's selling market says
+  nothing about the buyer's language.
+- Carrier-specific content — installation guidance, line settings, assigned
+  number, usage freshness, charges — is new localized surface area with real
+  accuracy risk. Getting an installation step wrong in French is a support
+  incident, so these strings need native review, not machine translation.
+
+The completed English/French architecture recorded in `i18n-scoping.md` §10
+remains current. Additional languages remain future work.

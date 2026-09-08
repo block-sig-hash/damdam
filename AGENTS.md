@@ -1,190 +1,216 @@
 # DamDam — Agent Instructions
 
-Read [`/docs/README.md`](./docs/README.md) first for the full spec
-index and recommended reading order. All product, technical,
-security, and infrastructure decisions live in `/docs` — treat it
-as the source of truth, not this file.
+Read [`/docs/README.md`](./docs/README.md) first for the full spec index and
+recommended reading order, then
+[`/docs/implementation/README.md`](./docs/implementation/README.md) for the
+current build sequence. All product, technical, security and infrastructure
+decisions live in `/docs` — treat it as the source of truth, not this file.
 
-## Before implementing any feature
+**This file was rewritten by chunk 01 on 8 September 2026**, at the user's
+explicit request, to record a new working split and a reset product scope. The
+previous "Claude designs, Codex implements, Claude reviews" ownership table and
+the pilot feature freeze are superseded. See
+[`/docs/implementation/`](./docs/implementation/) for the reset itself.
 
-1. Find the User Story (`US-XX`) in [`/docs/prd.md`](./docs/prd.md)
-   §4 and its acceptance criteria
-2. Check [`/docs/testing-qa.md`](./docs/testing-qa.md) for the
-   required test cases mapped to that story — write these before
-   or alongside the implementation for the strict-TDD categories in
-   §14.1 (check-in, SOS, payment/idempotency, auth)
-3. Cross-check the relevant sections in `/docs/data-model.md`,
-   `/docs/api-spec.md`, and the frontend spec for your platform
-   (`/docs/frontend-mobile.md` or `/docs/frontend-dashboard.md`)
+## The product, in one paragraph
+
+DamDam is a global eSIM and carrier-voice platform for individual consumers and
+for enterprise/government organizations. Customers buy connectivity in DamDam,
+install an eSIM, and then use their phone's **normal dialer and mobile data** —
+the same carrier-enabled profile carries both. Telnyx is the preferred launch
+supplier, subject to verified availability. Family contacts, offline SOS and the
+Hajj-pilgrim framing are retired. External verified caller ID and app/browser
+VoIP are deferred. Every claim about a market, device, number type or roaming
+capability must be explicitly supported before it ships.
 
 ## Who implements what
 
-This project splits work by **concern, not by whole codebase area**
-— the split exists to put the small amount of genuinely taste-
-sensitive work where design judgment matters, and everything else
-where it's cheapest to build, without defaulting to "Claude builds
-all of mobile" (that would be far more Claude usage than necessary
-and works against the cost-optimization policy below).
+**Claude implements. Codex independently reviews and may refactor.**
 
-**The core mechanism: Claude produces a design system once, Codex
-implements against it, Claude reviews the rendered result.**
-Codex's frontend gap is a taste/judgment gap, not a capability gap
-— it's very capable of assembling already-decided design tokens,
-component patterns, and layout rules precisely. Removing ambiguous
-taste calls from Codex's job (by giving it an explicit system to
-follow) closes most of the quality gap without Claude touching
-every screen.
+That is the whole rule. It is not subdivided by area, language or screen —
+Claude writes the API, the mobile app, the dashboard, the infrastructure and the
+tests; Codex reviews all of it with authority to fix and refactor within scope.
 
-| Area | Primary implementer | Why |
-|---|---|---|
-| `docs/design-system.md` (tokens, typography, spacing, component patterns) | **Claude**, produced once, revised rarely | The one-time investment that makes everything below cheaper to get right |
-| `apps/mobile/src/screens/SosConfirm/**`, `SosSent/**`, and the onboarding flow (`Splash` through `DepartureDate`) | **Claude, direct implementation** | The small, named exception — these are the screens where the *feel* of the interaction (reassurance during a real emergency, trust during first use by a low-tech-confidence demographic) matters more than typical UI, and a taste gap here has outsized real-world cost |
-| All other `apps/mobile/src/screens/**`, `apps/mobile/src/components/**` | **Codex**, against `design-system.md` | Implemented by assembling the design system's already-decided pieces — Claude reviews the rendered output (see the GitHub Action below), doesn't build it |
-| `apps/mobile/src/hooks/**`, `apps/mobile/src/services/**`, `apps/mobile/src/store/**` | **Codex** | Logic/state layer — no visual output |
-| `apps/dashboard/**` | **Codex** | Explicitly speced as "functional, not polished" in `frontend-dashboard.md` §9.5 — the taste gap doesn't matter here |
-| `apps/api/**`, `scripts/`, Terraform/infra | **Codex** | Backend/infra — no UI surface |
-| QA/review across all of the above | **Claude** | See the GitHub Action below |
+| Role | Responsibility |
+|---|---|
+| **Claude** | Implements one chunk at a time on an isolated branch. Runs the affected required checks. Returns [`docs/implementation/HANDOFF-TEMPLATE.md`](./docs/implementation/HANDOFF-TEMPLATE.md). **Never marks its own work accepted.** |
+| **Codex** | Independently reviews the actual diff and its integration points, verifies behavior and failure cases, fixes and refactors defects within scope, adds regression coverage, and records ACCEPTED / CHANGES_REQUIRED / EXTERNAL_BLOCKED against a named head SHA in `docs/implementation/reviews/NN.md`. |
 
-**If you are Codex implementing a mobile screen:** read
-`design-system.md` first and build strictly against it — don't
-improvise spacing, color, or component choices not covered there;
-flag a gap in the PR description instead of guessing, so Claude's
-review catches it as a design-system omission to fix once, not a
-one-off judgment call to repeat.
+The cycle, per chunk:
 
-**If you are Claude reviewing a mobile screen Codex built:** don't
-just review the code — actually render the screen (or request a
-screenshot in CI, see the GitHub Action) and check it against
-`design-system.md` and the per-screen spec in `frontend-mobile.md`.
-A screen that passes its tests but looks generic or inconsistent
-with the system is a real review finding, not a nitpick.
+1. Claude implements chunk `NN` from `docs/implementation/chunks/NN-*.md` on a
+   dedicated branch cut from the last accepted code, preserving unrelated work.
+2. Claude records the handoff at `docs/implementation/handoffs/NN.md` and sets
+   the chunk to `READY_FOR_REVIEW` in `docs/implementation/STATUS.md`.
+3. Codex reviews using `docs/implementation/REVIEW.md`, fixes what needs fixing,
+   and records the review and status.
+4. Only after acceptance does the next dependent chunk start. Carry Codex's
+   fixes forward into the next branch.
 
-**If you are Codex working anywhere in `apps/mobile`'s logic
-layer:** stay inside hooks/services/store — don't restructure
-screens or components even if it would simplify your logic; flag
-it as a suggestion instead and let the screen's assigned
-implementer (Codex-against-system, or Claude for the named
-exceptions) make that call.
+Keep **one active implementation chunk** by default. Do not start the next chunk
+because the current one "looks done". Do not merge, deploy, submit to a store,
+send a vendor message, make a live purchase or delete production data as part of
+any chunk unless separately authorized.
+
+## Before implementing any chunk
+
+1. Read the chunk file in [`/docs/implementation/chunks/`](./docs/implementation/chunks/)
+   in full — it is a complete assignment, including its acceptance criteria.
+2. Find its registered story in [`/docs/prd.md`](./docs/prd.md) §10 via
+   [`/docs/implementation/STORY-MAP.md`](./docs/implementation/STORY-MAP.md),
+   and read the acceptance criteria.
+3. Read the accepted dependency reviews in `docs/implementation/reviews/`. Do
+   not build on an unaccepted chunk, and do not silently absorb a missing
+   predecessor's work.
+4. Check [`/docs/implementation/DECISIONS.md`](./docs/implementation/DECISIONS.md)
+   for the D1–D6 gates your chunk depends on. A gate does not stop preparatory
+   work; it stops you calling gated scope complete.
+5. Cross-check `/docs/data-model.md`, `/docs/api-spec.md`, `/docs/security.md`
+   and the frontend spec for your platform.
+6. Check [`/docs/implementation/SCOPE-DISPOSITION.md`](./docs/implementation/SCOPE-DISPOSITION.md)
+   before acting on any spec text that mentions Hajj, pilgrims, family contacts,
+   SOS, check-ins, WebRTC calling, verified caller ID or HTOs. Those specs have
+   not been rewritten yet; that file says which references are retired,
+   generalized, deferred or purely historical.
+
+## Test policy
+
+Strict TDD — write the failing test first — is required for:
+
+| Category | Why |
+|---|---|
+| Authentication, sessions, recovery | Edge-case-heavy; a lockout or expiry off-by-one is not caught by manual testing |
+| Payments and idempotency | Double-charging or double-provisioning is trust-destroying and hardest to unwind at exactly the wrong moment |
+| Tenant isolation and object-level authorization | A cross-tenant read is a breach, not a bug |
+| Order and provisioning idempotency, including accepted-but-response-lost | The single most expensive failure mode in this product |
+| Safety-transition tests during feature retirement | Retirement must not orphan queued work or rebind it to the wrong account |
+
+Everywhere else: tests are required, TDD is recommended, and neither is
+mechanically enforced by tooling — it is a review-time check.
+
+Non-negotiable:
+
+- **Use PostgreSQL for anything about database or concurrency behavior.** SQLite
+  does not reproduce the constraints, locking or isolation this product depends
+  on.
+- **Never disable a check, lower a coverage threshold, or weaken a production
+  expiry/authorization rule to make a test pass.** Fix the code or the test.
+- **A mock passing itself is not evidence of external compatibility.** Vendor
+  behavior claims need documented contract checks against current official
+  documentation, with the date recorded.
+- **Do not add tests that mirror the implementation** or chase a coverage
+  number. A regression test should fail against the actual defect.
+
+Run the affected required checks for your chunk. Do not re-run unrelated suites
+endlessly after they pass. The complete integrated matrix runs in chunk 28.
 
 ## Build & test commands
 
 ```
-# API (FastAPI)
+# API (FastAPI) — PostgreSQL required
 cd apps/api && pytest --cov=app
 cd apps/api && ruff check . && mypy app
 
 # Mobile (React Native, iOS + Android)
-cd apps/mobile && npm test
+cd apps/mobile && npm test -- --runInBand
 cd apps/mobile && npm run lint && npm run type-check
 
 # Dashboard (Next.js)
 cd apps/dashboard && npm test
-cd apps/dashboard && npm run lint && npm run type-check
+cd apps/dashboard && npm run lint && npm run type-check && npm run build
 
 # Full local stack
 docker compose up
 ```
 
+OpenAPI drift, migration and screenshot checks run in CI as configured; see
+`.github/workflows/ci.yml`. Chunk 02 owns re-establishing the current CI
+baseline — see `docs/implementation/BASELINE.md` for what is failing today and
+what is only historically reported.
+
 ## Non-negotiable conventions
 
-- Every feature PR references its User Story ID (`US-XX`) from
-  `prd.md` in the PR description
-- Data model changes require a numbered amendment in
-  `data-model.md` (see §6.4/§6.5 for the pattern), not a silent edit
-- API changes must keep `api-spec.md` in sync — CI fails on drift
-  between the committed spec and FastAPI's generated OpenAPI output
-- Check-in and SOS features (`US-15`, `US-16`) are safety-critical:
-  any change touching the offline queue, sync retry logic, or
-  notification dispatch requires the full test suite in
-  `testing-qa.md` §14.4 (offline/chaos scenarios), not just unit
-  tests, before merge
-- Never weaken the offline-first write-before-network pattern
-  (`prd.md` §5.6) to "simplify" a feature
-- **All third-party vendor integrations go through an internal
-  abstraction layer — `OTPService` (Termii primary/Twilio Verify
-  secondary underneath, per `prd.md` §5.1), `VoiceService`/
-  `VoiceProvider` (Telnyx underneath, with an IDT Express BYOC
-  migration planned post-MVP per `prd.md` §5.5), `ESIMService`
-  (Monty Mobile/eSIM Access/1Global underneath, three-way cascading
-  failover), and `PaymentService` (Paystack/Flutterwave underneath)
-  — never called directly from route handlers.** The API layer is
-  already vendor-agnostic (`api-spec.md` §7.1/§7.4/§7.5 don't leak
-  vendor-specific shapes into the contract), and `data-model.md`'s
-  `aggregator` and `processor` enums already anticipate multiple
-  providers per package/transaction (§6.6, §6.7). This convention
-  makes switching or adding a vendor (Telnyx-to-IDT BYOC, a new
-  eSIM aggregator, a payment processor fallback) a configuration
-  change inside one service, not a rewrite across the codebase —
-  this matters concretely here since all four vendor decisions
-  (OTP, voice, eSIM, payments) are now resolved but held as
-  configuration rather than hardcoded, precisely so a future change
-  doesn't require this kind of rewrite.
+- Every chunk's PR or branch references its registered story ID (`US-XX`) and
+  its chunk number.
+- **Data model changes require a numbered amendment** in `data-model.md` (see
+  §6.4/§6.5 for the pattern), never a silent edit.
+- **API changes must keep `api-spec.md` in sync** — CI fails on drift between
+  the committed spec and FastAPI's generated OpenAPI output.
+- **All third-party vendor integrations go through an internal abstraction
+  layer**, never called directly from route handlers or UI components. Each
+  adapter advertises its capabilities (native voice, supported numbers, top-up,
+  reuse, suspension, usage latency, spending enforcement); a data-only adapter
+  cannot satisfy a native-voice plan. Keeping this boundary is what makes a
+  supplier change a configuration change instead of a rewrite.
+- **An unknown supplier outcome reconciles against the original operation
+  reference.** It never triggers a second purchase and never fails over to
+  another vendor.
+- **Money carries an explicit ISO currency and correctly scaled amounts.** Exact
+  decimal precision for rates and metered usage, documented rounding, no
+  cross-currency balance addition. Historical NGN records are preserved through
+  every migration, including receipts and refunds.
+- **Payment, provisioning, installation, activation and connectivity are
+  separate states.** A paid order may be pending provisioning; installation does
+  not prove network attachment.
+- **Removal work follows the migration sequence** in
+  `docs/implementation/IMPLEMENTATION-PLAN.md` §7 Phase 1: inventory deployed
+  data → stop new enrollment and dispatch → handle queued work and old clients →
+  backfill → verify migration and rollback → delete sensitive records per the
+  approved retention policy → drop schema only after compatibility ends. Never
+  erase order or audit history because a screen was removed.
+- Secrets, credentials and eSIM activation material stay out of code, logs,
+  test fixtures, handoffs and review records.
 
-## Cost-optimization policy (Claude usage)
+## Product boundaries — do not exceed without a recorded decision
 
-Claude Code runs on direct Anthropic API billing for this project
-(not the Claude.ai subscription), so every invocation has a real
-marginal cost. Codex runs under a ChatGPT Plus subscription with no
-comparable per-task cost. Optimize accordingly:
+Additional carrier integrations, recurring subscriptions, SSO/SCIM, MDM
+deployment, a reseller marketplace, PBX/SIP features, AI features, multi-region
+deployment and a microservice rewrite are all **out of scope**. Modular code
+does not mean a plugin marketplace.
 
-- **Default to Sonnet, not Opus**, for routine review and mobile UI
-  implementation. Only escalate to Opus for a genuinely hard
-  architecture call, and do it explicitly (e.g., comment "@claude
-  use opus" on a PR), not by default.
-- **Codex handles everything it's assigned above without
-  escalating to Claude** unless the task is explicitly one of the
-  strict-TDD categories in `testing-qa.md` §14.1, or touches
-  `apps/mobile/src/screens`/`components`.
-- **Don't paste large spec sections into a Claude prompt manually**
-  — let Claude's file-read tools pull `/docs` content directly, so
-  repeated reads of stable files benefit from prompt caching rather
-  than re-billing full-price tokens every session.
-- **Keep Claude sessions scoped to one PR or one feature at a
-  time** rather than one sprawling session touching many unrelated
-  files — this both controls cost and keeps review quality focused.
-- **Output-token compression (`JuliusBrussee/caveman`) is scoped to
-  `claude-review.yml` only, not interactive sessions.** That
-  workflow's output is a structured checklist where terse is
-  correct UX; ~65% output token reduction there is a real, low-risk
-  win. Do not apply it to local interactive `claude` sessions —
-  detailed reasoning in architecture/QA discussion has repeatedly
-  caught real spec inconsistencies in this project, and compressing
-  it would cost more in missed issues than it saves in tokens.
+The selling legal entity (D3) and the global payment processor (D4) are
+**unresolved decisions, not assumptions**. Do not write Stripe-specific code, or
+hardcode an entity or a tax treatment, before
+`docs/implementation/DECISIONS.md` records the selection.
 
-## GitHub Action — Claude Review
+Do not invent API endpoints, live prices, coverage claims, regulatory approvals
+or successful test evidence. If a chunk needs an answer that only the founder or
+a vendor can give, finish the independent work, name the exact missing input and
+its owner in the handoff, and leave the remainder explicitly open.
 
-`.github/workflows/claude-review.yml` runs Claude automatically on
-every opened/ready PR and on `@claude` mentions in PR comments. It
-is scoped to Sonnet with a turn limit for cost predictability, and
-its prompt already routes review emphasis correctly (visual/UX
-review for `apps/mobile` screens/components, TDD/offline-scenario
-verification for safety-critical logic, spec-drift/cross-tenant
-checks otherwise). Codex's own "Automatic reviews" setting can stay
-on in parallel as a fast first-pass P0/P1 filter — it should not be
-treated as a substitute for Claude's review on anything the table
-above assigns to Claude for review.
+## Cost and session discipline
 
-## Commit convention
+Claude Code runs on direct Anthropic API billing for this project, so scope
+sessions deliberately:
 
-Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`) — see
-root `README.md` for branch strategy.
+- Keep a session to one chunk. A sprawling session touching many unrelated files
+  costs more and reviews worse.
+- Let file-read tools pull `/docs` content directly rather than pasting large
+  spec sections into a prompt — repeated reads of stable files benefit from
+  prompt caching.
+- If a chunk needs multiple independent migrations or features, propose lettered
+  subchunks rather than delivering an unreviewable diff.
+
+The output-token compression note that previously applied to
+`.github/workflows/claude-review.yml` is retained there. That workflow's own
+role is being re-evaluated now that Claude is the implementer rather than the
+reviewer — chunk 02 owns the decision.
 
 ## What NOT to do
 
-- Don't invent new API endpoints without adding them to
-  `api-spec.md` first
-- Don't add dependencies without checking `aarch64` wheel/binary
-  availability if the change touches anything deployed to the OCI
-  Ampere A1 instance (see `scaling-infrastructure.md` §12.2)
-- Don't touch `.env.production` or any file under
-  `/apps/api/secrets/` — these are runtime-only, never committed
-- Don't mark a PR ready for review without running the linked
-  test cases from `testing-qa.md`, not just "tests I wrote for
-  this change"
-- Codex: don't implement a mobile screen without reading
-  `design-system.md` first, and don't touch the named exception
-  screens (SOS confirm/sent, onboarding flow) — see the ownership
-  table above
-- Don't start building mobile screens at all until
-  `design-system.md` exists — it's a prerequisite, not an
-  optional nice-to-have (see "Who implements what" above)
+- Don't add an API endpoint without adding it to `api-spec.md` first.
+- Don't add a dependency without checking `aarch64` wheel/binary availability if
+  it reaches the OCI Ampere A1 instance (`scaling-infrastructure.md` §12.2).
+- Don't touch `.env.production` or anything under `/apps/api/secrets/`.
+- Don't mark a PR or a chunk ready for review without running its linked checks.
+- Don't mark your own work accepted, and don't start the next chunk. Codex
+  reviews first.
+- Don't treat a passing sandbox implementation as merchant approval, VoLTE
+  production support, real handset behavior or a compliant selling market.
+- Don't repeat a historical CI or test result as a current fact. Re-run it, or
+  label it historical.
+
+## Commit convention
+
+Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`) — see root
+[`README.md`](./README.md) for branch strategy.

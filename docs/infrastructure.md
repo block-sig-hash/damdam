@@ -1061,3 +1061,43 @@ past its bootstrap commit until a real staging host is provisioned.
 This is the same "wired but not yet resourced" state §11.11 already
 documents for production, extended honestly to staging rather than
 implied to already work.
+
+---
+
+## 11.15 Amendment — Product Reset and the Current Operational Baseline
+
+**Recorded 8 September 2026 by build chunk 01. Registered story: US-27.**
+Documentation only — no workflow, compose file or deployment script changed.
+
+`prd.md` §10 resets the product. This document's hosting, CI/CD, monitoring and
+backup approach is retained; only its Hajj-pilot framing and its SOS/check-in
+specific alerting are superseded. Chunk 26 owns environment hardening and chunk
+27 owns release automation.
+
+**Current baseline, observed 2026-09-08 against `develop` @ `6790c74`** — the
+full record with commands and run IDs is in
+[`implementation/BASELINE.md`](./implementation/BASELINE.md):
+
+- Nightly CI has concluded **failure** on every run inspected from 2026-09-01
+  through 2026-09-08.
+- The API job fails on one test,
+  `tests/test_auth_api.py::test_otp_request_and_verify_contract`
+  (`ExpiredSignatureError` → `InvalidRefreshTokenError` → `OTPError`). 335 tests
+  pass; coverage is 87.13% against an 85% threshold, so coverage is not the
+  blocker. This is **still failing**.
+- The iOS screenshot job **failed on 2026-09-07 and succeeded on 2026-09-08 on
+  the identical commit**, uploading 33 PNGs. It is intermittent, not
+  deterministically broken. The historical "0/32" figure must not be repeated as
+  a current fact.
+- Mobile, dashboard and multi-arch Docker jobs pass.
+- `Deploy develop to staging` is **skipped** on every run, because the API job
+  fails first. The most recent recorded staging deployment is 2026-07-28; there
+  is no production deployment in the queried history and therefore **no current
+  running-environment evidence**.
+
+The three-branch promotion gate in §11.14 stays in force. Note the one known
+inconsistency this reset creates: `scripts/validate-release-signoff.sh` still
+requires "Offline check-in survival" and "Offline SOS survival" rows in every
+release signoff, for features the reset retires. Chunk 01 deliberately did not
+change that script — release automation is chunk 27's scope. Until chunk 27
+lands, a `staging → main` promotion still mechanically demands SOS evidence.
