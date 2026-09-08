@@ -804,3 +804,50 @@ implementer, so that workflow reviewing a Claude-authored PR is Claude reviewing
 its own work. Acceptance requires the independent Codex review recorded in
 `docs/implementation/reviews/NN.md`. The workflow's prompt now says so in its
 posted comment and is forbidden from declaring a PR accepted or ready to merge.
+
+### 14.14.6 Reproducible local toolchain, and what cannot be reproduced locally
+
+Chunk 02's assignment requires that a missing platform prerequisite is never
+reported as an application failure. These are the requirements to reproduce each
+CI job locally, and the point at which local reproduction stops.
+
+**API — fully reproducible locally.**
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+docker run -d --name dd-pg -e POSTGRES_USER=damdam_test -e POSTGRES_PASSWORD=damdam_test \
+  -e POSTGRES_DB=damdam_test -p 55432:5432 postgres:16-alpine
+export DATABASE_URL='postgresql+psycopg://damdam_test:damdam_test@localhost:55432/damdam_test'
+export TEST_DATABASE_URL="$DATABASE_URL"
+.venv/bin/alembic upgrade head   # required first: the *_postgres.py suites assume the schema
+.venv/bin/pytest --cov=app && .venv/bin/ruff check . && .venv/bin/mypy app
+```
+
+Two failure modes here are environment, not application, and must not be
+reported as defects:
+
+- `sqlalchemy.exc.ArgumentError: Could not parse SQLAlchemy URL` in the
+  `*_postgres.py` suites means `TEST_DATABASE_URL` is unset or malformed. Note
+  that `export A=... B=$A` in one statement does **not** work — `$A` expands
+  before `A` is assigned. Export them separately.
+- Widespread `*_postgres.py` failures with a valid URL usually mean
+  `alembic upgrade head` was not run first.
+
+**Mobile — reproducible except for capture.** `npm ci && npm test && npm run lint
+&& npm run type-check` runs anywhere. `scripts/validateScreenshots.js` needs only
+Node built-ins, so it runs even when `npm ci` has failed. Actually *producing*
+screenshots needs an Android emulator with KVM, or macOS with Xcode; neither is
+available in a typical Linux development container.
+
+**Not reproducible without the corresponding platform access:**
+
+| Evidence | Requires | Chunk 02 status |
+|---|---|---|
+| iOS screenshot capture, and confirmation of the driver-startup timeout | macOS runner with Xcode 16.1+ | **not run** — evidence gap, not a passing result |
+| Android screenshot capture | Linux host with KVM | not run |
+| Multi-arch `linux/arm64` image build | QEMU + buildx, long emulated build | not run; no dependency changed, so no new `aarch64` risk |
+| Signed builds, store submission | Apple/Google credentials (D6) | out of scope for chunk 02 |
+| Staging or production deployment | deployment secrets, push to a deploy branch | out of scope; deployment is push-only by design |
+
+A missing prerequisite in this table is recorded as **NOT RUN with its reason**.
+It is never recorded as a pass, and never as an application defect.
