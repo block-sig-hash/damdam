@@ -16,7 +16,7 @@ Do not reset to the original baseline and discard the reviewed specification.
 |---|---|---|---|---|
 | 01 — Reset product specifications and working rules | ACCEPTED | base `6790c74` / corrected content `36e9bf36a2827d108633730ff0899edbd17b97ef` | [Independent review](reviews/01.md) | None blocking chunk 01; D1–D6 remain OPEN |
 | 02 — Repair the CI baseline and screenshot harness | NOT_STARTED | — | — | See assignment |
-| 03 — Prove Telnyx feasibility and document the carrier contract | NOT_STARTED | — | — | See assignment |
+| 03 — Prove Telnyx feasibility and document the carrier contract | READY_FOR_REVIEW | base `178c448` / head see [handoffs/03.md](handoffs/03.md) | pending | **D1 OPEN** — no Telnyx account, no live call, no rate deck; enquiry drafted and unsent |
 | 04 — Retire family, safety and app-calling features safely | NOT_STARTED | — | — | See assignment |
 | 05 — Introduce core domain models and migration boundaries | NOT_STARTED | — | — | See assignment |
 | 06 — Implement global identity and account recovery | NOT_STARTED | — | — | See assignment |

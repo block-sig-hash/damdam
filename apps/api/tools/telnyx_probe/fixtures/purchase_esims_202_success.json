@@ -1,0 +1,41 @@
+{
+  "_fixture": "SIMULATED",
+  "_description": "Shape-only reconstruction of a 202 response to POST /actions/purchase/esims, built from the published ESimPurchase/SimpleSIMCard OpenAPI schemas. NOT a recorded Telnyx response. No real ICCID, EID, MSISDN or activation code appears here.",
+  "_source": "https://developers.telnyx.com/api-reference/sim-cards/purchase-esims.md",
+  "_fetched": "2026-09-08",
+  "data": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "record_type": "sim_card",
+      "type": "esim",
+      "status": "standby",
+      "iccid": "00000000000000000001",
+      "imsi": null,
+      "msisdn": null,
+      "eid": null,
+      "sim_card_group_id": "00000000-0000-4000-8000-0000000000aa",
+      "tags": ["damdam-op-11111111-1111-4111-8111-111111111111"],
+      "voice_enabled": false,
+      "esim_installation_status": "disabled",
+      "authorized_imeis": null,
+      "actions_in_progress": 0,
+      "created_at": "2026-09-08T00:00:00Z",
+      "updated_at": "2026-09-08T00:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000002",
+      "record_type": "sim_card",
+      "type": "esim",
+      "status": "standby",
+      "iccid": "00000000000000000002",
+      "sim_card_group_id": "00000000-0000-4000-8000-0000000000aa",
+      "tags": ["damdam-op-11111111-1111-4111-8111-111111111111"],
+      "voice_enabled": false,
+      "esim_installation_status": "disabled",
+      "actions_in_progress": 0,
+      "created_at": "2026-09-08T00:00:00Z",
+      "updated_at": "2026-09-08T00:00:00Z"
+    }
+  ],
+  "errors": []
+}

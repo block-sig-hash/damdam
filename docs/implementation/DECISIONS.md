@@ -53,6 +53,48 @@ Recorded so far: the documentation review dated 8 September 2026 in
 [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) §5. That is a reading of public
 documentation, not commercial confirmation, and it does not move D1.
 
+#### Evidence gathered — 2026-09-08 (chunk 03, US-35)
+
+- Gathered by: Claude, chunk 03. **Not a decision. D1 stays OPEN.**
+- Method: independent re-verification against current official Telnyx pages.
+  No account, no API call, no contact with Telnyx.
+- Artifacts: [telnyx/CAPABILITY-MATRIX.md](telnyx/CAPABILITY-MATRIX.md),
+  [telnyx/API-CONTRACTS.md](telnyx/API-CONTRACTS.md),
+  [telnyx/GO-NO-GO.md](telnyx/GO-NO-GO.md),
+  [telnyx/ENQUIRY-DRAFT.md](telnyx/ENQUIRY-DRAFT.md) (**unsent**).
+
+Confirmed against current documentation:
+
+- VoLTE is **still beta**, verbatim: "VoLTE is in beta. API reference and
+  detailed configuration docs coming soon." The API reference itself does not
+  yet exist.
+- Branded eSIM resale is supported, including `product: "whitelabel"` and
+  `whitelabel_name`, the service name shown on the handset.
+- Data, voice and the assigned number sit on one SIM Card resource; the assigned
+  number is the documented outbound caller ID and inbound rings natively.
+
+Newly established, and material to the plan:
+
+- **Voice coverage is entirely undocumented.** The 650+ networks / 180+ countries
+  figures appear only on data pages, qualified as "5G & 4G (LTE) networks". The
+  VoLTE pages carry no coverage figure, country list or roaming statement.
+- **No mobile-voice per-minute rate is published at all**, for Nigeria or any
+  destination. A rate deck via sales is a hard prerequisite.
+- **No voice spending cap is documented.** Data has a supplier-side `data_limit`
+  with unquantified enforcement latency; voice has no documented equivalent.
+  This is in direct tension with the prepaid promise under D5.
+- **eSIM activation codes are one-time use** — a lost profile requires a new
+  purchase. This reshapes device replacement and account recovery.
+- **The product is framed as IoT**; every device guide is a router or dev board.
+  No consumer-handset VoLTE matrix is published.
+- Messaging on cellular numbers is documented as **"coming soon"**.
+- `POST /actions/purchase/esims` has **no idempotency key**. `tags` plus
+  `GET /sim_cards?filter[tags][]=` is the only documented reconciliation path,
+  and its post-purchase consistency is itself undocumented.
+
+Questions 1–8 above all remain unanswered. The enquiry draft is prepared and
+**has not been sent**; sending it is the founder's decision.
+
 **Explicitly not assumed:** that Telnyx can present a third-party verified +234
 caller ID on the cellular line. External CLI is deferred (see D2) and is not a
 launch disqualifier.
