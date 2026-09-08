@@ -1,4 +1,12 @@
 # Product Requirements Document
+
+> **Current scope:** the September 2026 reset in §10 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Nigerian Traveler Connectivity Platform
 # Version: 0.1 (MVP)
 # Status: DRAFT
@@ -1150,9 +1158,12 @@ a timestamped last-known usage reading remain available offline. Ordinary
 carrier calling requires no background location, no contacts access and no
 microphone permission.
 
-**Consumer recovery:** a returning user restores their account and their
-existing service on a new device, without any family, SOS or verified-CLI
-dependency.
+**Consumer recovery:** a returning user restores their account and service
+records without family, SOS or verified-CLI dependencies. Restoring an account
+does not move an installed eSIM. A new device follows the supplier-supported
+reinstallation, transfer or replacement procedure; if unsupported, show the
+limitation and a support/refund route under the agreed policy before promising
+service recovery on that device.
 
 **Enterprise:** create an organization → invite administrators (MFA required) →
 import people with row-level validation → bulk quote → fund a prepaid balance →
@@ -1189,16 +1200,16 @@ unrelated requirement.
 | US-12 Emergency contacts content | **Retired** (already reduced by §6.20) | — |
 | US-13 Arrival activation prompt | **Retired** — geofencing removed | — |
 | US-14 Verified caller ID call | **Deferred** — outbound identity is the carrier-assigned number | US-35 |
-| US-15 Offline check-in | **Retired**, subject to the check-in confirmation in D2 | — |
+| US-15 Offline check-in | **Proposed retirement**, subject to the product-default record in `implementation/DECISIONS.md` | US-30 for any transition |
 | US-16 SOS trigger | **Retired** | — |
 | US-17 Remaining data and minutes | Replaced — real supplier usage reconciliation with freshness | US-36, US-38 |
-| US-18 HTO check-in roster | **Retired** | — |
+| US-18 HTO check-in roster | **Proposed retirement** with the remaining welfare workflow | US-30 for any transition |
 | US-19 HTO SOS alerts | **Retired** | — |
 | US-20 HTO report download | Replaced — departmental spend and usage exports | US-40 |
 | US-21 Family WhatsApp check-in | **Retired** | — |
 | US-22 Family WhatsApp SOS | **Retired** | — |
 | US-23 Session persistence | Retained in substance; re-specified with the global identity model | US-29 |
-| US-24 Offline safety queue | **Retired** — with the account-isolation obligation carried into US-30 | US-30 |
+| US-24 Offline safety queue | Retire SOS paths safely; check-in paths follow the product-default decision. Preserve applicable tests and account isolation throughout | US-30 |
 | US-25 Duplicate-purchase prevention | Retained and strengthened — durable operation reference and reconciliation | US-32 |
 | US-26 Manual Naira pricing | Replaced — multi-currency tariff versions and immutable quotes | US-31 |
 
@@ -1367,8 +1378,10 @@ and deletion to work, so that I can run my own account.
   available offline
 - AC-38.4: Receipts, support contact and account deletion work without any
   family, SOS or verified-CLI dependency
-- AC-38.5: A returning user recovers their account and existing service on a new
-  device
+- AC-38.5: A returning user recovers their account and service records. On a new
+  device, offer only supported profile reinstallation/transfer/replacement;
+  otherwise explain the limitation and the agreed support/refund path. Test both
+  supported and unsupported recovery without reusing one-time activation codes
 
 **US-39** [P0] — As an organization administrator, I want people, teams and
 imports, so that I can manage who gets connectivity.
@@ -1407,10 +1420,11 @@ baseline, so that a green pipeline means something.
   one controlled test clock shared by token creation and JWT validation, with
   both valid and expired cases, and **without** disabling production expiry
   checks
-- AC-42.2: **Original finding 5b** — the screenshot job asserts a complete,
+- AC-42.2: **Original finding 5b** — strengthen the existing exact-count check
+  (32 images on the baseline) so the screenshot job asserts a complete,
   nonempty manifest for the revised screen/locale matrix and fails when an
   expected image is missing, so intermittency surfaces as a failure. The
-  historical 0/32 and the 33 images observed on 2026-09-08 both describe the old
+  historical 0/32 and the 32 images observed on 2026-09-08 both describe the old
   matrix and neither carries forward
 - AC-42.3: Staging and production are isolated, with least-privilege
   credentials, verified webhooks, tested backups and restoration, monitoring and

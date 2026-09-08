@@ -16,7 +16,7 @@ Paths refer to the inspected baseline; verify them in the actual current checkou
 ## Acceptance and evidence
 
 - Require all expected screenshots and inspect rendered critical flows. Run appropriate native build checks and release-validator negative cases.
-- Verify missing supplier/merchant/device evidence, mock mode or mismatched commit prevents production signoff; signing/build success alone must not bypass the gate.
+- Verify missing supplier/merchant/device evidence, mock mode, an explicit FAIL result, a future-dated signoff or untested runtime/configuration changes after the declared tested commit prevents production signoff. The legacy validator accepts FAIL text as structurally complete; preserve its history but close that gap for the reset product. Verify current branch/ruleset enforcement separately; signing/build success alone must not bypass the gate.
 
 Also satisfy the common handoff and affected repository checks below. External prerequisites cannot be replaced by passing mocks. If only a preparatory subset can be completed, identify it and leave the remainder explicitly open.
 
@@ -32,9 +32,8 @@ Inspect the actual current branch, local changes and dependency review records. 
 
 Use existing modules and abstractions, numbered data-model amendments and synchronized API specs. Verify changing vendor APIs against current official documentation. Do not invent endpoints, live prices, regulatory approvals or successful test evidence.
 
-Implement the outcome and its failure behavior. Follow strict TDD for auth and payment/idempotency and the applicable safety-transition tests. Use PostgreSQL for database/concurrency behavior. Run the affected repository-required tests, lint, types, builds and contract checks; do not disable checks or lower coverage to pass. Refactor within scope when it improves correctness or maintainability. If work needs multiple independent migrations/features, propose subchunks rather than delivering an unreviewable PR.
+Implement the outcome and its failure behavior. Follow strict TDD for auth and payment/idempotency and the applicable safety-transition tests. Use PostgreSQL for backend database/concurrency behavior; test mobile SQLite persistence with its actual storage. Run the affected repository-required tests, lint, types, builds and contract checks; do not disable checks or lower coverage to pass. Refactor within scope when it improves correctness or maintainability. If work needs multiple independent migrations/features, propose subchunks rather than delivering an unreviewable PR.
 
 No production deployment, merge, store submission, outgoing vendor messages, live purchases or production data deletion is implied. Prepare reviewable code, scripts and unsent drafts; use existing authorized sandbox access appropriately. Keep secrets and eSIM activation material out of code, logs and evidence.
 
 Finish with the handoff format in `docs/implementation/HANDOFF-TEMPLATE.md`: exact base/head SHA, clean/dirty status, changed behavior, acceptance-test evidence, commands/results, migration notes, unresolved gates and known limitations. Mark incomplete checks as incomplete. Do not mark yourself accepted or continue to the next chunk; Codex reviews first.
-

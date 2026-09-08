@@ -128,17 +128,18 @@ acceptance test that closes it.
 
 - **Status:** **split.** The API clock failure is *currently reproducing*. The
   iOS screenshot failure is *intermittent* — it failed on 2026-09-07 and
-  succeeded on 2026-09-08 on the same commit, uploading 33 PNGs.
+  succeeded on 2026-09-08 on the same commit, validating 32 PNGs; the upload contains those images plus one XML report.
 - **Owning chunk:** 02 for both; release proof in 27–29.
 - **Story:** `US-42`, criteria `AC-42.1`–`AC-42.3`.
 - **Acceptance test (API clock):** `tests/test_auth_api.py::test_otp_request_and_verify_contract`
   passes under one controlled test clock shared by token creation and JWT
   validation, with both a valid-token and an expired-token case, and **without**
   disabling production expiry checks.
-- **Acceptance test (screenshots):** the screenshot job asserts a complete,
+- **Acceptance test (screenshots):** strengthen the existing count check into
+  exact expected screen/locale coverage. The screenshot job asserts a complete,
   nonempty manifest for the revised screen/locale matrix and fails when an
   expected image is missing — flakiness must surface as a failure, not as a
-  silently short manifest. The historical 0/32 and the current 33 both describe
+  silently short manifest. The historical 0/32 and the observed 32 both describe
   the old matrix and neither carries forward; chunk 08 defines the new matrix
   and chunk 27 makes it a release gate.
 

@@ -1,4 +1,12 @@
 # Verified Caller ID Hardening — Scoping
+
+> **Current scope:** the September 2026 reset in §7 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1 · Audit date: 24 July 2026
 
 ## 1. Decision summary

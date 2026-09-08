@@ -1,4 +1,12 @@
 # Frontend Specification — Mobile App
+
+> **Current scope:** the September 2026 reset in §8.9 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1 · React Native · iOS + Android
 
 Single React Native codebase targeting both platforms at MVP.
@@ -653,9 +661,10 @@ walkthrough imagery remain release gates in `localization.md` §§6–7.
 Documentation only — no screen or component change here.
 
 `prd.md` §10 resets the app to four surfaces: **Home, Plans, My Line, Account**.
-The SOS, check-in, family-nomination, arrival-geofence, verified-CLI and
-departure-date screens described above are **retired**; chunk 04 removes them and
-chunks 18–21 build the replacement. `prd.md` §10.3 holds the revised journeys.
+The SOS, family-nomination, arrival-geofence, verified-CLI and departure-date
+screens leave launch scope in chunk 04; chunks 18–21 build the replacement.
+Remaining check-in screens follow the proposed product-default disposition; do
+not treat that proposal as an already completed removal. `prd.md` §10.3 holds the revised journeys.
 
 Requirements that carry forward unchanged:
 
@@ -677,5 +686,5 @@ Requirements that change:
 - Installation guidance must be real for the supported launch device matrix with
   a QR fallback; no placeholder guide ships (`US-38`, AC-38.1).
 - The screen and locale screenshot matrix is re-cut in chunk 08 and enforced in
-  chunk 27. Neither the historical 0/32 count nor the 33 images observed on
+  chunk 27. Neither the historical 0/32 count nor the 32 images observed on
   2026-09-08 carries forward — both describe the old matrix.

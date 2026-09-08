@@ -1,4 +1,12 @@
 # API Specification
+
+> **Current scope:** the September 2026 reset in §7.26 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1
 
 This document is the canonical route inventory and contract.
@@ -1120,9 +1128,10 @@ drift check is unaffected.
 `prd.md` §10 resets the product. Read every section above against
 [`implementation/SCOPE-DISPOSITION.md`](./implementation/SCOPE-DISPOSITION.md).
 
-- Check-in, SOS and family-contact endpoints describe **retired** features;
-  chunk 04 removes them, with old-client behavior handled explicitly rather than
-  by deleting a route and hoping.
+- SOS and family-contact endpoints are scheduled for retirement in chunk 04.
+  Remaining check-in/welfare endpoints follow the proposed-default disposition in
+  `implementation/DECISIONS.md`. Handle old clients/jobs and applicable tests
+  explicitly; a spec amendment does not mean an endpoint has already disappeared.
 - Verified caller-ID endpoints describe **deferred** scope.
 - HTO-shaped organization and manifest endpoints are **generalized** into
   organization, membership, people-import and bulk-allocation contracts by

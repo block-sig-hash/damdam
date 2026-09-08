@@ -1,4 +1,12 @@
 # Security & Compliance Specification
+
+> **Current scope:** the September 2026 reset in §10.14 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1
 
 ## 10.1 Scope and Governing Framework
@@ -392,10 +400,15 @@ Nigerian pilot. A global product's applicable regimes depend on D2 (selling
 markets) and D3 (selling entity), both open. Do not narrow or widen a compliance
 claim before those are recorded.
 
-**New sensitive material.** eSIM activation codes, carrier line identifiers and
-assigned numbers join the redaction rules that already cover secrets and tokens.
-They must not appear in code, logs, fixtures, exports, handoffs or review
-records.
+**New sensitive material.** Real eSIM activation credentials, secrets and tokens
+must never appear in code, logs, exports, fixtures or review evidence. Deliver
+installation credentials only through authorized protected installation flows.
+Carrier line identifiers and assigned numbers are personal/service data: mask
+them in diagnostic logs and public evidence, but permit authorized My Line,
+support and tenant-scoped reports to show the fields necessary for their purpose.
+Use synthetic identifiers in tests and scrubbed contract fixtures; no real
+customer activation credentials belong in fixtures. This distinction preserves
+both data protection and the required line-management/reporting experience.
 
 **Emergency calling is not settled by removing SOS.** Carrier emergency-calling
 obligations on a real cellular line are a separate supplier and legal question

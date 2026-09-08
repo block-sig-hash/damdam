@@ -40,17 +40,19 @@ see [BASELINE.md](BASELINE.md).
 | 29 — Run the authorized physical-device and enterprise pilot | NOT_STARTED | — | — | See assignment |
 | 30 — Close release findings and prepare the production handoff | NOT_STARTED | — | — | See assignment |
 
-## Known open inconsistency created by chunk 01
+## Legacy release compatibility boundary
 
 `scripts/validate-release-signoff.sh` and `docs/release-signoffs/TEMPLATE.md`
 still require "Offline check-in survival" and "Offline SOS survival" rows in
-every release signoff, for features the chunk 01 reset retires. `main`'s branch
-protection genuinely blocks a `staging → main` merge without them.
+every release signoff, for features the reset schedules for retirement. The
+workflow still expects these rows. Current server-side branch protection was
+not verified; see [BASELINE.md](BASELINE.md).
 
 Chunk 01 deliberately left this alone — release automation is **chunk 27**'s
-scope, and weakening a release gate from a documentation chunk should be
-reviewed on its own. Closed by AC-42.5. Until then, promotion to `main` still
-mechanically demands evidence for a retired feature.
+scope. AC-42.5 requires updating template and validator together, retaining
+relevant protection and adding rejection tests. The reset product cannot use
+the old matrix as release certification or invent evidence to pass it. This
+boundary does not prevent reviewed implementation branches or chunk 02.
 
 ## External decisions
 
@@ -67,4 +69,3 @@ D1–D6 begin **OPEN / verify current evidence**. Do not infer they are closed f
 Claude may record IN_PROGRESS, READY_FOR_REVIEW, EXTERNAL_BLOCKED and handoff links. Only an independent Codex review records ACCEPTED or CHANGES_REQUIRED. Acceptance identifies the reviewed/tested code. Explicitly list lettered subchunks and their unaccepted remainder where work was split.
 
 A review record can be carried forward only if the relevant code/configuration has not changed; subsequent changes require appropriate revalidation. Store approval/status text separately from executable runtime configuration.
-

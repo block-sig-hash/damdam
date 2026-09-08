@@ -1,5 +1,12 @@
 # Pre-Pilot Checklist
 
+> **Current scope:** the September 2026 reset in the closing product-reset amendment and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 Every item below was flagged individually, in its own PR description or spec
 section, across the project's build history — nothing here is new work being
 proposed; this document only consolidates gaps that were already identified
@@ -384,19 +391,22 @@ Not as this document's items, but as requirements in the reset scope:
 
 ### Items that retire with their features
 
-Voice/PSTN via verified CLI (`US-14`), check-in offline queue (`US-15`), SOS
-(`US-16`), eSIM geofencing (`US-13`) and HTO dashboard usability (`US-05`
-family) all retire. Their **only** surviving obligation is the account-isolation
-requirement, which becomes AC-30.4 under chunk 04 — offline events must never be
-attributed to the next signed-in account, including across restart and delayed
-callbacks.
+The launch verified-CLI/app-call path, SOS, geofencing and HTO-specific UI
+leave the reset scope; remaining check-in/welfare paths follow the product-default
+decision. Existing safety scenarios remain required for every supported or
+transitioning path under `testing-qa.md` §14.13. Account isolation in AC-30.4 is
+an additional requirement, alongside history preservation, safe shutdown and
+old-client/job compatibility. Removal is proven by chunk 04, not by this amendment.
 
 ### Known inconsistency, deliberately left open
 
 `scripts/validate-release-signoff.sh` still requires "Offline check-in survival
 through force-quit/reboot" and "Offline SOS survival through force-quit/reboot"
-rows in every release signoff, and `main`'s branch protection genuinely blocks a
-merge without them. Those rows demand evidence for features this reset retires.
+rows in every release signoff. Those rows describe the legacy product. The
+workflow still runs on PRs to `main`; current server-side merge enforcement was
+not verified (the branch-protection API returned 404 during review). Treat the
+July protection claim as historical; do not infer either enforcement or absence
+from that response. See `implementation/BASELINE.md`.
 
 Chunk 01 did **not** change that script: release automation is chunk 27's scope,
 and quietly weakening a release gate from a documentation chunk is exactly the

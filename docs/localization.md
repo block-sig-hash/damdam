@@ -1,5 +1,12 @@
 # DamDam Localization Guide
 
+> **Current scope:** the September 2026 reset in §9 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 This is the ongoing engineering and release process for English and French
 (`en`, `fr`). The original inventory and rationale remain in
 [`i18n-scoping.md`](./i18n-scoping.md).
@@ -140,10 +147,12 @@ verification, translation provenance, and the required checks in §8.
 
 What changes is the **content** those processes apply to:
 
-- Safety, SOS, check-in and family-notification strings are **retired** with
+- SOS and family-notification strings are **retired** with
   their features in chunk 04. Remove their keys and their vendor notification
   templates as part of that retirement, so no removed feature can still be
-  dispatched by an old worker or client.
+  dispatched by an old worker or client. Remaining check-in/welfare strings
+  follow the product-default decision and remain tested while their path is
+  supported; do not remove strings from a surviving transition flow.
 - New consumer surfaces (Home, Plans, My Line, Account) and the enterprise
   dashboard need complete English and French coverage from the start — this is
   AC-37.6, not a follow-up.

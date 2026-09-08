@@ -1,4 +1,12 @@
 # Testing & QA Specification
+
+> **Current scope:** the September 2026 reset in §14.13 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1
 
 This document closes a gap that existed across the rest of the
@@ -622,8 +630,8 @@ coverage requirement above is lowered.**
 ### 14.13.1 Revised strict-TDD categories
 
 §14.1's table is superseded by this one. The change is a consequence of the
-product reset: check-in and SOS are retired, and new categories carry the risk
-they used to.
+product reset: SOS is scheduled for retirement, the remaining check-in scope
+is a proposed default, and new categories also require explicit coverage.
 
 | Feature category | TDD requirement |
 |---|---|
@@ -638,18 +646,23 @@ they used to.
 | Dashboard and consumer CRUD surfaces | TDD recommended. |
 | UI polish, copy, styling | No TDD expectation. |
 
-Check-in and SOS (`US-15`, `US-16`, `US-24`) leave this table with the feature.
-Their **account-isolation obligation does not leave** — it becomes AC-30.4 and
-is strict-TDD under safety-transition testing.
+Check-in and SOS (`US-15`, `US-16`, `US-24`) retain strict TDD while any affected
+path is supported or being transitioned. Changes to queues, retries and dispatch
+must run the applicable full §14.4 offline/chaos suite, plus the account-switch,
+restart and delayed-callback scenarios in AC-30.4. Declaring retirement in a
+specification does not remove these obligations.
 
-§14.4's offline/chaos suite likewise retires with its feature, **except** the
-account-switch, restart and delayed-callback isolation scenarios, which chunk 04
-must run against the retirement path.
+Chunk 04 must map each obsolete scenario to evidence that its feature, supported
+old clients and jobs can no longer execute that path before retiring the test.
+Remaining paths keep their applicable tests. Account isolation, history
+preservation and safe shutdown remain required throughout the transition.
 
 ### 14.13.2 PostgreSQL is mandatory for database and concurrency behavior
 
-Anything asserting constraint, locking, isolation or concurrency behavior runs
-against PostgreSQL. SQLite does not reproduce it.
+Backend constraint, locking, isolation and concurrency checks run against
+PostgreSQL, not an SQLite substitute. Mobile outboxes use SQLite: exercise their
+actual persistence, migrations and restart behavior separately, including the
+account-switch scenarios. This rule does not replace the mobile storage engine.
 
 ### 14.13.3 Mocks are not external evidence
 
@@ -668,12 +681,12 @@ Observed 2026-09-08 against `develop` @ `6790c74`; full record in
 |---|---|
 | `tests/test_auth_api.py::test_otp_request_and_verify_contract` | **Failing now.** `ExpiredSignatureError` → `InvalidRefreshTokenError` → `OTPError`. Owned by chunk 02, closed by AC-42.1. |
 | API suite otherwise | 335 passing, coverage 87.13% against an 85% threshold. |
-| iOS screenshot job | **Intermittent.** Failed 2026-09-07, succeeded 2026-09-08 with 33 PNGs on the same commit. Owned by chunk 02, closed by AC-42.2. |
+| iOS screenshot job | **Intermittent.** Failed 2026-09-07, succeeded 2026-09-08 with 32 PNGs on the same commit. Owned by chunk 02, closed by AC-42.2. |
 | Mobile / dashboard / Docker jobs | Passing. |
-| Staging deploy | Skipped on every run — blocked behind the API job. |
+| Staging deploy | Skipped on scheduled runs by the push-only condition; an API failure would also block an eligible push deployment. |
 
 The historical "0/32 iOS screenshots" figure describes the 2026-09-07 run only.
-It is **not** a current fact, and neither it nor the 33 images observed on
+It is **not** a current fact, and neither it nor the 32 images observed on
 2026-09-08 carries into the redesigned matrix. §14.11 and §14.12's screenshot
 matrices are re-cut against the reset screens in chunk 08 and enforced as a
 release gate in chunk 27.

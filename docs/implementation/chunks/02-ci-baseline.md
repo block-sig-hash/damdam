@@ -9,12 +9,13 @@ Paths refer to the inspected baseline; verify them in the actual current checkou
 
 1. Reproduce current baseline failures before fixing them. Investigate the historical JWT July-versus-September clock mismatch using the actual current branch.
 2. Use one controlled clock consistently for test token creation and validation; keep production expiry enforcement intact.
-3. Repair iOS screenshot execution and artifact collection. Validate a nonempty, complete manifest against an explicit current screen/locale matrix; do not hardcode the historical 32 count as a permanent target.
+3. Diagnose intermittent iOS screenshot execution and artifact collection using the failed and successful runs. Both platforms already enforce an exact count of 32 PNGs; strengthen that check into exact expected screen/locale coverage with nonempty valid images. The successful September 8 upload was 32 PNGs plus an XML report, not 33 PNGs. Validate a nonempty, complete manifest against an explicit current screen/locale matrix; do not hardcode the historical 32 count as a permanent target.
 4. Record reproducible toolchain/environment requirements and distinguish missing macOS/signing/secrets from application failures. Keep required checks enforcing failures.
+5. Wire the documentation-link check into a docs-triggered CI path and clarify that any automated Claude review is supplemental to the required independent Codex acceptance. Preserve the required check names and do not change production release-promotion semantics in this chunk.
 
 ## Acceptance and evidence
 
-- Test valid and expired tokens plus time boundaries. Demonstrate screenshot generation fails when expected images are absent.
+- Test valid and expired tokens plus time boundaries. Demonstrate screenshot validation rejects an empty directory, a missing expected image replaced by an unrelated PNG at the same count, and an empty/corrupt expected PNG. Test both platform matrices and keep harness-only test changes out of the production app behavior.
 - Run applicable API/mobile/dashboard baseline checks; use macOS CI for iOS evidence if available. Unavailable native execution remains an explicit evidence gap.
 
 Also satisfy the common handoff and affected repository checks below. External prerequisites cannot be replaced by passing mocks. If only a preparatory subset can be completed, identify it and leave the remainder explicitly open.
@@ -31,9 +32,8 @@ Inspect the actual current branch, local changes and dependency review records. 
 
 Use existing modules and abstractions, numbered data-model amendments and synchronized API specs. Verify changing vendor APIs against current official documentation. Do not invent endpoints, live prices, regulatory approvals or successful test evidence.
 
-Implement the outcome and its failure behavior. Follow strict TDD for auth and payment/idempotency and the applicable safety-transition tests. Use PostgreSQL for database/concurrency behavior. Run the affected repository-required tests, lint, types, builds and contract checks; do not disable checks or lower coverage to pass. Refactor within scope when it improves correctness or maintainability. If work needs multiple independent migrations/features, propose subchunks rather than delivering an unreviewable PR.
+Implement the outcome and its failure behavior. Follow strict TDD for auth and payment/idempotency and the applicable safety-transition tests. Use PostgreSQL for backend database/concurrency behavior; test mobile SQLite persistence with its actual storage. Run the affected repository-required tests, lint, types, builds and contract checks; do not disable checks or lower coverage to pass. Refactor within scope when it improves correctness or maintainability. If work needs multiple independent migrations/features, propose subchunks rather than delivering an unreviewable PR.
 
 No production deployment, merge, store submission, outgoing vendor messages, live purchases or production data deletion is implied. Prepare reviewable code, scripts and unsent drafts; use existing authorized sandbox access appropriately. Keep secrets and eSIM activation material out of code, logs and evidence.
 
 Finish with the handoff format in `docs/implementation/HANDOFF-TEMPLATE.md`: exact base/head SHA, clean/dirty status, changed behavior, acceptance-test evidence, commands/results, migration notes, unresolved gates and known limitations. Mark incomplete checks as incomplete. Do not mark yourself accepted or continue to the next chunk; Codex reviews first.
-

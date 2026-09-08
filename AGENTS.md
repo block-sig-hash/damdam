@@ -84,15 +84,22 @@ Strict TDD — write the failing test first — is required for:
 | Tenant isolation and object-level authorization | A cross-tenant read is a breach, not a bug |
 | Order and provisioning idempotency, including accepted-but-response-lost | The single most expensive failure mode in this product |
 | Safety-transition tests during feature retirement | Retirement must not orphan queued work or rebind it to the wrong account |
+| Ledger entry correctness and concurrency | Posted entries and reservations must remain correct under replay and concurrent requests |
 
 Everywhere else: tests are required, TDD is recommended, and neither is
 mechanically enforced by tooling — it is a review-time check.
 
 Non-negotiable:
 
-- **Use PostgreSQL for anything about database or concurrency behavior.** SQLite
-  does not reproduce the constraints, locking or isolation this product depends
-  on.
+- **Use PostgreSQL for backend database and concurrency behavior.** Do not
+  substitute SQLite for server constraints, locking or isolation. Mobile outbox
+  persistence uses SQLite; test that actual storage and its restart behavior as
+  well as the backend when validating safety retirement.
+- **Keep existing safety tests while their paths are supported.** The applicable
+  strict-TDD and full offline/chaos checks in `testing-qa.md` §14.4 remain required
+  for retained or transitioning queues, retries and notification dispatch. Retire
+  a scenario only with evidence that its path and supported old clients/jobs
+  have been retired; account isolation is an additional requirement.
 - **Never disable a check, lower a coverage threshold, or weaken a production
   expiry/authorization rule to make a test pass.** Fix the code or the test.
 - **A mock passing itself is not evidence of external compatibility.** Vendor
@@ -140,8 +147,9 @@ what is only historically reported.
   layer**, never called directly from route handlers or UI components. Each
   adapter advertises its capabilities (native voice, supported numbers, top-up,
   reuse, suspension, usage latency, spending enforcement); a data-only adapter
-  cannot satisfy a native-voice plan. Keeping this boundary is what makes a
-  supplier change a configuration change instead of a rewrite.
+  cannot satisfy a native-voice plan. The boundary limits supplier-specific
+  changes; a switch can still need a new adapter, profile, customer installation
+  and commercial approval. It is not necessarily a configuration-only change.
 - **An unknown supplier outcome reconciles against the original operation
   reference.** It never triggers a second purchase and never fails over to
   another vendor.

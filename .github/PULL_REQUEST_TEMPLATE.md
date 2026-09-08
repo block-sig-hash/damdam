@@ -18,22 +18,20 @@ Closes #
 - [ ] docs — documentation only
 - [ ] chore — tooling, dependencies, config
 
-## Pilot RC freeze classification
+## Build chunk and review
 
-<!-- `docs/pre-pilot-checklist.md` defines the active feature freeze.
-Check the one category that admits this change. New product scope is
-deferred unless it resolves a named pilot blocker. -->
+<!-- The September product reset supersedes the old pilot feature freeze.
+Use docs/implementation/README.md. Claude implements; Codex independently
+reviews and may refactor. A separate authorization is needed for promotion. -->
 
-- [ ] P0/P1 correctness, safety, security, privacy,
-      accessibility, or data-loss fix
-- [ ] Release/CI, signed-build, staging/production, vendor,
-      monitoring, backup/restore, compliance, localization-review,
-      or release-evidence work
-- [ ] Copy/layout correction from native-language, legal,
-      HTO-usability, or physical-device review
-- [ ] Explicit freeze exception — pilot blocker named below
+- Chunk and registered story:
+- Accepted dependency reviews:
+- Implementation handoff:
+- Independent Codex review and reviewed SHA:
+- External gates / missing evidence:
 
-Pilot blocker or exception rationale: N/A
+An automated Claude review is supplemental; it does not accept a chunk or
+replace the independent review. Do not claim unrun tests or live verification.
 
 ## Platform(s) affected
 

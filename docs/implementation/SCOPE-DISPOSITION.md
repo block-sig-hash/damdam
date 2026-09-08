@@ -29,7 +29,7 @@ at this file.
 | Hajj / Umrah / pilgrim / NAHCON framing | GENERALIZED | Generic consumer traveler; no pilgrimage, departure-date or Saudi-destination requirement | 04 (behavior), 18–21 (UI), 09 (catalog) |
 | Family contacts (`family_contacts`, nomination, WhatsApp notification) | RETIRED | none | 04 |
 | Offline SOS (`sos_alerts`, `sos_notifications`, dispatch, HTO alerting) | RETIRED | none | 04 |
-| Check-in / welfare workflow (`check_ins`, `check_in_notifications`, roster status) | RETIRED — **proposed**, see D2 note below | none | 04 |
+| Check-in / welfare workflow (`check_ins`, `check_in_notifications`, roster status) | **PROPOSED RETIREMENT**, see product-default note below | none | 04 |
 | Arrival geofencing (`destination_geofences`) | RETIRED | none | 04 |
 | Verified Nigerian caller ID (`verified_cli`, `caller_id_verifications`) | DEFERRED | Carrier-assigned number as outbound identity | 04 (launch dependency), 15 (number lifecycle) |
 | +234 retention / porting | DEFERRED | New assigned number; **no retention promise** | D2 decision, then 15 |
@@ -47,9 +47,12 @@ Removing family contacts and SOS is the user's explicit decision. Removing the
 **remaining check-in / welfare workflow** is recorded in
 [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) §1 as a *recommended scope
 interpretation*. It is carried in [DECISIONS.md](DECISIONS.md) as a proposed
-default owned by founder/product. Chunk 04 must not begin welfare removal until
-that proposal is confirmed, and must not quietly retain welfare tracking inside
-the enterprise dashboard as a substitute.
+default owned by founder/product. Confirm the final disposition before irreversible
+removal of remaining welfare data or a launch promise about that service. Reversible
+inventory, isolation and migration preparation may proceed, as may the already
+authorized family/SOS removal. Do not quietly retain welfare tracking in the
+enterprise dashboard. Record a founder decision already supplied in the session
+without asking for it again.
 
 ### SOS removal is not emergency-calling removal
 
@@ -115,6 +118,8 @@ done
   requires "Offline check-in survival" and "Offline SOS survival" rows in every
   release signoff. Removing them is release automation and belongs to
   **chunk 27**; it is recorded in [STATUS.md](STATUS.md) as a known
-  inconsistency between this reset and the enforced gate. Until chunk 27 lands,
-  a `staging → main` promotion still mechanically demands SOS evidence.
+  compatibility constraint between the reset and the legacy validator. Until
+  chunk 27 updates template and validator together, the workflow still expects
+  the legacy rows. Current server-side merge enforcement is unverified; see
+  [BASELINE.md](BASELINE.md). Never fabricate retired-feature evidence to pass it.
 - It did **not** touch application code, migrations or CI configuration.

@@ -1,73 +1,67 @@
 # Refreshed baseline — chunk 01
 
-Recorded 8 September 2026 as the first deliverable of
-[chunk 01](chunks/01-scope-and-specifications.md). This file records what was
-actually observed on that date. It does not declare any defect fixed, and it
-does not certify the branch as release-ready.
+Recorded 8 September 2026; corrected by independent Codex review on the same
+date. This is a dated observation, not a production-readiness certificate.
+The original builder handoff remains historical; corrections here govern later work.
 
 ## Repository and commit facts
 
-| Fact | Value |
-|---|---|
-| Remote | `https://github.com/block-sig-hash/damdam.git` |
-| Default integration branch | `develop` |
-| `origin/develop` after `git fetch --all --prune --tags` on 2026-09-08 | `6790c74707a0f3e52cfedb36bc173ec83ca26663` |
-| Commit date of that SHA | 2026-07-28 22:26:52 +0100 |
-| Commit subject | `fix(ci): prepare the pilot release candidate (#99)` |
-| Base SHA used for chunk 01 | `6790c74707a0f3e52cfedb36bc173ec83ca26663` |
-| Latest tag | `v0.1.0-rc.1` |
-| Remote branches present | 37, including 20+ unmerged `agent/*` branches |
-| Working tree before chunk 01 | clean; no stashes; no other worktrees |
+- Repository: `block-sig-hash/damdam`; integration branch: `develop`.
+- Base and fetched `origin/develop`: `6790c74707a0f3e52cfedb36bc173ec83ca26663`.
+- Base subject: `fix(ci): prepare the pilot release candidate (#99)`.
+- Base commit date: 2026-07-28; historical tag `v0.1.0-rc.1` remains untouched.
+- Builder content: `0f3331a907783edc75663ded8e6cc85208961ec9`; handoff-only
+  successor: `3e99cefcda288747fb8cfe15adaaf9e0ff6d0fc3`.
+- Branch: `chunk/01-scope-and-specifications`, local only. The checkout was clean
+  when independent review began. Review fixes follow those commits.
 
-`develop` has not advanced since the 7 September review snapshot, so the base
-SHA for this work is identical to the historically reviewed commit. Local work
-was preserved: chunk 01 was cut as a new branch,
-`chunk/01-scope-and-specifications`, directly from `6790c74`. Nothing was reset,
-rebased or force-updated.
+The checkout has 37 remote refs including `origin/HEAD`. Many feature tips are
+not ancestors of `origin/develop` according to `git branch -r --no-merged`.
+That does not prove their changes never landed: squash/rebase merges may retain
+non-ancestor branch tips. Inspect code and PR history before salvaging anything;
+do not treat branch names or ancestry alone as implementation evidence.
 
-### Unmerged remote branches
+## Deployment records and their limits
 
-37 remote refs exist, most of them `agent/*` feature branches that were never
-merged into `develop` (for example `agent/us-16-sos`,
-`agent/us-18-19-22-sos-dashboard`, `agent/us-06-bulk-package-purchase`,
-`agent/deploy-pipeline`, `agent/kuma-monitoring`). None of them were merged,
-inspected or rebased by chunk 01. Several implement features that the product
-reset retires; chunk 04 owns the decision on what to salvage versus abandon,
-and nothing in this pack treats an unmerged branch as delivered behavior.
+Independent review queried `gh api
+'repos/block-sig-hash/damdam/deployments?per_page=100'` on 8 September. It returned
+19 records, including:
 
-## Deployment evidence available
+| Environment | Latest returned record | SHA | Meaning |
+|---|---|---|---|
+| staging | 2026-07-28T21:40:08Z; ID 5647994259 | `6790c74` | A deployment record exists |
+| production | 2026-07-12T22:46:45Z; ID 5416936363 | `76a8b1ad5b0bbbfe8c6806d9cc20e610fb40435c` | A production deployment record exists |
 
-| Environment | Evidence found | Date |
-|---|---|---|
-| staging | GitHub deployments recorded against `develop` | most recent 2026-07-28T21:40:08Z |
-| production | no deployment recorded in the queried history | — |
+The initial handoff's claim that production had no deployment record was wrong.
+No later record appeared in this response. A record is not proof that deployment
+succeeded or that an environment is healthy now; statuses, host health, secrets
+and running versions were not verified by this review.
 
-There has been no recorded deployment of any kind since 2026-07-28. The nightly
-CI `Deploy develop to staging` job has been **skipped** on every run inspected,
-because the API job it depends on fails first. There is therefore no current
-running-environment evidence for this baseline — only CI evidence.
+`.github/workflows/ci.yml` allows `deploy-staging` only on a **push** to
+`refs/heads/develop`, with no failed/cancelled prerequisites. Scheduled runs
+therefore skip it even if tests pass. An API failure also blocks an eligible
+push deployment; fixing that failure alone will not make a scheduled run deploy.
 
-## Current CI evidence (observed, not historical)
+## CI evidence
 
-Nightly scheduled CI runs against `develop` @ `6790c74`. Every run in the
-inspected window (2026-09-01 through 2026-09-08) concluded **failure**.
-
-Most recent run at the time of writing —
-[run 34198388517](https://github.com/block-sig-hash/damdam/actions/runs/34198388517),
-2026-09-08T07:14:54Z, head SHA `6790c74`:
+[Run 34198388517](https://github.com/block-sig-hash/damdam/actions/runs/34198388517)
+started 2026-09-08T07:14:54Z against `6790c74` and concluded failure. Independent
+review confirmed job/step conclusions with `gh run view --json headSha,conclusion,jobs`.
 
 | Job | Conclusion |
 |---|---|
 | Detect changed paths | success |
-| API — Lint, type-check, test | **failure** |
-| Mobile — Lint, type-check, test | success |
-| Dashboard — Lint, type-check, test | success |
-| Docker build check (multi-arch) | success |
-| Mobile — iOS screenshot generation (nightly/on-demand) | **success** |
-| Mobile — Android screenshot generation | skipped |
-| Deploy develop to staging | skipped |
+| API lint/types/migrations | success |
+| API pytest | failure |
+| OpenAPI drift | skipped after pytest failed; not independently proven passing |
+| Mobile lint/types/tests + Android debug compilation | success |
+| Dashboard lint/types/tests | success; no production build step in this job |
+| Docker multi-architecture checks | success |
+| iOS screenshot job | success |
+| Android screenshot job | skipped |
+| Staging deploy | skipped under the push-only event condition |
 
-API job detail from that run:
+The builder reported this API log result from that run:
 
 ```
 FAILED tests/test_auth_api.py::test_otp_request_and_verify_contract
@@ -76,62 +70,70 @@ FAILED tests/test_auth_api.py::test_otp_request_and_verify_contract
 Required test coverage of 85.0% reached. Total coverage: 87.13%
 ```
 
-The failure chain is `jwt.exceptions.ExpiredSignatureError: Signature has
-expired` in `apps/api/app/auth/tokens.py:83` → `InvalidRefreshTokenError` →
-`OTPError("invalid_refresh_token")` raised from `apps/api/app/auth/routes.py:152`.
-This is the clock/expiry defect described as original finding 5. It is
-**still failing**; chunk 02 owns the fix.
+The reported chain is `ExpiredSignatureError` → `InvalidRefreshTokenError` →
+`OTPError`. Chunk 02 must reproduce/fix the shared test clock while preserving
+production token expiry. No application test was rerun during this docs review.
 
-## Differences from the historical 6790c74 review
+### Screenshot correction: 32 PNGs, not 33
 
-The 7 September review recorded "335 API tests passed, one failed, 87% coverage;
-iOS screenshot output 0/32; mobile unit and dashboard checks passed", citing
-[run 34094962267](https://github.com/block-sig-hash/damdam/actions/runs/34094962267).
-Comparing that run against the 2026-09-08 run on the same commit:
+Independent review read the existing
+[iOS job log](https://github.com/block-sig-hash/damdam/actions/runs/34198388517/job/101971247184).
+At 07:40:31 it reports `Expected 32 screenshots; found 32`. The subsequent upload
+reports **33 files** because the workflow includes 32 PNGs **and
+`maestro-report.xml`**. Artifact ID 10045606959 is 3,368,205 bytes. The upload's
+file count is not a PNG count.
 
-| Item | 2026-09-07 (historical review) | 2026-09-08 (observed now) | Assessment |
-|---|---|---|---|
-| API test result | 1 failed / 335 passed | 1 failed / 335 passed, same test, same error | Unchanged and reproducible |
-| API coverage | 87% | 87.13%, threshold 85% met | Unchanged; coverage is not the blocker |
-| iOS screenshot job | failure, 0/32 images | **success, 33 PNG files uploaded** (`mobile-screenshots-ios`, artifact 10045606959, 3,368,205 bytes) | **Materially different** |
-| Mobile unit / lint / types | success | success | Unchanged |
-| Dashboard unit / lint / types | success | success | Unchanged |
-| Docker multi-arch build | not separately recorded | success | Additional current evidence |
-| Staging deploy | skipped | skipped | Unchanged; blocked behind the API job |
+Both Android and iOS already have an exact-count assertion in `ci.yml` and
+`if-no-files-found: error` on artifact upload. The empty artifact failure was
+already visible to CI; chunk 02 must not claim to add missing nonempty enforcement.
 
-**The one material difference is the iOS screenshot job.** On the identical
-commit it failed on 7 September and succeeded on 8 September, producing 33
-images. The correct current classification is therefore *intermittent /
-environment-dependent*, not *deterministically broken*. The "0/32" figure is a
-**historical** observation and must not be repeated as a current fact.
+The [September 7 run](https://github.com/block-sig-hash/damdam/actions/runs/34094962267)
+was reported with 0/32 PNGs and a failed iOS job, while September 8 succeeds on
+the same application commit. This establishes differing outcomes, not the root
+cause. Chunk 02 owns diagnosis of harness/runner/toolchain variability and
+strengthening count-only checking to exact screen/locale coverage and valid,
+nonempty images. Test a missing expected image replaced by an unrelated image
+at the same count. Chunk 08 defines the revised matrix; chunk 27 enforces it for
+release. Neither old count is a permanent target for the redesigned app.
 
-Two consequences for the plan:
+## Release enforcement: repository code versus server settings
 
-1. Chunk 02 must diagnose flakiness and add a nonempty-manifest assertion, not
-   only "make screenshots generate". A job that passes some nights and fails
-   others without a manifest check is not a trustworthy release gate.
-2. The screenshot count is in any case superseded. 33 images belong to the old
-   Hajj/SOS/verified-CLI screen matrix. The redesigned screen and locale matrix
-   defined in chunk 08 and chunk 27 replaces it; no count carries forward.
+The checked-in promotion workflow runs the existing signoff validator on PRs to
+`main`. Its matrix includes old app-call, CallKit/PushKit, check-in/SOS and HTO
+scenarios. That matrix remains a legacy compatibility constraint until chunk 27
+updates template and validator together. Do not use it to certify the reset
+product or fabricate obsolete evidence.
 
-Nothing above is a fix. Both original CI findings remain open, one
-reproducibly and one intermittently.
+The July infrastructure amendment records branch-protection enforcement at that
+time. Independent review's GET of `repos/block-sig-hash/damdam/branches/main/protection`
+returned **404** on 8 September. This does not establish current enforcement or
+its absence; classic protection, rulesets and account access require separate
+verification. No server setting was changed. Chunk 27 must verify actual
+promotion protection before release.
 
-## Reproducing this record
+The legacy validator checks whether PASS or FAIL text exists, rather than
+requiring every mandatory result to pass. It also accepts any tested ancestor
+without excluding later runtime changes. Chunk 27's negative cases explicitly
+cover these limitations, future dates and missing evidence. This review leaves
+runtime release automation unchanged and does not authorize promotion.
 
-```bash
-git -C <checkout> fetch --all --prune --tags
-git -C <checkout> rev-parse origin/develop
-gh run list --limit 8
-gh run view 34198388517 --json headSha,conclusion,jobs
-gh run view 34198388517 --log-failed
-gh api repos/block-sig-hash/damdam/deployments
+## Reproduction and source limits
+
+```
+git rev-parse origin/develop
+git branch -r --no-merged origin/develop
+gh run view 34198388517 --repo block-sig-hash/damdam --json headSha,conclusion,jobs
+gh run view 34198388517 --repo block-sig-hash/damdam --job 101971247184 --log
+gh api 'repos/block-sig-hash/damdam/deployments?per_page=100'
+gh api repos/block-sig-hash/damdam/branches/main/protection
 ```
 
-## Known limitation of this checkout
+The initial handoff reported failures on the September 1–8 runs. Independent
+review checked the named September 8 run, not every run in that window. The
+original five findings remain implementation work; none is fixed by this review.
 
-The working checkout used for chunk 01 is `/tmp/damdam-review-20260907`, a full
-clone of the remote. `/tmp` is not durable across a host restart. The branch is
-committed locally and has **not** been pushed — pushing is an outward-facing
-action that was not authorized for this chunk. Relocate or push the branch
-before relying on it.
+## Durability
+
+The working checkout is `/tmp/damdam-review-20260907`. A local bundle under the
+user's home directory preserves the reviewed branch; see the review handoff for
+the exact filename/head. No push, merge, deployment or live test occurred.

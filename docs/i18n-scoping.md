@@ -1,4 +1,12 @@
 # Internationalization Scoping — English and French
+
+> **Current scope:** the September 2026 reset in §11 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1 · Audit date: 23 July 2026
 
 ## 1. Decision summary
@@ -602,8 +610,10 @@ Documentation only.
   and emergency string review, and pilgrim-market expansion. Those are scoping
   inputs for a product that no longer exists; do not read them as a current
   backlog.
-- **SOS, emergency, check-in and family string scope is retired** with the
-  feature in chunk 04, including vendor notification templates.
+- **SOS and family string scope retires** with the feature in chunk 04,
+  including vendor notification templates. Remaining check-in/welfare scope
+  follows the proposed product-default decision and retains applicable tests
+  until the supported path is retired.
 - **The market-expansion analysis in §7.4 is superseded** by D2 (selling
   markets, visited countries, calling destinations, supported devices), which is
   open in [`implementation/DECISIONS.md`](./implementation/DECISIONS.md).

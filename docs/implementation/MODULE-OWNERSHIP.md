@@ -12,9 +12,13 @@ separates them deliberately:
 2. **Module ownership** — which specification defines a module's contract and
    which chunk is allowed to change it. That is what this file records.
 
-A chunk may only change modules it owns. Touching a module owned by a later
-chunk means either the scope is wrong or the work needs a subchunk — say so in
-the handoff rather than widening the diff.
+The chunk's acceptance criteria define its scope; the table names primary
+delivery responsibility, not exclusive file ownership. Necessary integration
+changes are allowed across modules: for example, chunk 04 retires shared dispatch
+and navigation paths, chunk 05 introduces cross-module schema, and chunk 09 owns
+immutable quote behavior before order orchestration in chunk 11. Explain and
+test those changes in the handoff. Split unrelated new features into a later
+chunk instead of using integration work to widen the scope.
 
 ## Target module boundaries
 
@@ -66,7 +70,7 @@ Inventory of `6790c74`. "Reuse" means the code or its abstraction survives;
 | `apps/api/app/packages/` | Generalize into catalog and entitlement | Catalog, Connectivity | 09, 15 |
 | `apps/api/app/esim/providers.py` | Reuse provider boundary and pending-order safeguards; existing adapters are issue-only and are **not** evidence of a live integration | Connectivity | 15 |
 | `apps/api/app/voice/` | Retire the app/WebRTC path as the launch mechanism; keep billing concepts | Connectivity, Usage | 04, 15 |
-| `apps/api/app/checkins/`, `app/sos/`, `app/profile/` (family) | Retire, with the migration sequence in `IMPLEMENTATION-PLAN.md` §7 Phase 1 | — | 04 |
+| `apps/api/app/checkins/`, `app/sos/`, `app/profile/` (family) | Retire agreed scope; check-in follows the product-default record, with the migration sequence in `IMPLEMENTATION-PLAN.md` §7 Phase 1 | — | 04 |
 | `apps/api/app/notifications/`, `app/i18n/` | Reuse; retire feature-specific dispatch with its feature | Notifications | 04, 18 |
 | `apps/api/app/audit/`, `app/admin/`, `app/reports/`, `app/retention/` | Reuse and generalize | Support / Audit | 25 |
 | `apps/api/app/activation/` | Reuse; rebind redemption to the intended recipient | Connectivity, Organizations | 18, 23 |
@@ -86,7 +90,7 @@ The product-level narrative, with acceptance criteria, is in
 | Journey | Chunks | Story |
 |---|---|---|
 | Consumer: browse → check eligibility → sign up → quote → pay → provision → install → select native line → use → top up | 09, 12, 13, 18, 19, 20 | `US-37`, `US-38` |
-| Consumer recovery: returning user restores account and existing service on a new device | 06, 20, 21 | `US-29`, `US-38` |
+| Consumer recovery: restore account/service records; reinstall, transfer or replace a profile only through a supported carrier procedure | 06, 20, 21 | `US-29`, `US-38` |
 | Enterprise: create organization → invite administrators → import people → bulk quote → fund → order → assign → employee installs → reconciled spend → offboard | 07, 22, 23, 24 | `US-39`, `US-40` |
 | Internal operations: exception queue → supplier reconciliation → refund or adjustment → audited record | 14, 25 | `US-41` |
 

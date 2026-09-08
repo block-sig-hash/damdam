@@ -1,4 +1,12 @@
 # Frontend Specification — HTO & Admin Dashboard
+
+> **Current scope:** the September 2026 reset in §9.9 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1 · Next.js · Cloudflare Workers · Web (desktop-first)
 
 One Next.js application, role-conditional routing between the HTO
@@ -494,9 +502,10 @@ Documentation only — no screen change here.
 a separate product; launch claims no universal government certification or
 data-residency compliance.
 
-- **Retired:** SOS alert surfaces, check-in rosters and any welfare or
-  duty-of-care tracking. The reset must not quietly reintroduce welfare
-  monitoring here after removing it from the consumer app.
+- **Scheduled for retirement:** SOS alert surfaces. Check-in rosters and
+  remaining welfare/duty-of-care tracking follow the proposed product-default
+  disposition in `implementation/DECISIONS.md`. The reset must not quietly
+  introduce enterprise monitoring as a substitute for removed consumer features.
 - **Generalized:** manifests become validated people imports; manifest orders
   become bulk quotes and orders with per-line progress and partial-failure
   recovery; HTO operators become organization members with owner, administrator,

@@ -143,4 +143,3 @@ Start from the latest accepted code, preserve unrelated changes,
 run required checks and return docs/implementation/HANDOFF-TEMPLATE.md.
 Do not mark your own work accepted or start another chunk.
 ```
-

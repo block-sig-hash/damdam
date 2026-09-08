@@ -149,14 +149,16 @@ hosting, secrets ownership, support ownership, and physical test devices for the
 supported matrix. No fabricated signed-build, device or live-payment result may
 be recorded anywhere in this repository.
 
-## Proposed defaults awaiting a decision
+## Product defaults and existing decisions
 
-These are carried as proposals, not founder approvals. Each names where it is
-recorded and who owns confirming it.
+Family contacts and offline SOS removal are already authorized by the user
+(plan §1); do not ask for that approval again. The four defaults below remain
+proposals, not founder approvals. Use them for reversible preparatory work while
+recording unresolved choices; do not invent approval for irreversible removal or
+public service promises. Record any subsequent session decision here.
 
 | Proposed default | Source | Owner | Consequence if reversed |
 |---|---|---|---|
-| Remove family contacts and offline SOS entirely | User decision, plan §1 | Decided by the user | — (this one is a decision, not a proposal) |
 | Remove the remaining check-in / welfare workflow | Plan §1, "recommended scope interpretation" | Founder / product | Chunk 04 retirement scope changes; enterprise dashboard scope changes |
 | Email-based account identity and recovery, independent of SMS | Plan §1 | Founder / product | Chunk 06 identity model changes |
 | A new carrier-assigned number, no +234 retention promise | Plan §1, D2 | Founder / product | Chunk 15 number lifecycle and all plan copy change |
@@ -164,6 +166,10 @@ recorded and who owns confirming it.
 
 Chunk 01 records these as proposed defaults exactly as the plan does. It did not
 invent founder approval for any of them.
+
+The welfare and identity defaults are product choices, not hidden additions to
+D2's carrier-market gate. The assigned-number policy is under D2 and charging
+is under D5. Each affected chunk must name its remaining choice explicitly.
 
 ## Recording a decision
 

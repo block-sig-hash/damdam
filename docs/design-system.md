@@ -1,4 +1,12 @@
 # Mobile App Design System
+
+> **Current scope:** the September 2026 reset in §15.3 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 1.0
 
 This is the visual and interaction vocabulary for `apps/mobile`.
@@ -465,5 +473,5 @@ Two governance changes:
   for screen work, and chunk 08 is a dependency of chunks 18–24.
 - **The screenshot matrix is re-cut here.** Chunk 08 defines the reset
   screen/locale matrix; chunk 27 enforces a complete, nonempty manifest for it as
-  a release gate. Neither the historical 0/32 nor the 33 images observed on
+  a release gate. Neither the historical 0/32 nor the 32 images observed on
   2026-09-08 carries forward — both describe the old screen set.

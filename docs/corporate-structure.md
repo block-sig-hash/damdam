@@ -1,4 +1,12 @@
 # Corporate Structure
+
+> **Current scope:** the September 2026 reset in §13.5 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1
 
 This document is the source of truth for DamDam's entity structure

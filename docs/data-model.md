@@ -1,4 +1,12 @@
 # Data Model
+
+> **Current scope:** the September 2026 reset in §6.42 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1
 
 Database: PostgreSQL 16. ORM: SQLModel (Pydantic + SQLAlchemy). All
@@ -1916,8 +1924,10 @@ Read every section above against
 which classifies each legacy concept as retired, generalized, deferred or
 historical. In particular:
 
-- `family_contacts`, `check_ins`, `check_in_notifications`, `sos_alerts`,
-  `sos_notifications` and `destination_geofences` describe **retired** features.
+- `family_contacts`, `sos_alerts`, `sos_notifications` and
+  `destination_geofences` describe features scheduled for retirement. The
+  `check_ins` and `check_in_notifications` disposition remains a proposed
+  product default in `implementation/DECISIONS.md`.
   Chunk 04 owns their removal, following the migration sequence in
   `implementation/IMPLEMENTATION-PLAN.md` §7 Phase 1 — stop enrollment and
   dispatch, drain queued work, delete per the retention policy, and drop schema

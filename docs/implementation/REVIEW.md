@@ -54,4 +54,3 @@ Conclude with:
 P0/P1 defects and material P2 gaps in correctness, authorization, financial integrity, data preservation or required behavior block acceptance. Missing mandatory verification blocks the affected scope. Refactoring suggestions that do not affect acceptance can be explicitly deferred with ownership.
 
 If a necessary live/native test cannot run, do not falsely accept the whole chunk. Accept a clearly named software/preparatory subchunk only when its own criteria pass, leaving the remainder visible. No code-quality verdict implies production readiness.
-

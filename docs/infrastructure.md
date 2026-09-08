@@ -1,4 +1,12 @@
 # Infrastructure & DevOps Specification
+
+> **Current scope:** the September 2026 reset in §11.15 and
+> [PRD §10](prd.md) governs conflicts with earlier text. Use the
+> [scope disposition](implementation/SCOPE-DISPOSITION.md) and
+> [decision register](implementation/DECISIONS.md) for retained, retired
+> and proposed behavior. These are target requirements; existing code and
+> supported transition paths remain subject to their applicable checks.
+
 # DamDam — Version 0.1
 
 > **Scope note:** This document covers MVP infrastructure only —
@@ -1086,16 +1094,20 @@ full record with commands and run IDs is in
   pass; coverage is 87.13% against an 85% threshold, so coverage is not the
   blocker. This is **still failing**.
 - The iOS screenshot job **failed on 2026-09-07 and succeeded on 2026-09-08 on
-  the identical commit**, uploading 33 PNGs. It is intermittent, not
+  the identical commit**, validating 32 PNGs (the upload has 33 files including
+  the XML report). It is intermittent, not
   deterministically broken. The historical "0/32" figure must not be repeated as
   a current fact.
 - Mobile, dashboard and multi-arch Docker jobs pass.
-- `Deploy develop to staging` is **skipped** on every run, because the API job
-  fails first. The most recent recorded staging deployment is 2026-07-28; there
-  is no production deployment in the queried history and therefore **no current
-  running-environment evidence**.
+- `Deploy develop to staging` is **push-only** and therefore skips scheduled
+  runs independently of test results. API failure would also block an eligible
+  push. Latest returned deployment records are staging on 2026-07-28 and
+  production on 2026-07-12. Records do not establish success or current health;
+  this review has **no current running-environment evidence**.
 
-The three-branch promotion gate in §11.14 stays in force. Note the one known
+The checked-in three-branch promotion workflow remains unchanged. Current
+server-side enforcement is unverified: the branch-protection API returned 404
+during review, which proves neither presence nor absence of protection. Note the
 inconsistency this reset creates: `scripts/validate-release-signoff.sh` still
 requires "Offline check-in survival" and "Offline SOS survival" rows in every
 release signoff, for features the reset retires. Chunk 01 deliberately did not

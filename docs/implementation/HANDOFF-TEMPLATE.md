@@ -58,4 +58,3 @@ Include meaningful regression tests, relevant existing suites, lint/types/build/
 - No merge/deployment/store submission performed unless separately authorized:
 
 Claude's handoff is a request for review, not acceptance.
-
