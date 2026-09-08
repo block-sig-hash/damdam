@@ -1,4 +1,6 @@
 /**
+ * @jest-environment node
+ *
  * US-42 / AC-42.2 — negative coverage for the screenshot completeness check.
  *
  * The old CI assertion was `test "${#screenshots[@]}" -eq 32`. Each test below
@@ -126,6 +128,16 @@ describe('expected matrix derivation', () => {
     expect(parsed.screenshots).toEqual(['example-en']);
   });
 
+  it('parses ordinary YAML quotes, inline tags and comments', () => {
+    expect(parseFlow('appId: test\ntags: [ios-only]\n---\n- takeScreenshot: "quoted-en" # capture\n'))
+      .toEqual({tags: ['ios-only'], screenshots: ['quoted-en']});
+  });
+
+  it('does not silently omit nested captures from coverage', () => {
+    expect(() => parseFlow('appId: test\n---\n- runFlow:\n    commands:\n      - takeScreenshot: nested-en\n'))
+      .toThrow(/unsupported|nested|runFlow/i);
+  });
+
   it('rejects an unknown platform rather than validating nothing', () => {
     expect(() => expectedMatrix('web', FLOWS_DIR)).toThrow(/Unknown platform/);
   });
@@ -242,6 +254,23 @@ describe.each(['ios', 'android'])('validate(%s)', platform => {
 });
 
 describe('inspectPng', () => {
+  it('rejects corrupt image data even when its header and ending survive', () => {
+    const dir = track(fs.mkdtempSync(path.join(os.tmpdir(), 'shots-corrupt-')));
+    const file = path.join(dir, 'corrupt.png');
+    const png = makePng();
+    const idat = png.indexOf(Buffer.from('IDAT'));
+    png[idat + 5] ^= 0xff;
+    fs.writeFileSync(file, png);
+    expect(inspectPng(file, 200)).not.toBeNull();
+  });
+
+  it('rejects missing pixel data with an intact IHDR and IEND', () => {
+    const dir = track(fs.mkdtempSync(path.join(os.tmpdir(), 'shots-no-pixels-')));
+    const file = path.join(dir, 'empty-data.png');
+    const png = makePng();
+    fs.writeFileSync(file, Buffer.concat([png.subarray(0, 33), png.subarray(-12)]));
+    expect(inspectPng(file, 200)).not.toBeNull();
+  });
   it('accepts a well-formed capture', () => {
     const dir = track(fs.mkdtempSync(path.join(os.tmpdir(), 'shots-one-')));
     const file = path.join(dir, 'ok.png');

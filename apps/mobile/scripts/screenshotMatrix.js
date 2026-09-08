@@ -22,6 +22,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const YAML = require('yaml');
 
 const EXCLUDED_TAG_BY_PLATFORM = {
   ios: 'android-only',
@@ -30,44 +31,40 @@ const EXCLUDED_TAG_BY_PLATFORM = {
 
 const PLATFORMS = Object.keys(EXCLUDED_TAG_BY_PLATFORM);
 
-/**
- * Parse one Maestro flow file into its tags and the screenshots it captures.
- *
- * Deliberately a small line parser rather than a YAML dependency: these files
- * have a fixed, simple shape, and the screenshot harness should not add a
- * runtime dependency to the mobile app's tree just to read them.
- */
+/** Parse ordinary YAML, failing closed for dynamic/nested capture flows. */
 function parseFlow(contents) {
-  const tags = [];
+  const documents = YAML.parseAllDocuments(contents);
+  if (documents.length !== 2 || documents.some(doc => doc.errors.length)) {
+    throw new Error('Expected valid Maestro config and command YAML documents');
+  }
+  const config = documents[0].toJS();
+  const commands = documents[1].toJS();
+  if (!config || Array.isArray(config) || !Array.isArray(commands)) {
+    throw new Error('Expected a Maestro config object and command list');
+  }
+  const tags = config.tags || [];
+  if (!Array.isArray(tags) || tags.some(tag => typeof tag !== 'string')) {
+    throw new Error('Maestro tags must be a list of strings');
+  }
   const screenshots = [];
-  let inTagsBlock = false;
-
-  for (const rawLine of contents.split('\n')) {
-    const line = rawLine.replace(/\s+$/, '');
-    if (line === '') {
+  for (const command of commands) {
+    if (typeof command === 'string') {
       continue;
     }
-
-    if (inTagsBlock) {
-      const tagMatch = line.match(/^\s+-\s*(\S+)\s*$/);
-      if (tagMatch) {
-        tags.push(tagMatch[1]);
-        continue;
+    if (!command || typeof command !== 'object' || Array.isArray(command)) {
+      throw new Error('Unsupported Maestro command');
+    }
+    if ('runFlow' in command || 'repeat' in command || 'retry' in command) {
+      throw new Error('Nested runFlow/repeat/retry requires explicit matrix support');
+    }
+    if ('takeScreenshot' in command) {
+      const name = command.takeScreenshot;
+      if (typeof name !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(name)) {
+        throw new Error('Screenshot names must be literal safe basenames');
       }
-      inTagsBlock = false;
-    }
-
-    if (/^tags:\s*$/.test(line)) {
-      inTagsBlock = true;
-      continue;
-    }
-
-    const shotMatch = line.match(/^-\s*takeScreenshot:\s*(\S+)\s*$/);
-    if (shotMatch) {
-      screenshots.push(shotMatch[1]);
+      screenshots.push(name);
     }
   }
-
   return {tags, screenshots};
 }
 

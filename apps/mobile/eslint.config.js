@@ -8,8 +8,7 @@ module.exports = [
   {
     // scripts/ holds CI tooling that runs under plain Node on the runner,
     // not inside the React Native app bundle -- so it needs Node globals
-    // the React Native config does not declare, and the screenshot
-    // validator reads PNG headers, which is bitwise by nature.
+    // the React Native config does not declare.
     files: ['scripts/**/*.js'],
     languageOptions: {
       globals: {
@@ -21,8 +20,10 @@ module.exports = [
         require: 'readonly',
       },
     },
-    rules: {
-      'no-bitwise': 'off',
-    },
+  },
+  {
+    files: ['scripts/validateScreenshots.test.js'],
+    // Only the synthetic PNG fixture builder needs bitwise CRC32 operations.
+    rules: {'no-bitwise': 'off'},
   },
 ];

@@ -30,6 +30,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const {PNG} = require('pngjs');
 
 const {expectedMatrix} = require('./screenshotMatrix');
 
@@ -37,10 +38,8 @@ const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0
 const DEFAULT_MIN_DIMENSION = 200;
 
 /**
- * Structural PNG check. Reads the signature, the IHDR dimensions and the
- * trailing IEND marker, so a truncated file (a capture interrupted
- * mid-write, which is exactly what a killed simulator produces) is rejected
- * rather than counted.
+ * Check bounded capture dimensions, then decode pixels and verify chunk CRCs.
+ * A surviving header/IEND alone does not establish that an image is readable.
  *
  * @returns {string|null} a human-readable problem, or null when the file is fine.
  */
@@ -56,6 +55,9 @@ function inspectPng(filePath, minDimension) {
   }
   if (stats.size === 0) {
     return 'is empty (0 bytes)';
+  }
+  if (stats.size > 64 * 1024 * 1024) {
+    return 'exceeds the supported capture size';
   }
 
   const buffer = fs.readFileSync(filePath);
@@ -85,6 +87,14 @@ function inspectPng(filePath, minDimension) {
     return 'is truncated (no IEND chunk at end of file)';
   }
 
+  if (width * height > 25000000) {
+    return 'exceeds the supported capture size';
+  }
+  try {
+    PNG.sync.read(buffer, {checkCRC: true});
+  } catch (error) {
+    return `has invalid PNG data: ${error.message}`;
+  }
   return null;
 }
 
@@ -105,6 +115,9 @@ function listPngBasenames(dir) {
  * @returns {{ok: boolean, problems: string[], summary: string}}
  */
 function validate({platform, dir, flowsDir, minDimension = DEFAULT_MIN_DIMENSION}) {
+  if (!Number.isInteger(minDimension) || minDimension <= 0) {
+    throw new Error('min-dimension must be a positive integer');
+  }
   const matrix = expectedMatrix(platform, flowsDir);
   const expected = matrix.screenshots;
   const problems = [];
@@ -119,6 +132,9 @@ function validate({platform, dir, flowsDir, minDimension = DEFAULT_MIN_DIMENSION
   }
 
   const actualSet = new Set(actual);
+  if (actualSet.size !== actual.length) {
+    problems.push('duplicate screenshot basenames with different extensions');
+  }
   const expectedSet = new Set(expected);
 
   const missing = expected.filter(name => !actualSet.has(name));

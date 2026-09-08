@@ -744,8 +744,11 @@ A count is weaker than it looks. It accepts:
 **derived from the Maestro flows themselves** — each `takeScreenshot:` name is
 one expected image, and a flow's `tags:` decide which platform runs it, matching
 Maestro's `--exclude-tags` selection. The validator then requires exact set
-equality and inspects every expected file's PNG signature, `IHDR` dimensions and
-trailing `IEND` chunk.
+equality and decodes every expected PNG, checking chunk CRCs and pixel data as
+well as dimensions. Files are limited to 64 MiB and 25 million pixels before
+decoding. The `yaml` parser accepts ordinary quoted names, inline tags and
+comments. Dynamic names and nested runFlow/repeat/retry commands fail explicitly
+until the matrix supports them; they cannot silently omit captures.
 
 Two consequences worth stating plainly:
 
@@ -775,8 +778,9 @@ The 2026-09-07 and 2026-09-08 nightlies ran the same application commit
 | [2026-09-07](https://github.com/block-sig-hash/damdam/actions/runs/34094962267) | `IOSDriverTimeoutException: iOS driver not ready in time` after ~2m36s | 0 flows ran, 0 screenshots, job failed |
 | [2026-09-08](https://github.com/block-sig-hash/damdam/actions/runs/34198388517) | ready in ~64s | 16/16 flows passed, 32 screenshots |
 
-The app built and the simulator booted in both. The variable is macOS-runner
-cold-start time for Maestro's XCUITest driver. The job now sets
+The app built and the simulator booted in both. Slow XCUITest cold start is a
+plausible explanation, but these logs cannot distinguish it from a hung driver.
+The job now sets
 `MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"` — the remedy Maestro's own error
 message names — at roughly 4.7× the observed healthy startup, still bounded so a
 genuinely wedged driver fails rather than consuming the job's runtime.
@@ -835,7 +839,8 @@ reported as defects:
 
 **Mobile — reproducible except for capture.** `npm ci && npm test && npm run lint
 && npm run type-check` runs anywhere. `scripts/validateScreenshots.js` needs only
-Node built-ins, so it runs even when `npm ci` has failed. Actually *producing*
+Node plus the declared `yaml` and `pngjs` development dependencies (`npm ci`
+first). Neither adds native binaries or changes the API image dependencies. Actually *producing*
 screenshots needs an Android emulator with KVM, or macOS with Xcode; neither is
 available in a typical Linux development container.
 
@@ -845,9 +850,33 @@ available in a typical Linux development container.
 |---|---|---|
 | iOS screenshot capture, and confirmation of the driver-startup timeout | macOS runner with Xcode 16.1+ | **not run** — evidence gap, not a passing result |
 | Android screenshot capture | Linux host with KVM | not run |
-| Multi-arch `linux/arm64` image build | QEMU + buildx, long emulated build | not run; no dependency changed, so no new `aarch64` risk |
+| Multi-arch `linux/arm64` image build | QEMU + buildx, long emulated build | see the independent review for current build evidence; no API dependency changed |
 | Signed builds, store submission | Apple/Google credentials (D6) | out of scope for chunk 02 |
 | Staging or production deployment | deployment secrets, push to a deploy branch | out of scope; deployment is push-only by design |
 
 A missing prerequisite in this table is recorded as **NOT RUN with its reason**.
 It is never recorded as a pass, and never as an application defect.
+
+### 14.14.7 Independent review corrections
+
+The shared decoder now applies expiry, issued-at and not-before to the same
+application clock for consumer tokens, organization access and organization
+email verification. Future dates and malformed/nonfinite claims are rejected;
+production still uses UTC wall-clock time. Refresh rotation locks its PostgreSQL
+row and checks stored ownership, expiry and revocation before replacing it.
+
+`tests/test_auth_clock_postgres.py` checks clocks before and after real time,
+invalid dates, stored expiry, concurrent reuse and organization verification
+against isolated PostgreSQL schemas. Existing SQLite unit suites remain in the
+repository; they are not the evidence for database locking. The signature-
+tampering regression changes actual signature bits, not unused base64 padding.
+
+The screenshot tests additionally reject corrupt or absent IDAT data with an
+otherwise intact header/end, and cover YAML quoting and unsupported nested
+flows. Their Jest environment is Node so the parser resolves its Node export.
+Only the PNG fixture's CRC32 calculation receives a bitwise lint exception.
+
+Changing `ci.yml` selects all four existing application/build path filters,
+including dashboard. Dashboard checks therefore apply to this chunk even though
+its application source is unchanged. Review results and remaining native CI
+requirements are recorded separately in the chunk's independent review record.

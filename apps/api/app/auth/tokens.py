@@ -1,6 +1,8 @@
 import hashlib
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID, uuid4
 
 import jwt
@@ -12,6 +14,42 @@ from app.config import Settings
 
 class InvalidRefreshTokenError(Exception):
     pass
+
+
+def decode_with_clock(
+    token: str, secret: str, audience: str, now: datetime
+) -> dict[str, Any]:
+    """Verify signed claims and all NumericDates using the caller's clock."""
+    claims: dict[str, Any] = jwt.decode(
+        token,
+        secret,
+        algorithms=["HS256"],
+        audience=audience,
+        options={
+            "verify_exp": False,
+            "verify_iat": False,
+            "verify_nbf": False,
+            "require": ["exp"],
+        },
+    )
+    timestamp = now.timestamp()
+    for name in ("exp", "iat", "nbf"):
+        if name not in claims:
+            continue
+        try:
+            value = claims[name]
+            if isinstance(value, bool):
+                raise ValueError("boolean NumericDate")
+            numeric = float(value)
+            if not math.isfinite(numeric):
+                raise ValueError("nonfinite NumericDate")
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise jwt.InvalidTokenError(f"invalid {name}") from exc
+        if name == "exp" and numeric <= timestamp:
+            raise jwt.ExpiredSignatureError("expired token")
+        if name != "exp" and numeric > timestamp:
+            raise jwt.ImmatureSignatureError(f"future {name}")
+    return claims
 
 
 @dataclass(frozen=True)
@@ -69,31 +107,8 @@ class TokenService:
 
     def rotate(self, session: Session, token: str, now: datetime) -> TokenPair:
         try:
-            claims = jwt.decode(
-                token,
-                self.settings.jwt_secret,
-                algorithms=["HS256"],
-                audience="pilgrim",
-                # Same contract as decode_access below: expiry is checked
-                # against the injected clock, not wall-clock time. PyJWT's
-                # own exp/iat checks always use real time regardless of the
-                # `now` this method receives, so leaving them on rejects a
-                # token that is entirely self-consistent with the clock that
-                # minted it -- which is exactly how
-                # test_otp_request_and_verify_contract started failing in
-                # September against a July test clock, with no code change.
-                # Expiry is NOT weakened: it is enforced twice below,
-                # against the token's own exp claim and against the stored
-                # refresh-token row, both compared to `now`. In production
-                # `now` is wall-clock (app.main.utc_now).
-                options={"verify_exp": False, "verify_iat": False},
-            )
+            claims = decode_with_clock(token, self.settings.jwt_secret, "pilgrim", now)
             if claims.get("type") != "refresh":
-                raise InvalidRefreshTokenError
-            claimed_expiry = datetime.fromtimestamp(
-                float(claims["exp"]), tz=timezone.utc
-            )
-            if claimed_expiry <= now:
                 raise InvalidRefreshTokenError
             token_id = UUID(claims["jti"])
             user_id = UUID(claims["sub"])
@@ -103,12 +118,14 @@ class TokenService:
             raise InvalidRefreshTokenError from exc
 
         stored = session.exec(
-            select(RefreshToken).where(
+            select(RefreshToken)
+            .where(
                 RefreshToken.id == token_id,
                 RefreshToken.token_hash == self._hash(token),
             )
+            .with_for_update()
         ).first()
-        if stored is None or stored.revoked_at is not None:
+        if stored is None or stored.revoked_at is not None or stored.user_id != user_id:
             raise InvalidRefreshTokenError
         expires_at = stored.expires_at
         if expires_at.tzinfo is None:
@@ -126,26 +143,8 @@ class TokenService:
 
     def decode_access(self, token: str, now: datetime) -> UUID:
         try:
-            claims = jwt.decode(
-                token,
-                self.settings.jwt_secret,
-                algorithms=["HS256"],
-                audience="pilgrim",
-                # exp is checked manually below against the injected
-                # clock, not wall-clock time, so tests (and any future
-                # clock-skewed deployment) can validate expiry
-                # deterministically. iat must be disabled for the same
-                # reason: PyJWT's default iat check compares the
-                # token's iat against real wall-clock time regardless
-                # of what `now` this call receives, which rejects a
-                # token minted at a mocked-forward clock as "not yet
-                # valid" even though it's entirely self-consistent.
-                options={"verify_exp": False, "verify_iat": False},
-            )
+            claims = decode_with_clock(token, self.settings.jwt_secret, "pilgrim", now)
             if claims.get("type") != "access":
-                raise InvalidRefreshTokenError
-            expires_at = datetime.fromtimestamp(float(claims["exp"]), tz=timezone.utc)
-            if expires_at <= now:
                 raise InvalidRefreshTokenError
             return UUID(claims["sub"])
         except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:

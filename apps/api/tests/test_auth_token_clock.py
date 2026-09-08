@@ -108,9 +108,7 @@ def test_rotation_boundary_accepts_just_before_and_rejects_exactly_at_expiry(
     # one full TTL further out. Land the clock exactly on that instant.
     clock.value = clock() + ttl
     with pytest.raises(OTPError, match="invalid_refresh_token"):
-        refresh_token(
-            RefreshRequest(refresh_token=accepted.refresh_token), request
-        )
+        refresh_token(RefreshRequest(refresh_token=accepted.refresh_token), request)
 
 
 def test_rotation_still_revokes_the_previous_refresh_token(api: FastAPI) -> None:
@@ -129,7 +127,7 @@ def test_rotation_rejects_a_tampered_signature(api: FastAPI) -> None:
     refresh = _sign_in(api)
     request = SimpleNamespace(app=api)
     head, payload, signature = refresh.split(".")
-    forged = f"{head}.{payload}.{signature[:-1]}{'A' if signature[-1] != 'A' else 'B'}"
+    forged = f"{head}.{payload}.{'A' if signature[0] != 'A' else 'B'}{signature[1:]}"
 
     with pytest.raises(OTPError, match="invalid_refresh_token"):
         refresh_token(RefreshRequest(refresh_token=forged), request)

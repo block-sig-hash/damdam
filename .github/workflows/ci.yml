@@ -305,8 +305,8 @@ jobs:
       # expected screen/locale set from the Maestro flows themselves
       # (scripts/screenshotMatrix.js), so the matrix cannot drift from what
       # this job actually runs and no screenshot count is hardcoded here.
-      # Pure Node, no npm dependency, so it still runs when an earlier step
-      # failed.
+      # Node tooling uses the dev dependencies installed by npm ci. If setup
+      # failed, validation also fails; artifact upload still runs independently.
       - name: Validate screenshot artifact completeness
         if: always()
         run: |
@@ -444,9 +444,9 @@ jobs:
       # `xcuitest.installer.LocalXCTestInstaller$IOSDriverTimeoutException:
       # iOS driver not ready in time` after ~2m36s, producing 0 screenshots,
       # while 2026-09-08 succeeded on the identical commit with the XCUITest
-      # driver ready in ~64s. The variable is macOS-runner cold-start time for
-      # the XCUITest runner, not anything in the app -- so raise the timeout
-      # Maestro's own error message points at rather than retrying the job.
+      # driver ready in ~64s. A slow XCUITest cold start is a hypothesis; these
+      # logs locate the timeout but do not distinguish slowness from a hang.
+      # Raise the timeout named by Maestro, pending a new macOS CI run.
       # 300000ms is ~4.7x the observed healthy startup, and still bounded so a
       # genuinely wedged driver fails instead of burning the job's time.
       - name: Run Maestro flows
@@ -471,8 +471,8 @@ jobs:
       # expected screen/locale set from the Maestro flows themselves
       # (scripts/screenshotMatrix.js), so the matrix cannot drift from what
       # this job actually runs and no screenshot count is hardcoded here.
-      # Pure Node, no npm dependency, so it still runs when an earlier step
-      # failed.
+      # Node tooling uses the dev dependencies installed by npm ci. If setup
+      # failed, validation also fails; artifact upload still runs independently.
       - name: Validate screenshot artifact completeness
         if: always()
         run: |
