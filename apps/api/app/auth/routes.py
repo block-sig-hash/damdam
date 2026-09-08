@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Request
@@ -145,8 +144,12 @@ def verify_pin_recovery(payload: OTPVerifyRequest, request: Request) -> AuthResp
 def refresh_token(payload: RefreshRequest, request: Request) -> TokenResponse:
     with request.app.state.session_factory() as session:
         try:
+            # The application clock, not wall-clock: every other token path
+            # (get_current_user, get_current_organization, decode_access)
+            # already validates against `app.state.clock`. In production that
+            # clock is `utc_now`, so production expiry is unchanged.
             pair = _service(request).tokens.rotate(
-                session, payload.refresh_token, datetime.now(timezone.utc)
+                session, payload.refresh_token, request.app.state.clock()
             )
         except InvalidRefreshTokenError as exc:
             raise OTPError("invalid_refresh_token") from exc

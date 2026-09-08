@@ -690,3 +690,117 @@ It is **not** a current fact, and neither it nor the 32 images observed on
 2026-09-08 carries into the redesigned matrix. §14.11 and §14.12's screenshot
 matrices are re-cut against the reset screens in chunk 08 and enforced as a
 release gate in chunk 27.
+
+---
+
+## 14.14 Amendment — Screenshot Matrix Validation and the iOS Driver Timeout
+
+**Recorded 8 September 2026 by build chunk 02. Registered story: US-42
+(AC-42.1, AC-42.2).**
+
+### 14.14.1 The auth clock defect, diagnosed and fixed
+
+`tests/test_auth_api.py::test_otp_request_and_verify_contract` failed on
+`develop` from at least 2026-09-01 with `OTPError: invalid_refresh_token`,
+raised from a PyJWT `ExpiredSignatureError`. It was not a flaky test and no
+code had changed.
+
+`TokenService.issue` mints tokens against an **injected** clock, and
+`TokenService.decode_access` deliberately validates `exp` against that same
+injected clock (`options={"verify_exp": False, "verify_iat": False}` plus a
+manual comparison), because PyJWT's own checks always use real wall-clock time
+regardless of the `now` they are handed. Two places did not follow that rule:
+
+- `POST /auth/token/refresh` passed `datetime.now(timezone.utc)` instead of the
+  application clock.
+- `TokenService.rotate` left PyJWT's `exp` verification enabled.
+
+The test clock is pinned to 2026-07-13, so a refresh token carried `exp` around
+2026-08-12. The test passed when written and began failing the moment real time
+passed that date — a July-versus-September mismatch that no rerun could clear.
+
+Both paths now use the injected clock, matching `decode_access`,
+`get_current_user` and `get_current_organization`. **Production expiry is
+unchanged**: in production the injected clock *is* wall-clock
+(`app.main.utc_now`), and `rotate` now enforces expiry twice — against the
+token's own `exp` claim and against the stored refresh-token row — both compared
+to `now`. `tests/test_auth_token_clock.py` pins valid, expired and exact-boundary
+cases, plus revocation-on-rotation and signature tampering, so relaxing PyJWT's
+check cannot silently relax expiry or authenticity.
+
+### 14.14.2 The screenshot gate is a matrix, not a count
+
+§14.12 stated the completeness gate as "32 PNGs (16 applicable targets × 2
+locales)", and both CI jobs enforced it as `test "${#screenshots[@]}" -eq 32`.
+A count is weaker than it looks. It accepts:
+
+- 32 copies of one screen;
+- a set where an expected screen is missing and an unrelated file makes up the
+  number;
+- zero-byte, truncated or non-PNG files;
+- a degenerate 1×1 capture.
+
+`apps/mobile/scripts/validateScreenshots.js` replaces it. The expected set is
+**derived from the Maestro flows themselves** — each `takeScreenshot:` name is
+one expected image, and a flow's `tags:` decide which platform runs it, matching
+Maestro's `--exclude-tags` selection. The validator then requires exact set
+equality and inspects every expected file's PNG signature, `IHDR` dimensions and
+trailing `IEND` chunk.
+
+Two consequences worth stating plainly:
+
+- **No count is hardcoded anywhere.** Adding or removing a `takeScreenshot:`
+  changes the gate. When chunk 08 redefines the screen matrix and chunk 27
+  enforces it for release, neither needs to update a magic number. The derived
+  matrix currently comes to 32 per platform, which is how the previous hardcoded
+  figure was confirmed correct rather than assumed.
+- **It is not a visual regression test.** There are no committed baselines, so
+  the validator cannot tell a correct screen from a wrong one that is
+  structurally valid. Pixel comparison belongs with the redesigned matrix, not
+  here; inventing baselines now would either accept anything or reject every
+  legitimate UI change.
+
+Negative coverage lives in `apps/mobile/scripts/validateScreenshots.test.js`:
+empty directory, absent directory, missing image substituted by an unrelated PNG
+at the same count, zero-byte image, non-PNG content, truncated write, and a 1×1
+capture — run against both platform matrices.
+
+### 14.14.3 The iOS screenshot job was flaky, not broken
+
+The 2026-09-07 and 2026-09-08 nightlies ran the same application commit
+(`6790c74`) with opposite outcomes. The logs give the reason directly:
+
+| Run | XCUITest driver | Outcome |
+|---|---|---|
+| [2026-09-07](https://github.com/block-sig-hash/damdam/actions/runs/34094962267) | `IOSDriverTimeoutException: iOS driver not ready in time` after ~2m36s | 0 flows ran, 0 screenshots, job failed |
+| [2026-09-08](https://github.com/block-sig-hash/damdam/actions/runs/34198388517) | ready in ~64s | 16/16 flows passed, 32 screenshots |
+
+The app built and the simulator booted in both. The variable is macOS-runner
+cold-start time for Maestro's XCUITest driver. The job now sets
+`MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"` — the remedy Maestro's own error
+message names — at roughly 4.7× the observed healthy startup, still bounded so a
+genuinely wedged driver fails rather than consuming the job's runtime.
+
+This is a mitigation with a real limit: **it has not been observed passing a
+previously-failing run, because that requires macOS CI, which was not available
+during chunk 02.** It remains an evidence gap until a nightly run exercises it.
+The Android job is left unchanged — its emulator path has not shown this failure,
+and adding an unneeded timeout there would be speculative.
+
+### 14.14.4 Documentation links are now a CI check
+
+`ci.yml` gains a `Docs — Link validation` job running
+`docs/implementation/tools/check-docs-links.sh` on documentation changes. The
+implementation packet routes every chunk through relative links between chunk
+files, review records, the story map and the specs; a broken link there drops an
+assignment or an acceptance criterion silently. The checker covers relative file
+links only — anchors and external URLs are out of its scope.
+
+### 14.14.5 Automated Claude review is supplemental
+
+`.github/workflows/claude-review.yml` is an advisory first-pass filter, not
+chunk acceptance. Since the working split changed (`AGENTS.md`), Claude is the
+implementer, so that workflow reviewing a Claude-authored PR is Claude reviewing
+its own work. Acceptance requires the independent Codex review recorded in
+`docs/implementation/reviews/NN.md`. The workflow's prompt now says so in its
+posted comment and is forbidden from declaring a PR accepted or ready to merge.

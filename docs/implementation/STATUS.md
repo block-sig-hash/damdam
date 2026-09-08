@@ -15,7 +15,7 @@ Do not reset to the original baseline and discard the reviewed specification.
 | Chunk | Status | Base/head SHA | Review record | Remaining gate |
 |---|---|---|---|---|
 | 01 — Reset product specifications and working rules | ACCEPTED | base `6790c74` / corrected content `36e9bf36a2827d108633730ff0899edbd17b97ef` | [Independent review](reviews/01.md) | None blocking chunk 01; D1–D6 remain OPEN |
-| 02 — Repair the CI baseline and screenshot harness | NOT_STARTED | — | — | See assignment |
+| 02 — Repair the CI baseline and screenshot harness | READY_FOR_REVIEW | base `178c448` / head see [handoffs/02.md](handoffs/02.md) | pending | macOS CI unavailable: the iOS driver-timeout mitigation is committed but unverified |
 | 03 — Prove Telnyx feasibility and document the carrier contract | NOT_STARTED | — | — | See assignment |
 | 04 — Retire family, safety and app-calling features safely | NOT_STARTED | — | — | See assignment |
 | 05 — Introduce core domain models and migration boundaries | NOT_STARTED | — | — | See assignment |

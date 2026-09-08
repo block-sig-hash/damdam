@@ -74,11 +74,31 @@ class TokenService:
                 self.settings.jwt_secret,
                 algorithms=["HS256"],
                 audience="pilgrim",
+                # Same contract as decode_access below: expiry is checked
+                # against the injected clock, not wall-clock time. PyJWT's
+                # own exp/iat checks always use real time regardless of the
+                # `now` this method receives, so leaving them on rejects a
+                # token that is entirely self-consistent with the clock that
+                # minted it -- which is exactly how
+                # test_otp_request_and_verify_contract started failing in
+                # September against a July test clock, with no code change.
+                # Expiry is NOT weakened: it is enforced twice below,
+                # against the token's own exp claim and against the stored
+                # refresh-token row, both compared to `now`. In production
+                # `now` is wall-clock (app.main.utc_now).
+                options={"verify_exp": False, "verify_iat": False},
             )
             if claims.get("type") != "refresh":
                 raise InvalidRefreshTokenError
+            claimed_expiry = datetime.fromtimestamp(
+                float(claims["exp"]), tz=timezone.utc
+            )
+            if claimed_expiry <= now:
+                raise InvalidRefreshTokenError
             token_id = UUID(claims["jti"])
             user_id = UUID(claims["sub"])
+        except InvalidRefreshTokenError:
+            raise
         except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
             raise InvalidRefreshTokenError from exc
 

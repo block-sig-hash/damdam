@@ -137,3 +137,24 @@ original five findings remain implementation work; none is fixed by this review.
 The working checkout is `/tmp/damdam-review-20260907`. A local bundle under the
 user's home directory preserves the reviewed branch; see the review handoff for
 the exact filename/head. No push, merge, deployment or live test occurred.
+
+---
+
+## Chunk 02 addendum — 8 September 2026
+
+Appended by chunk 02 (US-42). Everything above is the chunk 01 record as
+independently reviewed and accepted; nothing above has been rewritten. This
+section records only what changed afterwards.
+
+| Baseline item above | Status after chunk 02 |
+|---|---|
+| API `test_otp_request_and_verify_contract` failing | **Fixed in this branch, not yet on `develop`.** Reproduced locally first, then fixed. Full local suite: 343 passed, 0 failed, coverage 87.58%. See `docs/testing-qa.md` §14.14.1. |
+| iOS screenshot job intermittent | **Diagnosed; mitigation committed, unverified.** Root cause is Maestro's XCUITest driver startup timing out on the macOS runner (`IOSDriverTimeoutException` at ~2m36s on 09-07 versus a ~64s healthy startup on 09-08). `MAESTRO_DRIVER_STARTUP_TIMEOUT` is now set. **No macOS CI was available to confirm the mitigation** — this remains an evidence gap. See §14.14.3. |
+| Count-only screenshot assertion (`-eq 32`) | **Replaced** by exact matrix validation derived from the Maestro flows, with structural PNG checks and negative tests. The derived matrix independently reproduces 32 per platform, which is how the previous hardcoded figure was confirmed rather than assumed. See §14.14.2. |
+| OpenAPI drift "skipped after pytest failed; not independently proven passing" | **Now proven passing locally** — the drift check runs and reports no drift. Chunk 02 changes no route signature or schema. |
+| Staging deploy skipped | **Unchanged and correct.** Deployment is push-only by design; scheduled runs cannot deploy. Chunk 02 did not alter that policy. |
+| Production deployment history / branch-protection 404 | **Unchanged.** Not re-queried by chunk 02; still chunk 27's verification. |
+
+No claim here is a claim about `develop`: these results are from the
+`chunk/02-ci-baseline` branch and from local execution. CI on this branch has
+not been run, because the branch has not been pushed.
