@@ -1,15 +1,20 @@
 # Implementation status
 
-Chunk 01 (documentation reset) is implemented and awaiting independent Codex
-review. No application chunk has been implemented. Nothing here is accepted.
+Chunk 01 (documentation reset) is **ACCEPTED after independent Codex review and
+fixes**. No application chunk has been implemented; chunk 02 is NOT_STARTED.
 
-**Base for all current work:** `develop` @
+**Original baseline:** `develop` @
 `6790c74707a0f3e52cfedb36bc173ec83ca26663`, confirmed current on 2026-09-08 —
 see [BASELINE.md](BASELINE.md).
 
+**Start chunk 02 from the accepted `chunk/01-scope-and-specifications` branch
+tip**, including the review-record commit. Corrected content is
+`36e9bf36a2827d108633730ff0899edbd17b97ef`; see [reviews/01.md](reviews/01.md).
+Do not reset to the original baseline and discard the reviewed specification.
+
 | Chunk | Status | Base/head SHA | Review record | Remaining gate |
 |---|---|---|---|---|
-| 01 — Reset product specifications and working rules | READY_FOR_REVIEW | base `6790c74` / head see [handoffs/01.md](handoffs/01.md) | pending | None blocking chunk 01; D1–D6 recorded OPEN |
+| 01 — Reset product specifications and working rules | ACCEPTED | base `6790c74` / corrected content `36e9bf36a2827d108633730ff0899edbd17b97ef` | [Independent review](reviews/01.md) | None blocking chunk 01; D1–D6 remain OPEN |
 | 02 — Repair the CI baseline and screenshot harness | NOT_STARTED | — | — | See assignment |
 | 03 — Prove Telnyx feasibility and document the carrier contract | NOT_STARTED | — | — | See assignment |
 | 04 — Retire family, safety and app-calling features safely | NOT_STARTED | — | — | See assignment |

@@ -15,4 +15,5 @@ unchanged.
 Only a review record may set a chunk to ACCEPTED in
 [`../STATUS.md`](../STATUS.md). Claude never marks its own work accepted.
 
-_No review has been recorded yet._
+[Chunk 01](01.md) is accepted after review fixes. Its record names the reviewed
+content commit and the remaining release/implementation work.
