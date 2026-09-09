@@ -30,3 +30,7 @@ apps/mobile/ios/build/
 apps/mobile/android/.gradle/
 apps/mobile/android/app/build/
 apps/mobile/android/build/
+
+# A .venv symlink (used when reusing another worktree's environment) is not
+# matched by the ".venv/" directory pattern above.
+.venv
