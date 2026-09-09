@@ -10,6 +10,7 @@ import { EsimActivationFlow } from '../screens/EsimActivation/EsimActivationFlow
 import { EsimQrCodeScreen } from '../screens/EsimSetup/EsimQrCodeScreen';
 import { HomeDashboardScreen } from '../screens/HomeDashboard/HomeDashboardScreen';
 import {useHomePackageStatus} from '../screens/HomeDashboard/useHomePackageStatus';
+import {useOutboxOwnership} from '../hooks/useOutboxOwnership';
 import { ActiveCallScreen } from '../screens/ActiveCall/ActiveCallScreen';
 import { DialPadScreen } from '../screens/DialPad/DialPadScreen';
 import { CliManageScreen } from '../screens/CliVerification/CliManageScreen';
@@ -96,28 +97,11 @@ export function AuthenticatedApp({
     packageId,
   );
   const pstnMinutesRemaining = balances?.pstnMinutesRemaining ?? 0;
-  // One ref is shared by old and replacement service instances. Updating it on
-  // every render means an in-flight service created for A observes B (or
-  // logout) instead of comparing A with a value captured from the same render.
-  const currentOwnerUserId = useRef(userId);
-  currentOwnerUserId.current = userId;
-  useEffect(
-    () => () => {
-      currentOwnerUserId.current = undefined;
-    },
-    [],
-  );
   // US-30 AC-30.4: the offline queues are bound to the signed-in account, and
   // the binding is re-checked at dispatch time rather than captured once. A
   // session with no user id (persisted before US-30) owns nothing, so its
   // queues stay inert instead of adopting whatever is on the device.
-  const ownership = useMemo(
-    () => ({
-      ownerUserId: userId ?? '',
-      currentOwnerUserId: () => currentOwnerUserId.current,
-    }),
-    [userId],
-  );
+  const ownership = useOutboxOwnership(userId);
   const checkIns = useMemo(
     () =>
       new CheckInSyncService(
