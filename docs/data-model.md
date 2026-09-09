@@ -1983,3 +1983,116 @@ hitting an unregistered task and crashing its worker in a retry loop. The
 retention sweeps `null_checkin_locations` and `delete_sos_alerts` continue to
 run: retiring a feature must not switch off data minimization for the data it
 leaves behind.
+
+## 6.44 Amendment — Core Domain Identities and Separated States (US-28)
+
+**Recorded 9 September 2026 by build chunk 05.** Additive only: revision
+`0027_core_domain_model` creates nine tables and alters nothing. No existing
+column changes, no row is written, no table is dropped.
+
+### Why the legacy shape cannot carry the reset
+
+`packages` is one row playing four parts — the purchase, the entitlement, the
+provisioning job and the thing that expires — keyed off a single `status` whose
+values mix payment (`pending`), lifecycle (`active`, `expired`) and commercial
+outcome (`cancelled`, `superseded`). `esim_profiles.status` does the same for
+three more questions: `issued` is the supplier, `downloaded` is the handset,
+`activated` is the network. And every amount is NGN by construction —
+`ngn_price`, `amount_ngn`, `total_ngn` — because that was the only currency sold.
+
+None of that survives an enterprise buying lines in USD for staff who are not
+the payer.
+
+### The identities
+
+| Table | Identity | Notes |
+|---|---|---|
+| `legal_entities` | **seller** | **No row is seeded.** Which entity sells is D3, open. |
+| `users` | **payer** or **recipient** | Existing table, reused. |
+| `organizations` | **payer** | Existing table, reused. |
+| `products` | product | What is sold, independent of price. |
+| `product_prices` | price version | Append-only, currency-explicit, per seller. |
+| `orders` | order | Names its seller and exactly one payer; charge and settlement amounts remain separate. |
+| `order_items` | order item | One independently recoverable line; names its recipient, which may be null until assigned. |
+| `entitlements` | entitlement | What the holder is owed, in exact units. |
+| `esim_installations` | eSIM installation | Links an entitlement to a device state. |
+| `carrier_lines` | carrier line | Activation and network attachment. |
+| `assigned_numbers` | assigned number | Live assignment unique; history preserved. |
+
+Payer and recipient are **roles on a purchase, not new party tables**. Inventing
+a `parties` table would duplicate identity that `users` and `organizations`
+already own; a role belongs to the relationship.
+
+### The states, and why they are separate columns on separate tables
+
+| Resource | Column | Question |
+|---|---|---|
+| `orders` | `payment_state` | did anyone pay |
+| `order_items` | `provisioning_state` | did the supplier fulfil it |
+| `esim_installations` | `installation_state` | is the profile on a device |
+| `carrier_lines` | `activation_state` | is the line live with the carrier |
+| `carrier_lines` | `network_state` | is it attached right now |
+
+They can disagree, which is precisely why one ordered status has to lie about at
+least one of them. A paid order may be pending provisioning; a profile can be
+installed on a handset that never attaches; a line can be suspended with the
+profile still installed.
+
+`provisioning_state` carries **`outcome_unknown`** as a first-class value. A
+supplier request whose response was lost is not a failure and must never be
+retried as a fresh purchase — it is reconciled against the same
+`order_items.operation_reference`, which is written before dispatch. Chunk 11
+owns that recovery; the state exists so it has somewhere truthful to sit.
+
+Each order item has `quantity = 1` by database constraint. Bulk purchases use
+one item per line because recipient, entitlement, supplier operation and
+provisioning recovery are all line-specific; one shared item could otherwise
+charge for several lines while recording only one outcome.
+
+`network_state` defaults to `unknown` and is never inferred from activation.
+
+### Money and exact units
+
+Amounts are `NUMERIC(20, 6)` with a required ISO 4217 `currency` column beside
+them, constrained to `^[A-Z]{3}$`. There is no default currency and no bare
+amount. Rates get `NUMERIC(20, 10)`, because rates multiply and their error
+compounds through a conversion chain.
+
+Six decimal places is chosen for metered usage, not for display. **Presentation
+scale is per currency** — NGN and USD present two places — and rounding for
+display happens at the edge, never in storage. An order item has a composite
+foreign key to its parent order's id and currency, so a mixed-currency order is
+rejected by PostgreSQL. Chunk 10 applies the same by-construction rule to ledger
+balances and postings.
+
+`orders.currency` and `orders.total_amount` record what the customer was
+charged. Nullable `settlement_currency` and `settlement_amount` record what the
+seller receives after the processor settles. They are an atomic pair: both are
+null until settlement is known, and otherwise both are present. This preserves
+a USD charge and an NGN settlement as distinct values instead of overwriting or
+adding them.
+
+Entitlements are counted in **bytes and seconds**, not gigabytes and minutes.
+The legacy `NUMERIC(6,2)` gigabyte balance cannot represent a supplier's
+byte-level usage report without rounding, and rounding a balance against the
+customer is a billing defect.
+
+The currency and E.164 CHECK constraints are emitted **for PostgreSQL only**
+(`ddl_if(dialect="postgresql")`), because `~` is not SQLite syntax and the fast
+unit suite builds its schema on SQLite. Anything relying on them is therefore
+tested against PostgreSQL in `tests/test_core_domain_postgres.py`.
+
+### Preserved history
+
+`pricing_tiers.ngn_price`, `transactions.amount_ngn`, `manifest_orders.total_ngn`,
+every processor reference, receipt, package balance and issuance job keeps its
+exact value. Proved by `tests/test_core_model_upgrade_postgres.py`, which
+populates a database at revision `0026_i18n_locales` with a personal user, an
+HTO organization, a paid manifest order, a package with its NGN transaction, an
+issued eSIM profile and a pending issuance job, upgrades, and asserts the
+snapshot is unchanged — then downgrades and asserts it again.
+
+### Migration phases
+
+The nullable → backfill → constrain sequence, and what is deliberately deferred,
+is in [implementation/CORE-MODEL-UPGRADE.md](implementation/CORE-MODEL-UPGRADE.md).

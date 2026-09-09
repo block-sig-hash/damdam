@@ -5,7 +5,10 @@ from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 from app.auth import models  # noqa: F401
+from app.catalog import models as catalog_models  # noqa: F401
 from app.config import get_settings
+from app.connectivity import models as connectivity_models  # noqa: F401
+from app.orders import models as orders_models  # noqa: F401
 from app.packages import models as packages_models  # noqa: F401
 from app.profile import models as profile_models  # noqa: F401
 
