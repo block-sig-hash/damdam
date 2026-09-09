@@ -53,6 +53,40 @@ Recorded so far: the documentation review dated 8 September 2026 in
 [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) §5. That is a reading of public
 documentation, not commercial confirmation, and it does not move D1.
 
+#### Evidence gathered — 2026-09-09 (chunk V01, US-44) — internet track
+
+- Gathered by: Claude, chunk V01. **Not a decision. D1 stays OPEN.**
+- Method: independent reading of current official Telnyx documentation.
+  No account, no API call, no SDK installed, no contact with Telnyx.
+- Scope: **internet calling only.** This adds an internet track to D1 and
+  changes nothing about the carrier evidence recorded on 2026-09-08.
+- Artifacts: [voice/CAPABILITY-MATRIX.md](voice/CAPABILITY-MATRIX.md),
+  [voice/API-CONTRACTS.md](voice/API-CONTRACTS.md),
+  [voice/COST-MODEL.md](voice/COST-MODEL.md),
+  [voice/LEGACY-REUSE.md](voice/LEGACY-REUSE.md),
+  [voice/GO-NO-GO.md](voice/GO-NO-GO.md),
+  [voice/ENQUIRY-DRAFT.md](voice/ENQUIRY-DRAFT.md) (**unsent**).
+
+Additional evidence D1 now requires for the internet track, none of it
+obtainable without an account:
+
+9.  Whether a WebRTC telephony credential or JWT can be restricted so it cannot
+    originate outbound calls, and whether an Outbound Voice Profile may have an
+    empty allowed-destination set. **No per-destination token scope is
+    documented**, so the route depends on this.
+10. The reaction time of the Daily Spend Limit Per Connection, and whether any
+    control enforces a hard prepaid ceiling in real time.
+11. Nigeria outbound rates, billing increment, minimum duration and connection
+    fee. Not published; `GET /v2/public/pricing` returns HTTP 404
+    unauthenticated.
+12. Whether Nigeria requires Level 2 destination verification.
+13. Mobile WebRTC SDK support for React Native 0.86 / React 19.
+
+Two evidenced cost inputs are already recorded: the WebRTC leg and Voice API
+usage are **$0.002/min each**, and a bridged call produces **two CDRs**
+correlated by a shared `uuid`. No comparison with carrier calling is possible
+until item 11 is answered.
+
 #### Evidence gathered — 2026-09-08 (chunk 03, US-35)
 
 - Gathered by: Claude, chunk 03. **Not a decision. D1 stays OPEN.**
