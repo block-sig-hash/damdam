@@ -102,7 +102,17 @@ jobs:
           # workspace but outside the visible working tree, so this
           # doesn't show up as a stray untracked file in git status.
           DIFF_PATH="${GITHUB_WORKSPACE}/.git/pr-${PR_NUMBER}-review.diff"
-          gh pr diff "${PR_NUMBER}" --repo "${{ github.repository }}" > "${DIFF_PATH}"
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          # issue_comment events do not include pull_request.base/head. Fetch
+          # the two small metadata fields in that case; never ask GitHub's
+          # diff endpoint, which returns HTTP 406 above 20,000 lines.
+          if [[ -z "${BASE_SHA}" || -z "${HEAD_SHA}" ]]; then
+            BASE_SHA="$(gh pr view "${PR_NUMBER}" --repo "${{ github.repository }}" --json baseRefOid --jq .baseRefOid)"
+            HEAD_SHA="$(gh pr view "${PR_NUMBER}" --repo "${{ github.repository }}" --json headRefOid --jq .headRefOid)"
+          fi
+          git fetch --no-tags origin "${BASE_SHA}" "${HEAD_SHA}"
+          git diff --find-renames "${BASE_SHA}...${HEAD_SHA}" > "${DIFF_PATH}"
           echo "diff_path=${DIFF_PATH}" >> "$GITHUB_OUTPUT"
 
       - uses: anthropics/claude-code-action@v1
