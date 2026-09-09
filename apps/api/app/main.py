@@ -227,8 +227,6 @@ def create_app(
             "otp_expired": 400,
             "rate_limited": 429,
             "locked": 423,
-            "account_exists": 409,
-            "account_not_found": 404,
             "otp_unavailable": 503,
             "invalid_refresh_token": 401,
             "invalid_webhook_signature": 401,

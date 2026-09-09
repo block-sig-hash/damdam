@@ -163,12 +163,23 @@ class OTPService:
         locale: Locale = Locale.EN,
     ) -> None:
         e164 = to_e164(phone_number)
-        existing = session.exec(select(User).where(User.phone_number == e164)).first()
-        if existing is not None and not allow_existing:
-            raise OTPError("account_exists")
-        if existing is None and allow_existing:
-            raise OTPError("account_not_found")
-        rate_scope = "recovery" if allow_existing else "signup"
+        # US-29 (founder decision 2026-09-09): no pre-verification signal of
+        # account existence. This used to raise account_exists / account_not_found,
+        # which let anyone test whether a phone number had a DamDam account.
+        # AC-01.7's "direct to login" is now answered by `is_new_user` on verify,
+        # once the caller has proved control of the number.
+        #
+        # `allow_existing` selects the *flow* -- signup/login versus PIN
+        # recovery -- and the challenge carries that purpose so a recovery code
+        # cannot be redeemed as a login code. It no longer says anything about
+        # whether an account exists.
+        purpose = "recovery" if allow_existing else "signup"
+        # The rate-limit budget stays scoped per flow. That does not leak
+        # anything: the scope follows the endpoint the caller chose, which they
+        # already know, never whether an account exists. Sharing one budget
+        # would break a legitimate case -- signing up and then needing PIN
+        # recovery immediately would trip the resend cooldown.
+        rate_scope = purpose
         self._check_request_limit(phone_number, rate_scope)
 
         primary_name = self.settings.otp_provider_primary
@@ -182,7 +193,7 @@ class OTPService:
                 raise OTPError("otp_unavailable") from exc
             challenge = self._new_challenge(
                 phone_number,
-                rate_scope,
+                purpose,
                 secondary_name,
                 dispatch,
                 primary_name,
@@ -194,7 +205,7 @@ class OTPService:
 
         challenge = self._new_challenge(
             phone_number,
-            rate_scope,
+            purpose,
             primary_name,
             dispatch,
             secondary_name,

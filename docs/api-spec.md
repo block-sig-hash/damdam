@@ -1248,3 +1248,45 @@ it.** `_handle_initiated` bridges a WebRTC leg to PSTN using a SIP credential
 that only `POST /voice/token` ever provisioned and a verified caller identity
 nobody can obtain. It is left in place, with its tests, as the raw material for
 the carrier-voice model rather than redesigned here.
+
+## 7.31 Amendment — No Pre-Verification Account Enumeration (US-29)
+
+**Recorded 9 September 2026 by build chunk 06**, on the founder decision of the
+same date.
+
+### Withdrawn
+
+`POST /v1/auth/otp/request` no longer returns:
+
+| Code | Status | Was returned when |
+|---|---|---|
+| `account_exists` | 409 | the number already had an account |
+| `account_not_found` | 404 | PIN recovery was requested for an unknown number |
+
+Both are removed from the error catalogue and from the localized message
+catalogue in English and French. Together they let an unauthenticated caller
+determine whether any given phone number had a DamDam account.
+
+### Current contract
+
+`POST /v1/auth/otp/request` returns **200** with the same body whether or not the
+number is registered, and dispatches a code either way.
+
+`POST /v1/auth/otp/verify` continues to return `is_new_user`, which is where a
+client learns whether to route to signup or login. That value is only reachable
+by someone who has received and submitted the code, so it is not an oracle.
+
+### Preserved deliberately
+
+Rate limiting, the per-identifier resend cooldown, the hourly cap and provider
+failover are unchanged. They are what stops the now-uniform response being used
+to flood a phone number the caller does not own. The rate-limit budget stays
+scoped per flow; that follows the endpoint the caller selected and reveals
+nothing about account state.
+
+### Applies equally to email
+
+The identity endpoints added by chunk 06 follow the same rule: requesting
+verification or recovery for an address returns an identical response whether or
+not it is known, and a message is only dispatched when the identifier exists and
+is verified.
