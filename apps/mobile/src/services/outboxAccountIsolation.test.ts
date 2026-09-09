@@ -102,6 +102,16 @@ describe('AC-30.4: queued rows are owned', () => {
     ).rejects.toThrow(/owner/i);
   });
 
+  it('refuses a whitespace-only owner', async () => {
+    const connection = new TestSqliteConnection();
+    const outbox = checkInOutboxOn(connection);
+    await outbox.initialize();
+
+    await expect(
+      outbox.enqueue(item('a1', '2026-09-09T08:00:00.000Z'), '   '),
+    ).rejects.toThrow(/owner/i);
+  });
+
   it('survives a process restart with ownership intact', async () => {
     const first = new TestSqliteConnection();
     const outbox = checkInOutboxOn(first);

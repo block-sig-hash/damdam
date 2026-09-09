@@ -36,8 +36,13 @@ import type { AuthenticatedMobileSession } from './OnboardingNavigator';
 
 type AuthenticatedAppProps = Pick<
   AuthenticatedMobileSession,
-  'accessToken' | 'departureDate' | 'packageId' | 'userId'
->;
+  'accessToken' | 'departureDate' | 'packageId'
+> & {
+  // Required as a prop even though old persisted sessions may supply
+  // `undefined`. This prevents the application boundary from silently
+  // forgetting to thread queue ownership into the authenticated tree.
+  userId: AuthenticatedMobileSession['userId'];
+};
 
 type Screen =
   | 'home'

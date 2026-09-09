@@ -32,7 +32,7 @@ export interface OutboxOwnership {
 }
 
 export function requireOwner(ownerUserId: string): string {
-  if (!ownerUserId) {
+  if (!ownerUserId.trim()) {
     throw new OutboxOwnerError(
       'refusing to queue an offline event with no owner: an unowned row cannot ' +
         'be attributed to an account later without risking the wrong one',
