@@ -2013,7 +2013,7 @@ the payer.
 | `products` | product | What is sold, independent of price. |
 | `product_prices` | price version | Append-only, currency-explicit, per seller. |
 | `orders` | order | Names its seller and exactly one payer; charge and settlement amounts remain separate. |
-| `order_items` | order item | Names its recipient, which may be null until assigned. |
+| `order_items` | order item | One independently recoverable line; names its recipient, which may be null until assigned. |
 | `entitlements` | entitlement | What the holder is owed, in exact units. |
 | `esim_installations` | eSIM installation | Links an entitlement to a device state. |
 | `carrier_lines` | carrier line | Activation and network attachment. |
@@ -2043,6 +2043,11 @@ supplier request whose response was lost is not a failure and must never be
 retried as a fresh purchase — it is reconciled against the same
 `order_items.operation_reference`, which is written before dispatch. Chunk 11
 owns that recovery; the state exists so it has somewhere truthful to sit.
+
+Each order item has `quantity = 1` by database constraint. Bulk purchases use
+one item per line because recipient, entitlement, supplier operation and
+provisioning recovery are all line-specific; one shared item could otherwise
+charge for several lines while recording only one outcome.
 
 `network_state` defaults to `unknown` and is never inferred from activation.
 

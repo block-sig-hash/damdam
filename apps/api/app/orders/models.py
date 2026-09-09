@@ -150,7 +150,7 @@ class OrderItem(SQLModel, table=True):
             name="fk_order_items_order_currency",
             ondelete="CASCADE",
         ),
-        CheckConstraint("quantity > 0", name="ck_order_items_quantity_positive"),
+        CheckConstraint("quantity = 1", name="ck_order_items_single_line"),
         CheckConstraint("unit_amount >= 0", name="ck_order_items_amount_not_negative"),
     )
 
@@ -170,6 +170,9 @@ class OrderItem(SQLModel, table=True):
             ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True
         ),
     )
+    # One item is one independently recoverable connectivity line. A bulk
+    # purchase creates multiple items so each recipient, supplier operation,
+    # entitlement and provisioning state remains unambiguous.
     quantity: int = Field(default=1)
     # Copied from the ProductPrice at sale time, not referenced. A later price
     # version must never rewrite what someone was charged.

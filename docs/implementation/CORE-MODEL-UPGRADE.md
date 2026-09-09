@@ -56,7 +56,8 @@ be filled for a legacy row is **nullable now**:
 
 Constraints that **are** enforced from day one, because they never depend on a
 backfill: exactly one payer per order, non-negative amounts and entitlements,
-positive quantity, ISO 4217 currency shape, E.164 number shape, one live
+exactly one provisionable line per order item, ISO 4217 currency shape, E.164
+number shape, one live
 assignment per number, and every foreign key. Order items are bound to the
 parent order by both id and currency, so mixed-currency totals cannot be
 constructed. Charge and settlement are separate amount/currency pairs;

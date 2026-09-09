@@ -265,6 +265,24 @@ def test_an_organization_may_pay_for_another_persons_service(session) -> None:
     assert order.payer_user_id is None
 
 
+def test_a_connectivity_order_item_represents_exactly_one_line(session) -> None:
+    """Per-line fulfilment cannot safely share one state or operation reference."""
+    order = _order(session)
+    session.flush()
+    session.add(
+        OrderItem(
+            order_id=order.id,
+            product_id=_product(session).id,
+            recipient_user_id=_user(session).id,
+            quantity=2,
+            unit_currency="NGN",
+            unit_amount=Decimal("15000.00"),
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
 def test_order_reference_is_unique(session) -> None:
     reference = f"ORD-{uuid4().hex[:10]}"
     session.add(_order(session, reference=reference))

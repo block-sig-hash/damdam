@@ -236,7 +236,7 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "unit_currency ~ '^[A-Z]{3}$'", name="ck_order_items_unit_currency_iso4217"
         ),
-        sa.CheckConstraint("quantity > 0", name="ck_order_items_quantity_positive"),
+        sa.CheckConstraint("quantity = 1", name="ck_order_items_single_line"),
         sa.CheckConstraint(
             "unit_amount >= 0", name="ck_order_items_amount_not_negative"
         ),

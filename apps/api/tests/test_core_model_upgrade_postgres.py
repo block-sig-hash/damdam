@@ -311,6 +311,7 @@ def test_upgrade_installs_settlement_and_currency_invariants(legacy_url) -> None
                     "('ck_product_prices_amount_not_negative', "
                     "'ck_orders_settlement_pair', "
                     "'ck_orders_settlement_amount_not_negative', "
+                    "'ck_order_items_single_line', "
                     "'fk_order_items_order_currency')"
                 )
             ).scalars()
@@ -322,6 +323,7 @@ def test_upgrade_installs_settlement_and_currency_invariants(legacy_url) -> None
         "ck_product_prices_amount_not_negative",
         "ck_orders_settlement_pair",
         "ck_orders_settlement_amount_not_negative",
+        "ck_order_items_single_line",
         "fk_order_items_order_currency",
     }
 
