@@ -1,153 +1,164 @@
 # Internet calling — go/no-go
 
-Chunk V01, **9 September 2026**. Decision covers **documented preparation only**.
+Chunk V01, independently reviewed **9 September 2026**. This decision covers
+documented preparation only.
 
 ## Verdict
 
 | Question | Answer |
 |---|---|
-| Is the route technically expressible from documented Telnyx contracts? | **YES** |
-| May V02 implement the authorization and lifecycle skeleton? | **YES**, for the evidenced parts only |
-| Is a **live** internet-calling route ready to enable? | **NO** |
-| Is a **hard prepaid spending guarantee** provable today? | **NO** |
-| May any pricing or cost-saving claim be made? | **NO** |
+| Is an outbound route expressible from documented Telnyx contracts? | **YES** |
+| May V02 build the provider-neutral authorization, event inbox and lifecycle model after its listed prerequisites? | **YES** |
+| May V02 treat one Telnyx topology or invoice shape as production-proven? | **NO** |
+| May live internet calling be enabled? | **NO** |
+| Is a hard prepaid guarantee or cost-saving claim supported? | **NO** |
 
-**GO for V02 documented implementation. NO-GO for live calling and for any
-prepaid guarantee.** The gap is account evidence, not design.
+**GO for provider-neutral V02 preparation; NO-GO for a live Telnyx route.** The
+official outbound-dialer pattern supplies the missing parking hook, but account
+and live tests must close five blockers.
 
-## Why GO for V02
+## What V02 may rely on
 
-The topology in [API-CONTRACTS.md](API-CONTRACTS.md) is built entirely from
-documented behaviour:
+- A server can create an expiring, single-use authorization and reserve money
+  before any PSTN Dial.
+- Park Outbound Calls is the documented pre-connection control for ordinary
+  client-originated calls.
+- A server can create a separate PSTN leg and bridge controlled legs.
+- Dial-created legs accept `time_limit_secs`.
+- Ed25519 verifies webhook authenticity; event ids and DamDam operation ids
+  provide durable replay/idempotency boundaries.
+- Outbound Voice Profiles provide coarse destination, concurrency, spend and
+  maximum-rate controls.
 
-- `Dial` accepts a **SIP URI** as `to`, so the backend can originate to the
-  client and the client never names a destination
-- `time_limit_secs` gives a **provider-enforced** per-leg duration bound that
-  survives backend failure
-- Ed25519 webhook signing is documented and **already correctly implemented** in
-  this repository
-- `call_session_id` correlates both legs; CDRs share a `uuid`
-- Outbound Voice Profiles provide destination, concurrency, daily-spend and
-  rate ceilings independent of application code
+V02 must keep the Telnyx adapter feature-disabled until the account probes pass.
 
-None of that required inventing a claim or a hook.
+## Live blockers
 
-## Why NO-GO for live calling
+### B1 — Credential containment and emergency bypass
 
-### B1 — Can a stolen WebRTC credential dial out? *(blocking, unresolved)*
+No destination scope is documented inside the client JWT. Parking provides a
+backend decision for ordinary destinations, but Telnyx explicitly routes
+country-matched emergency calls without parking. Account tests must prove the
+credential connection can register clients while blocking all unintended direct
+PSTN and emergency routing, and must identify one device credential reliably in
+the parked event. Client-side validation alone is insufficient.
 
-A Telnyx WebRTC credential/JWT authenticates an endpoint. **No per-destination
-scope on the token is documented.** The proposed mitigation is to attach the
-WebRTC credential connection to an Outbound Voice Profile permitting **no**
-destinations — but whether a profile can be configured with an empty allowed-
-destination set is not documented.
+### B2 — Nigeria rates and billing shape
 
-- **If yes:** a stolen credential can answer calls but not originate billable
-  ones. Residual risk acceptable.
-- **If no:** a stolen credential can dial whatever that profile permits, bounded
-  only by channel limit, daily spend limit and rate threshold. That is a real
-  financial exposure and must be stated to the founder before launch, not
-  discovered later.
+Nigeria mobile/landline rates, billing increments, minimums and connection fees
+were not obtained. The public pricing request returned 404 without an account.
+The number of WebRTC, Voice API and termination invoice components for each
+candidate topology also needs real CDR evidence. No price comparison is valid.
 
-**This is the single question that most changes the design.**
+### B3 — Bounded stopping and spend
 
-### B2 — Nigeria rates are unobtainable without an account *(blocking pricing)*
+`time_limit_secs` bounds a server-created PSTN leg. Public documentation does
+not give the client-created parked leg an equivalent provider time limit or
+state how long an abandoned parked leg persists. Daily-spend-limit reaction time
+and hangup delay are also unstated. A hard prepaid guarantee remains blocked.
 
-Not published per-country; `GET /v2/public/pricing` returned **HTTP 404
-unauthenticated** on 2026-09-09. Billing increment, minimum duration and
-connection fee are also unstated. **No cost comparison with carrier calling is
-possible** — see [COST-MODEL.md](COST-MODEL.md).
+### B4 — Nigeria account eligibility
 
-### B3 — Daily spend limit latency is unquantified *(blocking hard caps)*
+Telnyx says many destinations require Level 2 verification. Whether the account
+can activate Nigeria mobile and landline termination, resell it in the intended
+markets and present the selected Telnyx number must be confirmed in writing and
+tested.
 
-Documented as blocking outbound "once spending has exceeded the threshold", with
-no stated reaction time. A cap that lags cannot back a hard prepaid promise. The
-per-leg `time_limit_secs` is the only bound with documented, immediate semantics.
+### B5 — Supported client behavior
 
-### B4 — Level 2 verification for destinations *(blocking Nigeria specifically)*
+The current Telnyx packages declare peer ranges that include RN 0.86 and React
+19, but the official demo is on RN 0.79.6 and the integration guide acknowledges
+peer-resolution friction. V04 must prove clean dependency resolution, native
+iOS/Android builds, microphone/audio routing, DTMF, foreground outbound calls and
+active-call background/lock behavior. V05 must prove supported browsers and
+microphone/media failure behavior.
 
-"Many destinations require Level 2 verification before activation." Whether
-Nigeria mobile is among them, and what that entails for a new account, is
-account-specific.
+## V02 interface proposal
 
-### B5 — SDK compatibility with RN 0.86 *(blocking V04 only)*
+These are proposed contracts, not implemented endpoints.
 
-This repository runs React Native **0.86.0** / React **19.2.7**. Telnyx's RN SDK
-support for a version this recent must be confirmed against its own published
-matrix. Does not block V02 or V03, which are backend-only.
-
-## Interface proposal for V02
-
-Concrete enough to build against, narrow enough not to pre-empt V03.
-
+```text
+POST /v1/calls/client-session
+  request:  { device_id }
+  response: { token, sip_identity, expires_at }
 ```
+
+Issues a short-lived JWT for a non-revoked per-device telephony credential. It
+does not expose the Telnyx account API key.
+
+```text
 POST /v1/calls/authorize
-  request:  { destination_e164, on_behalf_of? }
+  request:  { destination_e164, on_behalf_of?, idempotency_key }
   response: { attempt_id, expires_at, max_seconds, estimated_max_charge }
 ```
 
-Creates a durable **call attempt** binding destination, outbound identity, payer,
-tenant, rate version, maximum liability and expiry; reserves funds atomically in
-PostgreSQL **before** any provider command. Returns no SDK credential and no
-destination-bearing token.
+Creates one durable attempt and reservation binding the exact destination,
+identity, payer, tenant/personal scope, tariff, liability and device credential.
 
-```
+```text
 POST /v1/calls/{attempt_id}/start
-  → server Dials leg A to the client's SIP URI with time_limit_secs
-  → on call.answered(leg A): Dial leg B to the destination
-  → on call.answered(leg B): bridge
+  validates owner/device and returns only what the selected client adapter needs
+  for one attempt; repeated requests converge on the same operation
 ```
 
+```text
+POST /v1/webhooks/telnyx/call-events
+  verify signature and timestamp
+  insert unique provider event id
+  resolve stored attempt/leg mapping
+  validate connection, device credential, destination and expected transition
+  consume grant once, then create/bridge/reconcile the original provider operation
 ```
-POST /v1/webhooks/telnyx/call-events    (Ed25519 verified — reuse R1)
-  call.initiated | call.answered | call.hangup | call.bridged
-  → resolve attempt via client_state, converge state, settle on hangup
-```
 
-**Invariants V02 must hold:**
+The selected preparatory route is the parked WebRTC pattern in
+[API-CONTRACTS.md](API-CONTRACTS.md). The provider interface must still support
+the server-originated fallback without changing domain authorization or money
+records.
 
-1. The client never sends a destination to the SDK, and never receives one in a
-   token.
-2. `time_limit_secs` is set on **both** legs from the reservation.
-3. An unknown outcome reconciles against the **original** attempt — no blind
-   second PSTN leg. (`command_id` dedupes only within 60 s; own idempotency key
-   required.)
-4. No reservation is released until settlement is final.
-5. Both CDRs are settled; leg durations are never summed as customer talk time.
+## V02 invariants
 
-## Negative test matrix for V02
+1. A destination leg starts only from an unused, unexpired, owner-scoped grant
+   whose reservation committed first.
+2. No webhook field, `client_state` value or SDK destination is authoritative
+   without a matching database record.
+3. One provider credential belongs to one device/browser installation and can
+   be revoked without changing the user's other credentials.
+4. Every signed provider event id is applied at most once, including a replay
+   inside the signature tolerance window.
+5. Every provider command has a durable local operation id; an unknown outcome
+   reconciles against that operation instead of issuing a second Dial.
+6. `time_limit_secs` is set on every server-created leg. Unproven bounds keep
+   live mode disabled.
+7. Attempt-to-leg mappings are authoritative; shared session/CDR identifiers
+   are optional evidence, not required assumptions.
+8. A reservation remains held until every known supplier liability is final.
 
-| # | Scenario | Required behaviour |
+## Negative test matrix
+
+| # | Scenario | Required behavior |
 |---|---|---|
-| N1 | Replayed authorize request | One attempt, one reservation |
-| N2 | Client presents an attempt id belonging to another user | Refused; nothing dialled |
-| N3 | Expired attempt used | Refused; reservation already released |
-| N4 | Leg A never answered | Reservation released; no leg B |
-| N5 | Leg B rejected by the provider | Reservation released; no customer charge |
-| N6 | Worker dies between the two Dials | Reconciles to the original attempt; no duplicate PSTN leg |
-| N7 | Duplicate `call.hangup` webhooks | Settled once |
-| N8 | Late/reordered `call.answered` after `call.hangup` | Converges without negative duration |
-| N9 | Unsigned or wrongly-signed webhook | Rejected before any state change |
-| N10 | Webhook replayed outside the tolerance window | Rejected |
-| N11 | Call reaches `time_limit_secs` | `hangup_cause=time_limit`; settled at the bound |
-| N12 | Two concurrent calls exceeding available funds | Second refused at reservation |
-| N13 | Membership revoked mid-call | Defined termination policy; personal service unaffected |
-| N14 | Destination outside policy (premium/unsupported) | Refused server-side before any provider command |
-| N15 | Stolen credential attempts direct origination | **Cannot be tested without an account — B1** |
-
-N15 is deliberately listed as untestable rather than quietly dropped.
-
-## What must not be claimed
-
-- That internet calling is cheaper than carrier calling — **B2**.
-- That spending is hard-capped — **B3**; only the per-leg time bound is proven.
-- That a stolen credential cannot dial — **B1**.
-- That this provides emergency calling. It does not, and must not be presented
-  as an alternative to carrier emergency access.
+| N1 | Same authorize idempotency key is replayed | One attempt and one reservation |
+| N2 | Another user/device presents the attempt | Refused; no provider command |
+| N3 | Expired or already-consumed attempt is started | Refused; no second leg |
+| N4 | Destination differs from the stored grant | Refused; stored destination is never replaced |
+| N5 | Unsupported, premium, emergency or special number | Refused before SDK/provider invocation |
+| N6 | Parked event has an unexpected connection/credential/leg | Quarantined; no PSTN Dial |
+| N7 | `client_state` is missing, malformed or names another attempt | Database mapping governs; no authorization from client state |
+| N8 | Valid signed event is replayed inside timestamp tolerance | Stored once and transition applied once |
+| N9 | Event is unsigned, wrongly signed or too old | Rejected before persistence/state change except audit-safe rejection metadata |
+| N10 | Events arrive late or in reverse order | State converges without regression or negative duration |
+| N11 | PSTN Dial response is lost or worker restarts after send | Reconcile original operation; no second destination leg |
+| N12 | Duplicate bridge/start command after 60 seconds | Durable idempotency still prevents duplication |
+| N13 | Client/WebRTC leg never becomes usable | No destination charge; reservation follows defined expiry/reconciliation |
+| N14 | PSTN leg rejects or never answers | No retail talk charge; all supplier liabilities still reconciled |
+| N15 | Call reaches provider time limit | Known legs end and settlement uses actual components |
+| N16 | Two calls race for insufficient available funds | Only the committed reservation may proceed |
+| N17 | Membership is revoked mid-call | Defined work-call termination; personal service remains separate |
+| N18 | Copied credential dials directly or uses an emergency number | Live account test must prove containment; failure keeps route disabled |
 
 ## Status
 
-**V01 delivered scope: READY_FOR_REVIEW.**
-**Remainder: EXTERNAL_BLOCKED on D1 account access** — B1, B2, B3 and B4 cannot
-be closed by documentation. The unsent [ENQUIRY-DRAFT.md](ENQUIRY-DRAFT.md)
-covers all four.
+**V01 documented/preparatory scope: ACCEPTABLE AFTER REVIEW FIXES.**
+**Live route: EXTERNAL_BLOCKED** on B1–B5 and D1. V02 is also sequenced behind
+chunks 06, 07, 09, 10 and 11; V01 acceptance alone does not make it eligible to
+start.

@@ -1,113 +1,109 @@
 # Internet-calling cost worksheet — chunk V01
 
-Produced **9 September 2026**. Supplier rates for Nigeria are **not evidenced**,
-so the model is symbolic. Every number below is either cited or a named symbol —
-**no rate is invented, and no claim is made that this is cheaper than carrier
-calling.**
+Reviewed **9 September 2026**. Nigeria rates and the exact invoice shape are not
+evidenced, so this worksheet stays symbolic and makes no claim that internet
+calling is cheaper than carrier calling.
 
-## What is evidenced
+## Published unit inputs
 
-| Input | Value | Source |
+| Symbol | Published value | Limit |
 |---|---|---|
-| WebRTC call leg | **$0.002 / min** | Telnyx WebRTC billing release note, 2026-09-09 |
-| Voice API / Call Control usage | **$0.002 / min** | Voice API pricing page, 2026-09-09 |
-| Billing currency | **USD** | Same |
-| CDRs per bridged call | **2**, correlated by identical `uuid` | WebRTC billing release note |
-| Max leg duration | 14400 s default and maximum | Dial API reference |
+| `W` — WebRTC/browser/app calling usage | **$0.002/min** | Public Telnyx pricing/release material; applicable count and billed duration need CDR proof |
+| `V` — Voice API usage | **$0.002/min** | Public Voice API price; whether charged once or for each controlled leg is not established here |
+| Billing currency | USD | Supplier billing currency; customer tariff may use another explicit currency |
+| `T_dial_max` | 14400 seconds | Default/maximum `time_limit_secs` for a Dial-created Call Control leg |
 
-## What is not evidenced
+Telnyx's WebRTC billing release gives an example with two CDRs sharing a
+`uuid` for a WebRTC plus SIP-trunk call. It does not establish that every
+candidate Call Control topology has exactly two CDRs, shares that identifier or
+incurs one Voice API charge.
 
-| Input | Why it is symbolic |
+## Unknown inputs
+
+| Symbol | Required evidence |
 |---|---|
-| `R_ng_mobile` — Nigeria mobile termination, $/min | Not published per-country. `GET /v2/public/pricing` returned **HTTP 404 unauthenticated** on 2026-09-09 |
-| `R_ng_fixed` — Nigeria landline termination, $/min | Same |
-| `C_connect` — per-call connection fee | Existence and amount unknown for this account |
-| `I` — billing increment (per second / 6 s / 60 s) | Not stated on the public pricing page; materially changes short-call cost |
-| `M` — minimum billable duration | Not stated |
-| `N_rent` — number rental, $/month | Published per-country on the numbers page, but the *specific* number type this product needs is not chosen yet |
-| `T` — taxes, surcharges, carrier passthrough | "Carrier passthrough and taxes vary by destination" — explicitly variable |
-| `FX` — USD→NGN rate and spread | Commercial choice, not a Telnyx input |
-| `D_term` — permitted termination delay | How long a leg may persist after a hangup command; bounds worst-case overrun |
+| `R_ng_mobile`, `R_ng_fixed` | Current Nigeria prefix-level termination rates |
+| `n_w`, `n_v`, `n_p` | Count of billed WebRTC, Voice API and PSTN components for the chosen topology |
+| `d_w[i]`, `d_v[i]`, `d_p[i]` | Billable duration of each component from actual CDRs |
+| `I_x`, `M_x` | Billing increment and minimum for each component |
+| `C_connect[x]` | Per-call/per-leg connection fees |
+| `N_rent` | Monthly rental for the chosen outbound number type |
+| `T_tax` | Taxes, regulatory fees and carrier passthrough for the seller/route |
+| `FX` | Versioned supplier-to-customer currency conversion and spread |
+| `D_hangup` | Worst observed delay from requested/provider limit to final termination |
+| `D_park` | Maximum billable lifetime of an abandoned client-originated parked leg |
 
-## Per-call supplier cost
+## Supplier-cost equation
 
-For one bridged customer call of billable duration `d` minutes to Nigeria:
+Apply each component's own increment and minimum:
 
-```
-supplier_cost(d) =
-      d × 0.002                     # leg A, WebRTC       (evidenced)
-    + d × 0.002                     # Call Control usage  (evidenced)
-    + d × R_ng_<type>               # leg B, PSTN         (UNKNOWN)
-    + C_connect                     # per call            (UNKNOWN)
-    + T                             # taxes/passthrough   (UNKNOWN)
+```text
+billable(raw_seconds, I_x, M_x) =
+    max(M_x, ceil(raw_seconds / I_x) * I_x) / 60
 
-where d = max(M, ceil(actual_seconds / I) × I / 60)
-```
-
-**The two evidenced legs alone are $0.004/min before the PSTN leg.** That is the
-floor, not the price. `R_ng_mobile` is very likely the dominant term, so no
-comparison with carrier calling is possible yet.
-
-### Amortised per-account
-
-```
-monthly_fixed = N_rent × numbers_held        # UNKNOWN
+supplier_cost =
+    sum(i=1..n_w, billable(d_w[i], I_w, M_w) * W)
+  + sum(i=1..n_v, billable(d_v[i], I_v, M_v) * V)
+  + sum(i=1..n_p, billable(d_p[i], I_p, M_p) * R_ng_<type>[i])
+  + sum(all applicable C_connect)
+  + T_tax
 ```
 
-## Retail price and prepaid headroom
+The public sources establish `W` and `V` as unit prices. They do not establish
+`n_w`, `n_v` or the Nigeria termination rate for DamDam's chosen route.
+There is therefore no defensible fixed per-minute floor beyond the individual
+published units.
 
-Supplier cost is **not** the customer tariff. Per
-[VOICE-EXPANSION.md](../VOICE-EXPANSION.md), the customer price comes from a
-**versioned retail tariff**, and supplier cost reconciles separately.
+### Monthly fixed cost
 
-Reservation before a call must cover the **worst case**, not the expected case:
-
-```
-max_liability = (T_max / 60) × (0.002 + 0.002 + R_ng_<type>)
-              + C_connect + T
-              + overrun_allowance(D_term)
-
-where T_max = time_limit_secs set on the legs
+```text
+monthly_fixed = N_rent * numbers_held + other_account_fees
 ```
 
-`overrun_allowance(D_term)` exists because a hangup command is not instantaneous.
-With `D_term` unknown, V03 must either measure it on a real account or hold a
-deliberately conservative allowance — and say which.
+Number type, inventory strategy and any account minimum remain decisions.
 
-## Worked example — structure only, not a quotation
+## Retail tariff and reservation
 
-`T_max = 600 s (10 min)`, per-second increment, no minimum:
+Supplier cost and the customer tariff are separate records. The customer quote
+uses a versioned retail tariff in its own currency. Settlement retains the
+supplier currency/units and records any FX version explicitly.
 
-| Component | Cost |
-|---|---|
-| Leg A WebRTC | 10 × $0.002 = **$0.020** |
-| Call Control | 10 × $0.002 = **$0.020** |
-| Leg B Nigeria | 10 × `R_ng_mobile` = **unknown** |
-| Connection fee | `C_connect` = **unknown** |
-| Taxes | `T` = **unknown** |
-| **Reservation floor** | **$0.040 + 10·R_ng_mobile + C_connect + T** |
+For a live prepaid route, the reservation must cover every component that can
+remain billable through the authorized maximum and termination overrun:
 
-At a hypothetical `R_ng_mobile = $0.05/min` the PSTN leg is $0.50 — **12× the
-two evidenced legs combined.** This is exactly why no cost claim can be made
-before D1 produces a rate deck. The figure is an illustration of sensitivity,
-**not** an estimate of Nigeria pricing.
+```text
+max_liability =
+    upper_bound(chosen topology, authorized_seconds,
+                component rates, increments, minimums,
+                connection fees, D_hangup, D_park, taxes)
+```
 
-## What must be obtained before any pricing decision
+No finite hard-prepaid formula is proven for the selected parked topology while
+`D_park` and spend-control latency are unknown. V03 may implement the generic
+reservation calculation and reject live authorization when any required bound
+or tariff input is absent.
 
-1. Nigeria mobile and landline rates, per destination prefix if they differ.
-2. Billing increment `I` and minimum `M`.
-3. Connection fee `C_connect`, if any.
-4. Taxes and carrier passthrough for the selling entity's jurisdiction (**D3**,
-   also open — the seller determines the tax treatment).
-5. Permitted termination delay `D_term`.
-6. Whether Voice API usage is billed on both legs or once per session.
+## Settlement rule for V03
 
-Items 1–5 are in the unsent [ENQUIRY-DRAFT.md](ENQUIRY-DRAFT.md). Item 6 is
-resolvable from a real CDR pair once an account exists.
+Do not settle from an estimate, webhook duration alone or an assumed pair of
+CDRs. Ingest each supplier record idempotently, associate it through the durable
+attempt and provider leg mapping, preserve corrections, and finalize only when
+all known liabilities have reached the provider's terminal state.
 
-## Rule for V03
+Customer talk duration is the bridged conversation interval and is charged once
+under the retail tariff. WebRTC, Voice API, PSTN, connection and tax lines are
+supplier-cost components; they are not duplicate customer minutes.
 
-**Do not charge a customer from an estimate.** Reserve against
-`max_liability`, settle against the two actual CDRs correlated by `uuid`, and
-release the difference. A displayed balance that assumes the expected case will
-over-commit funds on long calls to expensive destinations.
+## Evidence required before pricing
+
+1. Nigeria mobile and fixed rates, including prefix differences.
+2. Billing increments, minimums and connection fees per component.
+3. A real CDR/invoice set for both the parked topology and, if retained, the
+   server-originated fallback.
+4. Number rental and account minimums.
+5. Taxes/surcharges for the selected seller under D3.
+6. Measured hangup and parked-leg bounds.
+7. Written confirmation of the Voice API/WebRTC fee count for the route.
+
+These questions are included in the unsent
+[ENQUIRY-DRAFT.md](ENQUIRY-DRAFT.md).

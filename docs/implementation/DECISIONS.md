@@ -70,22 +70,27 @@ documentation, not commercial confirmation, and it does not move D1.
 Additional evidence D1 now requires for the internet track, none of it
 obtainable without an account:
 
-9.  Whether a WebRTC telephony credential or JWT can be restricted so it cannot
-    originate outbound calls, and whether an Outbound Voice Profile may have an
-    empty allowed-destination set. **No per-destination token scope is
-    documented**, so the route depends on this.
-10. The reaction time of the Daily Spend Limit Per Connection, and whether any
-    control enforces a hard prepaid ceiling in real time.
+9.  Whether a WebRTC telephony credential can register and create ordinary
+    parked calls while being unable to connect directly to PSTN or emergency
+    routing; and which signed event fields bind the parked leg to one device
+    credential. **No per-destination token scope is documented**, and emergency
+    calls are documented to bypass parking.
+10. The provider-enforced lifetime of a client-created parked leg, the reaction
+    time of the Daily Spend Limit, hangup delay, and whether these establish any
+    finite hard-prepaid bound.
 11. Nigeria outbound rates, billing increment, minimum duration and connection
     fee. Not published; `GET /v2/public/pricing` returns HTTP 404
     unauthenticated.
 12. Whether Nigeria requires Level 2 destination verification.
-13. Mobile WebRTC SDK support for React Native 0.86 / React 19.
+13. Native proof for the current SDK on React Native 0.86 / React 19 and browser
+    support. The published peer ranges include these versions, but installation,
+    native builds and calls have not been tested.
 
-Two evidenced cost inputs are already recorded: the WebRTC leg and Voice API
-usage are **$0.002/min each**, and a bridged call produces **two CDRs**
-correlated by a shared `uuid`. No comparison with carrier calling is possible
-until item 11 is answered.
+Two published unit inputs are recorded: WebRTC and Voice API usage are each
+listed at **$0.002/min**. The number and duration of billed components, CDR
+correlation and Nigeria termination price for the chosen topology remain
+unknown. No comparison with carrier calling is possible until item 11 and live
+CDR evidence are available.
 
 #### Evidence gathered — 2026-09-08 (chunk 03, US-35)
 

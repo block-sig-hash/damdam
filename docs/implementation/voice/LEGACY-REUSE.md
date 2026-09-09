@@ -1,76 +1,65 @@
 # Legacy voice code — reuse, refactor or reject
 
-Produced by chunk V01 on **9 September 2026**, against
-`d95db83c79239e495854ffb404709b7415a5e868` (planning tip, carrying accepted
-application base `7aeea65`).
+Reviewed **9 September 2026** against retained `apps/api/app/voice/` code and
+the chunk 04D removal commit `390f792`. Never restore that commit wholesale.
 
-Two sources: the **retained** `apps/api/app/voice/` module, and code **removed
-by chunk 04D** (`390f792`, "remove app calling and caller-ID verification"),
-recoverable from history.
+## Reuse as a primitive
 
-The governing rule from the assignment: *never restore chunk 04 wholesale.* Each
-item below is judged against the **new** scope — outbound internet calling, no
-eSIM requirement, no verified caller ID, no incoming ringing.
-
-## REUSE — take substantially as-is
-
-| # | Component | Path | Why it fits |
+| # | Component | Path | Decision |
 |---|---|---|---|
-| **R1** | `VoiceService._verify_signature` | `apps/api/app/voice/service.py:368` | Ed25519 verification of `telnyx-signature-ed25519` over `timestamp \| payload`, plus a clock-tolerance window against replay. Matches current Telnyx documentation exactly. Written against a real contract and already covered by tests. **The single most valuable retained asset.** |
-| **R2** | `CallLog` | `apps/api/app/voice/models.py:257` | Per-call financial/audit record. Chunk 04D explicitly retained it as financial history. Needs new columns (V02/V03), not replacement |
-| **R3** | `VoiceProvider` Protocol | `apps/api/app/voice/providers.py:28` | The provider-boundary shape — `initiate_call`, `bridge_call`, `issue_token`, `create_credential` — is the right seam and keeps SDK/provider concerns out of routes. The Protocol survives even though its implementation changes |
-| **R4** | Webhook→service routing | `apps/api/app/voice/service.py:89` `process_webhook` | Signature-first, then dispatch by `event_type`. Correct order; keep it |
-| **R5** | Contract-probe harness | `apps/api/tools/telnyx_probe/` | Chunk 03's pattern for asserting fixtures against documented contracts without an account. V02 should extend it rather than invent a second approach |
+| R1 | Ed25519 verification | `apps/api/app/voice/service.py::_verify_signature` | Reuse signature and timestamp-freshness verification, then add a durable unique event inbox. Freshness alone is not replay deduplication |
+| R2 | Call financial history | `apps/api/app/voice/models.py::CallLog` | Preserve existing records and identifiers; extend through additive migration for attempt/leg/usage settlement |
+| R3 | Provider boundary concept | `apps/api/app/voice/providers.py::VoiceProvider` | Keep provider code outside routes and UI, but replace method contracts for explicit operations, returned identifiers and uncertain outcomes |
+| R4 | Signature-first dispatch order | `apps/api/app/voice/service.py::process_webhook` | Keep authentication before parsing/state mutation; insert durable event-id dedup and authoritative leg lookup before dispatch |
+| R5 | Contract-probe harness | `apps/api/tools/telnyx_probe/` | Extend with dated fixtures and account probes rather than creating another harness |
 
-## REFACTOR — the shape is right, the coupling is wrong
+## Refactor before use
 
-| # | Component | Path | What must change |
+| # | Component | Path | Required change |
 |---|---|---|---|
-| **F1** | `TelnyxVoiceProvider.initiate_call` | `providers.py:89` | Currently takes `verified_caller_identity_id` and a `caller_id` from the retired CLI flow. Outbound identity becomes an **owned Telnyx number**; the CLI parameter goes |
-| **F2** | `VoiceCredential` | `models.py:234` | One SIP credential per user is reusable, but it must be issued against a connection that **cannot dial PSTN** (API-CONTRACTS §5). Today nothing constrains what the credential may call |
-| **F3** | `_handle_hangup` billing | `service.py:210` | Deducts `pstn_minutes_remaining` from a `Package` — the retired minutes-bundle model, and it charges a **single** leg. V03 replaces this with ledger settlement over **two** correlated CDRs. The duration/rounding logic is a useful reference, the money model is not |
-| **F4** | `eligibility` | `service.py:50` | The `cli_not_verified` gate was already removed by 04D. What remains — a balance check before permitting a call — is the right idea, but it must consult the reservation/ledger, not `Package.pstn_minutes_remaining` |
-| **F5** | `nigerian_numbers.py` | `apps/api/app/voice/nigerian_numbers.py` | Nigeria-specific normalisation. Useful for validating Nigerian **destinations**, which is still the target market; must not be reused as *identity* validation, which was its CLI purpose |
+| F1 | Origination adapter | `providers.py::TelnyxVoiceProvider.initiate_call` | Remove verified-CLI fields, return all provider identifiers, accept a persisted operation id, expose unknown outcome, and implement only the selected topology |
+| F2 | Bridge adapter | `providers.py::TelnyxVoiceProvider.bridge_call` | Current code sends `call_control_id`; official generated examples use `call_control_id_to_bridge_with` while other official schema/tutorial text still shows `call_control_id`. Confirm the accepted field in the probe before enabling |
+| F3 | Voice credential | `models.py::VoiceCredential` | Replace unique-per-user ownership with one revocable credential per device/browser installation; record provider connection, expiry/revocation and owner scope |
+| F4 | Credential creation/token issue | `providers.py::create_credential/issue_token` | Use per-device names/tags, a bounded parent expiry and server-issued short-lived client sessions; do not infer token expiry from local wall clock without provider response/claim validation |
+| F5 | Hangup billing | `service.py::_handle_hangup` | Replace package-minute debit and single-leg assumptions with V03 usage ingestion and ledger settlement |
+| F6 | Eligibility | `service.py::eligibility` | Replace active-package minutes with entitlement, tariff, payer and atomic reservation checks; internet calling cannot require an eSIM package |
+| F7 | Nigeria normalization | `apps/api/app/voice/nigerian_numbers.py` | Reuse tested E.164 destination normalization only; do not use it as caller-identity verification |
+| F8 | `client_state` decoder | `service.py::_client_state` | Keep as a parser after signature verification, but never authorize or settle from decoded values without authoritative database mapping |
 
-## REJECT — do not carry forward
+## Reject for the new route
 
-| # | Component | Where | Why |
+| # | Component | Where | Reason |
 |---|---|---|---|
-| **X1** | `caller_identity_service.py`, `verified_numbers.py` | deleted in `390f792` | Third-party verified caller ID. **Deferred under D2** and explicitly out of scope. Reinstating it would reintroduce the retired flow the assignment forbids |
-| **X2** | `VerifiedCallerIdentity`, `CallerIdConsent`, and the seven CLI enums | `models.py:26-232` | Same reason. The tables are **retained** (chunk 04 dropped nothing) but must not be wired into the new route. `caller_id_consents` is consent evidence and stays for its retention period |
-| **X3** | `_handle_initiated` + `_log_pstn_rejection` | `service.py:111,169` | The WebRTC→PSTN bridge built on the **client-dials** model, gated on a verified caller identity. Both premises are gone. This is the code the new topology deliberately inverts |
-| **X4** | `_handle_app_to_app_hangup` | `service.py:275` | App-to-app calling between DamDam users. Not in the approved scope, which is outbound to ordinary phone numbers |
-| **X5** | `callKit.ts`, `voiceGateway.ts` | deleted in `390f792` | CallKit/PushKit **incoming**-call handling. Incoming ringing is deferred; outbound-only calling needs neither. Restoring them would reinstate the `voip` background mode 04D removed |
-| **X6** | `cliClient.ts`, `voiceClient.ts` | deleted in `390f792` | Clients for retired endpoints |
-| **X7** | `IDTExpressVoiceProvider` | `providers.py:154` | Its own docstring says it "is never constructed in production; it exists only to give" a second provider shape. A second carrier is not approved |
+| X1 | Caller identity services/routes | removed by `390f792` | Customer-owned verified caller ID is deferred |
+| X2 | Verified caller/consent domain as active eligibility | retained historical tables | Preserve required history/retention, but do not wire it into the new route |
+| X3 | Existing `_handle_initiated` authorization behavior | `service.py` | It trusts the retired verified-CLI/client-dials model and lacks a single-use grant/event inbox |
+| X4 | App-to-app calling | `service.py::_handle_app_to_app_hangup` | Outside outbound-to-PSTN scope |
+| X5 | Incoming CallKit/PushKit bridge | removed mobile files | Incoming ringing is deferred; V04 evaluates active outbound-call integration independently |
+| X6 | Retired CLI/voice endpoint clients | removed mobile files | Contracts no longer match |
+| X7 | `IDTExpressVoiceProvider` stub | `providers.py` | No second voice provider is approved |
 
-## Assumptions in the retained code that must be re-examined
+## Legacy assumptions that must not cross the boundary
 
-These are not components but embedded premises, and each one is a trap:
-
-1. **Minutes-bundle accounting.** `pstn_minutes_total/remaining` on `Package`
-   assumes prepaid minutes attached to an eSIM package. Internet calling
-   **must not require an eSIM** — so a voice grant cannot hang off `Package`.
-   Chunk 05's `entitlements` table is the right home; the plan calls a voice-only
-   grant "a distinct capability, not a fake installed line."
-2. **NGN-only money.** Retained billing assumes NGN. Telnyx bills in **USD**.
-   Chunk 05 made money currency-explicit — use it, and keep FX a separate,
-   versioned input.
-3. **One billable leg.** Every retained billing path charges once. The evidenced
-   reality is **two CDRs per call**. This is the highest-value correction in this
-   inventory: carrying the single-leg assumption forward would misprice by
-   roughly the WebRTC leg on every call.
-4. **Caller ID from a verified third-party number.** Now an owned Telnyx number.
-5. **`gencred…` SIP usernames.** The provider's own docs use that prefix for
-   telephony credentials, so the retained naming is real, not invented — but
-   see F2 on what such a credential must not be allowed to do.
+1. **Package minutes.** Internet-only users may have no eSIM or Package. Voice
+   authorization uses entitlements and the shared ledger.
+2. **NGN-only money.** Telnyx supplier charges are in USD; payer, seller,
+   customer tariff, settlement and FX versions remain explicit.
+3. **Exactly one billable leg or exactly two CDRs.** Both are unproven for the
+   chosen topology. Store every supplier component and charge customer talk time
+   once.
+4. **Shared session identifiers.** Independently created legs are associated by
+   DamDam's attempt/leg records; provider session/CDR fields are supporting data.
+5. **One credential per user.** Telnyx recommends separate device credentials;
+   sharing one SIP identity across devices creates registration and revocation
+   ambiguity.
+6. **Verified customer number as caller ID.** Use only a provider-authorized
+   assigned identity that has been proven for the route.
 
 ## Traceability
 
-Every path above is either present in the working tree at `d95db83` or
-recoverable with:
+Current and removed paths can be checked with:
 
-```
+```bash
 git show 390f792 -- apps/api/app/voice/caller_identity_service.py
 git show 390f792 -- apps/mobile/src/services/callKit.ts
 git log --diff-filter=D --name-only 390f792
