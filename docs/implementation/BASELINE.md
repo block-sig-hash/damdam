@@ -170,3 +170,18 @@ and concurrent refresh rotation also have regressions. See
 [reviews/02.md](reviews/02.md) for exact checks and limits. The iOS logs identify
 a startup timeout, but cannot establish slowness rather than a hung driver.
 Native CI evidence and GitHub write access remain open; develop is unchanged.
+
+
+### Final chunk 02 evidence — 9 September 2026
+
+The previous access/native evidence gaps are closed. Both
+[PR CI](https://github.com/block-sig-hash/damdam/actions/runs/34268255191) and
+[on-demand CI including iOS](https://github.com/block-sig-hash/damdam/actions/runs/34268285562)
+passed at `aeb74f6`: 359 API tests, complete native builds/captures, 32 validated
+PNGs and 16 successful flows per platform, and Docker/restore checks. See
+[reviews/02.md](reviews/02.md) for accepted scope and exact content SHA.
+
+Chunk 01 merged in PR #100. Its push-to-develop deployment exposed a separate
+setup gap: all four staging secrets are unset. Deployment failed before server
+contact; the gate remains intact. That D6/chunk 26 issue does not invalidate
+passing chunk 02 verification and is not claimed fixed by this review.

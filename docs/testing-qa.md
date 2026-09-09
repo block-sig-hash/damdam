@@ -880,3 +880,22 @@ Changing `ci.yml` selects all four existing application/build path filters,
 including dashboard. Dashboard checks therefore apply to this chunk even though
 its application source is unchanged. Review results and remaining native CI
 requirements are recorded separately in the chunk's independent review record.
+
+
+### 14.14.8 Final native evidence — 9 September 2026
+
+The initial “not run” entries in this amendment describe implementation-time
+limitations and are superseded for chunk 02 by
+[on-demand CI run 34268285562](https://github.com/block-sig-hash/damdam/actions/runs/34268285562)
+and [PR run 34268255191](https://github.com/block-sig-hash/damdam/actions/runs/34268255191),
+both passing at `aeb74f6`. The on-demand run executes the configured 300-second
+iOS timeout. Both platforms produce 32 expected, independently decoded PNGs and
+16 successful flows with zero JUnit errors/failures. API, dashboard, mobile,
+Docker multi-architecture and WAL-G restore verification also pass.
+
+This demonstrates the configured harness operating successfully on these
+runners; it does not prove intermittency eliminated or replace physical-device
+and carrier proof. The post-chunk-01 staging deployment fails before server
+contact because its four required environment secrets are unset; D6/chunk 26
+owns that setup. Full review and scope limits are in
+[implementation/reviews/02.md](./implementation/reviews/02.md).

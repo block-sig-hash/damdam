@@ -1,9 +1,11 @@
 # Implementation status
 
-Chunk 01 (documentation reset) is **ACCEPTED after independent Codex review and
-fixes**. Chunk 02 review fixes are committed and local checks pass; full
-acceptance is **EXTERNAL_BLOCKED** pending native/remote CI evidence and GitHub
-write access. See [reviews/02.md](reviews/02.md).
+Chunks 01 and 02 are **ACCEPTED after independent Codex review and fixes**.
+Chunk 01 merged in [PR #100](https://github.com/block-sig-hash/damdam/pull/100).
+Chunk 02's tested content and native evidence are recorded in
+[reviews/02.md](reviews/02.md); [PR #101](https://github.com/block-sig-hash/damdam/pull/101)
+carries its integration. Staging is not deployed: its four required secrets are
+missing (D6/chunk 26). No production-readiness claim is made.
 
 **Original baseline:** `develop` @
 `6790c74707a0f3e52cfedb36bc173ec83ca26663`, confirmed current on 2026-09-08 —
@@ -17,7 +19,7 @@ independent worktree is based on chunk 01; its work is not accepted by this revi
 | Chunk | Status | Base/head SHA | Review record | Remaining gate |
 |---|---|---|---|---|
 | 01 — Reset product specifications and working rules | ACCEPTED | base `6790c74` / corrected content `36e9bf36a2827d108633730ff0899edbd17b97ef` | [Independent review](reviews/01.md) | None blocking chunk 01; D1–D6 remain OPEN |
-| 02 — Repair the CI baseline and screenshot harness | EXTERNAL_BLOCKED | base `178c448` / corrected content `4e5ecc9` | [Independent review](reviews/02.md) | Local software findings fixed; native and required branch CI still pending; GitHub account has READ access |
+| 02 — Repair the CI baseline and screenshot harness | ACCEPTED | base `178c448` / corrected content `4e5ecc9` / CI head `aeb74f6` | [Independent review](reviews/02.md) | None blocking chunk 02; staging configuration remains D6/chunk 26 |
 | 03 — Prove Telnyx feasibility and document the carrier contract | IN_PROGRESS | separate `chunk/03-telnyx-feasibility` worktree based on `178c448` | Not reviewed here | Independent of chunk 02; see its own handoff when submitted |
 | 04 — Retire family, safety and app-calling features safely | NOT_STARTED | — | — | See assignment |
 | 05 — Introduce core domain models and migration boundaries | NOT_STARTED | — | — | See assignment |
