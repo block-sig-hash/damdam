@@ -289,6 +289,43 @@ def test_upgrade_adds_the_new_tables_empty(legacy_url) -> None:
     engine.dispose()
 
 
+def test_upgrade_installs_settlement_and_currency_invariants(legacy_url) -> None:
+    """The Alembic schema must enforce the same money rules as the ORM schema."""
+    command.upgrade(_alembic_config(legacy_url), US28_REVISION)
+
+    engine = create_engine(legacy_url)
+    with engine.connect() as connection:
+        order_columns = set(
+            connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = 'orders'"
+                )
+            ).scalars()
+        )
+        constraints = set(
+            connection.execute(
+                text(
+                    "SELECT conname FROM pg_constraint "
+                    "WHERE conname IN "
+                    "('ck_product_prices_amount_not_negative', "
+                    "'ck_orders_settlement_pair', "
+                    "'ck_orders_settlement_amount_not_negative', "
+                    "'fk_order_items_order_currency')"
+                )
+            ).scalars()
+        )
+    engine.dispose()
+
+    assert {"settlement_currency", "settlement_amount"} <= order_columns
+    assert constraints == {
+        "ck_product_prices_amount_not_negative",
+        "ck_orders_settlement_pair",
+        "ck_orders_settlement_amount_not_negative",
+        "fk_order_items_order_currency",
+    }
+
+
 def test_downgrade_restores_the_previous_schema_without_data_loss(legacy_url) -> None:
     """A migration that cannot be reversed on a populated database is not deployable."""
     _seed_legacy(legacy_url)

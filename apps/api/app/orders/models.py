@@ -22,7 +22,15 @@ from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, String
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlmodel import Field, SQLModel
 
@@ -73,12 +81,23 @@ class Order(SQLModel, table=True):
     __tablename__ = "orders"
     __table_args__ = (
         currency_check("orders"),
+        currency_check("orders", "settlement_currency"),
+        UniqueConstraint("id", "currency", name="uq_orders_id_currency"),
         CheckConstraint(
             "(payer_user_id IS NOT NULL AND payer_organization_id IS NULL) "
             "OR (payer_user_id IS NULL AND payer_organization_id IS NOT NULL)",
             name="ck_orders_exactly_one_payer",
         ),
         CheckConstraint("total_amount >= 0", name="ck_orders_total_not_negative"),
+        CheckConstraint(
+            "(settlement_currency IS NULL AND settlement_amount IS NULL) OR "
+            "(settlement_currency IS NOT NULL AND settlement_amount IS NOT NULL)",
+            name="ck_orders_settlement_pair",
+        ),
+        CheckConstraint(
+            "settlement_amount >= 0",
+            name="ck_orders_settlement_amount_not_negative",
+        ),
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -102,6 +121,15 @@ class Order(SQLModel, table=True):
     )
     currency: str = Field(sa_column=currency_column())
     total_amount: Decimal = Field(sa_column=money_column())
+    # Settlement is recorded independently because a processor may charge the
+    # customer in one currency and remit to the seller in another. Both values
+    # remain null until a settlement amount is known.
+    settlement_currency: str | None = Field(
+        default=None, sa_column=currency_column(nullable=True)
+    )
+    settlement_amount: Decimal | None = Field(
+        default=None, sa_column=money_column(nullable=True)
+    )
     payment_state: PaymentState = Field(
         default=PaymentState.UNPAID,
         sa_column=_enum(PaymentState, "order_payment_state", PaymentState.UNPAID),
@@ -116,15 +144,19 @@ class OrderItem(SQLModel, table=True):
     __tablename__ = "order_items"
     __table_args__ = (
         currency_check("order_items", "unit_currency"),
+        ForeignKeyConstraint(
+            ["order_id", "unit_currency"],
+            ["orders.id", "orders.currency"],
+            name="fk_order_items_order_currency",
+            ondelete="CASCADE",
+        ),
         CheckConstraint("quantity > 0", name="ck_order_items_quantity_positive"),
         CheckConstraint("unit_amount >= 0", name="ck_order_items_amount_not_negative"),
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     order_id: UUID = Field(
-        sa_column=Column(
-            ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True
-        )
+        sa_column=Column(nullable=False, index=True)
     )
     product_id: UUID = Field(
         sa_column=Column(ForeignKey("products.id"), nullable=False, index=True)

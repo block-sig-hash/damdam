@@ -1977,7 +1977,7 @@ the payer.
 | `organizations` | **payer** | Existing table, reused. |
 | `products` | product | What is sold, independent of price. |
 | `product_prices` | price version | Append-only, currency-explicit, per seller. |
-| `orders` | order | Names its seller and exactly one payer. |
+| `orders` | order | Names its seller and exactly one payer; charge and settlement amounts remain separate. |
 | `order_items` | order item | Names its recipient, which may be null until assigned. |
 | `entitlements` | entitlement | What the holder is owed, in exact units. |
 | `esim_installations` | eSIM installation | Links an entitlement to a device state. |
@@ -2020,9 +2020,17 @@ compounds through a conversion chain.
 
 Six decimal places is chosen for metered usage, not for display. **Presentation
 scale is per currency** — NGN and USD present two places — and rounding for
-display happens at the edge, never in storage. Cross-currency addition is not
-prevented by a column type and nothing here pretends otherwise: a balance in two
-currencies is two balances, and the rule belongs to chunk 10's ledger.
+display happens at the edge, never in storage. An order item has a composite
+foreign key to its parent order's id and currency, so a mixed-currency order is
+rejected by PostgreSQL. Chunk 10 applies the same by-construction rule to ledger
+balances and postings.
+
+`orders.currency` and `orders.total_amount` record what the customer was
+charged. Nullable `settlement_currency` and `settlement_amount` record what the
+seller receives after the processor settles. They are an atomic pair: both are
+null until settlement is known, and otherwise both are present. This preserves
+a USD charge and an NGN settlement as distinct values instead of overwriting or
+adding them.
 
 Entitlements are counted in **bytes and seconds**, not gigabytes and minutes.
 The legacy `NUMERIC(6,2)` gigabyte balance cannot represent a supplier's

@@ -128,6 +128,9 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "currency ~ '^[A-Z]{3}$'", name="ck_product_prices_currency_iso4217"
         ),
+        sa.CheckConstraint(
+            "amount >= 0", name="ck_product_prices_amount_not_negative"
+        ),
     )
     op.create_index(
         "ux_product_prices_version",
@@ -163,6 +166,8 @@ def upgrade() -> None:
         ),
         sa.Column("currency", CURRENCY, nullable=False),
         sa.Column("total_amount", MONEY, nullable=False),
+        sa.Column("settlement_currency", CURRENCY, nullable=True),
+        sa.Column("settlement_amount", MONEY, nullable=True),
         sa.Column(
             "payment_state",
             postgresql.ENUM(name="order_payment_state", create_type=False),
@@ -174,11 +179,25 @@ def upgrade() -> None:
             "currency ~ '^[A-Z]{3}$'", name="ck_orders_currency_iso4217"
         ),
         sa.CheckConstraint(
+            "settlement_currency ~ '^[A-Z]{3}$'",
+            name="ck_orders_settlement_currency_iso4217",
+        ),
+        sa.CheckConstraint(
             "(payer_user_id IS NOT NULL AND payer_organization_id IS NULL) "
             "OR (payer_user_id IS NULL AND payer_organization_id IS NOT NULL)",
             name="ck_orders_exactly_one_payer",
         ),
         sa.CheckConstraint("total_amount >= 0", name="ck_orders_total_not_negative"),
+        sa.CheckConstraint(
+            "(settlement_currency IS NULL AND settlement_amount IS NULL) OR "
+            "(settlement_currency IS NOT NULL AND settlement_amount IS NOT NULL)",
+            name="ck_orders_settlement_pair",
+        ),
+        sa.CheckConstraint(
+            "settlement_amount >= 0",
+            name="ck_orders_settlement_amount_not_negative",
+        ),
+        sa.UniqueConstraint("id", "currency", name="uq_orders_id_currency"),
     )
 
     op.create_table(
@@ -187,7 +206,6 @@ def upgrade() -> None:
         sa.Column(
             "order_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("orders.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         ),
@@ -221,6 +239,12 @@ def upgrade() -> None:
         sa.CheckConstraint("quantity > 0", name="ck_order_items_quantity_positive"),
         sa.CheckConstraint(
             "unit_amount >= 0", name="ck_order_items_amount_not_negative"
+        ),
+        sa.ForeignKeyConstraint(
+            ["order_id", "unit_currency"],
+            ["orders.id", "orders.currency"],
+            name="fk_order_items_order_currency",
+            ondelete="CASCADE",
         ),
     )
 

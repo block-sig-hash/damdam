@@ -11,7 +11,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, String
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, String
 from sqlalchemy import Enum as SAEnum
 from sqlmodel import Field, SQLModel
 
@@ -85,6 +85,9 @@ class ProductPrice(SQLModel, table=True):
     __tablename__ = "product_prices"
     __table_args__ = (
         currency_check("product_prices"),
+        CheckConstraint(
+            "amount >= 0", name="ck_product_prices_amount_not_negative"
+        ),
         Index(
             "ux_product_prices_version",
             "product_id",

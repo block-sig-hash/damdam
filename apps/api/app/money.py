@@ -13,9 +13,10 @@ a service:
 2. **Amounts are exact decimals**, never floats. Metered usage and FX rates need
    more precision than a presentation amount, so rates get their own scale.
 
-Cross-currency arithmetic is not a column type's job to prevent, and nothing
-here tries: a balance in two currencies is two balances. That rule belongs to
-the ledger in chunk 10, which this module exists to make expressible.
+Cross-currency arithmetic is not a column type's job to prevent. Owning models
+must bind related amounts to a currency identity: for example, an order item
+references its parent order by both id and currency. The ledger in chunk 10
+applies the same rule to balances and postings.
 """
 
 from typing import Any

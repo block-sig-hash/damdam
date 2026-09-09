@@ -126,6 +126,100 @@ def test_amounts_keep_exact_decimal_precision(session) -> None:
     assert price.amount == Decimal("3.141593")
 
 
+def test_a_negative_catalog_price_is_refused(session) -> None:
+    """A price cannot create a credit by using a negative sale amount."""
+    session.add(
+        ProductPrice(
+            product_id=_product(session).id,
+            legal_entity_id=_seller(session).id,
+            currency="USD",
+            amount=Decimal("-0.000001"),
+            version=1,
+            effective_from=datetime(2026, 9, 1, tzinfo=timezone.utc),
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_order_item_currency_must_match_its_order(session) -> None:
+    """An item cannot silently add NGN to a USD order total."""
+    order = _order(session, currency="USD", total_amount=Decimal("12.00"))
+    session.flush()
+    session.add(
+        OrderItem(
+            order_id=order.id,
+            product_id=_product(session).id,
+            recipient_user_id=_user(session).id,
+            quantity=1,
+            unit_currency="NGN",
+            unit_amount=Decimal("12.00"),
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_settlement_is_separate_from_charge_currency(session) -> None:
+    """A USD charge may settle in NGN without overwriting either amount."""
+    order = _order(
+        session,
+        currency="USD",
+        total_amount=Decimal("10.00"),
+        settlement_currency="NGN",
+        settlement_amount=Decimal("15000.00"),
+    )
+    session.commit()
+    session.refresh(order)
+
+    assert order.currency == "USD"
+    assert order.total_amount == Decimal("10.000000")
+    assert order.settlement_currency == "NGN"
+    assert order.settlement_amount == Decimal("15000.000000")
+
+
+@pytest.mark.parametrize(
+    ("settlement_currency", "settlement_amount"),
+    [("NGN", None), (None, Decimal("15000.00"))],
+)
+def test_settlement_currency_and_amount_are_an_atomic_pair(
+    session, settlement_currency, settlement_amount
+) -> None:
+    session.add(
+        _order(
+            session,
+            settlement_currency=settlement_currency,
+            settlement_amount=settlement_amount,
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_a_negative_settlement_amount_is_refused(session) -> None:
+    session.add(
+        _order(
+            session,
+            settlement_currency="NGN",
+            settlement_amount=Decimal("-0.000001"),
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_settlement_rejects_a_non_iso_currency(session) -> None:
+    session.add(
+        _order(
+            session,
+            settlement_currency="ngn",
+            settlement_amount=Decimal("15000.00"),
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
 # --- seller, payer, recipient ---------------------------------------------
 
 
