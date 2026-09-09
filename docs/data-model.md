@@ -1948,3 +1948,37 @@ The contracts the reset schema must satisfy are registered as `US-28`, `US-32`
 and `US-35` in `prd.md` §10.5. Chunk 05 introduces them as numbered amendments
 from §6.43 onward, additive first, preserving historical receipts, balances,
 orders and audit history through every upgrade.
+
+## 6.43 Amendment — Retired Feature Tables Are Retained, Not Dropped
+
+**Recorded 9 September 2026 by build chunk 04, subchunk 04B (US-30).**
+
+Withdrawing the check-in, SOS and family-contact behavior drops no table and
+deletes no row. `check_ins`, `check_in_notifications`, `sos_alerts`,
+`sos_notifications`, `family_contacts` and `destination_geofences` keep their
+current definitions and contents, and chunk 04 adds no migration.
+
+Two reasons. The check-in disposition is still a **proposed default owned by
+founder/product** under [SCOPE-DISPOSITION.md](implementation/SCOPE-DISPOSITION.md),
+so its data must survive until that is confirmed. And the rows are personal data
+whose deletion belongs to the approved retention policy, not to a feature
+removal. The dry-run plan for that is owed by subchunk 04E and executes
+nothing when it lands.
+
+Schema removal follows the migration sequence in
+[IMPLEMENTATION-PLAN.md](implementation/IMPLEMENTATION-PLAN.md) §7 Phase 1 and
+happens only after compatibility requirements end.
+
+### Scheduled work withdrawn
+
+These Celery beat entries are removed: `enqueue-due-checkin-fallbacks`,
+`enqueue-pending-checkin-notifications`, `enqueue-pending-sos-notifications`
+and `enqueue-due-sos-fallbacks`. Four of them polled every 10–30 seconds.
+
+Their **task names stay registered as refusals** that dispatch nothing and open
+no database session. Deleting the names outright would leave a beat process
+still running the previous schedule, or a message queued before the deploy,
+hitting an unregistered task and crashing its worker in a retry loop. The
+retention sweeps `null_checkin_locations` and `delete_sos_alerts` continue to
+run: retiring a feature must not switch off data minimization for the data it
+leaves behind.

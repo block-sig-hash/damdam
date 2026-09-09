@@ -10,6 +10,7 @@ EN = "en"
 FR = "fr"
 
 _API_EN = {
+    "feature_retired": "This feature is no longer part of DamDam. Please update the app to the latest version.",
     "checkin_rate_limited": "You can check in once every 15 minutes.",
     "checkin_id_conflict": "This check-in identifier is already in use.",
     "invalid_webhook_signature": "Webhook signature is invalid.",
@@ -102,6 +103,7 @@ _API_EN = {
 }
 
 _API_FR = {
+    "feature_retired": "Cette fonctionnalité ne fait plus partie de DamDam. Veuillez mettre à jour l’application vers la dernière version.",
     "checkin_rate_limited": "Vous pouvez signaler votre sécurité une fois toutes les 15 minutes.",
     "checkin_id_conflict": "Cet identifiant de pointage est déjà utilisé.",
     "invalid_webhook_signature": "La signature du webhook n’est pas valide.",

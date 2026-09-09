@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -7,18 +8,13 @@ from redis import Redis
 from sqlmodel import col, select
 
 from app.auth.models import User, utc_now
-from app.checkins.models import CheckInNotification, WhatsAppDeliveryStatus
-from app.checkins.service import CheckInNotificationService
 from app.config import get_settings
 from app.container import (
-    CeleryCheckInScheduler,
     CeleryEsimIssuanceScheduler,
     CeleryFailoverScheduler,
     CeleryProvisioningScheduler,
-    CelerySOSScheduler,
     build_notification_service,
     build_otp_service,
-    build_sms_sender,
 )
 from app.db import create_session_factory
 from app.esim.models import EsimIssuanceJob
@@ -26,16 +22,8 @@ from app.esim.providers import build_esim_providers
 from app.esim.service import EsimError, EsimProfileService
 from app.manifests.invoices import InvoicePDFGenerator, build_invoice_storage
 from app.manifests.orders import ManifestOrderService
-from app.notifications.providers import FirebasePushSender
 from app.packages.models import Package
 from app.retention.service import RetentionService
-from app.sos.models import SOSNotification
-from app.sos.notifications import (
-    SOSNotificationService,
-    SOSProviderAdapter,
-    due_sos_fallback_notifications_query,
-    pending_dispatchable_notifications_query,
-)
 
 settings = get_settings()
 celery_app = Celery("damdam", broker=settings.redis_url, backend=settings.redis_url)
@@ -43,22 +31,6 @@ celery_app.conf.beat_schedule = {
     "enqueue-due-esim-issuance": {
         "task": "app.esim.enqueue_due",
         "schedule": 30.0,
-    },
-    "enqueue-due-checkin-fallbacks": {
-        "task": "app.checkins.enqueue_due_fallbacks",
-        "schedule": 30.0,
-    },
-    "enqueue-pending-checkin-notifications": {
-        "task": "app.checkins.enqueue_pending",
-        "schedule": 30.0,
-    },
-    "enqueue-pending-sos-notifications": {
-        "task": "app.sos.enqueue_pending",
-        "schedule": 10.0,
-    },
-    "enqueue-due-sos-fallbacks": {
-        "task": "app.sos.enqueue_due_fallbacks",
-        "schedule": 10.0,
     },
     "retention-null-checkin-locations": {
         "task": "app.retention.null_checkin_locations",
@@ -147,128 +119,75 @@ def delete_expired_transactions() -> int:
         return _retention().delete_expired_transactions(session)
 
 
-def _sos_notifications() -> SOSNotificationService:
-    return SOSNotificationService(
-        SOSProviderAdapter(
-            build_notification_service(settings),
-            FirebasePushSender(settings),
-            build_sms_sender(settings),
-        ),
-        utc_now,
-        CelerySOSScheduler(),
-        settings.family_notify_fallback_seconds,
-    )
+# --- retired features (US-30, chunk 04B) -----------------------------------
+#
+# SOS and check-in dispatch is withdrawn. The task *names* stay registered on
+# purpose: a beat process still running the previous schedule, or a message
+# queued before this deploy, would otherwise hit an unregistered name and
+# crash its worker in a retry loop. These refuse instead -- they dispatch
+# nothing and never open a database session, so no notification can be
+# reactivated by replaying old work.
+#
+# Retirement authority: docs/implementation/SCOPE-DISPOSITION.md.
+# The rows in `sos_notifications` and `check_in_notifications` are untouched.
+
+logger = logging.getLogger(__name__)
+
+
+def _refuse(task_name: str) -> None:
+    logger.warning("ignored message for retired task %s (US-30)", task_name)
 
 
 @celery_app.task(name="app.sos.dispatch")  # type: ignore[misc]
 def dispatch_sos_notification(notification_id: str, channel: str) -> bool:
-    del channel
-    with create_session_factory(settings)() as session:
-        return _sos_notifications().dispatch(session, UUID(notification_id))
+    del notification_id, channel
+    _refuse("app.sos.dispatch")
+    return False
 
 
 @celery_app.task(name="app.sos.sms_fallback")  # type: ignore[misc]
 def send_sos_sms_fallback(notification_id: str) -> bool:
-    with create_session_factory(settings)() as session:
-        return _sos_notifications().send_sms_fallback(session, UUID(notification_id))
+    del notification_id
+    _refuse("app.sos.sms_fallback")
+    return False
 
 
 @celery_app.task(name="app.sos.enqueue_pending")  # type: ignore[misc]
 def enqueue_pending_sos_notifications() -> int:
-    queued = 0
-    with create_session_factory(settings)() as session:
-        rows = session.exec(
-            pending_dispatchable_notifications_query().with_for_update(
-                skip_locked=True, of=SOSNotification
-            )
-        ).all()
-        for row in rows:
-            CelerySOSScheduler().schedule_dispatch(row.id, row.channel)
-            queued += 1
-    return queued
+    _refuse("app.sos.enqueue_pending")
+    return 0
 
 
 @celery_app.task(name="app.sos.enqueue_due_fallbacks")  # type: ignore[misc]
 def enqueue_due_sos_fallbacks() -> int:
-    queued = 0
-    with create_session_factory(settings)() as session:
-        rows = session.exec(
-            due_sos_fallback_notifications_query(utc_now()).with_for_update(
-                skip_locked=True, of=SOSNotification
-            )
-        ).all()
-        for row in rows:
-            CelerySOSScheduler().schedule_fallback(row.id, 0)
-            queued += 1
-    return queued
-
-
-def _checkin_notifications() -> CheckInNotificationService:
-    notifications = build_notification_service(settings)
-    return CheckInNotificationService(
-        notifications.whatsapp,
-        build_sms_sender(settings),
-        CeleryCheckInScheduler(),
-        utc_now,
-        settings.family_notify_fallback_seconds,
-        settings.family_notify_channel_primary,
-        settings.family_notify_channel_secondary,
-    )
+    _refuse("app.sos.enqueue_due_fallbacks")
+    return 0
 
 
 @celery_app.task(name="app.checkins.dispatch")  # type: ignore[misc]
 def dispatch_checkin_notification(notification_id: str) -> bool:
-    with create_session_factory(settings)() as session:
-        return _checkin_notifications().dispatch_whatsapp(
-            session, UUID(notification_id)
-        )
+    del notification_id
+    _refuse("app.checkins.dispatch")
+    return False
 
 
 @celery_app.task(name="app.checkins.sms_fallback")  # type: ignore[misc]
 def send_checkin_sms_fallback(notification_id: str) -> bool:
-    with create_session_factory(settings)() as session:
-        return _checkin_notifications().send_sms_fallback(
-            session, UUID(notification_id)
-        )
+    del notification_id
+    _refuse("app.checkins.sms_fallback")
+    return False
 
 
 @celery_app.task(name="app.checkins.enqueue_due_fallbacks")  # type: ignore[misc]
 def enqueue_due_checkin_fallbacks() -> int:
-    now = utc_now()
-    queued = 0
-    with create_session_factory(settings)() as session:
-        rows = session.exec(
-            select(CheckInNotification)
-            .where(
-                col(CheckInNotification.fallback_due_at).is_not(None),
-                col(CheckInNotification.fallback_due_at) <= now,
-                col(CheckInNotification.sms_fallback_sent_at).is_(None),
-                col(CheckInNotification.whatsapp_delivered_at).is_(None),
-                col(CheckInNotification.admin_queued_at).is_(None),
-            )
-            .with_for_update(skip_locked=True)
-        ).all()
-        for row in rows:
-            celery_app.send_task("app.checkins.sms_fallback", args=[str(row.id)])
-            queued += 1
-    return queued
+    _refuse("app.checkins.enqueue_due_fallbacks")
+    return 0
 
 
 @celery_app.task(name="app.checkins.enqueue_pending")  # type: ignore[misc]
 def enqueue_pending_checkin_notifications() -> int:
-    queued = 0
-    with create_session_factory(settings)() as session:
-        rows = session.exec(
-            select(CheckInNotification)
-            .where(
-                CheckInNotification.whatsapp_status == WhatsAppDeliveryStatus.PENDING
-            )
-            .with_for_update(skip_locked=True)
-        ).all()
-        for row in rows:
-            celery_app.send_task("app.checkins.dispatch", args=[str(row.id)])
-            queued += 1
-    return queued
+    _refuse("app.checkins.enqueue_pending")
+    return 0
 
 
 @celery_app.task(name="app.otp.failover")  # type: ignore[misc]
