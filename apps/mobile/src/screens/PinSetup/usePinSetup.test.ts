@@ -3,6 +3,8 @@ import { PinApiError, setPin } from '../../api/pinClient';
 import { savePinLocally } from '../../utils/pinLocalStore';
 import { usePinSetup } from './usePinSetup';
 
+const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
+
 jest.mock('../../api/pinClient', () => {
   const actual = jest.requireActual('../../api/pinClient');
   return {
@@ -24,7 +26,8 @@ beforeEach(() => {
 });
 
 async function mount(onPinSet: jest.Mock) {
-  return renderHook(() => usePinSetup({ accessToken: 'access-token', onPinSet }));
+  return renderHook(() => usePinSetup({ accessToken: 'access-token',
+    userId: TEST_USER_ID, onPinSet }));
 }
 
 describe('usePinSetup', () => {
@@ -83,7 +86,7 @@ describe('usePinSetup', () => {
     });
 
     expect(mockSetPin).toHaveBeenCalledWith('access-token', '4682');
-    expect(mockSaveLocally).toHaveBeenCalledWith('4682');
+    expect(mockSaveLocally).toHaveBeenCalledWith(TEST_USER_ID, '4682');
     expect(onPinSet).toHaveBeenCalled();
   });
 
@@ -106,7 +109,7 @@ describe('usePinSetup', () => {
       await result.current.submit();
     });
 
-    expect(mockSaveLocally).toHaveBeenCalledWith('4682');
+    expect(mockSaveLocally).toHaveBeenCalledWith(TEST_USER_ID, '4682');
     expect(onPinSet).toHaveBeenCalled();
     expect(result.current.errorMessage).toBeNull();
   });

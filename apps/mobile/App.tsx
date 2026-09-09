@@ -26,9 +26,16 @@ function App(): React.JSX.Element {
   let content: React.JSX.Element;
   if (phase === 'loading') {
     content = <View style={styles.root} />;
-  } else if (phase === 'pin-gate' && session) {
+  } else if (phase === 'pin-gate' && session && session.userId) {
+    // A session stored before US-29 carries no userId, so its PIN cannot be
+    // attributed to an account. Such a session falls through to OTP sign-in
+    // rather than unlocking against whatever PIN happens to be on the device.
     content = (
-      <PinUnlockScreen phoneNumber={session.phoneNumber} onUnlocked={onPinUnlocked} />
+      <PinUnlockScreen
+        phoneNumber={session.phoneNumber}
+        userId={session.userId}
+        onUnlocked={onPinUnlocked}
+      />
     );
   } else if (phase === 'authenticated' && session) {
     content = (

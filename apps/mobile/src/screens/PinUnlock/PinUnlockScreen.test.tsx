@@ -9,6 +9,8 @@ import {
 } from '../../utils/pinLocalStore';
 import { PinUnlockScreen } from './PinUnlockScreen';
 
+const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
+
 jest.mock('../../api/authClient', () => {
   const actual = jest.requireActual('../../api/authClient');
   return { ...actual, requestPinRecovery: jest.fn(), verifyPinRecovery: jest.fn() };
@@ -43,29 +45,29 @@ beforeEach(() => {
 
 describe('PinUnlockScreen', () => {
   it('unlocks with no network call on a correct PIN (AC-02.3/AC-23.3)', async () => {
-    mockGetState.mockResolvedValue({ pin: '4682', failedAttempts: 0, lockedUntil: null });
+    mockGetState.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: 0, lockedUntil: null });
     mockVerify.mockResolvedValue(true);
     const onUnlocked = jest.fn();
 
     await act(async () => {
-      render(<PinUnlockScreen phoneNumber="08012345678" onUnlocked={onUnlocked} />);
+      render(<PinUnlockScreen userId={TEST_USER_ID} phoneNumber="08012345678" onUnlocked={onUnlocked} />);
     });
     await act(async () => {
       fireEvent.changeText(screen.getByTestId('pin-unlock-input'), '4682');
     });
 
-    expect(mockVerify).toHaveBeenCalledWith('4682');
+    expect(mockVerify).toHaveBeenCalledWith(TEST_USER_ID, '4682');
     expect(onUnlocked).toHaveBeenCalledWith();
     expect(mockRequestRecovery).not.toHaveBeenCalled();
   });
 
   it('shows an inline error on a wrong PIN without locking out early', async () => {
-    mockGetState.mockResolvedValue({ pin: '4682', failedAttempts: 0, lockedUntil: null });
+    mockGetState.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: 0, lockedUntil: null });
     mockVerify.mockResolvedValue(false);
-    mockRecordFailure.mockResolvedValue({ pin: '4682', failedAttempts: 1, lockedUntil: null });
+    mockRecordFailure.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: 1, lockedUntil: null });
 
     await act(async () => {
-      render(<PinUnlockScreen phoneNumber="08012345678" onUnlocked={jest.fn()} />);
+      render(<PinUnlockScreen userId={TEST_USER_ID} phoneNumber="08012345678" onUnlocked={jest.fn()} />);
     });
     await act(async () => {
       fireEvent.changeText(screen.getByTestId('pin-unlock-input'), '0000');
@@ -76,16 +78,14 @@ describe('PinUnlockScreen', () => {
   });
 
   it('locks after the 5th failed attempt and shows the countdown (AC-02.4/AC-23.5)', async () => {
-    mockGetState.mockResolvedValue({ pin: '4682', failedAttempts: 4, lockedUntil: null });
+    mockGetState.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: 4, lockedUntil: null });
     mockVerify.mockResolvedValue(false);
-    mockRecordFailure.mockResolvedValue({
-      pin: '4682',
-      failedAttempts: 5,
+    mockRecordFailure.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: 5,
       lockedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     });
 
     await act(async () => {
-      render(<PinUnlockScreen phoneNumber="08012345678" onUnlocked={jest.fn()} />);
+      render(<PinUnlockScreen userId={TEST_USER_ID} phoneNumber="08012345678" onUnlocked={jest.fn()} />);
     });
     await act(async () => {
       fireEvent.changeText(screen.getByTestId('pin-unlock-input'), '0000');
@@ -96,7 +96,7 @@ describe('PinUnlockScreen', () => {
   });
 
   it('offers OTP recovery immediately, even before any failed attempt (AC-02.4)', async () => {
-    mockGetState.mockResolvedValue({ pin: '4682', failedAttempts: 0, lockedUntil: null });
+    mockGetState.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: 0, lockedUntil: null });
     mockRequestRecovery.mockResolvedValue({ message: 'OTP sent' });
     mockVerifyRecovery.mockResolvedValue({
       access_token: 'access-token',
@@ -118,7 +118,7 @@ describe('PinUnlockScreen', () => {
     const onUnlocked = jest.fn();
 
     await act(async () => {
-      render(<PinUnlockScreen phoneNumber="08012345678" onUnlocked={onUnlocked} />);
+      render(<PinUnlockScreen userId={TEST_USER_ID} phoneNumber="08012345678" onUnlocked={onUnlocked} />);
     });
     await act(async () => {
       fireEvent.press(screen.getByTestId('pin-unlock-recovery-link'));
@@ -139,7 +139,7 @@ describe('PinUnlockScreen', () => {
     mockGetState.mockResolvedValue(null);
 
     await act(async () => {
-      render(<PinUnlockScreen phoneNumber="08012345678" onUnlocked={jest.fn()} />);
+      render(<PinUnlockScreen userId={TEST_USER_ID} phoneNumber="08012345678" onUnlocked={jest.fn()} />);
     });
 
     expect(screen.queryByTestId('pin-unlock-input')).toBeNull();

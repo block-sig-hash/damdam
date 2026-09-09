@@ -10,6 +10,8 @@ export type EsimSetupStage = 'checking' | 'compatible' | 'warning' | 'qr-only';
 
 interface UseEsimSetupIntroArgs {
   accessToken: string;
+  /** Scopes the one-time warning dismissal to this account (US-29). */
+  userId: string;
   packageId: string;
 }
 
@@ -30,6 +32,7 @@ export interface UseEsimSetupIntroResult {
  */
 export function useEsimSetupIntro({
   accessToken,
+  userId,
   packageId,
 }: UseEsimSetupIntroArgs): UseEsimSetupIntroResult {
   const [stage, setStage] = useState<EsimSetupStage>('checking');
@@ -57,7 +60,7 @@ export function useEsimSetupIntro({
         setStage('compatible');
         return;
       }
-      if (await hasSeenEsimWarning()) {
+      if (await hasSeenEsimWarning(userId)) {
         if (!cancelled) {
           setStage('qr-only');
         }
@@ -76,15 +79,15 @@ export function useEsimSetupIntro({
     return () => {
       cancelled = true;
     };
-  }, [accessToken]);
+  }, [accessToken, userId]);
 
   const resolveWarning = useCallback(async () => {
     // The compatibility check (and its log/flag) already fired on
     // detection, above — this only records that the warning has been
     // shown, per AC-10.6, so it isn't repeated on a later visit.
-    await markEsimWarningSeen();
+    await markEsimWarningSeen(userId);
     setStage('qr-only');
-  }, []);
+  }, [userId]);
 
   const handleWarningContinue = useCallback(async () => {
     await resolveWarning();

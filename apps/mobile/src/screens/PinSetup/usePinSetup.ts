@@ -10,6 +10,8 @@ export type PinSetupStage = 'enter' | 'confirm' | 'submitting';
 
 interface UsePinSetupArgs {
   accessToken: string;
+  /** The account the PIN belongs to (US-29). */
+  userId: string;
   onPinSet: () => void;
 }
 
@@ -29,7 +31,11 @@ export interface UsePinSetupResult {
  * back to the client (prd.md §5.1), so PIN Unlock's local, no-network
  * validation has nothing else to compare against.
  */
-export function usePinSetup({ accessToken, onPinSet }: UsePinSetupArgs): UsePinSetupResult {
+export function usePinSetup({
+  accessToken,
+  userId,
+  onPinSet,
+}: UsePinSetupArgs): UsePinSetupResult {
   const [firstEntry, setFirstEntry] = useState('');
   const [stage, setStage] = useState<PinSetupStage>('enter');
   const [value, setValueState] = useState('');
@@ -75,7 +81,7 @@ export function usePinSetup({ accessToken, onPinSet }: UsePinSetupArgs): UsePinS
         // that request or block onboarding — it only means PIN Unlock
         // will find nothing to validate against until this succeeds
         // (falls back to OTP recovery, same as any other new device).
-        await savePinLocally(value);
+        await savePinLocally(userId, value);
       } catch {
         // Swallowed intentionally — see comment above.
       }
@@ -90,7 +96,7 @@ export function usePinSetup({ accessToken, onPinSet }: UsePinSetupArgs): UsePinS
       setFirstEntry('');
       setValueState('');
     }
-  }, [value, stage, firstEntry, accessToken, onPinSet]);
+  }, [value, stage, firstEntry, accessToken, userId, onPinSet]);
 
   return { stage, value, setValue, errorMessage, submit };
 }

@@ -847,3 +847,54 @@ declares no usage description for any retired feature and no background mode.
 available in this environment, so the Xcode project edit (six references to the
 removed bridge files) and the manifest and Gradle changes are reviewed source
 changes, not verified builds. The screenshot jobs are the first place they run.
+
+---
+
+## 8.13 Amendment — Device State Belongs to an Account (US-29)
+
+**Recorded 10 September 2026 by build chunk 06.**
+
+### The defect
+
+`utils/pinLocalStore.ts` wrote the unlock PIN to a **device-wide** Keychain
+service with no account attached, and `clearPinLocally` was called from nowhere
+in production — only from its own test. Every session-ending path in
+`useSessionGate` called `clearSession()`, which resets the session entry alone.
+
+So: A sets a PIN. A's session ends — expiry, sign-out, or a refresh token the
+server rejected. B signs in on the same handset. B's unlock screen validates
+against **A's PIN**, and A's failed-attempt lockout applies to B.
+
+This is the same shape of defect chunk 04A found in the offline queues: state
+scoped to a *device* rather than to the *account* that created it.
+
+### The rule
+
+**Anything persisted on the device that belongs to a signed-in account carries
+that account's id, and every read is checked against the account asking.**
+
+- `LocalPinState` gains a required `userId`. A record whose owner does not match
+  reads as absent, so it can neither authenticate nor lock out the wrong person.
+- A record with **no** owner predates this amendment and is also treated as
+  absent, rather than adopted by whoever is signed in now.
+- `hasSeenEsimWarning` / `markEsimWarningSeen` are keyed per account. A
+  device-wide dismissal meant the first person to dismiss the compatibility
+  warning suppressed it for everyone who signed in later — including someone
+  whose device is genuinely incompatible.
+- `clearAccountScopedState()` clears both, and is called from **every**
+  session-ending path in `useSessionGate`.
+- A session persisted before US-29 has no `userId`, so `App.tsx` does not render
+  the PIN gate for it at all; that session falls through to OTP sign-in rather
+  than unlocking against an unattributable PIN.
+
+`AuthenticatedMobileSession.userId` stays optional, because a session stored by
+an older build genuinely may not have one. The `activated` onboarding step's
+`userId` is now **required** — it is constructed in exactly one place and always
+from `result.user.id`, so the optional type was simply inaccurate.
+
+### Enforcement
+
+`utils/accountScopedState.test.ts` asserts the account boundary directly: A's
+PIN does not verify for B, B sees no stored PIN and no lockout, and ending a
+session clears the store. Any future device-persisted state belongs in
+`clearAccountScopedState()` and should be tested the same way.

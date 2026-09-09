@@ -15,6 +15,8 @@ export const PIN_LENGTH = 4;
 export type PinUnlockStage = 'checking' | 'entry' | 'locked' | 'no-local-pin';
 
 interface UsePinUnlockArgs {
+  /** The account whose PIN is being checked (US-29). */
+  userId: string;
   /** Called with no argument on a routine local-PIN match; called with
    * the fresh AuthResponse when unlocked via OTP recovery instead. */
   onUnlocked: (recovered?: AuthResponse) => void;
@@ -43,7 +45,10 @@ function secondsUntil(isoDate: string): number {
  * AC-02.4/AC-23.5 (5-attempt local lockout, immediate OTP recovery).
  * Screen 31 of docs/frontend-mobile.md §8.1.
  */
-export function usePinUnlock({ onUnlocked }: UsePinUnlockArgs): UsePinUnlockResult {
+export function usePinUnlock({
+  userId,
+  onUnlocked,
+}: UsePinUnlockArgs): UsePinUnlockResult {
   const [stage, setStage] = useState<PinUnlockStage>('checking');
   const [value, setValueState] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -76,7 +81,7 @@ export function usePinUnlock({ onUnlocked }: UsePinUnlockArgs): UsePinUnlockResu
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const state = await getLocalPinState();
+      const state = await getLocalPinState(userId);
       if (cancelled) {
         return;
       }
@@ -95,7 +100,7 @@ export function usePinUnlock({ onUnlocked }: UsePinUnlockArgs): UsePinUnlockResu
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [userId]);
 
   const setValue = useCallback((next: string) => {
     setErrorMessage(null);
@@ -106,13 +111,13 @@ export function usePinUnlock({ onUnlocked }: UsePinUnlockArgs): UsePinUnlockResu
     if (value.length !== PIN_LENGTH || stage !== 'entry') {
       return;
     }
-    const matched = await verifyPinLocally(value);
+    const matched = await verifyPinLocally(userId, value);
     setValueState('');
     if (matched) {
       onUnlocked();
       return;
     }
-    const updated = await recordFailedPinAttempt();
+    const updated = await recordFailedPinAttempt(userId);
     if (updated?.lockedUntil) {
       setLockoutTotalSeconds(secondsUntil(updated.lockedUntil));
       setStage('locked');
@@ -121,7 +126,7 @@ export function usePinUnlock({ onUnlocked }: UsePinUnlockArgs): UsePinUnlockResu
     }
     const remaining = PIN_UNLOCK_ATTEMPT_LIMIT - (updated?.failedAttempts ?? 0);
     setErrorMessage(i18n.t('errors.incorrectPin', {ns: 'auth', count: remaining}));
-  }, [value, stage, onUnlocked]);
+  }, [value, stage, userId, onUnlocked]);
 
   const startRecovery = useCallback(() => {
     setErrorMessage(null);
@@ -134,11 +139,11 @@ export function usePinUnlock({ onUnlocked }: UsePinUnlockArgs): UsePinUnlockResu
 
   const handleRecovered = useCallback(
     async (result: AuthResponse) => {
-      await clearLocalPinLock();
+      await clearLocalPinLock(userId);
       setIsRecovering(false);
       onUnlocked(result);
     },
-    [onUnlocked],
+    [userId, onUnlocked],
   );
 
   return {

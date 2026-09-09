@@ -17,8 +17,12 @@ type OnboardingStep =
   | { name: 'verified'; result: AuthResponse; activationCode?: string }
   | {
       name: 'activated';
-      /** US-30 AC-30.4: carried so the authenticated session can own its queues. */
-      userId?: string;
+      /**
+       * The authenticated account. Required, not optional: this step is built
+       * in exactly one place and always from `result.user.id`, and US-29 needs
+       * it to scope the local PIN to an account.
+       */
+      userId: string;
       accessToken: string;
       refreshToken: string;
       phoneNumber: string;
@@ -183,6 +187,7 @@ export function OnboardingNavigator({
       return (
         <PinSetupScreen
           accessToken={step.result.access_token}
+          userId={step.result.user.id}
           onPinSet={() => {
             if (onAuthenticated) {
               onAuthenticated({
@@ -224,6 +229,7 @@ export function OnboardingNavigator({
       return (
         <PinSetupScreen
           accessToken={step.accessToken}
+          userId={step.userId}
           onPinSet={() => {
             if (onAuthenticated) {
               onAuthenticated({
