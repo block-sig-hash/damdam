@@ -30,6 +30,7 @@ infrastructure decisions.
 | — | [`implementation/SCOPE-DISPOSITION.md`](./implementation/SCOPE-DISPOSITION.md) | Which legacy concepts are retired, generalized, deferred or historical |
 | — | [`implementation/MODULE-OWNERSHIP.md`](./implementation/MODULE-OWNERSHIP.md) | Module boundaries, existing-code mapping and journey routing |
 | — | [`implementation/IMPLEMENTATION-PLAN.md`](./implementation/IMPLEMENTATION-PLAN.md) | The consolidated plan the chunks are cut from |
+| — | [`implementation/telnyx/`](./implementation/telnyx/) | Carrier feasibility evidence for D1/D2 — capability matrix, API contracts, go/no-go and the **unsent** supplier enquiry |
 
 ## Specifications
 
