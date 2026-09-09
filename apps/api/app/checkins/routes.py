@@ -5,7 +5,7 @@ registered so an old client is told so explicitly rather than being led to
 believe a check-in was recorded, or that a delivery receipt was processed.
 
 The `check_ins` and `check_in_notifications` tables and their rows are
-untouched; see docs/implementation/SCOPE-DISPOSITION.md.
+untouched; see docs/implementation/retirement/RETENTION-PLAN.md.
 """
 
 from fastapi import APIRouter

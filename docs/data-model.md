@@ -1962,8 +1962,9 @@ Two reasons. The check-in disposition is still a **proposed default owned by
 founder/product** under [SCOPE-DISPOSITION.md](implementation/SCOPE-DISPOSITION.md),
 so its data must survive until that is confirmed. And the rows are personal data
 whose deletion belongs to the approved retention policy, not to a feature
-removal. The dry-run plan for that is owed by subchunk 04E and executes
-nothing when it lands.
+removal — the plan for that is
+[retirement/RETENTION-PLAN.md](implementation/retirement/RETENTION-PLAN.md),
+which is a dry run and executes nothing.
 
 Schema removal follows the migration sequence in
 [IMPLEMENTATION-PLAN.md](implementation/IMPLEMENTATION-PLAN.md) §7 Phase 1 and

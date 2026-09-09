@@ -68,7 +68,8 @@ describe('retired feature surface', () => {
 
   it('opens no retired queue database', () => {
     // The device-local queue file is deliberately left on disk rather than
-    // deleted -- see docs/implementation/retirement/. Nothing may read it.
+    // deleted -- see docs/implementation/retirement/RETENTION-PLAN.md.
+    // Nothing may read it.
     const readers = shipped
       .filter(file => file.text.includes('damdam-safety.sqlite'))
       .map(file => file.path);
