@@ -61,7 +61,7 @@
     "title": "Accueil HTO",
     "refreshing": "Actualisation…",
     "refresh": "Actualiser",
-    "allManifests": "Tous les manifestes, triés par risque. Actualisation automatique toutes les 60 secondes.",
+    "allManifests": "Tous les manifestes, triés par nom. Actualisation automatique toutes les 60 secondes.",
     "noManifests": "Aucun manifeste pour le moment.",
     "createManifest": "Créer votre premier manifeste",
     "manifest": "Manifeste",
@@ -89,31 +89,9 @@
     },
     "loadFailed": "Impossible de charger les pèlerins.",
     "roster": "Liste des pèlerins",
-    "riskRefresh": "Triée par risque. Actualisation automatique toutes les 60 secondes."
+    "riskRefresh": "Triée par nom. Actualisation automatique toutes les 60 secondes."
   },
   "esim": {},
-  "safety": {
-    "desk": "Cellule de sécurité HTO",
-    "title": "Alertes SOS",
-    "refresh": "Actualisation toutes les 15 secondes",
-    "pushIntro": "Recevez une alerte dans ce navigateur dès qu'un SOS arrive, même si cet onglet n'est pas ouvert.",
-    "enabling": "Activation…",
-    "enable": "Activer les alertes du navigateur",
-    "pushFailed": "Impossible d'activer les alertes du navigateur. Réessayez dans un instant.",
-    "pushUnsupported": "Ce navigateur ne prend pas en charge les alertes push.",
-    "filterAria": "Filtre de statut SOS",
-    "filters": {
-      "active": "Actives",
-      "resolved": "Résolues",
-      "all": "Toutes"
-    },
-    "empty": "Aucune alerte SOS : {filter}.",
-    "locationAlt": "Position de {name}",
-    "locationUnavailable": "Position indisponible",
-    "viewPilgrim": "Voir la fiche du pèlerin",
-    "resolve": "Résoudre",
-    "loadFailed": "Impossible de charger les alertes SOS."
-  },
   "payments": {},
   "manifests": {
     "upload": {
@@ -268,26 +246,6 @@
       "confirm": "Passer {tier} de {oldPrice} à {newPrice} ({direction} de {percent} %) ? Ce changement s'applique immédiatement aux nouveaux achats.",
       "loadFailed": "Impossible de charger les formules tarifaires.",
       "updateFailed": "Impossible de mettre le prix à jour."
-    },
-    "notifications": {
-      "title": "File des notifications en échec",
-      "intro": "Actualisation manuelle uniquement. Une nouvelle tentative remet immédiatement la notification en file d'envoi.",
-      "loading": "Chargement des notifications en échec…",
-      "empty": "Aucune notification en échec.",
-      "retrying": "Nouvelle tentative…",
-      "retrySelected": "Réessayer la sélection ({count})",
-      "select": "Sélectionner",
-      "pilgrim": "Pèlerin",
-      "channel": "Canal",
-      "failure": "Motif de l'échec",
-      "timestamp": "Horodatage du SOS",
-      "retryCount": "Nombre de tentatives",
-      "actions": "Actions",
-      "selectAria": "Sélectionner la notification {channel} de {name}",
-      "retry": "Réessayer",
-      "loadFailed": "Impossible de charger les notifications en échec.",
-      "retryFailed": "Impossible de relancer cette notification.",
-      "bulkFailed": "Impossible de relancer les notifications sélectionnées."
     }
   },
   "reports": {
@@ -299,7 +257,7 @@
     "start": "début",
     "now": "aujourd'hui",
     "fullHistory": "tout votre historique de provisionnement",
-    "description": "Télécharge un CSV couvrant {manifest}, {range} — nom, téléphone, formule, date d'achat, statut eSIM, nombre de pointages et événements SOS par pèlerin.",
+    "description": "Télécharge un CSV couvrant {manifest}, {range} — nom, téléphone, formule, date d’achat et statut eSIM par personne.",
     "manifest": "Manifeste",
     "allOption": "Tous les manifestes",
     "unnamed": "Manifeste sans nom",

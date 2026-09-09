@@ -76,6 +76,29 @@ describe('retired feature surface', () => {
     expect(readers).toEqual([]);
   });
 
+  it('ships no current-client geofence contract', () => {
+    const paymentClient = readFileSync(join(SRC, 'api', 'paymentClient.ts'), 'utf8');
+    expect(paymentClient).not.toContain('PackageGeofence');
+    expect(paymentClient).not.toContain('getPackageGeofence');
+  });
+
+  it('does not package libraries used only by retired safety queues', () => {
+    const packageJson = JSON.parse(
+      readFileSync(join(SRC, '..', 'package.json'), 'utf8'),
+    ) as {dependencies: Record<string, string>; devDependencies: Record<string, string>};
+    for (const dependency of [
+      '@react-native-community/geolocation',
+      'react-native-background-fetch',
+      'react-native-nitro-modules',
+      'react-native-nitro-sqlite',
+      'react-native-uuid',
+      'sql.js',
+    ]) {
+      expect(packageJson.dependencies?.[dependency]).toBeUndefined();
+      expect(packageJson.devDependencies?.[dependency]).toBeUndefined();
+    }
+  });
+
   it('requests no permission for a retired feature', () => {
     const manifest = readFileSync(
       join(SRC, '..', 'android', 'app', 'src', 'main', 'AndroidManifest.xml'),

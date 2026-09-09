@@ -18,25 +18,6 @@ jest.mock('@react-native-community/netinfo', () => ({
   },
 }));
 
-jest.mock('react-native-background-fetch', () => ({
-  __esModule: true,
-  default: {
-    NETWORK_TYPE_ANY: 1,
-    configure: jest.fn().mockResolvedValue(2),
-    scheduleTask: jest.fn().mockResolvedValue(true),
-    finish: jest.fn(),
-    stop: jest.fn().mockResolvedValue(undefined),
-  },
-}));
-
-jest.mock('@react-native-community/geolocation', () => ({
-  __esModule: true,
-  default: {
-    requestAuthorization: jest.fn(success => success()),
-    getCurrentPosition: jest.fn((success, error) => error({code: 2})),
-  },
-}));
-
 jest.mock('react-native-localize', () => ({
   findBestLanguageTag: jest.fn(() => ({languageTag: 'en', isRTL: false})),
   getLocales: jest.fn(() => [{languageCode: 'en', languageTag: 'en-US', isRTL: false}]),

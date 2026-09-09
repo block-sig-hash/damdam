@@ -61,7 +61,7 @@
     "title": "HTO Home",
     "refreshing": "Refreshing…",
     "refresh": "Refresh",
-    "allManifests": "All manifests, sorted by risk. Auto-refreshes every 60 seconds.",
+    "allManifests": "All manifests, sorted by name. Auto-refreshes every 60 seconds.",
     "noManifests": "No manifests yet.",
     "createManifest": "Create your first manifest",
     "manifest": "Manifest",
@@ -89,31 +89,9 @@
     },
     "loadFailed": "Could not load pilgrims.",
     "roster": "Pilgrim roster",
-    "riskRefresh": "Sorted by risk. Auto-refreshes every 60 seconds."
+    "riskRefresh": "Sorted by name. Auto-refreshes every 60 seconds."
   },
   "esim": {},
-  "safety": {
-    "desk": "HTO safety desk",
-    "title": "SOS Alerts",
-    "refresh": "Refreshes every 15 seconds",
-    "pushIntro": "Get an alert on this browser the moment an SOS comes in, even when this tab isn't open.",
-    "enabling": "Enabling…",
-    "enable": "Enable browser alerts",
-    "pushFailed": "Could not enable browser alerts. Try again shortly.",
-    "pushUnsupported": "This browser doesn't support push alerts.",
-    "filterAria": "SOS status filter",
-    "filters": {
-      "active": "Active",
-      "resolved": "Resolved",
-      "all": "All"
-    },
-    "empty": "No {filter} SOS alerts.",
-    "locationAlt": "Location of {name}",
-    "locationUnavailable": "Location unavailable",
-    "viewPilgrim": "View pilgrim detail",
-    "resolve": "Resolve",
-    "loadFailed": "Could not load SOS alerts."
-  },
   "payments": {},
   "manifests": {
     "upload": {
@@ -268,26 +246,6 @@
       "confirm": "Change {tier} from {oldPrice} to {newPrice} ({percent}% {direction})? This takes effect immediately for new purchases.",
       "loadFailed": "Could not load pricing tiers.",
       "updateFailed": "Could not update price."
-    },
-    "notifications": {
-      "title": "Failed notification queue",
-      "intro": "Manual refresh only. Retrying re-queues a notification for immediate dispatch.",
-      "loading": "Loading failed notifications…",
-      "empty": "No failed notifications.",
-      "retrying": "Retrying…",
-      "retrySelected": "Retry selected ({count})",
-      "select": "Select",
-      "pilgrim": "Pilgrim",
-      "channel": "Channel",
-      "failure": "Failure reason",
-      "timestamp": "SOS timestamp",
-      "retryCount": "Retry count",
-      "actions": "Actions",
-      "selectAria": "Select {name}'s {channel} notification",
-      "retry": "Retry",
-      "loadFailed": "Could not load failed notifications.",
-      "retryFailed": "Could not retry this notification.",
-      "bulkFailed": "Could not retry the selected notifications."
     }
   },
   "reports": {
@@ -299,7 +257,7 @@
     "start": "the start",
     "now": "now",
     "fullHistory": "your full provisioning history",
-    "description": "Downloads a CSV covering {manifest}, {range} — name, phone, tier, purchase date, eSIM status, check-in count, and SOS events per pilgrim.",
+    "description": "Downloads a CSV covering {manifest}, {range} — name, phone, tier, purchase date, and eSIM status per person.",
     "manifest": "Manifest",
     "allOption": "All manifests",
     "unnamed": "Unnamed manifest",

@@ -42,7 +42,7 @@ describe('PackageSelectionScreen', () => {
     expect(screen.getByText('₦145,000')).toBeTruthy();
     expect(screen.getByText(/10 GB eSIM data/)).toBeTruthy();
     expect(screen.getByText(/90 Nigerian calling minutes/)).toBeTruthy();
-    expect(screen.getAllByText(/Offline check-in and SOS tools/)).toHaveLength(4);
+    expect(screen.queryByText(/check-in|SOS/i)).toBeNull();
   });
 
   it("expands the What's included section (AC-08.5)", async () => {
@@ -55,7 +55,8 @@ describe('PackageSelectionScreen', () => {
     });
 
     expect(await screen.findByTestId('whats-included-content')).toBeTruthy();
-    expect(screen.getByText(/Calls with your Nigerian caller ID/)).toBeTruthy();
+    expect(screen.getByText(/Calls from your carrier-assigned number/)).toBeTruthy();
+    expect(screen.queryByText(/check-in|SOS/i)).toBeNull();
   });
 
   it('hands a non-Family tier directly to the purchase seam', async () => {
