@@ -1,7 +1,7 @@
 # Implementation status
 
-Chunks 01, 02 and chunk 03's documented/simulated scope are **ACCEPTED after
-independent Codex review and fixes**.
+Chunks 01, 02, 04 and chunk 03's documented/simulated scope are **ACCEPTED
+after independent Codex review and fixes**.
 Chunk 01 merged in [PR #100](https://github.com/block-sig-hash/damdam/pull/100).
 Chunk 02's tested content and native evidence are recorded in
 [reviews/02.md](reviews/02.md); [PR #101](https://github.com/block-sig-hash/damdam/pull/101)
@@ -13,7 +13,7 @@ missing (D6/chunk 26). No production-readiness claim is made.
 `6790c74707a0f3e52cfedb36bc173ec83ca26663`, confirmed current on 2026-09-08 —
 see [BASELINE.md](BASELINE.md).
 
-**Chunk 04 is complete and awaiting review**, delivered as five subchunks on
+**Chunk 04 is accepted after review fixes**, delivered as five subchunks on
 `chunk/04-safe-feature-retirement`, based on `12582f1`. It withdraws behavior
 and removes surface; it deletes no row, drops no table and adds no migration.
 The retention plan in [retirement/RETENTION-PLAN.md](retirement/RETENTION-PLAN.md)
@@ -28,7 +28,7 @@ is a dry run that executes nothing.
 | 01 — Reset product specifications and working rules | ACCEPTED | base `6790c74` / corrected content `36e9bf36a2827d108633730ff0899edbd17b97ef` | [Independent review](reviews/01.md) | None blocking chunk 01; D1–D6 remain OPEN |
 | 02 — Repair the CI baseline and screenshot harness | ACCEPTED | base `178c448` / corrected content `4e5ecc9` / CI head `aeb74f6` | [Independent review](reviews/02.md) | None blocking chunk 02; staging configuration remains D6/chunk 26 |
 | 03 — Prove Telnyx feasibility and document the carrier contract | ACCEPTED (documented/simulated scope); live scope EXTERNAL_BLOCKED | base `178c448` / submitted `fe569e1` / corrected code `6a24c19` | [Independent review](reviews/03.md) | **D1/D2 OPEN** — no Telnyx account, live call, rate deck or cleared market |
-| 04 — Retire family, safety and app-calling features safely | ACCEPTED (04A only); CHANGES_REQUIRED overall | base `12582f1` / submitted `34f4503` / corrected code `cf8e98e` | [Independent review](reviews/04.md) | 04B–04E unbuilt; check-in/welfare disposition remains open |
+| 04 — Retire family, safety and app-calling features safely | ACCEPTED after fixes (04A–04E) | base `12582f1` / submitted complete head `55394f5` / corrected code `d53c055` | [Independent review](reviews/04.md) | Check-in/welfare data disposition remains open; no welfare data deleted |
 | 05 — Introduce core domain models and migration boundaries | NOT_STARTED | — | — | See assignment |
 | 06 — Implement global identity and account recovery | NOT_STARTED | — | — | See assignment |
 | 07 — Implement memberships, tenant isolation and administrator MFA | NOT_STARTED | — | — | See assignment |
