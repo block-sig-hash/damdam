@@ -638,9 +638,15 @@ jobs:
           script: |
             set -eu
             cd /opt/damdam
-            git fetch origin develop
+            # Deploy the commit that passed this workflow's checks. `develop`
+            # can advance while the test/build jobs are running; resolving
+            # origin/develop here could otherwise deploy an untested newer
+            # commit while the final step records this run's older HEAD on the
+            # staging branch.
+            target_commit="${{ github.sha }}"
+            git fetch origin "$target_commit"
             previous_commit=$(git rev-parse HEAD)
-            target_commit=$(git rev-parse origin/develop)
+            git cat-file -e "$target_commit^{commit}"
             mkdir -p .deploy
             rm -f .deploy/staging_previous_commit
             current_container=$(docker ps -q \
