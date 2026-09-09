@@ -21,7 +21,7 @@ independent worktree is based on chunk 01; its work is not accepted by this revi
 | 01 — Reset product specifications and working rules | ACCEPTED | base `6790c74` / corrected content `36e9bf36a2827d108633730ff0899edbd17b97ef` | [Independent review](reviews/01.md) | None blocking chunk 01; D1–D6 remain OPEN |
 | 02 — Repair the CI baseline and screenshot harness | ACCEPTED | base `178c448` / corrected content `4e5ecc9` / CI head `aeb74f6` | [Independent review](reviews/02.md) | None blocking chunk 02; staging configuration remains D6/chunk 26 |
 | 03 — Prove Telnyx feasibility and document the carrier contract | IN_PROGRESS | separate `chunk/03-telnyx-feasibility` worktree based on `178c448` | Not reviewed here | Independent of chunk 02; see its own handoff when submitted |
-| 04 — Retire family, safety and app-calling features safely | READY_FOR_REVIEW (subchunk 04A only) | base `12582f1` / head see [handoffs/04.md](handoffs/04.md) | pending | Welfare-data deletion awaits the founder's confirmation; subchunks 04B–04E explicitly unbuilt |
+| 04 — Retire family, safety and app-calling features safely | ACCEPTED (04A only); CHANGES_REQUIRED overall | base `12582f1` / submitted `34f4503` / corrected code `cf8e98e` | [Independent review](reviews/04.md) | 04B–04E unbuilt; check-in/welfare disposition remains open |
 | 05 — Introduce core domain models and migration boundaries | NOT_STARTED | — | — | See assignment |
 | 06 — Implement global identity and account recovery | NOT_STARTED | — | — | See assignment |
 | 07 — Implement memberships, tenant isolation and administrator MFA | NOT_STARTED | — | — | See assignment |
