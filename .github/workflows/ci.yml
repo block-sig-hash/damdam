@@ -598,6 +598,16 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history, not the default shallow clone. The "Advance staging
+          # branch" step below pushes HEAD to refs/heads/staging as a plain
+          # fast-forward; from a depth-1 clone the runner does not have
+          # staging's commit object, so git cannot demonstrate the update is a
+          # fast-forward and the push is rejected with "remote contains work
+          # that you do not have" -- even when staging is genuinely an ancestor
+          # of the deployed commit. release-promotion.yml already takes
+          # fetch-depth: 0 for the same class of reason.
+          fetch-depth: 0
 
       - name: Validate staging deployment secrets
         env:
