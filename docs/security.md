@@ -459,3 +459,17 @@ The quarantined rows retain their original location and timestamp data and are
 therefore still personal data. They are covered by the retention policy and must
 be included in the deletion plan produced in subchunk 04E; chunk 04A does not
 delete them.
+
+## 10.17 Amendment — Outbound calling authorization and fraud boundaries
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+Treat client SDK credentials as untrusted capabilities that must not authorize
+arbitrary PSTN spending. V01 proves the route/control method; V02 enforces call
+grants, tenant/payer/destination/identity, short expiry, replay resistance and
+revocation. Verify signed raw webhooks before durable deduplication. V03 enforces
+bounded spend independently of client/worker survival. Apply rate/destination
+controls, restrictive browser origins, existing CSRF/session policy and masked
+audit metadata. No backend Telnyx key in browser/mobile; no new recording/contact
+collection. Evaluate actual mode/market emergency and privacy obligations before
+sale. Deferred incoming calling is not implicitly restored by SDK installation.

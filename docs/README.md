@@ -1,10 +1,11 @@
 # DamDam — Documentation Index
 
-DamDam is a global eSIM and carrier-voice platform for individual consumers and
-for enterprise and government organizations. A customer buys connectivity in
-DamDam, installs an eSIM, and uses their phone's normal dialer and mobile data —
-one carrier-enabled profile carries both. Telnyx is the preferred launch
-supplier, subject to verified availability.
+> **Scope update — 9 September 2026:** Read [the approved calling amendment](./implementation/VOICE-EXPANSION.md). It supersedes earlier app/browser-calling deferrals and defines capability-specific release dependencies. Historical acceptance records remain valid for their reviewed scope.
+
+DamDam's approved target combines eSIM data, verified carrier native-dialer voice,
+and outbound internet calls from mobile and browser, for consumers and
+enterprise/government organizations. Internet calling does not require an eSIM.
+Telnyx is preferred; service availability is proven separately for each mode.
 
 This folder is the single source of truth for product, technical, security and
 infrastructure decisions.
@@ -13,7 +14,7 @@ infrastructure decisions.
 > Hajj-pilgrim product to the description above. The specs below have **not**
 > been rewritten yet — they still contain Hajj, family-contact, SOS, check-in,
 > verified-caller-ID, WebRTC-calling and HTO material.
-> [`prd.md` §10](./prd.md) is the reset product definition and governs where it
+> [`prd.md` §§10–11](./prd.md) define the reset and calling expansion and govern where the current scope
 > disagrees with anything else, and
 > [`implementation/SCOPE-DISPOSITION.md`](./implementation/SCOPE-DISPOSITION.md)
 > says which legacy references are retired, generalized, deferred or purely
@@ -23,7 +24,7 @@ infrastructure decisions.
 
 | # | Document | Purpose |
 |---|---|---|
-| — | [`implementation/README.md`](./implementation/README.md) | **Start here to build.** The 30-chunk sequence, dependencies, review gates and handoff format |
+| — | [`implementation/README.md`](./implementation/README.md) | **Start here to build.** The 01–30 sequence plus V01–V05 calling track, dependencies and review gates |
 | — | [`implementation/BASELINE.md`](./implementation/BASELINE.md) | What is actually passing and failing right now, with run IDs — observed, not historical |
 | — | [`implementation/DECISIONS.md`](./implementation/DECISIONS.md) | D1–D6 external gates, all open, with owners and required evidence |
 | — | [`implementation/STORY-MAP.md`](./implementation/STORY-MAP.md) | Chunk → story routing and the five original findings' traceability |
@@ -58,7 +59,7 @@ Recommended reading order:
 | [`pre-pilot-checklist.md`](./pre-pilot-checklist.md) | **Superseded as a gate**, retained as history. Its pilot feature freeze is lifted; see its closing amendment |
 | [`i18n-scoping.md`](./i18n-scoping.md) | §10 (shipped English/French architecture) is current; §§1–9 are historical scoping |
 | [`verified-cli-scoping.md`](./verified-cli-scoping.md) | **Deferred in full.** Retained as the record of a deferred commercial question |
-| [`release-signoffs/`](./release-signoffs/) | Release signoff artifacts and `TEMPLATE.md`. The template and its validator still demand retired SOS/check-in evidence — chunk 27 re-cuts them |
+| [`release-signoffs/`](./release-signoffs/) | Release signoff artifacts and `TEMPLATE.md`. Chunk 04 removed obsolete scenarios; chunk 27 must add the current capability matrix before release |
 | [`implementation/damdam-product-shape.md`](./implementation/damdam-product-shape.md) | Earlier product discussion, superseded by the implementation plan |
 | [`implementation/damdam-payment-provider-enquiry.md`](./implementation/damdam-payment-provider-enquiry.md) | **Unsent draft.** Revise for the D3 entity before any authorized outreach |
 

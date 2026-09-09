@@ -148,3 +148,21 @@ acceptance test that closes it.
 When a chunk is split into lettered subchunks, add a row per subchunk and keep
 the parent story. When a new story is genuinely needed, take the next free ID
 after the highest registered in `prd.md` §10 — never reuse `US-01`–`US-26`.
+
+## Calling expansion — 9 September 2026
+
+Checked `docs/` and `create-issues.sh` at `7aeea652e6e12034463dc3c3a3f964975c220f63`:
+US-44–US-48 were unused. PRD §11 registers them; no accepted story is overwritten.
+
+| Chunk | Story | Criteria and assignment |
+|---|---|---|
+| V01 | US-44 | AC-44.1–44.4; [feasibility](chunks/V01-internet-voice-feasibility.md) |
+| V02 | US-45 | AC-45.1–45.4; [call control](chunks/V02-outbound-call-control.md) |
+| V03 | US-46 | AC-46.1–46.4; [charging](chunks/V03-internet-voice-charging.md) |
+| V04 | US-47 | AC-47.1–47.3; [mobile](chunks/V04-mobile-outbound-calling.md) |
+| V05 | US-48 | AC-48.1–48.3; [browser](chunks/V05-browser-outbound-calling.md) |
+
+US-30 remains the accepted legacy retirement story. The new stories authorize
+new outbound scope under [VOICE-EXPANSION.md](VOICE-EXPANSION.md), while retaining
+all five original findings' ownership. Shared numbered-chunk criteria are extended
+by the amendment's dependency/acceptance table, especially release US-42/US-43.

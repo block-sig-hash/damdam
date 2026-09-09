@@ -228,3 +228,24 @@ Append a dated entry under the relevant gate:
 
 Then update [STATUS.md](STATUS.md) for every chunk whose gate changed. Do not
 delete a superseded decision; append the replacement.
+
+## Approved product change — 9 September 2026: three calling interfaces
+
+- Decided by: founder, in this session: “ok go ahead with what you recommend”,
+  following the recommendation for outbound mobile/browser calling alongside
+  independently verified carrier voice.
+- Decision: implement [VOICE-EXPANSION.md](VOICE-EXPANSION.md). Internet-only service
+  is allowed; inbound app/browser ringing and third-party verified CLI remain
+  deferred. Assigned identity per mode must be authorized by the provider;
+  common-number reuse is a target, not a promise.
+- This supersedes D2's blanket app/browser deferral above. It does not settle
+  markets, rates, D3 entity, D4 processors or the unresolved D5 commercial policy.
+- D1 now has **separate carrier and internet-voice evidence tracks**. Both remain
+  OPEN for live offers. V01 owns internet authorization, billable legs, rate deck,
+  caller identity, resale eligibility, termination bounds and unsent enquiries.
+  V02–V05 may implement documented/simulated scope, naming every live gap.
+- D2 adds internet selling origins/destinations and supported browsers/OS; D3/D4
+  must cover the expanded service; D5 adds mode-specific tariffs and bounded
+  cross-mode exposure; D6 adds browser and outbound-mobile device evidence.
+- This is a scope approval, not acceptance of any new implementation or evidence
+  of external approval. Preserve the carrier proof requirements in chunk 03.
