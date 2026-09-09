@@ -17,6 +17,13 @@ export const BACKGROUND_PIN_THRESHOLD_MS = 5 * 60 * 1000;
 const SERVICE = 'com.damdam.session';
 
 export interface PersistedSession {
+  /**
+   * US-30 AC-30.4: the account that owns anything this device queued offline.
+   * Optional because sessions persisted before US-30 have no user id -- those
+   * cannot own a queued row, so their queues stay inert and any rows left
+   * behind are quarantined rather than adopted.
+   */
+  userId?: string;
   accessToken: string;
   refreshToken: string;
   phoneNumber: string;

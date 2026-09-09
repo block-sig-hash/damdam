@@ -688,3 +688,59 @@ Requirements that change:
 - The screen and locale screenshot matrix is re-cut in chunk 08 and enforced in
   chunk 27. Neither the historical 0/32 count nor the 32 images observed on
   2026-09-08 carries forward — both describe the old matrix.
+
+---
+
+## 8.10 Amendment — Offline Queues Are Owned by an Account (US-30, AC-30.4)
+
+**Recorded 9 September 2026 by build chunk 04, subchunk 04A.**
+
+The offline check-in and SOS queues previously stored no owner. Both tables
+lived in one device-wide SQLite file, `damdam-safety.sqlite`, and `pending()`
+returned every queued row regardless of who was signed in. Sign-out cleared only
+the Keychain, and the sync timer kept running. The result is the original review
+finding 1: user A queues an event offline, signs out, user B signs in, and A's
+event is POSTed with B's token — and because the server derives the owner from
+that token, the record is genuinely created as B's.
+
+Server-side scoping cannot detect this. The fix is client-side.
+
+### What changed
+
+- Both outbox tables carry `owner_user_id`. Rows are written with it, read with
+  `WHERE owner_user_id = ?`, and removed and updated only when the owner matches.
+- Queuing without an owner is refused rather than defaulted.
+- Rows left by a build that recorded no owner are **quarantined**, not adopted:
+  they move to `<table>_quarantine` with a timestamp and a reason. They are kept
+  — they are a user's data — and are never attributed to whoever signs in next.
+  Quarantine is idempotent, so an interrupted migration converges.
+- `CheckInSyncService` and `SOSSyncService` take a required `OutboxOwnership`
+  with a `currentOwnerUserId()` **function**. Ownership is re-checked before the
+  loop, before each send, and again after each send resolves, so an account
+  switch mid-flight cannot confirm or consume a row. A delayed response for a
+  departed account leaves the row in place for its rightful owner.
+- `PersistedSession`, `ActiveSession` and `AuthenticatedMobileSession` carry
+  `userId`.
+
+### Deliberate consequence
+
+A session persisted **before** this change has no `userId`, so it owns nothing:
+its queues stay inert and it cannot enqueue new events. That is the correct
+failure direction — these features are being retired, and an event that cannot
+be attributed to an account must not be sent. It is recorded here because it is
+a real behavior change for an existing install, not an oversight.
+
+### Testing
+
+`src/services/outboxAccountIsolation.test.ts` covers AC-30.4 against a **real
+SQLite engine** (sql.js), because the defect lives in what the table records and
+what the query filters — an array double would pass a broken schema. It covers
+the account switch, process restart, delayed callback, signed-out state, timer
+cancellation, quarantine and cross-account read/remove attempts.
+
+### Still open
+
+This subchunk isolates the queues; it does not retire them. The screens,
+services, API clients, native permissions and server routes are removed in
+subchunks 04B–04E — see
+[`implementation/retirement/INVENTORY.md`](./implementation/retirement/INVENTORY.md).

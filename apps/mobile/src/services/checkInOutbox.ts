@@ -2,6 +2,15 @@ import type {NetInfoState} from '@react-native-community/netinfo';
 import type {NitroSQLiteConnection} from 'react-native-nitro-sqlite';
 import uuid from 'react-native-uuid';
 
+import {
+  SAFETY_DATABASE,
+  ensureOwnedOutboxTable,
+  ownershipHolds,
+  quarantinedRowCount,
+  requireOwner,
+  type OutboxOwnership,
+} from './outboxOwnership';
+
 export interface CheckInLocation {
   latitude: number;
   longitude: number;
@@ -16,10 +25,16 @@ export interface CheckInOutboxItem {
 
 export interface CheckInOutbox {
   initialize(): Promise<void>;
-  enqueue(item: CheckInOutboxItem): Promise<void>;
-  pending(): Promise<CheckInOutboxItem[]>;
-  remove(clientGeneratedId: string): Promise<void>;
-  updateLocation?(clientGeneratedId: string, location: CheckInLocation): Promise<void>;
+  /** AC-30.4: a queued row always records the account it belongs to. */
+  enqueue(item: CheckInOutboxItem, ownerUserId: string): Promise<void>;
+  pending(ownerUserId: string): Promise<CheckInOutboxItem[]>;
+  remove(clientGeneratedId: string, ownerUserId: string): Promise<void>;
+  updateLocation?(
+    clientGeneratedId: string,
+    location: CheckInLocation,
+    ownerUserId: string,
+  ): Promise<void>;
+  quarantinedCount?(): Promise<number>;
 }
 
 type OutboxRow = {
@@ -31,21 +46,24 @@ type OutboxRow = {
 
 export class NitroCheckInOutbox implements CheckInOutbox {
   private database?: NitroSQLiteConnection;
+  private initialized = false;
+
+  /** Test seam: run against a real SQLite connection without the native module. */
+  useConnection(connection: NitroSQLiteConnection): void {
+    this.database = connection;
+    this.initialized = false;
+  }
 
   async initialize(): Promise<void> {
-    if (this.database) return;
-    // Lazy loading keeps Jest and any pre-native bootstrap path from touching the
-    // HybridObject before React Native has installed native modules.
-    const {open} = require('react-native-nitro-sqlite') as typeof import('react-native-nitro-sqlite');
-    this.database = open({name: 'damdam-safety.sqlite'});
-    await this.database.executeAsync(
-      `CREATE TABLE IF NOT EXISTS checkin_outbox (
-        client_generated_id TEXT PRIMARY KEY NOT NULL,
-        timestamp TEXT NOT NULL,
-        latitude REAL,
-        longitude REAL
-      )`,
-    );
+    if (!this.database) {
+      // Lazy loading keeps Jest and any pre-native bootstrap path from touching
+      // the HybridObject before React Native has installed native modules.
+      const {open} = require('react-native-nitro-sqlite') as typeof import('react-native-nitro-sqlite');
+      this.database = open({name: SAFETY_DATABASE});
+    }
+    if (this.initialized) return;
+    await ensureOwnedOutboxTable(this.database, 'checkin_outbox');
+    this.initialized = true;
   }
 
   private async db(): Promise<NitroSQLiteConnection> {
@@ -54,26 +72,30 @@ export class NitroCheckInOutbox implements CheckInOutbox {
     return this.database;
   }
 
-  async enqueue(item: CheckInOutboxItem): Promise<void> {
+  async enqueue(item: CheckInOutboxItem, ownerUserId: string): Promise<void> {
+    const owner = requireOwner(ownerUserId);
     const database = await this.db();
     await database.executeAsync(
       `INSERT OR IGNORE INTO checkin_outbox
-       (client_generated_id, timestamp, latitude, longitude)
-       VALUES (?, ?, ?, ?)`,
+       (client_generated_id, timestamp, latitude, longitude, owner_user_id)
+       VALUES (?, ?, ?, ?, ?)`,
       [
         item.clientGeneratedId,
         item.timestamp,
         item.latitude ?? null,
         item.longitude ?? null,
+        owner,
       ],
     );
   }
 
-  async pending(): Promise<CheckInOutboxItem[]> {
+  async pending(ownerUserId: string): Promise<CheckInOutboxItem[]> {
+    const owner = requireOwner(ownerUserId);
     const database = await this.db();
     const result = await database.executeAsync<OutboxRow>(
       `SELECT client_generated_id, timestamp, latitude, longitude
-       FROM checkin_outbox ORDER BY timestamp ASC`,
+       FROM checkin_outbox WHERE owner_user_id = ? ORDER BY timestamp ASC`,
+      [owner],
     );
     return result.rows._array.map(row => ({
       clientGeneratedId: row.client_generated_id,
@@ -84,24 +106,31 @@ export class NitroCheckInOutbox implements CheckInOutbox {
     }));
   }
 
-  async remove(clientGeneratedId: string): Promise<void> {
+  async remove(clientGeneratedId: string, ownerUserId: string): Promise<void> {
+    const owner = requireOwner(ownerUserId);
     const database = await this.db();
     await database.executeAsync(
-      'DELETE FROM checkin_outbox WHERE client_generated_id = ?',
-      [clientGeneratedId],
+      'DELETE FROM checkin_outbox WHERE client_generated_id = ? AND owner_user_id = ?',
+      [clientGeneratedId, owner],
     );
   }
 
   async updateLocation(
     clientGeneratedId: string,
     location: CheckInLocation,
+    ownerUserId: string,
   ): Promise<void> {
+    const owner = requireOwner(ownerUserId);
     const database = await this.db();
     await database.executeAsync(
       `UPDATE checkin_outbox SET latitude = ?, longitude = ?
-       WHERE client_generated_id = ?`,
-      [location.latitude, location.longitude, clientGeneratedId],
+       WHERE client_generated_id = ? AND owner_user_id = ?`,
+      [location.latitude, location.longitude, clientGeneratedId, owner],
     );
+  }
+
+  async quarantinedCount(): Promise<number> {
+    return quarantinedRowCount(await this.db(), 'checkin_outbox');
   }
 }
 
@@ -113,11 +142,17 @@ export class CheckInSyncService {
     private readonly outbox: CheckInOutbox,
     private readonly send: (item: CheckInOutboxItem) => Promise<unknown>,
     private readonly onChanged: (pending: CheckInOutboxItem[]) => void = () => undefined,
+    private readonly onSynced: (item: CheckInOutboxItem) => void = () => undefined,
+    private readonly ownership: OutboxOwnership,
   ) {}
+
+  private get owner(): string {
+    return this.ownership.ownerUserId;
+  }
 
   async initialize(): Promise<CheckInOutboxItem[]> {
     await this.outbox.initialize();
-    const rows = await this.outbox.pending();
+    const rows = await this.outbox.pending(this.owner);
     this.onChanged(rows);
     return rows;
   }
@@ -135,12 +170,12 @@ export class CheckInSyncService {
     };
     if (holdForEnrichment) this.heldForEnrichment.add(item.clientGeneratedId);
     try {
-      await this.outbox.enqueue(item);
+      await this.outbox.enqueue(item, this.owner);
     } catch (error) {
       this.heldForEnrichment.delete(item.clientGeneratedId);
       throw error;
     }
-    this.onChanged(await this.outbox.pending());
+    this.onChanged(await this.outbox.pending(this.owner));
     return item;
   }
 
@@ -148,8 +183,8 @@ export class CheckInSyncService {
     clientGeneratedId: string,
     location: CheckInLocation,
   ): Promise<void> {
-    await this.outbox.updateLocation?.(clientGeneratedId, location);
-    this.onChanged(await this.outbox.pending());
+    await this.outbox.updateLocation?.(clientGeneratedId, location, this.owner);
+    this.onChanged(await this.outbox.pending(this.owner));
   }
 
   releaseEnrichment(clientGeneratedId: string): void {
@@ -168,18 +203,30 @@ export class CheckInSyncService {
   }
 
   private async performSync(): Promise<number> {
+    // AC-30.4: the signed-in account must still be this queue's owner before a
+    // single row is read, or A's events would be dispatched as B.
+    if (!ownershipHolds(this.ownership)) return 0;
+
     let sent = 0;
-    for (const item of await this.outbox.pending()) {
+    for (const item of await this.outbox.pending(this.owner)) {
       if (this.heldForEnrichment.has(item.clientGeneratedId)) continue;
+      // Re-checked per item: a switch can land between two sends.
+      if (!ownershipHolds(this.ownership)) break;
       try {
         await this.send(item);
-        await this.outbox.remove(item.clientGeneratedId);
+        // Re-checked after the response: a delayed callback must not confirm or
+        // consume a row once the account underneath it has changed.
+        if (!ownershipHolds(this.ownership)) break;
+        await this.outbox.remove(item.clientGeneratedId, this.owner);
+        this.onSynced(item);
         sent += 1;
       } catch {
         break;
       }
     }
-    this.onChanged(await this.outbox.pending());
+    if (ownershipHolds(this.ownership)) {
+      this.onChanged(await this.outbox.pending(this.owner));
+    }
     return sent;
   }
 
@@ -195,7 +242,7 @@ export class CheckInSyncService {
   }
 
   async isPending(clientGeneratedId: string): Promise<boolean> {
-    return (await this.outbox.pending()).some(
+    return (await this.outbox.pending(this.owner)).some(
       item => item.clientGeneratedId === clientGeneratedId,
     );
   }

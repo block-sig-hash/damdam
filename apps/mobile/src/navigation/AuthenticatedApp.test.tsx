@@ -109,6 +109,7 @@ beforeEach(() => {
 it('wires authenticated bootstrap, date banner, and activation navigation', async () => {
   await render(
     <AuthenticatedApp
+      userId="aaaaaaaa-0000-4000-8000-00000000000a"
       accessToken="access-token"
       departureDate="2026-07-20"
       packageId="package-1"
@@ -133,7 +134,11 @@ it('deep-links an authenticated pilgrim directly into activation', async () => {
     return jest.fn();
   });
   await render(
-    <AuthenticatedApp accessToken="access-token" departureDate={null} />,
+    <AuthenticatedApp
+      userId="aaaaaaaa-0000-4000-8000-00000000000a"
+      accessToken="access-token"
+      departureDate={null}
+    />,
   );
 
   await act(async () => openPackage?.('linked-package'));
@@ -144,6 +149,7 @@ it('deep-links an authenticated pilgrim directly into activation', async () => {
 it('AC-14.7: refreshes the displayed PSTN balance after a completed call', async () => {
   await render(
     <AuthenticatedApp
+      userId="aaaaaaaa-0000-4000-8000-00000000000a"
       accessToken="access-token"
       departureDate={null}
       packageId="package-1"
