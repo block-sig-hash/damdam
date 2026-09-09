@@ -1,10 +1,12 @@
 # Implementation status
 
-Chunks 01 and 02 are **ACCEPTED after independent Codex review and fixes**.
+Chunks 01, 02 and chunk 03's documented/simulated scope are **ACCEPTED after
+independent Codex review and fixes**.
 Chunk 01 merged in [PR #100](https://github.com/block-sig-hash/damdam/pull/100).
 Chunk 02's tested content and native evidence are recorded in
 [reviews/02.md](reviews/02.md); [PR #101](https://github.com/block-sig-hash/damdam/pull/101)
-carries its integration. Staging is not deployed: its four required secrets are
+carries its integration. Chunk 03 merged in
+[PR #102](https://github.com/block-sig-hash/damdam/pull/102). Staging is not deployed: its four required secrets are
 missing (D6/chunk 26). No production-readiness claim is made.
 
 **Original baseline:** `develop` @
@@ -13,16 +15,15 @@ see [BASELINE.md](BASELINE.md).
 
 **Current reviewed chunk 02 content:**
 `4e5ecc9a55b4230c1b73923eff08fbf41b7f64bf`, based on accepted chunk 01 tip
-`178c448d503eb2c5733c2daa7e12ce65159be769`. Preserve both branches. Chunk 03's
-independent worktree is based on chunk 01; its work is not accepted by this review.
+`178c448d503eb2c5733c2daa7e12ce65159be769`.
 
 | Chunk | Status | Base/head SHA | Review record | Remaining gate |
 |---|---|---|---|---|
 | 01 — Reset product specifications and working rules | ACCEPTED | base `6790c74` / corrected content `36e9bf36a2827d108633730ff0899edbd17b97ef` | [Independent review](reviews/01.md) | None blocking chunk 01; D1–D6 remain OPEN |
 | 02 — Repair the CI baseline and screenshot harness | ACCEPTED | base `178c448` / corrected content `4e5ecc9` / CI head `aeb74f6` | [Independent review](reviews/02.md) | None blocking chunk 02; staging configuration remains D6/chunk 26 |
-| 03 — Prove Telnyx feasibility and document the carrier contract | IN_PROGRESS | separate `chunk/03-telnyx-feasibility` worktree based on `178c448` | Not reviewed here | Independent of chunk 02; see its own handoff when submitted |
-| 04 — Retire family, safety and app-calling features safely | IN_PROGRESS in a separate worktree, based on `12582f1` | — | Not reviewed | Tracked on its own branch; independent of chunk 05 |
-| 05 — Introduce core domain models and migration boundaries | READY_FOR_REVIEW | base `12582f1` / see [handoff](handoffs/05.md) | Not reviewed | D3 (selling entity) still OPEN — `legal_entities` is deliberately unseeded |
+| 03 — Prove Telnyx feasibility and document the carrier contract | ACCEPTED (documented/simulated scope); live scope EXTERNAL_BLOCKED | base `178c448` / submitted `fe569e1` / corrected code `6a24c19` | [Independent review](reviews/03.md) | **D1/D2 OPEN** — no Telnyx account, live call, rate deck or cleared market |
+| 04 — Retire family, safety and app-calling features safely | 04A ACCEPTED and merged; 04B–04E READY_FOR_REVIEW on `chunk/04-safe-feature-retirement` | base `12582f1`, rebased onto `5636d8a` / see [handoff](handoffs/04.md) | [04A review](reviews/04.md); 04B–04E not reviewed | Check-in/welfare disposition remains OPEN with founder/product; no welfare data deleted |
+| 05 — Introduce core domain models and migration boundaries | READY_FOR_REVIEW | base `12582f1`, rebased onto `5636d8a` / see [handoff](handoffs/05.md) | Not reviewed | D3 (selling entity) still OPEN — `legal_entities` is deliberately unseeded |
 | 06 — Implement global identity and account recovery | NOT_STARTED | — | — | See assignment |
 | 07 — Implement memberships, tenant isolation and administrator MFA | NOT_STARTED | — | — | See assignment |
 | 08 — Define the consumer and enterprise design system | NOT_STARTED | — | — | See assignment |

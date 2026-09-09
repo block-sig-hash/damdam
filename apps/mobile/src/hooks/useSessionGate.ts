@@ -15,6 +15,8 @@ import {
 export type SessionPhase = 'loading' | 'onboarding' | 'pin-gate' | 'authenticated';
 
 export interface ActiveSession {
+  /** US-30 AC-30.4: owner of this device's offline queues. */
+  userId?: string;
   accessToken: string;
   refreshToken: string;
   phoneNumber: string;
@@ -51,6 +53,7 @@ const FOREGROUND_REFRESH_INTERVAL_MS = 12 * 60 * 1000;
 
 function toActiveSession(persisted: PersistedSession): ActiveSession {
   return {
+    userId: persisted.userId,
     accessToken: persisted.accessToken,
     refreshToken: persisted.refreshToken,
     phoneNumber: persisted.phoneNumber,
@@ -157,6 +160,7 @@ export function useSessionGate(): UseSessionGateResult {
           .then(findActivePackageId)
           .catch(() => session?.packageId);
         const next: ActiveSession = {
+          userId: recovered.user.id,
           accessToken: recovered.access_token,
           refreshToken: recovered.refresh_token,
           phoneNumber: recovered.user.phone_number,

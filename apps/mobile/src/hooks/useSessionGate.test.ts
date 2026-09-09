@@ -74,6 +74,7 @@ function latestAppStateHandler(): (status: string) => void {
 }
 
 const BASE_SESSION = {
+  userId: 'aaaaaaaa-0000-4000-8000-00000000000a',
   accessToken: 'access-1',
   refreshToken: 'refresh-1',
   phoneNumber: '08012345678',
@@ -128,6 +129,7 @@ describe('useSessionGate boot sequence', () => {
     expect(restarted.current.session?.accessToken).toBe('access-1');
     expect(restarted.current.session?.refreshToken).toBe('refresh-1');
     expect(restarted.current.session?.phoneNumber).toBe('08012345678');
+    expect(restarted.current.session?.userId).toBe(BASE_SESSION.userId);
   });
 });
 

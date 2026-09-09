@@ -430,3 +430,32 @@ so simultaneous uses of one refresh token cannot create two valid replacements.
 The stored expiry is retained as a separate constraint from the JWT expiry.
 Regression evidence includes PostgreSQL concurrency and organization verification;
 these changes do not implement the broader identity/tenancy work in chunks 06/07.
+
+---
+
+## 10.16 Amendment — Device-Local Queues Must Be Attributable (US-30, AC-30.4)
+
+**Recorded 9 September 2026 by build chunk 04, subchunk 04A.** No control above
+is relaxed.
+
+A shared device is a multi-tenant boundary. The offline safety queues did not
+treat it as one: one SQLite file, no owner column, and an unfiltered read, so a
+second person signing in on the same handset inherited the first person's queued
+events and had them submitted under their own identity. Location data was
+included.
+
+Two rules follow, and they apply to any future device-local queue, cache or
+outbox, not just the two being retired:
+
+1. **Every device-local record that will later be sent to the server carries the
+   account that created it**, and every read filters on it. Ownership is
+   re-verified immediately before dispatch and again after the response, because
+   an account can change while a request is in flight.
+2. **A record whose owner cannot be established is quarantined, never adopted.**
+   It is not deleted — it is a user's data — and it is never attributed to
+   whoever signs in next. Deletion follows the approved retention policy.
+
+The quarantined rows retain their original location and timestamp data and are
+therefore still personal data. They are covered by the retention policy and must
+be included in the deletion plan produced in subchunk 04E; chunk 04A does not
+delete them.
