@@ -126,6 +126,27 @@ describe('retired feature surface', () => {
     expect(plist).not.toContain('voip');
   });
 
+  it('uses the standard React activity after removing the Telnyx voice SDK', () => {
+    const activity = readFileSync(
+      join(
+        SRC,
+        '..',
+        'android',
+        'app',
+        'src',
+        'main',
+        'java',
+        'com',
+        'damdam',
+        'app',
+        'MainActivity.kt',
+      ),
+      'utf8',
+    );
+    expect(activity).not.toContain('com.telnyx.react_voice_commons');
+    expect(activity).toContain('class MainActivity : ReactActivity()');
+  });
+
   it('declares no iOS usage description for a retired feature', () => {
     const plist = readFileSync(
       join(SRC, '..', 'ios', 'DamDam', 'Info.plist'),
