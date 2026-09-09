@@ -105,7 +105,7 @@ it does not reverse chunk04 acceptance or imply restored calling code.
 
 | Chunk | Story | Status | Remaining gate |
 |---|---|---|---|
-| V01 — Internet-voice feasibility | US-44 | NOT_STARTED | D1 internet evidence; prepare independent documented scope first |
+| V01 — Internet-voice feasibility | US-44 | **READY_FOR_REVIEW** (documented scope); remainder **EXTERNAL_BLOCKED** | base `d95db83` / content `5f7543c` / [handoff](handoffs/V01.md), [evidence](voice/) — GO for V02 documented work, NO-GO for live calling. Blockers B1–B5 need D1 account access; recorded as D1 items 9–13 |
 | V02 — Outbound call control | US-45 | NOT_STARTED | Accepted V01 contract and 06/07/09/10/11; live controls gated |
 | V03 — Internet charging | US-46 | NOT_STARTED | V02/10/14; provider cutoff, rates and D5 |
 | V04 — Mobile outbound | US-47 | NOT_STARTED | V03/08/18; device/SDK and live evidence |
