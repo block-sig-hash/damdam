@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from enum import Enum
 from uuid import UUID
 
-from .contracts import SimCard, operation_tag
+from .contracts import ContractViolation, SimCard, operation_tag
 
 
 class ReconciliationOutcome(str, Enum):
@@ -74,6 +74,11 @@ def reconcile_purchase(
     question 2), callers must pass ``lookup_is_trusted=False``, and an empty
     result is escalated instead of retried.
     """
+    if type(requested_amount) is not int or requested_amount < 1:
+        raise ContractViolation("requested_amount must be a positive integer")
+    if not isinstance(operation_reference, UUID):
+        raise ContractViolation("operation_reference must be a UUID")
+
     expected_tag = operation_tag(operation_reference)
     matched = tuple(card for card in sim_cards if expected_tag in card.tags)
 

@@ -174,9 +174,11 @@ documented fields:
 3. On a lost response, timeout or crash, **do not retry the purchase.** Query
    `GET /sim_cards?filter[tags][]=damdam-op-<operation_reference>` and compare
    the count returned against the `amount` requested.
-4. Classify: full count → accepted, adopt the SIMs; zero → the purchase did not
-   land, safe to retry with the **same** tag; partial → partially accepted,
-   reconcile the shortfall as its own decision, never as a blind retry.
+4. Classify: full count → accepted, adopt the SIMs; partial → partially
+   accepted, reconcile the shortfall as its own decision, never as a blind
+   retry. A zero result permits a retry with the **same** tag only after Telnyx
+   has confirmed the lookup's post-purchase consistency and required settling
+   window. Until then, zero is outcome-unknown and requires manual review.
 
 ### 2.2 Why this is reconciliation, not idempotency — state it plainly
 

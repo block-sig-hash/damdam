@@ -13,6 +13,7 @@ avoid.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -160,8 +161,14 @@ class ESimPurchaseRequest:
     extra_tags: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        if type(self.amount) is not int:
+            raise ContractViolation("amount must be an integer")
         if self.amount < 1:
             raise ContractViolation("amount must be at least 1 (documented minimum)")
+        if not isinstance(self.operation_reference, UUID):
+            raise ContractViolation("operation_reference must be a UUID")
+        if self.status is not None and not isinstance(self.status, SimCardStatus):
+            raise ContractViolation("status must be a documented SimCardStatus")
         if self.status is not None and self.status not in {
             SimCardStatus.ENABLED,
             SimCardStatus.DISABLED,
@@ -176,11 +183,15 @@ class ESimPurchaseRequest:
                 raise ContractViolation(
                     "whitelabel_name requires product='whitelabel'"
                 )
-            if not _WHITELABEL_NAME.match(self.whitelabel_name):
+            if not _WHITELABEL_NAME.fullmatch(self.whitelabel_name):
                 raise ContractViolation(
                     "whitelabel_name must contain only letters, numbers and "
                     "whitespace"
                 )
+        if not isinstance(self.extra_tags, tuple) or not all(
+            isinstance(tag, str) for tag in self.extra_tags
+        ):
+            raise ContractViolation("extra_tags must be a tuple of strings")
 
     @property
     def correlation_tag(self) -> str:
@@ -220,30 +231,57 @@ class SimCard:
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> SimCard:
-        if "id" not in payload:
+    def from_payload(cls, payload: Mapping[str, Any]) -> SimCard:
+        if not isinstance(payload, Mapping):
+            raise ContractViolation("SIM card payload must be an object")
+        card_id = payload.get("id")
+        if not isinstance(card_id, str) or not card_id:
             raise ContractViolation("SIM card payload has no 'id'")
         raw_status = payload.get("status")
         # Telnyx returns status as an object in some responses and a bare
         # string in others; accept both rather than guessing one.
-        if isinstance(raw_status, dict):
+        if isinstance(raw_status, Mapping):
             raw_status = raw_status.get("value")
         try:
             status = SimCardStatus(raw_status)
-        except ValueError as exc:
+        except (TypeError, ValueError) as exc:
             raise ContractViolation(
                 f"undocumented SIM card status {raw_status!r} -- the contract "
                 "record needs updating before this is treated as expected"
             ) from exc
+        raw_tags = payload.get("tags")
+        if raw_tags is None:
+            tags: tuple[str, ...] = ()
+        elif (
+            not isinstance(raw_tags, Sequence)
+            or isinstance(raw_tags, str | bytes)
+            or not all(isinstance(tag, str) for tag in raw_tags)
+        ):
+            raise ContractViolation("SIM card 'tags' must be an array of strings")
+        else:
+            tags = tuple(raw_tags)
+
+        def optional_string(field_name: str) -> str | None:
+            value = payload.get(field_name)
+            if value is not None and not isinstance(value, str):
+                raise ContractViolation(
+                    f"SIM card {field_name!r} must be a string or null"
+                )
+            return value
+
+        voice_enabled = payload.get("voice_enabled")
+        if voice_enabled is not None and not isinstance(voice_enabled, bool):
+            raise ContractViolation("SIM card 'voice_enabled' must be boolean or null")
+
         return cls(
-            id=str(payload["id"]),
+            id=card_id,
             status=status,
-            type=payload.get("type"),
-            iccid=payload.get("iccid"),
-            tags=tuple(payload.get("tags") or ()),
-            voice_enabled=payload.get("voice_enabled"),
-            esim_installation_status=payload.get("esim_installation_status"),
-            raw=payload,
+            type=optional_string("type"),
+            iccid=optional_string("iccid"),
+            tags=tags,
+            voice_enabled=voice_enabled,
+            esim_installation_status=optional_string("esim_installation_status"),
+            raw=dict(payload),
         )
 
 
@@ -254,11 +292,22 @@ class WirelessError:
     detail: str | None = None
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> WirelessError:
+    def from_payload(cls, payload: Mapping[str, Any]) -> WirelessError:
+        if not isinstance(payload, Mapping):
+            raise ContractViolation("Wireless error payload must be an object")
+        code = payload.get("code")
+        if not isinstance(code, str) or not code:
+            raise ContractViolation("Wireless error payload has no string 'code'")
+        title = payload.get("title")
+        detail = payload.get("detail")
+        if title is not None and not isinstance(title, str):
+            raise ContractViolation("Wireless error 'title' must be a string or null")
+        if detail is not None and not isinstance(detail, str):
+            raise ContractViolation("Wireless error 'detail' must be a string or null")
         return cls(
-            code=str(payload.get("code", "")),
-            title=payload.get("title"),
-            detail=payload.get("detail"),
+            code=code,
+            title=title,
+            detail=detail,
         )
 
     @property
@@ -278,13 +327,16 @@ class ESimPurchaseResponse:
     errors: tuple[WirelessError, ...]
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> ESimPurchaseResponse:
+    def from_payload(cls, payload: Mapping[str, Any]) -> ESimPurchaseResponse:
+        if not isinstance(payload, Mapping):
+            raise ContractViolation("eSIM purchase response must be an object")
+        data = payload.get("data") or []
+        errors = payload.get("errors") or []
+        if not isinstance(data, list):
+            raise ContractViolation("eSIM purchase response 'data' must be an array")
+        if not isinstance(errors, list):
+            raise ContractViolation("eSIM purchase response 'errors' must be an array")
         return cls(
-            sim_cards=tuple(
-                SimCard.from_payload(item) for item in payload.get("data") or ()
-            ),
-            errors=tuple(
-                WirelessError.from_payload(item)
-                for item in payload.get("errors") or ()
-            ),
+            sim_cards=tuple(SimCard.from_payload(item) for item in data),
+            errors=tuple(WirelessError.from_payload(item) for item in errors),
         )

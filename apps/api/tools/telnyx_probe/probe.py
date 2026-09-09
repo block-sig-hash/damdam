@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -157,6 +158,21 @@ def run_live_mode(args: argparse.Namespace) -> int:
         return 2
 
     try:
+        tag_uuid = UUID(args.tag.removeprefix("damdam-op-"))
+    except (AttributeError, ValueError):
+        tag_uuid = None
+    if tag_uuid is None or args.tag != f"damdam-op-{tag_uuid}":
+        sys.stderr.write(
+            "Refusing to run live: --tag must be one exact DamDam operation tag "
+            "in the form damdam-op-<uuid>.\n"
+        )
+        return 2
+
+    if not math.isfinite(args.timeout) or args.timeout <= 0:
+        sys.stderr.write("Refusing to run live: --timeout must be a positive number.\n")
+        return 2
+
+    try:
         import httpx
     except ImportError:  # pragma: no cover -- exercised only outside the venv
         sys.stderr.write("httpx is required for live mode.\n")
@@ -164,12 +180,18 @@ def run_live_mode(args: argparse.Namespace) -> int:
 
     url = f"{API_BASE_URL}{LIST_SIM_CARDS_PATH}"
     sys.stdout.write(f"OBSERVED -- live read-only GET {url}\n")
-    response = httpx.get(
-        url,
-        params={"filter[tags][]": args.tag},
-        headers={"Authorization": f"Bearer {api_key}"},
-        timeout=args.timeout,
-    )
+    try:
+        response = httpx.get(
+            url,
+            params={"filter[tags][]": args.tag, "page[size]": 250},
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=args.timeout,
+        )
+    except httpx.RequestError:
+        # Do not print the exception: proxy URLs and supplier errors can contain
+        # account-specific data, and this output is intended to be shareable.
+        sys.stderr.write("Live read-only request failed; details withheld.\n")
+        return 1
     sys.stdout.write(f"HTTP {response.status_code}\n")
     if response.status_code != 200:
         # Deliberately not echoing the body: an error body can carry account
@@ -177,15 +199,26 @@ def run_live_mode(args: argparse.Namespace) -> int:
         sys.stderr.write("Non-200 response; body withheld from output.\n")
         return 1
 
-    payload = response.json()
-    cards = tuple(SimCard.from_payload(item) for item in payload.get("data") or ())
+    try:
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise ContractViolation("list response must be an object")
+        raw_cards = payload.get("data") or []
+        if not isinstance(raw_cards, list):
+            raise ContractViolation("list response 'data' must be an array")
+        cards = tuple(SimCard.from_payload(item) for item in raw_cards)
+    except (ContractViolation, ValueError):
+        sys.stderr.write(
+            "Live response did not match the documented contract; body withheld.\n"
+        )
+        return 1
     sys.stdout.write(f"{len(cards)} SIM card(s) carry that tag.\n")
     for card in cards:
-        # ICCID is deliberately truncated: it identifies a specific profile.
-        iccid = f"{card.iccid[:6]}..." if card.iccid else "unknown"
+        # Report only non-identifying fields. SIM IDs and even partial ICCIDs
+        # identify account resources and do not belong in pasteable evidence.
         sys.stdout.write(
-            f"  {card.id} status={card.status.value} type={card.type} "
-            f"voice_enabled={card.voice_enabled} iccid={iccid}\n"
+            f"  status={card.status.value} type={card.type} "
+            f"voice_enabled={card.voice_enabled}\n"
         )
     sys.stdout.write(
         "This is a read-only observation. It does not establish coverage, "

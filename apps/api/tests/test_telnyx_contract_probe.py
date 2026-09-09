@@ -15,9 +15,11 @@ Sources for every shape asserted here are recorded in
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from uuid import UUID
 
+import httpx
 import pytest
 
 from tools.telnyx_probe.contracts import (
@@ -105,6 +107,11 @@ class TestPurchaseRequestMatchesTheDocumentedSchema:
         with pytest.raises(ContractViolation, match="at least 1"):
             ESimPurchaseRequest(amount=0, operation_reference=OPERATION)
 
+    @pytest.mark.parametrize("amount", [True, 1.5, "1"])
+    def test_amount_must_really_be_an_integer(self, amount: object) -> None:
+        with pytest.raises(ContractViolation, match="integer"):
+            ESimPurchaseRequest(amount=amount, operation_reference=OPERATION)  # type: ignore[arg-type]
+
     def test_whitelabel_name_requires_the_whitelabel_product(self) -> None:
         with pytest.raises(ContractViolation, match="product='whitelabel'"):
             ESimPurchaseRequest(
@@ -160,6 +167,35 @@ class TestResponseParsing:
         with pytest.raises(ContractViolation, match="no 'id'"):
             SimCard.from_payload({"status": "enabled"})
 
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"id": "x"},
+            {"id": "x", "status": None},
+            {"id": "x", "status": {}},
+            {"id": "x", "status": "enabled", "tags": "not-an-array"},
+        ],
+    )
+    def test_malformed_sim_card_payloads_fail_as_contract_violations(
+        self, payload: dict[str, object]
+    ) -> None:
+        with pytest.raises(ContractViolation):
+            SimCard.from_payload(payload)
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"data": "not-an-array", "errors": []},
+            {"data": [], "errors": "not-an-array"},
+            {"data": ["not-an-object"], "errors": []},
+        ],
+    )
+    def test_malformed_purchase_envelopes_fail_as_contract_violations(
+        self, payload: dict[str, object]
+    ) -> None:
+        with pytest.raises(ContractViolation):
+            ESimPurchaseResponse.from_payload(payload)
+
     def test_unknown_fields_are_preserved_rather_than_dropped(self) -> None:
         card = SimCard.from_payload(
             {"id": "x", "status": "enabled", "some_new_field": 42}
@@ -206,6 +242,18 @@ class TestReconciliationOfAnUnknownPurchaseOutcome:
         assert decision.outcome is ReconciliationOutcome.COMPLETE
         assert decision.may_retry_purchase is False
         assert decision.requires_manual_review is False
+
+    @pytest.mark.parametrize("amount", [0, -1, True, 1.5])
+    def test_invalid_requested_amount_cannot_produce_a_safe_decision(
+        self, amount: object
+    ) -> None:
+        with pytest.raises(ContractViolation, match="positive integer"):
+            reconcile_purchase(
+                requested_amount=amount,  # type: ignore[arg-type]
+                operation_reference=OPERATION,
+                sim_cards=[],
+                lookup_is_trusted=True,
+            )
 
     def test_an_empty_untrusted_lookup_escalates_instead_of_retrying(self) -> None:
         """The core safety property.
@@ -312,6 +360,68 @@ class TestProbeRefusesUnauthorizedLiveUse:
         monkeypatch.setenv("TELNYX_API_KEY", "irrelevant")
         assert main(["--mode", "live", "--i-have-authorization"]) == 2
         assert "--tag is required" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("tag", ["anything", "damdam-op-not-a-uuid", " "])
+    def test_live_mode_rejects_a_broad_or_malformed_tag(
+        self,
+        tag: str,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("TELNYX_API_KEY", "irrelevant")
+        assert main(
+            ["--mode", "live", "--i-have-authorization", "--tag", tag]
+        ) == 2
+        assert "operation tag" in capsys.readouterr().err
+
+    @pytest.mark.parametrize("timeout", ["0", "-1", "nan", "inf"])
+    def test_live_mode_rejects_an_invalid_timeout(
+        self,
+        timeout: str,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        assert not math.isfinite(float(timeout)) or float(timeout) <= 0
+        monkeypatch.setenv("TELNYX_API_KEY", "irrelevant")
+        assert main(
+            [
+                "--mode",
+                "live",
+                "--i-have-authorization",
+                "--tag",
+                f"damdam-op-{OPERATION}",
+                "--timeout",
+                timeout,
+            ]
+        ) == 2
+        assert "timeout" in capsys.readouterr().err.lower()
+
+    def test_live_transport_failure_is_redacted_without_a_traceback(
+        self,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("TELNYX_API_KEY", "secret-test-key")
+
+        def fail(*args: object, **kwargs: object) -> httpx.Response:
+            del args, kwargs
+            raise httpx.ConnectError("account-specific upstream detail")
+
+        monkeypatch.setattr(httpx, "get", fail)
+        assert main(
+            [
+                "--mode",
+                "live",
+                "--i-have-authorization",
+                "--tag",
+                f"damdam-op-{OPERATION}",
+            ]
+        ) == 1
+        output = capsys.readouterr()
+        combined = output.out + output.err
+        assert "secret-test-key" not in combined
+        assert "account-specific upstream detail" not in combined
+        assert "request failed" in output.err.lower()
 
     def test_fixture_mode_labels_its_own_output_as_simulated(
         self, capsys: pytest.CaptureFixture[str]
