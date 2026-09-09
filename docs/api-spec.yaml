@@ -1565,62 +1565,32 @@ paths:
       - voice
       summary: Token
       operationId: token_v1_voice_token_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/VoiceTokenRequest'
-        required: true
       responses:
-        '200':
-          description: Successful Response
+        '410':
+          description: This feature has been retired from the product.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VoiceTokenResponse'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-      security:
-      - HTTPBearer: []
+                $ref: '#/components/schemas/RetiredFeatureResponse'
   /v1/voice/cli/verify:
     post:
       tags:
       - voice
       summary: Start Cli Verification
       operationId: start_cli_verification_v1_voice_cli_verify_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CliVerificationStartRequest'
-        required: true
       responses:
-        '201':
-          description: Successful Response
+        '410':
+          description: This feature has been retired from the product.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VerifiedCallerIdentityResponse'
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-      security:
-      - HTTPBearer: []
+                $ref: '#/components/schemas/RetiredFeatureResponse'
   /v1/voice/cli/{identity_id}/confirm:
     post:
       tags:
       - voice
       summary: Confirm Cli Verification
       operationId: confirm_cli_verification_v1_voice_cli__identity_id__confirm_post
-      security:
-      - HTTPBearer: []
       parameters:
       - name: identity_id
         in: path
@@ -1629,19 +1599,13 @@ paths:
           type: string
           format: uuid
           title: Identity Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CliVerificationConfirmRequest'
       responses:
-        '200':
-          description: Successful Response
+        '410':
+          description: This feature has been retired from the product.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VerifiedCallerIdentityResponse'
+                $ref: '#/components/schemas/RetiredFeatureResponse'
         '422':
           description: Validation Error
           content:
@@ -1654,8 +1618,6 @@ paths:
       - voice
       summary: Capture Cli Consent
       operationId: capture_cli_consent_v1_voice_cli__identity_id__consent_post
-      security:
-      - HTTPBearer: []
       parameters:
       - name: identity_id
         in: path
@@ -1664,19 +1626,13 @@ paths:
           type: string
           format: uuid
           title: Identity Id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CliConsentRequest'
       responses:
-        '200':
-          description: Successful Response
+        '410':
+          description: This feature has been retired from the product.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VerifiedCallerIdentityResponse'
+                $ref: '#/components/schemas/RetiredFeatureResponse'
         '422':
           description: Validation Error
           content:
@@ -1690,10 +1646,12 @@ paths:
       summary: Revoke Cli
       operationId: revoke_cli_v1_voice_cli_revoke_post
       responses:
-        '204':
-          description: Successful Response
-      security:
-      - HTTPBearer: []
+        '410':
+          description: This feature has been retired from the product.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetiredFeatureResponse'
   /v1/voice/cli/lost-sim:
     post:
       tags:
@@ -1701,10 +1659,12 @@ paths:
       summary: Report Lost Sim
       operationId: report_lost_sim_v1_voice_cli_lost_sim_post
       responses:
-        '204':
-          description: Successful Response
-      security:
-      - HTTPBearer: []
+        '410':
+          description: This feature has been retired from the product.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetiredFeatureResponse'
   /v1/voice/cli/status:
     get:
       tags:
@@ -1712,17 +1672,12 @@ paths:
       summary: Cli Status
       operationId: cli_status_v1_voice_cli_status_get
       responses:
-        '200':
-          description: Successful Response
+        '410':
+          description: This feature has been retired from the product.
           content:
             application/json:
               schema:
-                anyOf:
-                - $ref: '#/components/schemas/VerifiedCallerIdentityResponse'
-                - type: 'null'
-                title: Response Cli Status V1 Voice Cli Status Get
-      security:
-      - HTTPBearer: []
+                $ref: '#/components/schemas/RetiredFeatureResponse'
   /v1/webhooks/telnyx/call-events:
     post:
       tags:
@@ -2149,38 +2104,6 @@ components:
       - pstn
       - app_to_app
       title: CallType
-    CliConsentRequest:
-      properties:
-        consent_version:
-          type: string
-          title: Consent Version
-        device_session_id:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Device Session Id
-      type: object
-      required:
-      - consent_version
-      title: CliConsentRequest
-    CliVerificationConfirmRequest:
-      properties:
-        code:
-          type: string
-          title: Code
-      type: object
-      required:
-      - code
-      title: CliVerificationConfirmRequest
-    CliVerificationStartRequest:
-      properties:
-        phone_number:
-          type: string
-          title: Phone Number
-      type: object
-      required:
-      - phone_number
-      title: CliVerificationStartRequest
     DependencyChecks:
       properties:
         postgres:
@@ -3054,15 +2977,6 @@ components:
       required:
       - status
       title: PaymentConfirmationResponse
-    PhoneVerificationStatus:
-      type: string
-      enum:
-      - not_started
-      - pending
-      - verified
-      - failed
-      - expired
-      title: PhoneVerificationStatus
     Platform:
       type: string
       enum:
@@ -3434,61 +3348,6 @@ components:
       - msg
       - type
       title: ValidationError
-    VerifiedCallerIdentityResponse:
-      properties:
-        id:
-          type: string
-          format: uuid
-          title: Id
-        phone_number:
-          type: string
-          title: Phone Number
-        status:
-          $ref: '#/components/schemas/VerifiedCallerIdentityStatus'
-        phone_verification_status:
-          $ref: '#/components/schemas/PhoneVerificationStatus'
-        consent_version:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Consent Version
-        consent_at:
-          anyOf:
-          - type: string
-            format: date-time
-          - type: 'null'
-          title: Consent At
-        created_at:
-          type: string
-          format: date-time
-          title: Created At
-        updated_at:
-          type: string
-          format: date-time
-          title: Updated At
-      type: object
-      required:
-      - id
-      - phone_number
-      - status
-      - phone_verification_status
-      - created_at
-      - updated_at
-      title: VerifiedCallerIdentityResponse
-    VerifiedCallerIdentityStatus:
-      type: string
-      enum:
-      - unverified
-      - phone_verification_pending
-      - phone_verified
-      - identity_verification_pending
-      - identity_verified
-      - consent_required
-      - active
-      - suspended
-      - expired
-      - revoked
-      title: VerifiedCallerIdentityStatus
     VoiceEligibilityResponse:
       properties:
         allowed:
@@ -3518,45 +3377,6 @@ components:
       - call_type
       - pstn_minutes_remaining
       title: VoiceEligibilityResponse
-    VoiceTokenRequest:
-      properties:
-        to_number:
-          type: string
-          title: To Number
-        idempotency_key:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Idempotency Key
-      type: object
-      required:
-      - to_number
-      title: VoiceTokenRequest
-    VoiceTokenResponse:
-      properties:
-        token:
-          type: string
-          title: Token
-        sip_username:
-          type: string
-          title: Sip Username
-        expires_at:
-          type: string
-          format: date-time
-          title: Expires At
-        call_type:
-          $ref: '#/components/schemas/CallType'
-        destination:
-          type: string
-          title: Destination
-      type: object
-      required:
-      - token
-      - sip_username
-      - expires_at
-      - call_type
-      - destination
-      title: VoiceTokenResponse
     WebhookResponse:
       properties:
         processed:

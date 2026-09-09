@@ -801,3 +801,49 @@ and deleting it is exactly the irreversible step
 [SCOPE-DISPOSITION.md](implementation/SCOPE-DISPOSITION.md) gates on the founder
 decision. Nothing reads or writes it any more; its removal is owed by the
 retention plan in 04E.
+
+---
+
+## 8.12 Amendment — App Calling and Caller-ID Verification Are Removed (US-30, AC-30.5)
+
+**Recorded 9 September 2026 by build chunk 04, subchunk 04D.**
+
+Removed screens: `DialPad`, `ActiveCall`, and the four `CliVerification`
+screens. Removed services: `callKit`, `voiceGateway`, `deviceContacts`. Removed
+API clients: `cliClient`, `voiceClient`. Removed util: `cliPhoneNumber`. Home
+loses its call entry point. The `safety` locale namespace and the retired
+`dial`, `callerId` and `activeCall` sections of `home` are deleted in both
+English and French.
+
+Native calling is removed in full rather than half:
+
+- **Android** drops `READ_CONTACTS`, `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`,
+  `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_PHONE_CALL`, the
+  `CallHeadlessTaskService`, and the `io.wazo.callkeep.VoiceConnectionService`
+  declaration. `DamDamFirebaseMessagingService` no longer routes incoming-call
+  payloads.
+- **iOS** drops `NSContactsUsageDescription`,
+  `NSMicrophoneUsageDescription`, the whole `UIBackgroundModes` array
+  (`voip` and `audio`), `VoipCallKitBridge.{h,m}`, and the PushKit registration
+  and `PKPushRegistryDelegate` conformance in `AppDelegate.swift`.
+- **Dependencies** drop `react-native-callkeep`,
+  `react-native-voip-push-notification`, `react-native-contacts` and
+  `@telnyx/react-voice-commons-sdk`, and the Jest mocks that existed only for
+  them.
+
+**Half-removing this would have been a defect, not a smaller change.** The
+AppDelegate called `registerVoipPushes()` at launch; leaving that while removing
+the `voip` background mode would ship an app registering for a push type it no
+longer declares. The npm packages had to go with it, because the native bridge
+included `RNCallKeep/RNCallKeep.h` and `RNVoipPushNotificationManager.h`
+directly.
+
+The remaining Android permissions are `INTERNET`,
+`WRITE_EMBEDDED_SUBSCRIPTIONS`, `POST_NOTIFICATIONS` and
+`ACCESS_NETWORK_STATE`, plus the euicc/telephony feature declarations. iOS
+declares no usage description for any retired feature and no background mode.
+
+**Neither native build was run.** No macOS runner and no Android build is
+available in this environment, so the Xcode project edit (six references to the
+removed bridge files) and the manifest and Gradle changes are reviewed source
+changes, not verified builds. The screenshot jobs are the first place they run.

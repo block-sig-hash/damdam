@@ -34,17 +34,6 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSContactsUsageDescription</key>
-	<string>DamDam uses your contacts so you can pick a number to call directly from the dial pad.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>DamDam needs microphone access to make and receive calls.</string>
-	<!-- AC voip: PushKit wakes the app for an incoming Telnyx call; audio: active-call audio session
-	     must keep running if the screen locks or another app is briefly foregrounded mid-call. -->
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>voip</string>
-		<string>audio</string>
-	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

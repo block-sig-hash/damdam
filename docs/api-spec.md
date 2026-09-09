@@ -1218,3 +1218,33 @@ change. The removal is required rather than cosmetic — serving the fields is
 itself the welfare tracking that
 [SCOPE-DISPOSITION.md](implementation/SCOPE-DISPOSITION.md) forbids retaining.
 Every other field on the roster is unchanged.
+
+## 7.30 Amendment — App Voice Tokens and CLI Verification Retire
+
+**Recorded 9 September 2026 by build chunk 04, subchunk 04D (US-30).**
+
+`POST /v1/voice/token` answers `410` with `details.feature` of `app_voice`.
+WebRTC/SIP credentials are not the launch calling mechanism; the native dialer
+on the carrier eSIM is.
+
+`POST /v1/voice/cli/verify`, `POST /v1/voice/cli/{identity_id}/confirm`,
+`POST /v1/voice/cli/{identity_id}/consent`, `POST /v1/voice/cli/revoke`,
+`POST /v1/voice/cli/lost-sim` and `GET /v1/voice/cli/status` answer `410` with
+`details.feature` of `verified_cli`. External verified caller ID is deferred
+under D2, with a carrier-assigned number as the outbound identity.
+
+`GET /v1/voice/eligibility` **no longer returns `cli_not_verified`**. That gate
+was a launch dependency on a deferred feature: with enrolment retired, nobody
+could ever satisfy it, so every user would have been reported permanently
+ineligible to call. Remaining-minutes remains the only reason.
+
+Retained: `GET /v1/voice/eligibility`, `POST /v1/webhooks/telnyx/call-events`
+and `GET /v1/me/calls`, with the `call_logs`, `voice_credentials`,
+`verified_caller_identities` and `caller_id_consents` tables and their rows.
+Call history is financial history.
+
+**The call-event pipeline is now unreachable in production and chunk 15 owns
+it.** `_handle_initiated` bridges a WebRTC leg to PSTN using a SIP credential
+that only `POST /voice/token` ever provisioned and a verified caller identity
+nobody can obtain. It is left in place, with its tests, as the raw material for
+the carrier-voice model rather than redesigned here.

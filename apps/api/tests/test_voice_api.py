@@ -92,6 +92,28 @@ def _authenticated(api, phone_number: str = "08012345678") -> tuple[TestClient, 
     )
 
 
+def _provision_credential(
+    session_factory, voice, user_id: UUID, clock
+) -> str:
+    """Seed the SIP credential /voice/token used to provision (US-30, 04D).
+
+    The endpoint is retired, but the call-event handlers that read these rows
+    are retained for chunk 15, so the tests provision directly instead.
+    """
+    provisioned = voice.create_credential(str(user_id))
+    with session_factory() as session:
+        session.add(
+            VoiceCredential(
+                user_id=user_id,
+                telnyx_telephony_credential_id=provisioned.credential_id,
+                sip_username=provisioned.sip_username,
+                created_at=clock(),
+            )
+        )
+        session.commit()
+    return provisioned.sip_username
+
+
 def _active_package(session_factory, user_id: UUID, minutes: str) -> None:
     with session_factory() as session:
         tier = PricingTier(
@@ -223,34 +245,6 @@ def test_app_to_app_is_free_for_unverified_user_with_zero_balance(
     assert voice.credentials == []
 
 
-def test_pstn_token_requires_verified_cli_and_positive_balance(
-    settings, redis_client, providers, scheduler, session_factory, clock
-) -> None:
-    """AC-14.1/4/7: PSTN is gated by CLI ownership and remaining minutes."""
-    api, voice, _ = _api_and_signer(
-        settings, redis_client, providers, scheduler, session_factory, clock
-    )
-    client, user_id = _authenticated(api)
-    assert (
-        client.post("/v1/voice/token", json={"to_number": "08099999999"}).status_code
-        == 403
-    )
-    _activate_caller_identity(session_factory, user_id)
-    assert (
-        client.post("/v1/voice/token", json={"to_number": "08099999999"}).status_code
-        == 409
-    )
-    _active_package(session_factory, user_id, "2.00")
-
-    response = client.post("/v1/voice/token", json={"to_number": "08099999999"})
-
-    assert response.status_code == 200
-    assert response.json()["call_type"] == "pstn"
-    assert response.json()["destination"] == "+2348099999999"
-    assert response.json()["token"] == "telnyx-jwt"
-    assert voice.tokens == ["cred-1"]
-
-
 def test_unsigned_stale_and_malformed_telnyx_webhooks_are_rejected(
     settings, redis_client, providers, scheduler, session_factory, clock
 ) -> None:
@@ -323,16 +317,9 @@ def test_unverified_credentialed_user_pstn_dial_is_blocked_at_webhook_layer(
         session.add(unverified)
         session.commit()
 
-    # Provisions the callee's (unverified user's) VoiceCredential as a side
-    # effect of the caller's free app-to-app token request.
-    token_response = caller.post("/v1/voice/token", json={"to_number": "08098765432"})
-    assert token_response.status_code == 200
-    with session_factory() as session:
-        credential = session.exec(
-            select(VoiceCredential).where(VoiceCredential.user_id == unverified_id)
-        ).first()
-        assert credential is not None
-        sip_username = credential.sip_username
+    sip_username = _provision_credential(
+        session_factory, voice, unverified_id, clock
+    )
 
     initiated = json.dumps(
         {
@@ -448,11 +435,13 @@ def test_app_to_app_hangup_writes_free_history_without_balance(
     api, voice, signer = _api_and_signer(
         settings, redis_client, providers, scheduler, session_factory, clock
     )
-    caller, _ = _authenticated(api)
-    _, _ = _authenticated(api, "08098765432")
-    token = caller.post("/v1/voice/token", json={"to_number": "08098765432"})
-    assert token.status_code == 200
-    # Target is provisioned during eligibility; caller during token issuance.
+    caller, caller_id = _authenticated(api)
+    _, callee_id = _authenticated(api, "08098765432")
+    # Both legs were provisioned by the retired /voice/token path; seed them
+    # in the order it used -- the callee during eligibility, then the caller --
+    # so the SIP usernames in the fixtures below still identify the same users.
+    _provision_credential(session_factory, voice, callee_id, clock)
+    _provision_credential(session_factory, voice, caller_id, clock)
     initiated = json.dumps(
         {
             "data": {
@@ -497,10 +486,7 @@ def test_signed_call_control_events_set_verified_cli_and_bridge(
     client, user_id = _authenticated(api)
     _active_package(session_factory, user_id, "2.00")
     _activate_caller_identity(session_factory, user_id)
-    assert (
-        client.post("/v1/voice/token", json={"to_number": "08099999999"}).status_code
-        == 200
-    )
+    _provision_credential(session_factory, voice, user_id, clock)
     initiated = json.dumps(
         {
             "data": {

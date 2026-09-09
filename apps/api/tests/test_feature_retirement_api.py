@@ -294,6 +294,68 @@ def test_operator_roster_reports_no_welfare_state(
     assert "sos_status" not in HtoPilgrimSummary.model_fields
 
 
+# --- app calling and verified caller ID ------------------------------------
+
+
+def test_app_voice_token_is_refused(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """WebRTC app calling is not the launch mechanism; the native dialer is."""
+    api = _build_api(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, _ = _authenticated(api)
+    _assert_retired(
+        client.post("/v1/voice/token", json={"to_number": "08099999999"}), "app_voice"
+    )
+
+
+def test_cli_verification_endpoints_are_refused(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """Verified caller ID is deferred (D2), so nothing may enrol into it."""
+    api = _build_api(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, _ = _authenticated(api)
+    identity = uuid4()
+
+    _assert_retired(
+        client.post("/v1/voice/cli/verify", json={"phone_number": "08099999999"}),
+        "verified_cli",
+    )
+    _assert_retired(
+        client.post(f"/v1/voice/cli/{identity}/confirm", json={"code": "123456"}),
+        "verified_cli",
+    )
+    _assert_retired(
+        client.post(f"/v1/voice/cli/{identity}/consent", json={"consented": True}),
+        "verified_cli",
+    )
+    _assert_retired(client.post("/v1/voice/cli/revoke"), "verified_cli")
+    _assert_retired(client.post("/v1/voice/cli/lost-sim"), "verified_cli")
+    _assert_retired(client.get("/v1/voice/cli/status"), "verified_cli")
+
+
+def test_call_eligibility_no_longer_requires_a_verified_caller_id(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """The launch dependency on a deferred feature is what 04 removes.
+
+    Nobody can verify a caller identity any more, so leaving the gate in place
+    would report every user as permanently ineligible to call.
+    """
+    api = _build_api(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, _ = _authenticated(api)
+
+    response = client.get("/v1/voice/eligibility?phone_number=08099999999")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["reason"] != "cli_not_verified"
+
+
 # --- shape of the refusal --------------------------------------------------
 
 

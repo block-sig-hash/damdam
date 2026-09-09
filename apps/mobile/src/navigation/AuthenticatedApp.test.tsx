@@ -29,49 +29,6 @@ jest.mock('../screens/EsimSetup/EsimQrCodeScreen', () => {
   const { Text } = require('react-native');
   return { EsimQrCodeScreen: () => <Text>QR fallback</Text> };
 });
-jest.mock('../screens/DialPad/DialPadScreen', () => {
-  const { Pressable, Text } = require('react-native');
-  return {
-    DialPadScreen: ({
-      onCallStarted,
-      pstnMinutesRemaining,
-    }: {
-      onCallStarted: (call: object) => void;
-      pstnMinutesRemaining: number;
-    }) => (
-      <>
-        <Text>Dial balance {pstnMinutesRemaining}</Text>
-        <Pressable
-          testID="mock-start-pstn"
-          onPress={() =>
-            onCallStarted({
-              callType: 'pstn',
-              displayNumber: '08099999999',
-              subscribeState: () => jest.fn(),
-              subscribeDuration: () => jest.fn(),
-              toggleMute: jest.fn(),
-              toggleSpeaker: jest.fn(),
-              hangup: jest.fn(),
-            })
-          }
-        >
-          <Text>Start PSTN</Text>
-        </Pressable>
-      </>
-    ),
-  };
-});
-jest.mock('../screens/ActiveCall/ActiveCallScreen', () => {
-  const { Pressable, Text } = require('react-native');
-  return {
-    ActiveCallScreen: ({ onFinished }: { onFinished: () => void }) => (
-      <Pressable testID="mock-finish-call" onPress={onFinished}>
-        <Text>Finish call</Text>
-      </Pressable>
-    ),
-  };
-});
-
 const mockGetEsim = getEsim as jest.MockedFunction<typeof getEsim>;
 const mockGetPackageStatus = getPackageStatus as jest.MockedFunction<typeof getPackageStatus>;
 const mockRegisterPush = registerPushInstallation as jest.MockedFunction<
@@ -133,25 +90,3 @@ it('deep-links an authenticated pilgrim directly into activation', async () => {
   expect(screen.getByTestId('wired-activation-flow')).toBeTruthy();
 });
 
-it('AC-14.7: refreshes the displayed PSTN balance after a completed call', async () => {
-  await render(
-    <AuthenticatedApp
-      accessToken="access-token"
-      departureDate={null}
-      packageId="package-1"
-    />,
-  );
-  await waitFor(() => expect(mockGetPackageStatus).toHaveBeenCalledTimes(1));
-  await fireEvent.press(screen.getByTestId('open-call-tab'));
-  expect(screen.getByText('Dial balance 30')).toBeTruthy();
-  await fireEvent.press(screen.getByTestId('mock-start-pstn'));
-  mockGetPackageStatus.mockResolvedValue({
-    status: 'active',
-    data_gb_total: 10,
-    data_gb_remaining: 4.25,
-    pstn_minutes_total: 90,
-    pstn_minutes_remaining: 29.5,
-  });
-  await fireEvent.press(screen.getByTestId('mock-finish-call'));
-  await waitFor(() => expect(screen.getByText('Dial balance 29.5')).toBeTruthy());
-});

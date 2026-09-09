@@ -15,18 +15,11 @@ import { EsimQrCodeScreen } from '../src/screens/EsimSetup/EsimQrCodeScreen';
 import { EsimActivationPromptScreen } from '../src/screens/EsimActivation/EsimActivationPromptScreen';
 import { EsimActivationGuideScreen } from '../src/screens/EsimActivation/EsimActivationGuideScreen';
 import { ActivationSuccessScreen } from '../src/screens/ActivationSuccess/ActivationSuccessScreen';
-import { DialPadScreen } from '../src/screens/DialPad/DialPadScreen';
-import { ActiveCallScreen } from '../src/screens/ActiveCall/ActiveCallScreen';
-import { CliManageScreen } from '../src/screens/CliVerification/CliManageScreen';
-import { CliVerifyEntryScreen } from '../src/screens/CliVerification/CliVerifyEntryScreen';
-import { CliVerifyConfirmScreen } from '../src/screens/CliVerification/CliVerifyConfirmScreen';
-import { CliConsentScreen } from '../src/screens/CliVerification/CliConsentScreen';
 import { savePinLocally } from '../src/utils/pinLocalStore';
 import {
   FIXTURE_ACCESS_TOKEN,
   FIXTURE_PACKAGE_ID,
   FIXTURE_PHONE_NUMBER,
-  createFixtureCallSession,
 } from './fixtures';
 
 const noop = () => undefined;
@@ -112,72 +105,6 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
         accessToken={FIXTURE_ACCESS_TOKEN}
         activationCode="HARNESS01"
         onContinue={noop}
-      />
-    ),
-  },
-  'dial-pad': {
-    label: 'Dial Pad',
-    render: () => (
-      <DialPadScreen
-        accessToken={FIXTURE_ACCESS_TOKEN}
-        pstnMinutesRemaining={30}
-        onCallStarted={noop}
-        onManageCli={noop}
-        voiceGateway={{ startCall: () => Promise.reject(new Error('not used in harness')) }}
-        contactsLoader={() => Promise.resolve([])}
-        callingReadiness={() => Promise.resolve()}
-        networkQualityOverride={{ connected: true, quality: 'excellent' }}
-      />
-    ),
-  },
-  'cli-verify-entry': {
-    label: 'Verified Caller ID -- Enter Number',
-    render: () => (
-      <CliVerifyEntryScreen accessToken={FIXTURE_ACCESS_TOKEN} onStarted={noop} onCancel={noop} />
-    ),
-  },
-  'cli-verify-confirm': {
-    label: 'Verified Caller ID -- Enter Code',
-    render: () => (
-      <CliVerifyConfirmScreen
-        accessToken={FIXTURE_ACCESS_TOKEN}
-        identityId="harness-fixture-identity-id"
-        phoneNumber={FIXTURE_PHONE_NUMBER}
-        onConfirmed={noop}
-        onUseDifferentNumber={noop}
-      />
-    ),
-  },
-  'cli-consent': {
-    label: 'Verified Caller ID -- Consent',
-    render: () => (
-      <CliConsentScreen
-        accessToken={FIXTURE_ACCESS_TOKEN}
-        identityId="harness-fixture-identity-id"
-        phoneNumber={FIXTURE_PHONE_NUMBER}
-        onConsented={noop}
-      />
-    ),
-  },
-  'cli-manage': {
-    label: 'Verified Caller ID -- Manage (real fetch; likely shows Loading in harness)',
-    render: () => (
-      <CliManageScreen
-        accessToken={FIXTURE_ACCESS_TOKEN}
-        onVerifyNumber={noop}
-        onResumeConfirm={noop}
-        onResumeConsent={noop}
-      />
-    ),
-  },
-  'active-call': {
-    label: 'Active Call (in-app state; not the native CallKit/ConnectionService UI -- see README)',
-    render: () => (
-      <ActiveCallScreen
-        call={createFixtureCallSession()}
-        recipientName="Amina Yusuf"
-        onFinished={noop}
-        networkQualityOverride={{ connected: true, quality: 'excellent' }}
       />
     ),
   },

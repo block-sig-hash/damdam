@@ -5,7 +5,7 @@ module.exports = {
   ],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|react-native-contacts|react-native-callkeep|react-native-voip-push-notification)/)',
+    'node_modules/(?!(react-native|@react-native)/)',
   ],
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.d.ts'],
 };

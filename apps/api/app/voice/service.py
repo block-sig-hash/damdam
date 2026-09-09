@@ -25,7 +25,7 @@ from app.voice.models import (
     VerifiedCallerIdentityStatus,
     VoiceCredential,
 )
-from app.voice.providers import VoiceAccessToken, VoiceProvider, VoiceProviderError
+from app.voice.providers import VoiceProvider, VoiceProviderError
 
 
 class VoiceError(Exception):
@@ -62,11 +62,12 @@ class VoiceService:
                 "reason": None,
                 "pstn_minutes_remaining": float(balance),
             }
-        reason = None
-        if self._active_caller_identity(session, user.id) is None:
-            reason = "cli_not_verified"
-        elif balance <= 0:
-            reason = "pstn_balance_exhausted"
+        # US-30: the verified-caller-ID gate is removed from the launch
+        # dependency graph. Verification is deferred under D2 and nobody can
+        # enrol any more, so keeping the gate would report every user as
+        # permanently ineligible. The outbound identity becomes the
+        # carrier-assigned number in chunk 15.
+        reason = "pstn_balance_exhausted" if balance <= 0 else None
         return {
             "allowed": reason is None,
             "call_type": CallType.PSTN,
@@ -74,42 +75,6 @@ class VoiceService:
             "reason": reason,
             "pstn_minutes_remaining": float(balance),
         }
-
-    def token(
-        self,
-        session: Session,
-        user: User,
-        to_number: str,
-        idempotency_key: str | None = None,
-    ) -> tuple[VoiceAccessToken, VoiceCredential, dict[str, object]]:
-        eligibility = self.eligibility(session, user, to_number)
-        reason = eligibility["reason"]
-        if reason:
-            raise VoiceError(str(reason))
-        if eligibility["call_type"] == CallType.APP_TO_APP:
-            target = session.exec(
-                select(User).where(User.phone_number == to_number)
-            ).first()
-            if target is None:
-                raise VoiceError("voice_unavailable")
-            eligibility["destination"] = self._credential(session, target).sip_username
-        elif self.redis is not None:
-            # Bridges the REST /voice/token request to the later, webhook-
-            # driven call.initiated event so a retried token request and its
-            # eventual Telnyx call share one idempotency_key on the CallLog
-            # (data-model.md §6.40) -- best-effort; a miss just leaves the
-            # column null, it never blocks the call.
-            self.redis.set(
-                f"voice:pending_call:{user.id}",
-                idempotency_key or "",
-                ex=self.settings.cli_pending_idempotency_ttl_seconds,
-            )
-        credential = self._credential(session, user)
-        try:
-            token = self.provider.issue_token(credential.telnyx_telephony_credential_id)
-        except VoiceProviderError as exc:
-            raise VoiceError("voice_unavailable") from exc
-        return token, credential, eligibility
 
     def history(self, session: Session, user: User, limit: int) -> list[CallLog]:
         return list(

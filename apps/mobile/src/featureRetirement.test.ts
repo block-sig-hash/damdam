@@ -38,6 +38,17 @@ const RETIRED_MODULES = [
   'SosSentScreen',
   'EmergencyEssentials',
   'useEmergencyContact',
+  'callKit',
+  'voiceGateway',
+  'deviceContacts',
+  'cliClient',
+  'voiceClient',
+  'DialPadScreen',
+  'ActiveCallScreen',
+  'CliManageScreen',
+  'CliVerifyEntryScreen',
+  'CliVerifyConfirmScreen',
+  'CliConsentScreen',
 ];
 
 describe('retired feature surface', () => {
@@ -72,9 +83,23 @@ describe('retired feature surface', () => {
     for (const permission of [
       'ACCESS_FINE_LOCATION',
       'ACCESS_BACKGROUND_LOCATION',
+      'READ_CONTACTS',
+      'RECORD_AUDIO',
+      'MODIFY_AUDIO_SETTINGS',
+      'FOREGROUND_SERVICE_PHONE_CALL',
     ]) {
       expect(manifest).not.toContain(permission);
     }
+  });
+
+  it('declares no VoIP background mode', () => {
+    // PushKit woke the app for an incoming WebRTC call. Native dialling needs
+    // no background mode at all.
+    const plist = readFileSync(
+      join(SRC, '..', 'ios', 'DamDam', 'Info.plist'),
+      'utf8',
+    );
+    expect(plist).not.toContain('voip');
   });
 
   it('declares no iOS usage description for a retired feature', () => {
@@ -85,6 +110,8 @@ describe('retired feature surface', () => {
     for (const key of [
       'NSLocationWhenInUseUsageDescription',
       'NSLocationAlwaysAndWhenInUseUsageDescription',
+      'NSContactsUsageDescription',
+      'NSMicrophoneUsageDescription',
     ]) {
       expect(plist).not.toContain(key);
     }

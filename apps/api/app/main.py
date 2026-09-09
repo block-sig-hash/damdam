@@ -66,14 +66,9 @@ from app.reports.service import ProvisioningReportService
 from app.retention.service import RetentionService
 from app.retirement import RetiredFeatureError
 from app.sos.routes import router as sos_router
-from app.voice.caller_identity_service import CallerIdentityError, CallerIdentityService
 from app.voice.providers import TelnyxVoiceProvider, VoiceProvider
 from app.voice.routes import router as voice_router
 from app.voice.service import VoiceError, VoiceService
-from app.voice.verified_numbers import (
-    PhoneVerificationProvider,
-    TelnyxVerifiedNumbersProvider,
-)
 
 
 def create_app(
@@ -89,7 +84,6 @@ def create_app(
     provisioning_scheduler: ProvisioningScheduler | None = None,
     payment_providers: Mapping[str, PaymentProvider] | None = None,
     voice_provider: VoiceProvider | None = None,
-    phone_verification_provider: PhoneVerificationProvider | None = None,
     esim_providers: Mapping[str, EsimProvider] | None = None,
     esim_scheduler: EsimIssuanceScheduler | None = None,
 ) -> FastAPI:
@@ -192,13 +186,6 @@ def create_app(
         voice_provider or TelnyxVoiceProvider(resolved_settings),
         clock,
         cast(RedisClient, redis_client),
-    )
-    api.state.caller_identity_service = CallerIdentityService(
-        resolved_settings,
-        phone_verification_provider
-        or TelnyxVerifiedNumbersProvider(resolved_settings),
-        cast(RedisClient, redis_client),
-        clock,
     )
 
     @api.exception_handler(RetiredFeatureError)
@@ -422,29 +409,6 @@ def create_app(
             "cli_not_verified": 403,
             "pstn_balance_exhausted": 409,
             "voice_unavailable": 503,
-        }
-        return JSONResponse(
-            status_code=statuses[exc.code],
-            content={
-                "error": exc.code,
-                "message": api_message(request, exc.code),
-                "details": {},
-            },
-        )
-
-    @api.exception_handler(CallerIdentityError)
-    async def caller_identity_error_handler(
-        request: Request, exc: CallerIdentityError
-    ) -> JSONResponse:
-        statuses = {
-            "invalid_phone_number": 400,
-            "phone_verification_unavailable": 503,
-            "cli_verification_rate_limited": 429,
-            "caller_identity_not_found": 404,
-            "invalid_state": 409,
-            "verification_code_invalid": 400,
-            "number_already_verified_elsewhere": 409,
-            "no_active_caller_id": 404,
         }
         return JSONResponse(
             status_code=statuses[exc.code],
