@@ -7,7 +7,6 @@ import jwt
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
-from sqlmodel import col, select
 
 from app.auth.hto import HTOAuthError, HTOService
 from app.auth.models import (
@@ -15,7 +14,6 @@ from app.auth.models import (
     HTOApprovalStatus,
     ManifestOrderStatus,
     Platform,
-    User,
 )
 from app.auth.schemas import (
     HTOApprovalResponse,
@@ -38,15 +36,10 @@ from app.manifests.schemas import (
     PricingTierUpdateResponse,
 )
 from app.packages.service import PackageAdminService
-from app.sos.models import SOSAlert, SOSNotification, SOSNotificationStatus
-from app.sos.service import SOSService
+from app.retirement import RETIRED_RESPONSES, SOS, RetiredFeatureError
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 bearer = HTTPBearer(auto_error=False)
-
-
-class SOSRetryBulkRequest(BaseModel):
-    notification_ids: list[UUID]
 
 
 class PackageCancelResponse(BaseModel):
@@ -98,75 +91,35 @@ def current_admin(
         return cast(AdminUser, admin)
 
 
-@router.get("/sos-notifications/failed")
-def failed_sos_notifications(
-    request: Request, admin: Annotated[AdminUser, Depends(current_admin)]
-) -> dict[str, list[dict[str, object]]]:
-    del admin
-    with request.app.state.session_factory() as session:
-        rows = session.exec(
-            select(SOSNotification, SOSAlert, User)
-            .join(SOSAlert, col(SOSAlert.id) == col(SOSNotification.sos_alert_id))
-            .join(User, col(User.id) == col(SOSAlert.user_id))
-            .where(col(SOSNotification.admin_queued_at).is_not(None))
-        ).all()
-        return {
-            "notifications": [
-                {
-                    "id": str(row.id),
-                    "pilgrim_name": f"{user.first_name} {user.last_name}".strip(),
-                    "channel": row.channel.value,
-                    "failure_reason": row.failure_reason,
-                    "sos_timestamp": alert.timestamp,
-                    "retry_count": row.retry_count,
-                }
-                for row, alert, user in rows
-            ]
-        }
+# The operator SOS queue retires with the feature (US-30, chunk 04B). Retrying a
+# failed notification was the one remaining way to put retired dispatch back on
+# a queue, so it refuses before any authentication: there is nothing behind it
+# to protect, and an operator should be told the queue is gone rather than that
+# their credentials are wrong.
 
 
-def _retry_sos_rows(request: Request, notification_ids: list[UUID]) -> int:
-    sos = cast(SOSService, request.app.state.sos_service)
-    queued = 0
-    with request.app.state.session_factory() as session:
-        rows = session.exec(
-            select(SOSNotification).where(
-                col(SOSNotification.id).in_(notification_ids),
-                SOSNotification.status == SOSNotificationStatus.FAILED,
-                col(SOSNotification.admin_queued_at).is_not(None),
-            )
-        ).all()
-        for row in rows:
-            row.status = SOSNotificationStatus.PENDING
-            row.retry_count = 0
-            row.admin_queued_at = None
-            row.failure_reason = None
-            session.add(row)
-        session.commit()
-        for row in rows:
-            sos.scheduler.schedule_dispatch(row.id, row.channel)
-            queued += 1
-    return queued
+@router.get("/sos-notifications/failed", status_code=410, responses=RETIRED_RESPONSES)
+def failed_sos_notifications() -> None:
+    raise RetiredFeatureError(SOS)
 
 
-@router.post("/sos-notifications/retry-bulk")
-def retry_sos_notifications_bulk(
-    payload: SOSRetryBulkRequest,
-    request: Request,
-    admin: Annotated[AdminUser, Depends(current_admin)],
-) -> dict[str, int]:
-    del admin
-    return {"queued": _retry_sos_rows(request, payload.notification_ids)}
+@router.post(
+    "/sos-notifications/retry-bulk",
+    status_code=410,
+    responses=RETIRED_RESPONSES,
+)
+def retry_sos_notifications_bulk() -> None:
+    raise RetiredFeatureError(SOS)
 
 
-@router.post("/sos-notifications/{notification_id}/retry")
-def retry_sos_notification(
-    notification_id: UUID,
-    request: Request,
-    admin: Annotated[AdminUser, Depends(current_admin)],
-) -> dict[str, int]:
-    del admin
-    return {"queued": _retry_sos_rows(request, [notification_id])}
+@router.post(
+    "/sos-notifications/{notification_id}/retry",
+    status_code=410,
+    responses=RETIRED_RESPONSES,
+)
+def retry_sos_notification(notification_id: UUID) -> None:
+    del notification_id
+    raise RetiredFeatureError(SOS)
 
 
 def _device_compatibility_service(request: Request) -> DeviceCompatibilityService:

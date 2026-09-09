@@ -193,11 +193,10 @@ def _download(
     return rows
 
 
-def test_csv_header_and_field_list_matches_ac_20_2(
+def test_csv_excludes_retired_welfare_activity(
     api, session_factory, settings, clock
 ) -> None:
-    """AC-20.1/20.2: CSV download with exactly the specified per-pilgrim
-    fields, in order."""
+    """US-30: provisioning exports must not keep exposing retired welfare data."""
     org = _organization(session_factory, "Barakah Hajj Services")
     tier = _tier(session_factory)
     purchased = datetime(2026, 6, 1, tzinfo=timezone.utc)
@@ -221,21 +220,17 @@ def test_csv_header_and_field_list_matches_ac_20_2(
         "tier",
         "purchase_date",
         "esim_status",
-        "check_in_count",
-        "sos_events",
     ]
     assert len(rows) == 2
-    name, phone, tier_name, purchase_date, esim_status, check_ins, sos_events = rows[1]
+    name, phone, tier_name, purchase_date, esim_status = rows[1]
     assert name.startswith("Aisha Bello-")
     assert phone.startswith("+2348")
     assert tier_name == "Standard"
     assert purchase_date == "2026-06-01"
     assert esim_status == "activated"
-    assert check_ins == "3"
-    assert sos_events == "1"
 
 
-def test_pilgrim_without_activity_reports_zero_counts_and_not_checked(
+def test_pilgrim_without_activity_reports_not_checked(
     api, session_factory, settings, clock
 ) -> None:
     org = _organization(session_factory, "Barakah Hajj Services")
@@ -251,10 +246,8 @@ def test_pilgrim_without_activity_reports_zero_counts_and_not_checked(
 
     rows = _download(client, operator_headers(settings, clock, org.id))
 
-    _, _, _, _, esim_status, check_ins, sos_events = rows[1]
+    _, _, _, _, esim_status = rows[1]
     assert esim_status == "not_checked"
-    assert check_ins == "0"
-    assert sos_events == "0"
 
 
 def test_unprovisioned_orders_and_unrelated_manifests_are_excluded(

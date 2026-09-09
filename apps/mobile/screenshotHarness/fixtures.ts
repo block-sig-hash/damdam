@@ -6,8 +6,6 @@
 import type { PricingTier } from '../src/api/pricingClient';
 import type { EsimProfile } from '../src/api/esimClient';
 import type { ActivationRedemption } from '../src/api/activationClient';
-import type { CallHistoryItem } from '../src/api/voiceClient';
-import type { VoiceCallSession, VoiceCallState } from '../src/services/voiceGateway';
 
 // 1x1 transparent PNG -- stands in for a real QR code image URL so
 // <Image> has something to decode without a network round-trip.
@@ -52,40 +50,3 @@ export const FIXTURE_ACTIVATION_REDEMPTION: ActivationRedemption = {
   status: 'active',
 };
 
-export const FIXTURE_CALL_HISTORY: CallHistoryItem[] = [
-  {
-    id: 'call-1',
-    call_type: 'app_to_app',
-    to_number: '+2348022223333',
-    duration_seconds: 184,
-    pstn_minutes_charged: 0,
-    started_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'call-2',
-    call_type: 'pstn',
-    to_number: '+2348099998888',
-    duration_seconds: 95,
-    pstn_minutes_charged: 1.6,
-    started_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-  },
-];
-
-/** A VoiceCallSession that renders ActiveCallScreen in a static "connected" state. */
-export function createFixtureCallSession(): VoiceCallSession {
-  return {
-    callType: 'app_to_app',
-    displayNumber: '+234 802 222 3333',
-    subscribeState(listener: (state: VoiceCallState) => void) {
-      listener('connected');
-      return () => undefined;
-    },
-    subscribeDuration(listener: (seconds: number) => void) {
-      listener(47);
-      return () => undefined;
-    },
-    toggleMute: () => Promise.resolve(false),
-    toggleSpeaker: () => Promise.resolve(false),
-    hangup: () => Promise.resolve(),
-  };
-}

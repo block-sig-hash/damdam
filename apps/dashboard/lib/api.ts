@@ -10,48 +10,6 @@ export type HTORegistration = {
   locale: "en" | "fr";
 };
 
-export type SOSAlert = {
-  id: string;
-  pilgrim_name: string;
-  pilgrim_phone: string;
-  timestamp: string;
-  latitude: number | null;
-  longitude: number | null;
-  status: "active" | "resolved" | "cancelled";
-};
-
-export async function getSOSAlerts(
-  status?: "active" | "resolved",
-): Promise<SOSAlert[]> {
-  const query = status ? `?status=${status}` : "?status=";
-  const response = await fetch(`${API_BASE_URL}/hto/sos-alerts${query}`, {
-    headers: operatorHeaders(),
-  });
-  return (await parseResponse<{alerts: SOSAlert[]}>(response)).alerts;
-}
-
-export async function resolveSOSAlert(id: string): Promise<void> {
-  await parseResponse(
-    await fetch(`${API_BASE_URL}/hto/sos-alerts/${id}/resolve`, {
-      method: "POST",
-      headers: operatorHeaders(),
-    }),
-  );
-}
-
-export async function subscribeToPushTopic(fcmToken: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/hto/push-subscriptions`, {
-    method: "POST",
-    headers: {...operatorHeaders(), "Content-Type": "application/json"},
-    body: JSON.stringify({fcm_token: fcmToken}),
-  });
-  if (!response.ok) {
-    const error = (await response.json().catch(() => ({}))) as APIError;
-    throw new Error(error.message ?? clientMessage("common.errors.push"));
-  }
-  // 204 No Content on success -- nothing to parse.
-}
-
 type APIError = {
   error?: string;
   message?: string;
@@ -279,8 +237,6 @@ export type HtoPilgrim = {
   tier: string | null;
   esim_status: string;
   activation_status: string;
-  last_checkin_at: string | null;
-  sos_status: string;
 };
 
 // manifestId omitted (or undefined) aggregates across every manifest the
@@ -469,41 +425,6 @@ export async function rejectHTOOperator(operatorId: string, reason: string): Pro
   );
 }
 
-export type FailedSOSNotification = {
-  id: string;
-  pilgrim_name: string;
-  channel: string;
-  failure_reason: string | null;
-  sos_timestamp: string;
-  retry_count: number;
-};
-
-export async function getFailedSOSNotifications(): Promise<FailedSOSNotification[]> {
-  const response = await fetch(`${API_BASE_URL}/admin/sos-notifications/failed`, {
-    headers: adminHeaders(),
-  });
-  return (await parseResponse<{ notifications: FailedSOSNotification[] }>(response))
-    .notifications;
-}
-
-export async function retrySOSNotification(id: string): Promise<void> {
-  await parseResponse(
-    await fetch(`${API_BASE_URL}/admin/sos-notifications/${id}/retry`, {
-      method: "POST",
-      headers: adminHeaders(),
-    }),
-  );
-}
-
-export async function retrySOSNotificationsBulk(ids: string[]): Promise<void> {
-  await parseResponse(
-    await fetch(`${API_BASE_URL}/admin/sos-notifications/retry-bulk`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...adminHeaders() },
-      body: JSON.stringify({ notification_ids: ids }),
-    }),
-  );
-}
 
 export type DeviceCompatibilityLogEntry = {
   id: string;

@@ -45,7 +45,6 @@ function tierFeatures(tier: PricingTier): string[] {
   return [
     i18n.t('packages.dataFeature', {ns: 'payments', amount: tier.data_gb, suffix}),
     i18n.t('packages.minutesFeature', {ns: 'payments', amount: tier.pstn_minutes, suffix}),
-    i18n.t('packages.offlineFeature', {ns: 'payments'}),
   ];
 }
 
@@ -333,7 +332,6 @@ export function PackageSelectionScreen({
             <Text style={styles.includedHeading}>{t('packages.includedTitle')}</Text>
             <Text style={styles.includedText}>•  {t('packages.includedData')}</Text>
             <Text style={styles.includedText}>•  {t('packages.includedCalls')}</Text>
-            <Text style={styles.includedText}>•  {t('packages.includedSafety')}</Text>
           </View>
         ) : null}
       </ScrollView>

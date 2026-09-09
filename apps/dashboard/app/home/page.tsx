@@ -2,16 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {useLocale, useTranslations} from "next-intl";
+import {useTranslations} from "next-intl";
 
 import { getHtoPilgrims, getManifests, HtoPilgrim, Manifest } from "@/lib/api";
-import { isStaleCheckIn, matchesPilgrimSearch, sortPilgrimsByRisk } from "@/lib/pilgrimRisk";
+import { matchesPilgrimSearch, sortPilgrimsByName } from "@/lib/pilgrimRoster";
 
 const AUTO_REFRESH_MS = 60_000;
 
 export default function HTOHomePage() {
   const t = useTranslations("home");
-  const locale = useLocale();
   const [pilgrims, setPilgrims] = useState<HtoPilgrim[]>([]);
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,15 +42,13 @@ export default function HTOHomePage() {
   }, [load]);
 
   const visiblePilgrims = useMemo(() => {
-    const now = new Date();
-    return sortPilgrimsByRisk(pilgrims, now).filter(
+    return sortPilgrimsByName(pilgrims).filter(
       (pilgrim) =>
         (!manifestFilter || pilgrim.manifest_id === manifestFilter) &&
         matchesPilgrimSearch(pilgrim, search),
     );
   }, [pilgrims, search, manifestFilter]);
 
-  const unresolvedSOSCount = pilgrims.filter((p) => p.sos_status === "active").length;
 
   return (
     <main className="dashboard-shell">
@@ -66,14 +63,6 @@ export default function HTOHomePage() {
           </button>
         </div>
         <p>{t("allManifests")}</p>
-        {unresolvedSOSCount > 0 ? (
-          <aside className="sos-home-banner" role="alert">
-            <strong>
-              {t("unresolvedSos", {count: unresolvedSOSCount})}
-            </strong>
-            <a href="/sos-alerts">{t("openSos")}</a>
-          </aside>
-        ) : null}
         {!loading && manifests.length === 0 ? (
           <p>
             {t("noManifests")}{" "}
@@ -124,22 +113,13 @@ export default function HTOHomePage() {
                       <th>{t("tier")}</th>
                       <th>{t("activation")}</th>
                       <th>eSIM</th>
-                      <th>{t("lastCheckIn")}</th>
-                    </tr>
+                      </tr>
                   </thead>
                   <tbody>
                     {visiblePilgrims.map((pilgrim) => {
-                      const sos = pilgrim.sos_status === "active";
-                      const stale = !sos && isStaleCheckIn(pilgrim.last_checkin_at, new Date());
                       return (
-                        <tr
-                          className={sos ? "row-sos" : stale ? "row-stale" : undefined}
-                          key={pilgrim.id}
-                        >
-                          <td>
-                            {sos ? <span className="status-pill">SOS</span> : null}
-                            {pilgrim.name}
-                          </td>
+                        <tr key={pilgrim.id}>
+                          <td>{pilgrim.name}</td>
                           <td>{pilgrim.phone_number}</td>
                           <td>
                             <a href={`/manifests/${pilgrim.manifest_id}`}>
@@ -178,7 +158,6 @@ export default function HTOHomePage() {
                               "—"
                             )}
                           </td>
-                          <td>{pilgrim.last_checkin_at ? new Date(pilgrim.last_checkin_at).toLocaleString(locale) : t("noCheckIn")}</td>
                         </tr>
                       );
                     })}

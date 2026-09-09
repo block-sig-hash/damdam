@@ -3,10 +3,9 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { getEsim } from '../api/esimClient';
 import { getPackageStatus } from '../api/paymentClient';
 import {
-  optIntoArrivalGeofence,
   registerPushInstallation,
   subscribeToActivationDeepLinks,
-} from '../services/arrivalPrompts';
+} from '../services/activationLinks';
 import { AuthenticatedApp } from './AuthenticatedApp';
 
 jest.mock('react-native-device-info', () => ({
@@ -15,9 +14,8 @@ jest.mock('react-native-device-info', () => ({
 }));
 jest.mock('../api/esimClient', () => ({ getEsim: jest.fn() }));
 jest.mock('../api/paymentClient', () => ({ getPackageStatus: jest.fn() }));
-jest.mock('../services/arrivalPrompts', () => ({
-  ...jest.requireActual('../services/arrivalPrompts'),
-  optIntoArrivalGeofence: jest.fn(),
+jest.mock('../services/activationLinks', () => ({
+  ...jest.requireActual('../services/activationLinks'),
   registerPushInstallation: jest.fn(),
   subscribeToActivationDeepLinks: jest.fn(),
 }));
@@ -31,49 +29,6 @@ jest.mock('../screens/EsimSetup/EsimQrCodeScreen', () => {
   const { Text } = require('react-native');
   return { EsimQrCodeScreen: () => <Text>QR fallback</Text> };
 });
-jest.mock('../screens/DialPad/DialPadScreen', () => {
-  const { Pressable, Text } = require('react-native');
-  return {
-    DialPadScreen: ({
-      onCallStarted,
-      pstnMinutesRemaining,
-    }: {
-      onCallStarted: (call: object) => void;
-      pstnMinutesRemaining: number;
-    }) => (
-      <>
-        <Text>Dial balance {pstnMinutesRemaining}</Text>
-        <Pressable
-          testID="mock-start-pstn"
-          onPress={() =>
-            onCallStarted({
-              callType: 'pstn',
-              displayNumber: '08099999999',
-              subscribeState: () => jest.fn(),
-              subscribeDuration: () => jest.fn(),
-              toggleMute: jest.fn(),
-              toggleSpeaker: jest.fn(),
-              hangup: jest.fn(),
-            })
-          }
-        >
-          <Text>Start PSTN</Text>
-        </Pressable>
-      </>
-    ),
-  };
-});
-jest.mock('../screens/ActiveCall/ActiveCallScreen', () => {
-  const { Pressable, Text } = require('react-native');
-  return {
-    ActiveCallScreen: ({ onFinished }: { onFinished: () => void }) => (
-      <Pressable testID="mock-finish-call" onPress={onFinished}>
-        <Text>Finish call</Text>
-      </Pressable>
-    ),
-  };
-});
-
 const mockGetEsim = getEsim as jest.MockedFunction<typeof getEsim>;
 const mockGetPackageStatus = getPackageStatus as jest.MockedFunction<typeof getPackageStatus>;
 const mockRegisterPush = registerPushInstallation as jest.MockedFunction<
@@ -81,9 +36,6 @@ const mockRegisterPush = registerPushInstallation as jest.MockedFunction<
 >;
 const mockSubscribe = subscribeToActivationDeepLinks as jest.MockedFunction<
   typeof subscribeToActivationDeepLinks
->;
-const mockGeofence = optIntoArrivalGeofence as jest.MockedFunction<
-  typeof optIntoArrivalGeofence
 >;
 
 beforeEach(() => {
@@ -102,14 +54,12 @@ beforeEach(() => {
     pstn_minutes_remaining: 30,
   });
   mockRegisterPush.mockResolvedValue('registered');
-  mockGeofence.mockResolvedValue('registered');
   mockSubscribe.mockReturnValue(jest.fn());
 });
 
 it('wires authenticated bootstrap, date banner, and activation navigation', async () => {
   await render(
     <AuthenticatedApp
-      userId="aaaaaaaa-0000-4000-8000-00000000000a"
       accessToken="access-token"
       departureDate="2026-07-20"
       packageId="package-1"
@@ -118,7 +68,6 @@ it('wires authenticated bootstrap, date banner, and activation navigation', asyn
 
   await waitFor(() => {
     expect(mockRegisterPush).toHaveBeenCalledWith('access-token');
-    expect(mockGeofence).toHaveBeenCalledWith('access-token', 'package-1');
     expect(mockGetEsim).toHaveBeenCalledWith('access-token', 'package-1');
   });
   expect(screen.getByTestId('esim-activation-banner')).toBeTruthy();
@@ -134,38 +83,10 @@ it('deep-links an authenticated pilgrim directly into activation', async () => {
     return jest.fn();
   });
   await render(
-    <AuthenticatedApp
-      userId="aaaaaaaa-0000-4000-8000-00000000000a"
-      accessToken="access-token"
-      departureDate={null}
-    />,
+    <AuthenticatedApp accessToken="access-token" departureDate={null} />,
   );
 
   await act(async () => openPackage?.('linked-package'));
   expect(screen.getByTestId('wired-activation-flow')).toBeTruthy();
-  expect(mockGeofence).toHaveBeenCalledWith('access-token', 'linked-package');
 });
 
-it('AC-14.7: refreshes the displayed PSTN balance after a completed call', async () => {
-  await render(
-    <AuthenticatedApp
-      userId="aaaaaaaa-0000-4000-8000-00000000000a"
-      accessToken="access-token"
-      departureDate={null}
-      packageId="package-1"
-    />,
-  );
-  await waitFor(() => expect(mockGetPackageStatus).toHaveBeenCalledTimes(1));
-  await fireEvent.press(screen.getByTestId('open-call-tab'));
-  expect(screen.getByText('Dial balance 30')).toBeTruthy();
-  await fireEvent.press(screen.getByTestId('mock-start-pstn'));
-  mockGetPackageStatus.mockResolvedValue({
-    status: 'active',
-    data_gb_total: 10,
-    data_gb_remaining: 4.25,
-    pstn_minutes_total: 90,
-    pstn_minutes_remaining: 29.5,
-  });
-  await fireEvent.press(screen.getByTestId('mock-finish-call'));
-  await waitFor(() => expect(screen.getByText('Dial balance 29.5')).toBeTruthy());
-});

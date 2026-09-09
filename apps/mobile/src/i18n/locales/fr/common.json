@@ -21,15 +21,6 @@
     "welcomeBack": "Bon retour",
     "packageActive": "Forfait actif",
     "pinSet": "Code PIN défini",
-    "nextSteps": "Étape suivante : contact familial et date de départ — bientôt disponibles."
-  },
-  "native": {
-    "unknown": "Inconnu",
-    "callingPermissionTitle": "Autorisation d'appel requise",
-    "callingPermissionBody": "DamDam doit être activé comme compte d'appel pour afficher les appels entrants et sortants sur votre écran verrouillé.",
-    "enable": "Activer",
-    "callChannel": "Appels DamDam",
-    "callInProgress": "Appel DamDam en cours",
-    "incomingCall": "Appel entrant"
+    "nextSteps": "Accédez à l’accueil pour gérer votre eSIM et votre connectivité."
   }
 }

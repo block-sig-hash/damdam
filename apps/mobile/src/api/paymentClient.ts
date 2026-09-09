@@ -16,13 +16,6 @@ export interface PackagePaymentStatus {
   pstn_minutes_remaining: number;
 }
 
-export interface PackageGeofence {
-  latitude: number;
-  longitude: number;
-  radius_meters: number;
-  request_id: string;
-}
-
 export class PaymentApiError extends Error {
   constructor(message: string) {
     super(message);
@@ -70,11 +63,4 @@ export function getPackageStatus(
   packageId: string,
 ): Promise<PackagePaymentStatus> {
   return request<PackagePaymentStatus>(`/packages/${packageId}/status`, accessToken);
-}
-
-export function getPackageGeofence(
-  accessToken: string,
-  packageId: string,
-): Promise<PackageGeofence> {
-  return request<PackageGeofence>(`/packages/${packageId}/geofence`, accessToken);
 }

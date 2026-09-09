@@ -1,9 +1,7 @@
 import React from 'react';
 import {cleanup, render} from '@testing-library/react-native';
 import {PhoneEntryScreen} from '../screens/PhoneEntry/PhoneEntryScreen';
-import {SosConfirmScreen} from '../screens/SosConfirm/SosConfirmScreen';
 import {EsimActivationGuideScreen} from '../screens/EsimActivation/EsimActivationGuideScreen';
-import {CliVerifyEntryScreen} from '../screens/CliVerification/CliVerifyEntryScreen';
 import {i18n} from './index';
 
 describe('French mobile rendering', () => {
@@ -23,12 +21,6 @@ describe('French mobile rendering', () => {
     expect(phone.getByText('Quel est votre numéro de téléphone ?')).toBeTruthy();
   });
 
-  it('renders French safety copy and accessibility text', async () => {
-    const sos = await render(<SosConfirmScreen onConfirmed={jest.fn()} />);
-    expect(sos.getByText("SOS d'urgence")).toBeTruthy();
-    expect(sos.getByLabelText('SOS / Urgence')).toBeTruthy();
-  });
-
   it('renders French eSIM guide instructions', async () => {
     const guide = await render(
       <EsimActivationGuideScreen
@@ -42,16 +34,4 @@ describe('French mobile rendering', () => {
     expect(guide.getByText('Ouvrez Réglages, puis Données cellulaires.')).toBeTruthy();
   });
 
-  it('renders French caller ID copy and accessibility text', async () => {
-    const callerId = await render(
-      <CliVerifyEntryScreen
-        accessToken="access-token"
-        onStarted={jest.fn()}
-        onCancel={jest.fn()}
-      />,
-    );
-    expect(callerId.getByText("Vérifiez votre identité d'appelant")).toBeTruthy();
-    expect(callerId.getByLabelText('Numéro mobile nigérian')).toBeTruthy();
-    expect(callerId.getByText('Envoyer le code')).toBeTruthy();
-  });
 });

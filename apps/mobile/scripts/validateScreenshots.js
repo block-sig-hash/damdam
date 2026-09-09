@@ -90,6 +90,31 @@ function inspectPng(filePath, minDimension) {
   if (width * height > 25000000) {
     return 'exceeds the supported capture size';
   }
+
+  // pngjs has accepted an IHDR+IEND-only file on some runs, even though it
+  // contains no pixel stream. Walk the chunk framing ourselves so this gate is
+  // deterministic and explicitly requires non-empty IDAT data.
+  let offset = PNG_SIGNATURE.length;
+  let imageDataBytes = 0;
+  while (offset + 12 <= buffer.length) {
+    const dataLength = buffer.readUInt32BE(offset);
+    const type = buffer.subarray(offset + 4, offset + 8).toString('ascii');
+    const nextOffset = offset + 12 + dataLength;
+    if (nextOffset > buffer.length) {
+      return `has a truncated ${type || 'unknown'} chunk`;
+    }
+    if (type === 'IDAT') {
+      imageDataBytes += dataLength;
+    }
+    offset = nextOffset;
+  }
+  if (offset !== buffer.length) {
+    return 'has invalid PNG chunk framing';
+  }
+  if (imageDataBytes === 0) {
+    return 'has no pixel data (missing non-empty IDAT chunk)';
+  }
+
   try {
     PNG.sync.read(buffer, {checkCRC: true});
   } catch (error) {

@@ -33,7 +33,6 @@ function App(): React.JSX.Element {
   } else if (phase === 'authenticated' && session) {
     content = (
       <AuthenticatedApp
-        userId={session.userId}
         accessToken={session.accessToken}
         departureDate={session.departureDate}
         packageId={session.packageId}

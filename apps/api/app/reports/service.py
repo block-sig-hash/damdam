@@ -16,10 +16,8 @@ from app.auth.models import (
     Organization,
     PricingTier,
 )
-from app.checkins.models import CheckIn
 from app.esim.models import EsimProfile
 from app.packages.models import Package
-from app.sos.models import SOSAlert
 
 CSV_HEADER = (
     "name",
@@ -27,8 +25,6 @@ CSV_HEADER = (
     "tier",
     "purchase_date",
     "esim_status",
-    "check_in_count",
-    "sos_events",
 )
 
 _ESIM_STATUS_RANK = {"issued": 1, "downloaded": 2, "activated": 3}
@@ -56,8 +52,6 @@ class ProvisioningReportRow:
     tier: str | None
     purchase_date: date | None
     esim_status: str
-    check_in_count: int
-    sos_event_count: int
 
 
 class ProvisioningReportService:
@@ -124,28 +118,8 @@ class ProvisioningReportService:
         user_ids = {
             pilgrim.user_id for pilgrim, _, _ in rows if pilgrim.user_id is not None
         }
-        checkin_counts: dict[UUID, int] = {}
-        sos_counts: dict[UUID, int] = {}
         esim_statuses: dict[UUID, str] = {}
         if user_ids:
-            checkin_counts = {
-                user_id: count
-                for user_id, count in session.exec(
-                    select(CheckIn.user_id, func.count())
-                    .where(col(CheckIn.user_id).in_(user_ids))
-                    .group_by(col(CheckIn.user_id))
-                ).all()
-                if user_id is not None
-            }
-            sos_counts = {
-                user_id: count
-                for user_id, count in session.exec(
-                    select(SOSAlert.user_id, func.count())
-                    .where(col(SOSAlert.user_id).in_(user_ids))
-                    .group_by(col(SOSAlert.user_id))
-                ).all()
-                if user_id is not None
-            }
             profiles = session.exec(
                 select(EsimProfile)
                 .join(Package, col(Package.id) == col(EsimProfile.package_id))
@@ -190,16 +164,6 @@ class ProvisioningReportService:
                     tier=tier.name,
                     purchase_date=purchase_date,
                     esim_status=esim_status,
-                    check_in_count=(
-                        checkin_counts.get(pilgrim.user_id, 0)
-                        if pilgrim.user_id is not None
-                        else 0
-                    ),
-                    sos_event_count=(
-                        sos_counts.get(pilgrim.user_id, 0)
-                        if pilgrim.user_id is not None
-                        else 0
-                    ),
                 )
             )
         return result
@@ -234,8 +198,6 @@ class ProvisioningReportService:
                     _csv_safe(row.tier or ""),
                     row.purchase_date.isoformat() if row.purchase_date else "",
                     row.esim_status,
-                    row.check_in_count,
-                    row.sos_event_count,
                 ]
             )
         return buffer.getvalue()

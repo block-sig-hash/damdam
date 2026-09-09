@@ -10,6 +10,7 @@ EN = "en"
 FR = "fr"
 
 _API_EN = {
+    "feature_retired": "This feature is no longer part of DamDam. Please update the app to the latest version.",
     "checkin_rate_limited": "You can check in once every 15 minutes.",
     "checkin_id_conflict": "This check-in identifier is already in use.",
     "invalid_webhook_signature": "Webhook signature is invalid.",
@@ -78,7 +79,6 @@ _API_EN = {
     "invalid_group_size": "Choose a valid group size for this package.",
     "payment_unavailable": "Both payment services are unavailable. Please try again.",
     "invalid_processor": "The payment processor is not supported.",
-    "destination_geofence_not_configured": "Arrival alerts are not configured for this destination.",
     "cli_not_verified": "Verify your Nigerian number before making PSTN calls.",
     "pstn_balance_exhausted": "No PSTN minutes remain on your package.",
     "voice_unavailable": "Calling is temporarily unavailable.",
@@ -102,6 +102,7 @@ _API_EN = {
 }
 
 _API_FR = {
+    "feature_retired": "Cette fonctionnalité ne fait plus partie de DamDam. Veuillez mettre à jour l’application vers la dernière version.",
     "checkin_rate_limited": "Vous pouvez signaler votre sécurité une fois toutes les 15 minutes.",
     "checkin_id_conflict": "Cet identifiant de pointage est déjà utilisé.",
     "invalid_webhook_signature": "La signature du webhook n’est pas valide.",
@@ -170,7 +171,6 @@ _API_FR = {
     "invalid_group_size": "Choisissez une taille de groupe valide pour cette formule.",
     "payment_unavailable": "Les deux services de paiement sont indisponibles. Veuillez réessayer.",
     "invalid_processor": "Le prestataire de paiement n’est pas pris en charge.",
-    "destination_geofence_not_configured": "Les alertes d’arrivée ne sont pas configurées pour cette destination.",
     "cli_not_verified": "Vérifiez votre numéro nigérian avant de passer des appels téléphoniques.",
     "pstn_balance_exhausted": "Votre formule ne contient plus de minutes téléphoniques.",
     "voice_unavailable": "Les appels sont temporairement indisponibles.",
