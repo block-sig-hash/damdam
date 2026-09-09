@@ -1,14 +1,20 @@
 # Chunk 27 — Update signed builds, privacy disclosures and release automation
 
+> **Scope update — 9 September 2026:** Read [the approved calling amendment](../VOICE-EXPANSION.md). It supersedes earlier app/browser-calling deferrals and defines capability-specific release dependencies. Historical acceptance records remain valid for their reviewed scope.
+
 **Depends on:** chunk 02, chunk 04, chunk 08, chunk 21, chunk 24, chunk 26.
 **Plan mapping:** PR-16 part B / US-42.
 **Likely starting points:** Native projects, screenshot harness, store metadata, release-signoff template/validator and promotion workflows.
 Paths refer to the inspected baseline; verify them in the actual current checkout.
 
+## Calling expansion requirements
+
+V04/V05 are required for each released internet channel. Apply the calling amendment release manifest rule for carrier-only dependencies; retain all relevant signed-build, privacy and operational gates.
+
 ## Outcome and implementation scope
 
 1. Produce reproducible iOS/Android release builds using configured signing access; document exact environment and missing credentials.
-2. Update screenshot/localization/accessibility matrices for the final screens and remove stale safety/CLI/WebRTC gates through explicit amendments.
+2. Update screenshot/localization/accessibility matrices for the final screens and remove stale safety/CLI/incoming-call gates through explicit amendments; add the released outbound app/browser scenarios from V04/V05.
 3. Inventory actual permissions, SDK collection and payment methods for store/privacy/terms disclosures, with unresolved entity/legal details marked pending.
 4. Require release evidence to identify commit, environment, carrier/merchant configuration and device coverage; preserve existing historical release tags.
 5. Keep store submission and production promotion as distinct authorized actions, not side effects of completing this chunk.
@@ -26,7 +32,7 @@ Implement only this chunk in the DamDam repository. Read `AGENTS.md`, `docs/READ
 
 The user's chosen workflow is Claude implementation followed by Codex review and, when needed, refactoring. The user has authorized this redesign and working split; older ownership tables and obsolete product freezes do not override it. Retain applicable test, security and migration safeguards.
 
-Product boundaries: generic consumer plus enterprise/government connectivity; Telnyx preferred for data and native-dialer voice on the same eSIM, subject to verified availability. Remove family/SOS; follow the scope record for remaining welfare retirement. External verified caller ID and app VoIP are deferred. No additional carrier integration, subscriptions, AI features, SSO/SCIM or microservice rewrite unless separately approved. Entity and global payment processor remain decisions, not assumptions.
+Product boundaries: generic consumer plus enterprise/government connectivity; Telnyx preferred for data and native-dialer voice on the same eSIM, subject to verified availability. Remove family/SOS; follow the scope record for remaining welfare retirement. External verified caller ID and incoming app/browser ringing remain deferred. Outbound internet calling is assigned to V01–V05; apply the calling amendment to this chunk. No additional carrier integration, subscriptions, AI features, SSO/SCIM or microservice rewrite unless separately approved. Entity and global payment processor remain decisions, not assumptions.
 
 Inspect the actual current branch, local changes and dependency review records. Start from the accepted predecessor commit on a dedicated branch/worktree; preserve unrelated work. Do not code against the historical SHA blindly. If a dependency changed, explain the resulting scope adjustment. Do not silently absorb a missing predecessor's work.
 

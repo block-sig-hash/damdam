@@ -1,5 +1,7 @@
 # DamDam implementation plan
 
+> **Scope update — 9 September 2026:** Read [the approved calling amendment](VOICE-EXPANSION.md). It supersedes earlier app/browser-calling deferrals and defines capability-specific release dependencies. Historical acceptance records remain valid for their reviewed scope.
+
 Consolidated 8 September 2026 from the 7–8 September conversation.
 
 Status: planning baseline for the new product direction. No application changes,

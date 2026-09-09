@@ -899,3 +899,18 @@ and carrier proof. The post-chunk-01 staging deployment fails before server
 contact because its four required environment secrets are unset; D6/chunk 26
 owns that setup. Full review and scope limits are in
 [implementation/reviews/02.md](./implementation/reviews/02.md).
+
+## 14.15 Amendment — Three-interface calling evidence
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+V01 supplies contract evidence; V02/V03 require failing-first authorization,
+idempotency and PostgreSQL financial/concurrency tests. V04/V05 require rendered
+journeys and supported physical-device/browser evidence. Chunk28 covers copied
+credential bypass, simultaneous mobile/browser calls, multiple provider legs,
+unknown originate, lost terminal CDR, corrections, worker/tab loss, membership
+revocation and cross-mode exposure where enabled. Chunk27 updates validator and
+template together for outbound evidence; do not reinstate retired incoming-push
+or safety gates. Chunk29 records real identity, DTMF/audio, route and billed-cost
+evidence, separately for internet and native carrier calls. Missing live evidence
+is pending, never replaced by a mocked call or a screenshot.

@@ -1,9 +1,15 @@
 # Chunk 08 — Define the consumer and enterprise design system
 
+> **Scope update — 9 September 2026:** Read [the approved calling amendment](../VOICE-EXPANSION.md). It supersedes earlier app/browser-calling deferrals and defines capability-specific release dependencies. Historical acceptance records remain valid for their reviewed scope.
+
 **Depends on:** chunk 01, chunk 04.
 **Plan mapping:** PR-01 design + foundations for PR-11–14.
 **Likely starting points:** docs/design-system.md; both frontend specs; current theme, components and English/French resources.
 Paths refer to the inspected baseline; verify them in the actual current checkout.
+
+## Calling expansion requirements
+
+Include mobile and consumer-web Calls states, explicit mode/identity/payer, microphone denial, DTMF and low-credit errors in both locales and the screenshot/accessibility plan.
 
 ## Outcome and implementation scope
 
@@ -11,7 +17,7 @@ Paths refer to the inspected baseline; verify them in the actual current checkou
 2. Specify Home, Plans, My Line, Account; enterprise People, Orders, Lines and Billing; and visibly separate internal operations.
 3. Define pending provisioning, stale usage, partial failure, empty state, unsupported device and error/retry patterns with practical copy.
 4. Implement a small representative component/gallery surface and screen examples; do not build all product screens in this chunk.
-5. Include accessible labels, focus/navigation, contrast, font scaling and French text expansion. Use actual carrier-line concepts and no app dialer or family/SOS affordances.
+5. Include accessible labels, focus/navigation, contrast, font scaling and French text expansion. Distinguish carrier-line controls from internet Calls, with mobile/browser dialers, rate/identity/payer preview and no family/SOS affordances.
 
 ## Acceptance and evidence
 
@@ -26,7 +32,7 @@ Implement only this chunk in the DamDam repository. Read `AGENTS.md`, `docs/READ
 
 The user's chosen workflow is Claude implementation followed by Codex review and, when needed, refactoring. The user has authorized this redesign and working split; older ownership tables and obsolete product freezes do not override it. Retain applicable test, security and migration safeguards.
 
-Product boundaries: generic consumer plus enterprise/government connectivity; Telnyx preferred for data and native-dialer voice on the same eSIM, subject to verified availability. Remove family/SOS; follow the scope record for remaining welfare retirement. External verified caller ID and app VoIP are deferred. No additional carrier integration, subscriptions, AI features, SSO/SCIM or microservice rewrite unless separately approved. Entity and global payment processor remain decisions, not assumptions.
+Product boundaries: generic consumer plus enterprise/government connectivity; Telnyx preferred for data and native-dialer voice on the same eSIM, subject to verified availability. Remove family/SOS; follow the scope record for remaining welfare retirement. External verified caller ID and incoming app/browser ringing remain deferred. Outbound internet calling is assigned to V01–V05; apply the calling amendment to this chunk. No additional carrier integration, subscriptions, AI features, SSO/SCIM or microservice rewrite unless separately approved. Entity and global payment processor remain decisions, not assumptions.
 
 Inspect the actual current branch, local changes and dependency review records. Start from the accepted predecessor commit on a dedicated branch/worktree; preserve unrelated work. Do not code against the historical SHA blindly. If a dependency changed, explain the resulting scope adjustment. Do not silently absorb a missing predecessor's work.
 

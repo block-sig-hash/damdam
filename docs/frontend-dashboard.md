@@ -549,3 +549,14 @@ the AC-18.7 search.
 An operator can still see who is on a manifest, their tier, activation and eSIM
 status. They can no longer see where anyone last was, or whether they are in
 distress.
+
+## 9.11 Amendment — Consumer browser calling (US-48)
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+V05 adds a separate authenticated consumer calling area in Next.js. Personal
+calling needs no organization membership or internal privileges. Share backend
+policy/ledger with mobile; require permission at use, show rate/identity/payer,
+and recover one durable attempt across refresh/tabs without redial. Enterprise
+administration controls work service under existing RBAC; it does not grant
+cross-customer call access. Incoming ringing remains deferred.

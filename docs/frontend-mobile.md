@@ -847,3 +847,15 @@ declares no usage description for any retired feature and no background mode.
 available in this environment, so the Xcode project edit (six references to the
 removed bridge files) and the manifest and Gradle changes are reviewed source
 changes, not verified builds. The screenshot jobs are the first place they run.
+
+## 8.13 Amendment — Outbound internet Calls (US-47)
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+Add Calls via V04, supporting internet-only service, explicit rate/identity/payer,
+microphone consent at use, audio controls, DTMF and backend cost/history. Native
+carrier actions remain distinct with honest SIM-selection guidance. Handle
+account changes, lock/background/interruption and network loss per supported
+SDK/OS evidence; spending control survives client failure. Incoming push/ringing
+and third-party CLI stay deferred. The old permission removal remains correct
+for the retired build; add only required outbound permissions and native hooks.
