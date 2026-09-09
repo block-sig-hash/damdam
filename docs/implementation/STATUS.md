@@ -28,7 +28,7 @@ is a dry run that executes nothing.
 | 01 — Reset product specifications and working rules | ACCEPTED | base `6790c74` / corrected content `36e9bf36a2827d108633730ff0899edbd17b97ef` | [Independent review](reviews/01.md) | None blocking chunk 01; D1–D6 remain OPEN |
 | 02 — Repair the CI baseline and screenshot harness | ACCEPTED | base `178c448` / corrected content `4e5ecc9` / CI head `aeb74f6` | [Independent review](reviews/02.md) | None blocking chunk 02; staging configuration remains D6/chunk 26 |
 | 03 — Prove Telnyx feasibility and document the carrier contract | ACCEPTED (documented/simulated scope); live scope EXTERNAL_BLOCKED | base `178c448` / submitted `fe569e1` / corrected code `6a24c19` | [Independent review](reviews/03.md) | **D1/D2 OPEN** — no Telnyx account, live call, rate deck or cleared market |
-| 04 — Retire family, safety and app-calling features safely | ACCEPTED after fixes (04A–04E) | base `12582f1` / submitted complete head `55394f5` / corrected code `d53c055` | [Independent review](reviews/04.md) | Check-in/welfare data disposition remains open; no welfare data deleted |
+| 04 — Retire family, safety and app-calling features safely | ACCEPTED after fixes (04A–04E) | base `12582f1` / submitted complete head `55394f5` / corrected app `d53c055` / CI `d2ee863` | [Independent review](reviews/04.md) | Check-in/welfare data disposition remains open; no welfare data deleted |
 | 05 — Introduce core domain models and migration boundaries | NOT_STARTED | — | — | See assignment |
 | 06 — Implement global identity and account recovery | NOT_STARTED | — | — | See assignment |
 | 07 — Implement memberships, tenant isolation and administrator MFA | NOT_STARTED | — | — | See assignment |
