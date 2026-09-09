@@ -101,7 +101,7 @@ A review record can be carried forward only if the relevant code/configuration h
 ## Calling expansion approved — 9 September 2026
 
 The founder approved [VOICE-EXPANSION.md](VOICE-EXPANSION.md). This adds work;
-it does not reverse chunk04 acceptance or imply restored calling code.
+it does not reverse chunk 04 acceptance or imply restored calling code.
 
 | Chunk | Story | Status | Remaining gate |
 |---|---|---|---|
