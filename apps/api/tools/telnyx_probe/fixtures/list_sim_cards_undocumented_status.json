@@ -1,0 +1,16 @@
+{
+  "_fixture": "SIMULATED",
+  "_description": "Shape-only reconstruction of a response carrying a status value that is NOT in the documented enum. Used to prove the harness rejects undocumented values loudly instead of silently coercing them. NOT a recorded Telnyx response, and NOT evidence that Telnyx returns this value.",
+  "_source": "https://developers.telnyx.com/docs/iot-sim/sim-lifecycle.md",
+  "_fetched": "2026-09-08",
+  "data": [
+    {
+      "id": "00000000-0000-4000-8000-000000000004",
+      "record_type": "sim_card",
+      "type": "esim",
+      "status": "quarantined",
+      "tags": ["damdam-op-33333333-3333-4333-8333-333333333333"]
+    }
+  ],
+  "meta": {"total_pages": 1, "total_results": 1, "page_number": 1, "page_size": 20}
+}

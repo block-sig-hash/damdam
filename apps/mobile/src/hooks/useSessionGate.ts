@@ -53,6 +53,7 @@ const FOREGROUND_REFRESH_INTERVAL_MS = 12 * 60 * 1000;
 
 function toActiveSession(persisted: PersistedSession): ActiveSession {
   return {
+    userId: persisted.userId,
     accessToken: persisted.accessToken,
     refreshToken: persisted.refreshToken,
     phoneNumber: persisted.phoneNumber,

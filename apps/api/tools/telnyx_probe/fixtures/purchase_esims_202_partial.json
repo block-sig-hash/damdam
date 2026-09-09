@@ -1,0 +1,29 @@
+{
+  "_fixture": "SIMULATED",
+  "_description": "Shape-only reconstruction of a partially-successful purchase: the documented 202 body carries both `data` and `errors`, so fewer SIMs than requested can be returned alongside error 70001. NOT a recorded Telnyx response.",
+  "_source": "https://developers.telnyx.com/api-reference/sim-cards/purchase-esims.md and https://developers.telnyx.com/docs/iot-sim/api-errors.md",
+  "_fetched": "2026-09-08",
+  "data": [
+    {
+      "id": "00000000-0000-4000-8000-000000000003",
+      "record_type": "sim_card",
+      "type": "esim",
+      "status": "standby",
+      "iccid": "00000000000000000003",
+      "sim_card_group_id": "00000000-0000-4000-8000-0000000000aa",
+      "tags": ["damdam-op-22222222-2222-4222-8222-222222222222"],
+      "voice_enabled": false,
+      "esim_installation_status": "disabled",
+      "actions_in_progress": 0,
+      "created_at": "2026-09-08T00:00:00Z",
+      "updated_at": "2026-09-08T00:00:00Z"
+    }
+  ],
+  "errors": [
+    {
+      "code": "70001",
+      "title": "There aren't enough available SIM cards",
+      "detail": "Reduce the requested quantity or retry when stock is available."
+    }
+  ]
+}
