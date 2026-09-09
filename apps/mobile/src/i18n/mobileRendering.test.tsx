@@ -1,7 +1,6 @@
 import React from 'react';
 import {cleanup, render} from '@testing-library/react-native';
 import {PhoneEntryScreen} from '../screens/PhoneEntry/PhoneEntryScreen';
-import {SosConfirmScreen} from '../screens/SosConfirm/SosConfirmScreen';
 import {EsimActivationGuideScreen} from '../screens/EsimActivation/EsimActivationGuideScreen';
 import {CliVerifyEntryScreen} from '../screens/CliVerification/CliVerifyEntryScreen';
 import {i18n} from './index';
@@ -21,12 +20,6 @@ describe('French mobile rendering', () => {
       <PhoneEntryScreen onOtpSent={jest.fn()} onAccountExists={jest.fn()} />,
     );
     expect(phone.getByText('Quel est votre numéro de téléphone ?')).toBeTruthy();
-  });
-
-  it('renders French safety copy and accessibility text', async () => {
-    const sos = await render(<SosConfirmScreen onConfirmed={jest.fn()} />);
-    expect(sos.getByText("SOS d'urgence")).toBeTruthy();
-    expect(sos.getByLabelText('SOS / Urgence')).toBeTruthy();
   });
 
   it('renders French eSIM guide instructions', async () => {

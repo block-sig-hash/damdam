@@ -390,7 +390,6 @@ def create_app(
             "invalid_webhook_signature": 401,
             "invalid_webhook_payload": 400,
             "package_not_found": 404,
-            "destination_geofence_not_configured": 404,
         }
         return JSONResponse(
             status_code=statuses[exc.code],

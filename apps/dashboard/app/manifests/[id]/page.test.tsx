@@ -28,8 +28,6 @@ describe("HTO manifest pilgrim roster", () => {
             tier: "Standard",
             esim_status: "incompatible",
             activation_status: "activated",
-            last_checkin_at: null,
-            sos_status: "none",
           },
           {
             id: "p2",
@@ -38,8 +36,6 @@ describe("HTO manifest pilgrim roster", () => {
             tier: null,
             esim_status: "downloaded",
             activation_status: "activated",
-            last_checkin_at: null,
-            sos_status: "none",
           },
         ],
       }),
@@ -81,8 +77,6 @@ describe("HTO manifest pilgrim roster", () => {
         tier: "Standard",
         esim_status: "activated",
         activation_status: "activated",
-        last_checkin_at: new Date().toISOString(), // fresh
-        sos_status: "none",
       },
       {
         id: "p-bello",
@@ -91,8 +85,6 @@ describe("HTO manifest pilgrim roster", () => {
         tier: "Standard",
         esim_status: "activated",
         activation_status: "activated",
-        last_checkin_at: null, // stale: never checked in
-        sos_status: "none",
       },
       {
         id: "p-amina",
@@ -101,32 +93,9 @@ describe("HTO manifest pilgrim roster", () => {
         tier: "Standard",
         esim_status: "activated",
         activation_status: "activated",
-        last_checkin_at: new Date().toISOString(), // fresh, but has SOS
-        sos_status: "active",
       },
     ],
   };
-
-  it("AC-18.1/18.3/18.4: risk-sorts rows and highlights SOS red, stale amber", async () => {
-    window.localStorage.setItem("hto_access_token", "hto-token");
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(response(riskyPilgrims)));
-
-    render(<ManifestDetailPage />);
-    await screen.findByText("Amina Yusuf");
-
-    const rows = screen.getAllByRole("row").slice(1); // drop the header row
-    const names = rows.map((row) => row.textContent);
-    expect(names[0]).toContain("Amina Yusuf"); // unresolved SOS: always first
-    expect(names[1]).toContain("Bello Aliyu"); // stale: second
-    expect(names[2]).toContain("Zainab Bello"); // fresh: last
-
-    expect(rows[0]).toHaveClass("row-sos");
-    expect(rows[1]).toHaveClass("row-stale");
-    expect(rows[2]).not.toHaveClass("row-sos");
-    expect(rows[2]).not.toHaveClass("row-stale");
-
-    expect(screen.getByText("1 unresolved SOS alert on this manifest")).toBeInTheDocument();
-  });
 
   it("AC-18.7: search filters by name or phone without a new request", async () => {
     window.localStorage.setItem("hto_access_token", "hto-token");

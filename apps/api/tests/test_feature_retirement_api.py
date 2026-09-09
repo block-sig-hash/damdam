@@ -266,6 +266,34 @@ def test_emergency_contact_read_is_refused(
     _assert_retired(client.get("/v1/me/emergency-contact"), "emergency_contact")
 
 
+def test_arrival_geofence_lookup_is_refused(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """Arrival geofencing retires with the Hajj framing; the table is kept."""
+    api = _build_api(
+        settings, redis_client, providers, scheduler, session_factory, clock
+    )
+    client, _ = _authenticated(api)
+    _assert_retired(
+        client.get(f"/v1/packages/{uuid4()}/geofence"), "arrival_geofence"
+    )
+
+
+def test_operator_roster_reports_no_welfare_state(
+    settings, redis_client, providers, scheduler, session_factory, clock
+) -> None:
+    """SCOPE-DISPOSITION: welfare tracking must not survive in the dashboard.
+
+    The roster used to tell an operator when each traveler last checked in and
+    whether they had an active SOS alert. Removing the screens is not enough --
+    the projection itself is the tracking, so it must not be served at all.
+    """
+    from app.esim.schemas import HtoPilgrimSummary
+
+    assert "last_checkin_at" not in HtoPilgrimSummary.model_fields
+    assert "sos_status" not in HtoPilgrimSummary.model_fields
+
+
 # --- shape of the refusal --------------------------------------------------
 
 

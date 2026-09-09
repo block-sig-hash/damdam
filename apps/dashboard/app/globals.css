@@ -18,9 +18,6 @@ body { margin: 0; }
 .sos-card h2 { margin: 8px 0 4px; }
 .sos-card time { display: block; margin-top: 8px; }
 .sos-card img { width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; }
-.status-pill { font-weight: 800; color: #8f1f17; }
-.sos-home-banner { margin: 20px 0; padding: 20px; display: flex; justify-content: space-between; gap: 16px; background: #c0392b; color: white; border-radius: 8px; }
-.sos-home-banner a { color: white; font-weight: 800; }
 .sos-pinned-row { padding: 18px; display: grid; grid-template-columns: 1fr auto auto; gap: 16px; background: #fbe7e4; border-left: 8px solid #c0392b; color: #14181a; text-decoration: none; }
 .push-banner { margin: 20px 0; padding: 20px; display: flex; justify-content: space-between; align-items: center; gap: 16px; background: white; border: 1px solid #dde1e1; border-radius: 8px; }
 
@@ -139,11 +136,6 @@ a { color: #17623e; font-weight: 700; }
 .report-controls label { flex: 1 1 220px; }
 .report-controls select { width: 100%; border: 1px solid #aebbb2; border-radius: 8px; padding: 12px 14px; font: inherit; }
 .admin-order.overdue { border-color: #d68b1e; background: #fffaf0; }
-tr.row-sos { background: #fbe7e4; }
-tr.row-sos td:first-child { border-left: 4px solid #c0392b; }
-tr.row-sos .status-pill { margin-right: 8px; }
-tr.row-stale { background: #fffaf0; }
-tr.row-stale td:first-child { border-left: 4px solid #d68b1e; }
 .admin-order > div { display: grid; gap: 4px; min-width: 200px; }
 .admin-order button { width: auto; }
 

@@ -15,8 +15,6 @@ import { EsimQrCodeScreen } from '../src/screens/EsimSetup/EsimQrCodeScreen';
 import { EsimActivationPromptScreen } from '../src/screens/EsimActivation/EsimActivationPromptScreen';
 import { EsimActivationGuideScreen } from '../src/screens/EsimActivation/EsimActivationGuideScreen';
 import { ActivationSuccessScreen } from '../src/screens/ActivationSuccess/ActivationSuccessScreen';
-import { SosConfirmScreen } from '../src/screens/SosConfirm/SosConfirmScreen';
-import { SosSentScreen } from '../src/screens/SosSent/SosSentScreen';
 import { DialPadScreen } from '../src/screens/DialPad/DialPadScreen';
 import { ActiveCallScreen } from '../src/screens/ActiveCall/ActiveCallScreen';
 import { CliManageScreen } from '../src/screens/CliVerification/CliManageScreen';
@@ -114,21 +112,6 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
         accessToken={FIXTURE_ACCESS_TOKEN}
         activationCode="HARNESS01"
         onContinue={noop}
-      />
-    ),
-  },
-  'sos-confirm': {
-    label: 'SOS Confirm',
-    render: () => <SosConfirmScreen onConfirmed={noop} />,
-  },
-  'sos-sent': {
-    label: 'SOS Sent',
-    render: () => (
-      <SosSentScreen
-        synced
-        htoPhone="+2348011112222"
-        timestamp={new Date().toISOString()}
-        onCancel={noop}
       />
     ),
   },

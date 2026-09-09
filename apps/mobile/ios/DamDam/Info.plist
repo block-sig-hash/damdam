@@ -34,10 +34,6 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>DamDam uses your location to attach it to a check-in and to detect arrival in Saudi Arabia so your eSIM can be activated automatically.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>DamDam uses your location in the background to detect arrival in Saudi Arabia so your eSIM can be activated automatically, even if the app isn't open.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>DamDam uses your contacts so you can pick a number to call directly from the dial pad.</string>
 	<key>NSMicrophoneUsageDescription</key>

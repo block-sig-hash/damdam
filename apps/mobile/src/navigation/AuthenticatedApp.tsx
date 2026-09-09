@@ -1,10 +1,5 @@
 import DeviceInfo from 'react-native-device-info';
-import NetInfo, {
-  NetInfoStateType,
-  type NetInfoState,
-} from '@react-native-community/netinfo';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {getRecentCheckIns, sendCheckIn} from '../api/checkInClient';
+import React, { useEffect, useMemo, useState } from 'react';
 import { getEsim, type EsimProfile } from '../api/esimClient';
 import { EsimActivationFlow } from '../screens/EsimActivation/EsimActivationFlow';
 import { EsimQrCodeScreen } from '../screens/EsimSetup/EsimQrCodeScreen';
@@ -19,24 +14,12 @@ import { CliConsentScreen } from '../screens/CliVerification/CliConsentScreen';
 import type { VerifiedCallerIdentity } from '../api/cliClient';
 import type { VoiceCallSession } from '../services/voiceGateway';
 import { createCallKitVoiceGateway, initializeCallKit } from '../services/callKit';
-import {configureCheckInBackgroundSync} from '../services/checkInBackground';
-import {optionalCheckInLocation} from '../services/checkInLocation';
-import {CheckInSyncService, NitroCheckInOutbox} from '../services/checkInOutbox';
-import {sendSOS, cancelSOS, type SOSResponse} from '../api/sosClient';
-import {NitroSOSOutbox, SOSSyncService, type SOSOutboxItem} from '../services/sosOutbox';
-import {SosConfirmScreen} from '../screens/SosConfirm/SosConfirmScreen';
-import {SosSentScreen} from '../screens/SosSent/SosSentScreen';
-import {getEmergencyContact} from '../api/emergencyContactClient';
-import {
-  optIntoArrivalGeofence,
-  registerPushInstallation,
-  subscribeToActivationDeepLinks,
-} from '../services/arrivalPrompts';
+import {registerPushInstallation, subscribeToActivationDeepLinks} from '../services/activationLinks';
 import type { AuthenticatedMobileSession } from './OnboardingNavigator';
 
 type AuthenticatedAppProps = Pick<
   AuthenticatedMobileSession,
-  'accessToken' | 'departureDate' | 'packageId' | 'userId'
+  'accessToken' | 'departureDate' | 'packageId'
 >;
 
 type Screen =
@@ -45,8 +28,6 @@ type Screen =
   | 'qr'
   | 'dial'
   | 'active-call'
-  | 'sos-confirm'
-  | 'sos-sent'
   | 'cli-manage'
   | 'cli-verify-entry'
   | 'cli-verify-confirm'
@@ -61,7 +42,6 @@ export function AuthenticatedApp({
   accessToken,
   departureDate,
   packageId: initialPackageId,
-  userId,
 }: AuthenticatedAppProps): React.JSX.Element {
   const [screen, setScreen] = useState<Screen>('home');
   const [packageId, setPackageId] = useState(initialPackageId);
@@ -71,128 +51,15 @@ export function AuthenticatedApp({
   const [activeCall, setActiveCall] = useState<VoiceCallSession>();
   const [recipientName, setRecipientName] = useState<string>();
   const [balanceRefreshBaseline, setBalanceRefreshBaseline] = useState<number>();
-  const [queuedCheckIns, setQueuedCheckIns] = useState(0);
-  const [lastCheckInAt, setLastCheckInAt] = useState<string | null>(null);
-  const [queuedSOS, setQueuedSOS] = useState<SOSOutboxItem>();
-  const [queuedSOSCount, setQueuedSOSCount] = useState(0);
-  const [sosServerId, setSosServerId] = useState<string>();
-  const [sosSynced, setSosSynced] = useState(false);
-  const [htoPhone, setHtoPhone] = useState('');
   const [cliIdentity, setCliIdentity] = useState<VerifiedCallerIdentity>();
-  const cancelRequested = useRef(false);
-  const networkState = useRef<NetInfoState>({
-    type: NetInfoStateType.unknown,
-    isConnected: false,
-    isInternetReachable: null,
-    details: null,
-  });
   const {balances, refresh: refreshPackageStatus} = useHomePackageStatus(
     accessToken,
     packageId,
   );
   const pstnMinutesRemaining = balances?.pstnMinutesRemaining ?? 0;
-  // US-30 AC-30.4: the offline queues are bound to the signed-in account, and
-  // the binding is re-checked at dispatch time rather than captured once. A
-  // session with no user id (persisted before US-30) owns nothing, so its
-  // queues stay inert instead of adopting whatever is on the device.
-  const ownership = useMemo(
-    () => ({
-      ownerUserId: userId ?? '',
-      currentOwnerUserId: () => userId,
-    }),
-    [userId],
-  );
-  const checkIns = useMemo(
-    () =>
-      new CheckInSyncService(
-        new NitroCheckInOutbox(),
-        item => sendCheckIn(accessToken, item),
-        pending => setQueuedCheckIns(pending.length),
-        () => undefined,
-        ownership,
-      ),
-    [accessToken, ownership],
-  );
-  const sos = useMemo(
-    () => new SOSSyncService(
-      new NitroSOSOutbox(),
-      item => sendSOS(accessToken, item),
-      rows => {
-        setQueuedSOSCount(rows.length);
-        if (rows[0]) setQueuedSOS(rows[0]);
-      },
-      (_item, response) => {
-        const result = response as SOSResponse;
-        setSosServerId(result.id);
-        setSosSynced(true);
-        if (cancelRequested.current) {
-          cancelSOS(accessToken, result.id).then(() => {
-            cancelRequested.current = false;
-            setQueuedSOS(undefined);
-            setQueuedSOSCount(0);
-            setSosServerId(undefined);
-            setScreen('home');
-          }).catch(() => undefined);
-        }
-      },
-      ownership,
-    ),
-    [accessToken, ownership],
-  );
   // iOS only (frontend-mobile.md §8.3); createCallKitVoiceGateway returns
   // the unmodified default gateway on Android, so this has no effect there.
   const voiceGateway = useMemo(() => createCallKitVoiceGateway(), []);
-
-  useEffect(() => {
-    let active = true;
-    let stopTimer: () => void = () => undefined;
-    let stopBackground: () => void = () => undefined;
-    checkIns.initialize().then(rows => {
-      if (!active) return;
-      if (rows.length) setLastCheckInAt(rows[rows.length - 1].timestamp);
-      stopTimer = checkIns.start(() => networkState.current);
-    }).catch(() => undefined);
-    getRecentCheckIns(accessToken)
-      .then(rows => active && rows.length && setLastCheckInAt(rows[0].timestamp))
-      .catch(() => undefined);
-    const unsubscribe = NetInfo.addEventListener(state => {
-      networkState.current = state;
-      checkIns.connectivityChanged(state).catch(() => undefined);
-    });
-    configureCheckInBackgroundSync(checkIns, sos)
-      .then(stop => {
-        if (active) stopBackground = stop;
-        else stop();
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-      unsubscribe();
-      stopTimer();
-      stopBackground();
-    };
-  }, [accessToken, checkIns, sos]);
-
-  useEffect(() => {
-    let active = true;
-    let stop: () => void = () => undefined;
-    sos.initialize().then(rows => {
-      if (!active) return;
-      if (rows[0]) {
-        setQueuedSOS(rows[0]);
-        setScreen('sos-sent');
-      }
-      stop = sos.start(() => networkState.current);
-    }).catch(() => undefined);
-    const unsubscribe = NetInfo.addEventListener(state => {
-      networkState.current = state;
-      sos.connectivityChanged(state).catch(() => undefined);
-    });
-    getEmergencyContact(accessToken).then(contact => {
-      if (active) setHtoPhone(contact.hto_operator_phone_number ?? '');
-    }).catch(() => undefined);
-    return () => { active = false; stop(); unsubscribe(); };
-  }, [accessToken, sos]);
 
   useEffect(() => {
     registerPushInstallation(accessToken).catch(() => undefined);
@@ -220,9 +87,6 @@ export function AuthenticatedApp({
     getEsim(accessToken, packageId)
       .then((profile) => active && setEsimStatus(profile.status))
       .catch(() => active && setEsimStatus('not_issued'));
-    // The OS permission prompts are the opt-in gate. A denial never affects the
-    // permission-free date banner, and registration can be offered again later.
-    optIntoArrivalGeofence(accessToken, packageId).catch(() => undefined);
     return () => {
       active = false;
     };
@@ -360,44 +224,6 @@ export function AuthenticatedApp({
       />
     );
   }
-  if (screen === 'sos-confirm') {
-    return <SosConfirmScreen onConfirmed={async () => {
-      const item = await sos.captureOnce(undefined, new Date(), true);
-      setQueuedSOS(item);
-      setSosSynced(false);
-      setScreen('sos-sent');
-      try {
-        const location = await optionalCheckInLocation();
-        if (location) await sos.enrichLocation(item.clientGeneratedId, location);
-      } finally {
-        sos.releaseEnrichment(item.clientGeneratedId);
-      }
-      const current = await NetInfo.fetch();
-      networkState.current = current;
-      await sos.sync(current);
-    }} />;
-  }
-  if (screen === 'sos-sent' && queuedSOS) {
-    return <SosSentScreen
-      synced={sosSynced}
-      htoPhone={htoPhone}
-      timestamp={queuedSOS.timestamp}
-      onCancel={() => {
-        if (!sosServerId) {
-          cancelRequested.current = true;
-          return;
-        }
-        cancelSOS(accessToken, sosServerId)
-          .then(() => {
-            setQueuedSOS(undefined);
-            setQueuedSOSCount(0);
-            setSosServerId(undefined);
-            setScreen('home');
-          })
-          .catch(() => undefined);
-      }}
-    />;
-  }
   return (
     <HomeDashboardScreen
       departureDate={departureDate}
@@ -408,27 +234,6 @@ export function AuthenticatedApp({
       pstnMinutesTotal={balances?.pstnMinutesTotal ?? null}
       onActivateEsim={() => packageId && setScreen('activation')}
       onOpenCall={() => setScreen('dial')}
-      onOpenSOS={() => setScreen('sos-confirm')}
-      onCheckIn={async () => {
-        const tappedAt = new Date();
-        const item = await checkIns.capture(undefined, tappedAt, true);
-        setLastCheckInAt(item.timestamp);
-        try {
-          const location = await optionalCheckInLocation();
-          if (location) {
-            await checkIns.enrichLocation(item.clientGeneratedId, location);
-          }
-        } finally {
-          checkIns.releaseEnrichment(item.clientGeneratedId);
-        }
-        const current = await NetInfo.fetch();
-        networkState.current = current;
-        await checkIns.sync(current);
-        return (await checkIns.isPending(item.clientGeneratedId)) ? 'queued' : 'sent';
-      }}
-      lastCheckInAt={lastCheckInAt}
-      queuedCheckIns={queuedCheckIns}
-      queuedSOSAlerts={queuedSOSCount}
     />
   );
 }

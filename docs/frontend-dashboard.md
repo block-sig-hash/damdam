@@ -523,3 +523,29 @@ silently on an unmanaged phone — the employee installs and consents unless a
 separately supported managed-device workflow exists; organization credit is not
 automatically a shared carrier data pool; and offboarding respects personal
 services and carrier ownership rules. Chunks 22, 23 and 24 own the build.
+
+---
+
+## 9.10 Amendment — Operator Welfare Tracking Is Removed (US-30)
+
+**Recorded 9 September 2026 by build chunk 04, subchunk 04C.**
+
+Removed routes: `/sos-alerts` and `/admin/sos-notifications`. Removed API
+client functions: `getSOSAlerts`, `resolveSOSAlert`, `getFailedSOSNotifications`,
+`retrySOSNotification`, `retrySOSNotificationsBulk` and `subscribeToPushTopic`,
+along with `lib/push.ts` — operator push existed only to raise SOS alerts.
+
+**The roster projection goes too, and that is the substantive part.**
+`SCOPE-DISPOSITION.md` requires that welfare tracking is not quietly retained in
+the enterprise dashboard. Removing the screens would not have satisfied that:
+`GET /v1/hto/pilgrims` still reported `last_checkin_at` and `sos_status` for
+every person on a manifest, and the roster still ranked people by them. The
+fields are gone from `HtoPilgrimSummary`, the queries that computed them are
+gone from the pilgrim service, and `lib/pilgrimRisk.ts` — which sorted
+unresolved SOS first, then stale check-ins — is replaced by
+`lib/pilgrimRoster.ts`, keeping the name ordering that sort fell through to and
+the AC-18.7 search.
+
+An operator can still see who is on a manifest, their tier, activation and eSIM
+status. They can no longer see where anyone last was, or whether they are in
+distress.

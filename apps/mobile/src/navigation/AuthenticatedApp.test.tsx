@@ -3,10 +3,9 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { getEsim } from '../api/esimClient';
 import { getPackageStatus } from '../api/paymentClient';
 import {
-  optIntoArrivalGeofence,
   registerPushInstallation,
   subscribeToActivationDeepLinks,
-} from '../services/arrivalPrompts';
+} from '../services/activationLinks';
 import { AuthenticatedApp } from './AuthenticatedApp';
 
 jest.mock('react-native-device-info', () => ({
@@ -15,9 +14,8 @@ jest.mock('react-native-device-info', () => ({
 }));
 jest.mock('../api/esimClient', () => ({ getEsim: jest.fn() }));
 jest.mock('../api/paymentClient', () => ({ getPackageStatus: jest.fn() }));
-jest.mock('../services/arrivalPrompts', () => ({
-  ...jest.requireActual('../services/arrivalPrompts'),
-  optIntoArrivalGeofence: jest.fn(),
+jest.mock('../services/activationLinks', () => ({
+  ...jest.requireActual('../services/activationLinks'),
   registerPushInstallation: jest.fn(),
   subscribeToActivationDeepLinks: jest.fn(),
 }));
@@ -82,9 +80,6 @@ const mockRegisterPush = registerPushInstallation as jest.MockedFunction<
 const mockSubscribe = subscribeToActivationDeepLinks as jest.MockedFunction<
   typeof subscribeToActivationDeepLinks
 >;
-const mockGeofence = optIntoArrivalGeofence as jest.MockedFunction<
-  typeof optIntoArrivalGeofence
->;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -102,7 +97,6 @@ beforeEach(() => {
     pstn_minutes_remaining: 30,
   });
   mockRegisterPush.mockResolvedValue('registered');
-  mockGeofence.mockResolvedValue('registered');
   mockSubscribe.mockReturnValue(jest.fn());
 });
 
@@ -117,7 +111,6 @@ it('wires authenticated bootstrap, date banner, and activation navigation', asyn
 
   await waitFor(() => {
     expect(mockRegisterPush).toHaveBeenCalledWith('access-token');
-    expect(mockGeofence).toHaveBeenCalledWith('access-token', 'package-1');
     expect(mockGetEsim).toHaveBeenCalledWith('access-token', 'package-1');
   });
   expect(screen.getByTestId('esim-activation-banner')).toBeTruthy();
@@ -138,7 +131,6 @@ it('deep-links an authenticated pilgrim directly into activation', async () => {
 
   await act(async () => openPackage?.('linked-package'));
   expect(screen.getByTestId('wired-activation-flow')).toBeTruthy();
-  expect(mockGeofence).toHaveBeenCalledWith('access-token', 'linked-package');
 });
 
 it('AC-14.7: refreshes the displayed PSTN balance after a completed call', async () => {

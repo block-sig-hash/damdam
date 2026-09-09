@@ -17,8 +17,6 @@
     },
     "errors": {
       "generic": "Une erreur est survenue. Veuillez réessayer.",
-      "push": "Impossible d’activer les alertes du navigateur.",
-      "sosTitle": "Alerte SOS",
       "signInRequired": "Connectez-vous pour continuer.",
       "adminRequired": "Une session administrateur est requise."
     },
@@ -64,9 +62,6 @@
     "refreshing": "Actualisation…",
     "refresh": "Actualiser",
     "allManifests": "Tous les manifestes, triés par risque. Actualisation automatique toutes les 60 secondes.",
-    "unresolvedSos": "{count, plural, one {# alerte SOS non résolue} other {# alertes SOS non résolues}}",
-    "manifestSos": "{count, plural, one {# alerte SOS non résolue sur ce manifeste} other {# alertes SOS non résolues sur ce manifeste}}",
-    "openSos": "Ouvrir les alertes SOS",
     "noManifests": "Aucun manifeste pour le moment.",
     "createManifest": "Créer votre premier manifeste",
     "manifest": "Manifeste",
@@ -84,8 +79,6 @@
     "phone": "Téléphone",
     "tier": "Formule",
     "activation": "Activation",
-    "lastCheckIn": "Dernier pointage",
-    "noCheckIn": "Aucun pointage",
     "activated": "Activée",
     "notActivated": "Non activée",
     "followUp": "À suivre",
@@ -109,7 +102,11 @@
     "pushFailed": "Impossible d'activer les alertes du navigateur. Réessayez dans un instant.",
     "pushUnsupported": "Ce navigateur ne prend pas en charge les alertes push.",
     "filterAria": "Filtre de statut SOS",
-    "filters": {"active": "Actives", "resolved": "Résolues", "all": "Toutes"},
+    "filters": {
+      "active": "Actives",
+      "resolved": "Résolues",
+      "all": "Toutes"
+    },
     "empty": "Aucune alerte SOS : {filter}.",
     "locationAlt": "Position de {name}",
     "locationUnavailable": "Position indisponible",
@@ -219,7 +216,11 @@
     },
     "operators": {
       "title": "Approbation des opérateurs HTO",
-      "statuses": {"pending": "En attente", "approved": "Approuvés", "rejected": "Rejetés"},
+      "statuses": {
+        "pending": "En attente",
+        "approved": "Approuvés",
+        "rejected": "Rejetés"
+      },
       "loading": "Chargement des opérateurs…",
       "empty": "Aucun opérateur : {status}.",
       "licence": "Licence {number}",

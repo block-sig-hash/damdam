@@ -17,8 +17,6 @@
     },
     "errors": {
       "generic": "Something went wrong. Please try again.",
-      "push": "Could not enable browser alerts.",
-      "sosTitle": "SOS alert",
       "signInRequired": "Sign in to continue.",
       "adminRequired": "An administrator session is required."
     },
@@ -64,9 +62,6 @@
     "refreshing": "Refreshing…",
     "refresh": "Refresh",
     "allManifests": "All manifests, sorted by risk. Auto-refreshes every 60 seconds.",
-    "unresolvedSos": "{count, plural, one {# unresolved SOS alert} other {# unresolved SOS alerts}}",
-    "manifestSos": "{count, plural, one {# unresolved SOS alert on this manifest} other {# unresolved SOS alerts on this manifest}}",
-    "openSos": "Open SOS Alerts",
     "noManifests": "No manifests yet.",
     "createManifest": "Create your first manifest",
     "manifest": "Manifest",
@@ -84,8 +79,6 @@
     "phone": "Phone",
     "tier": "Tier",
     "activation": "Activation",
-    "lastCheckIn": "Last check-in",
-    "noCheckIn": "No check-in yet",
     "activated": "Activated",
     "notActivated": "Not activated",
     "followUp": "Follow up",
@@ -109,7 +102,11 @@
     "pushFailed": "Could not enable browser alerts. Try again shortly.",
     "pushUnsupported": "This browser doesn't support push alerts.",
     "filterAria": "SOS status filter",
-    "filters": {"active": "Active", "resolved": "Resolved", "all": "All"},
+    "filters": {
+      "active": "Active",
+      "resolved": "Resolved",
+      "all": "All"
+    },
     "empty": "No {filter} SOS alerts.",
     "locationAlt": "Location of {name}",
     "locationUnavailable": "Location unavailable",
@@ -219,7 +216,11 @@
     },
     "operators": {
       "title": "HTO operator approvals",
-      "statuses": {"pending": "Pending", "approved": "Approved", "rejected": "Rejected"},
+      "statuses": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "rejected": "Rejected"
+      },
       "loading": "Loading operators…",
       "empty": "No {status} operators.",
       "licence": "Licence {number}",

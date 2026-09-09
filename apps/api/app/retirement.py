@@ -22,11 +22,20 @@ CHECKINS = "checkins"
 SOS = "sos"
 FAMILY_CONTACTS = "family_contacts"
 EMERGENCY_CONTACT = "emergency_contact"
+ARRIVAL_GEOFENCE = "arrival_geofence"
 VERIFIED_CLI = "verified_cli"
 APP_VOICE = "app_voice"
 
 RETIRED_FEATURES = frozenset(
-    {CHECKINS, SOS, FAMILY_CONTACTS, EMERGENCY_CONTACT, VERIFIED_CLI, APP_VOICE}
+    {
+        CHECKINS,
+        SOS,
+        FAMILY_CONTACTS,
+        EMERGENCY_CONTACT,
+        ARRIVAL_GEOFENCE,
+        VERIFIED_CLI,
+        APP_VOICE,
+    }
 )
 
 RETIRED_ERROR_CODE = "feature_retired"

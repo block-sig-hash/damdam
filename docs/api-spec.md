@@ -1202,3 +1202,19 @@ Unchanged and explicitly retained: `DELETE /v1/me/account`,
 `PUT /v1/me/device-token`, and every authentication, order, payment, package and
 eSIM endpoint. `docs/api-spec.yaml` is regenerated from the application by
 `apps/api/scripts/export_api_spec.py`; CI fails on drift.
+
+## 7.29 Amendment — Arrival Geofencing and the Welfare Roster Fields
+
+**Recorded 9 September 2026 by build chunk 04, subchunk 04C (US-30).**
+
+`GET /v1/packages/{package_id}/geofence` joins the retired set from §7.28 and
+answers `410` with `details.feature` of `arrival_geofence`. The
+`destination_geofences` table and its rows are retained.
+
+`GET /v1/hto/pilgrims` no longer returns `last_checkin_at` or `sos_status`. This
+is a **breaking response change** for any operator client reading those fields;
+the only such client is the DamDam dashboard, which is updated in the same
+change. The removal is required rather than cosmetic — serving the fields is
+itself the welfare tracking that
+[SCOPE-DISPOSITION.md](implementation/SCOPE-DISPOSITION.md) forbids retaining.
+Every other field on the roster is unchanged.

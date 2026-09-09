@@ -1262,8 +1262,6 @@ paths:
       - payments
       summary: Package Geofence
       operationId: package_geofence_v1_packages__package_id__geofence_get
-      security:
-      - HTTPBearer: []
       parameters:
       - name: package_id
         in: path
@@ -1273,12 +1271,12 @@ paths:
           format: uuid
           title: Package Id
       responses:
-        '200':
-          description: Successful Response
+        '410':
+          description: This feature has been retired from the product.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PackageGeofenceResponse'
+                $ref: '#/components/schemas/RetiredFeatureResponse'
         '422':
           description: Validation Error
           content:
@@ -2615,15 +2613,6 @@ components:
         activation_status:
           type: string
           title: Activation Status
-        last_checkin_at:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Last Checkin At
-        sos_status:
-          type: string
-          title: Sos Status
-          default: none
       type: object
       required:
       - id
@@ -3028,27 +3017,6 @@ components:
       - id
       - status
       title: PackageCancelResponse
-    PackageGeofenceResponse:
-      properties:
-        latitude:
-          type: number
-          title: Latitude
-        longitude:
-          type: number
-          title: Longitude
-        radius_meters:
-          type: number
-          title: Radius Meters
-        request_id:
-          type: string
-          title: Request Id
-      type: object
-      required:
-      - latitude
-      - longitude
-      - radius_meters
-      - request_id
-      title: PackageGeofenceResponse
     PackageStatusResponse:
       properties:
         status:

@@ -12,7 +12,6 @@ import {
   View,
 } from 'react-native';
 import { Banner } from '../../components/Banner/Banner';
-import { EmergencyEssentials } from '../../components/EmergencyEssentials/EmergencyEssentials';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
 import { SecondaryButton } from '../../components/SecondaryButton/SecondaryButton';
 import { color, radius, space, typography } from '../../theme/tokens';
@@ -152,10 +151,6 @@ export function EsimQrCodeScreen({
         {t('qr.offlineNote')}
       </Text>
 
-      {/* US-12 AC-12.1: same screen as the eSIM QR/download, but a clearly
-          separated section — not merged into the eSIM card/detail blocks
-          above. */}
-      <EmergencyEssentials accessToken={accessToken} />
     </ScrollView>
   );
 }
