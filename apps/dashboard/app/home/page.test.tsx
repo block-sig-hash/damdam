@@ -25,8 +25,6 @@ const crossManifestPilgrims = {
       tier: "Standard",
       esim_status: "activated",
       activation_status: "activated",
-      last_checkin_at: null,
-      sos_status: "active",
     },
     {
       id: "p-bello",
@@ -37,8 +35,6 @@ const crossManifestPilgrims = {
       tier: null,
       esim_status: "not_checked",
       activation_status: "not_activated",
-      last_checkin_at: null,
-      sos_status: "none",
     },
   ],
 };
@@ -71,25 +67,6 @@ describe("HTO Home cross-manifest roster", () => {
     expect(aminaRow).toHaveTextContent("Flight NAF203");
     const belloRow = screen.getByText("Bello Aliyu").closest("tr")!;
     expect(belloRow).toHaveTextContent("Flight NAF900");
-  });
-
-  it("risk-sorts across manifests: unresolved SOS first regardless of which manifest", async () => {
-    window.localStorage.setItem("hto_access_token", "hto-token");
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce(response(crossManifestPilgrims))
-        .mockResolvedValueOnce(response(manifests)),
-    );
-
-    render(<HTOHomePage />);
-    await screen.findByText("Amina Yusuf");
-
-    const rows = screen.getAllByRole("row").slice(1);
-    expect(rows[0]).toHaveTextContent("Amina Yusuf");
-    expect(rows[0]).toHaveClass("row-sos");
-    expect(screen.getByText("1 unresolved SOS alert")).toBeInTheDocument();
   });
 
   it("the manifest filter dropdown narrows the table client-side, without a new request", async () => {

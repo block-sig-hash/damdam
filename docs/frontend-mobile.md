@@ -744,3 +744,106 @@ This subchunk isolates the queues; it does not retire them. The screens,
 services, API clients, native permissions and server routes are removed in
 subchunks 04B–04E — see
 [`implementation/retirement/INVENTORY.md`](./implementation/retirement/INVENTORY.md).
+
+---
+
+## 8.11 Amendment — Retired Mobile Surface and Native Permissions (US-30, AC-30.5)
+
+**Recorded 9 September 2026 by build chunk 04, subchunk 04C.**
+
+Removed screens: `SosConfirm`, `SosSent`. Removed services: `checkInOutbox`,
+`sosOutbox`, `outboxOwnership`, `checkInLocation`, `checkInBackground`,
+`arrivalPrompts`, and the `testSqlite` test adapter. Removed API clients:
+`checkInClient`, `sosClient`, `familyContactClient`, `emergencyContactClient`.
+Removed component: `EmergencyEssentials`, with the section it occupied on the
+eSIM QR screen. Home keeps its balances, banner and support handoff, and loses
+the check-in button, the SOS button, the queue indicator and the last-check-in
+line.
+
+**Subchunk 04A's account-scoped queues are removed here, not undone.** 04A was
+the "isolate" half of the inventory's *isolate first, retire second* sequence:
+it makes an installed build safe for the accounts already using it, and this
+removes the queue so the risk cannot recur. The AC-30.4 evidence stands as the
+record for that transition.
+
+`arrivalPrompts.ts` is split rather than deleted. Arrival geofencing retires
+with the Hajj framing, but the eSIM activation deep link, push installation and
+the date-based activation banner do not depend on it — they are now
+`services/activationLinks.ts`. The banner was always permission-free: it keys on
+the departure date, never on the device's location.
+
+### Native permissions
+
+Android drops `ACCESS_FINE_LOCATION` and `ACCESS_BACKGROUND_LOCATION`, the
+`ArrivalGeofenceReceiver` registration, and the `play-services-location`
+dependency that only the geofence client used. iOS drops
+`NSLocationWhenInUseUsageDescription` and
+`NSLocationAlwaysAndWhenInUseUsageDescription`.
+
+`READ_CONTACTS`, `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS` and the `voip`
+background mode belong to app calling and are removed with it in 04D.
+`WRITE_EMBEDDED_SUBSCRIPTIONS`, `POST_NOTIFICATIONS`, `INTERNET`,
+`ACCESS_NETWORK_STATE` and the euicc/telephony features are retained.
+
+The native module is still registered as `ArrivalPromptModule` although it now
+only fetches an FCM token. Renaming it needs an Android build to verify, which
+this change does not run.
+
+`src/featureRetirement.test.ts` walks the shipped source and fails on any
+surviving import of a retired module, any code opening the retired queue
+database, and any reintroduced permission.
+
+### Device-local data is left in place
+
+The retired `damdam-safety.sqlite` file is **not** deleted from devices. It may
+hold queued rows and 04A's quarantine table, both of which are personal data,
+and deleting it is exactly the irreversible step
+[SCOPE-DISPOSITION.md](implementation/SCOPE-DISPOSITION.md) gates on the founder
+decision. Nothing reads or writes it any more; its removal is owed by the
+retention plan in 04E.
+
+---
+
+## 8.12 Amendment — App Calling and Caller-ID Verification Are Removed (US-30, AC-30.5)
+
+**Recorded 9 September 2026 by build chunk 04, subchunk 04D.**
+
+Removed screens: `DialPad`, `ActiveCall`, and the four `CliVerification`
+screens. Removed services: `callKit`, `voiceGateway`, `deviceContacts`. Removed
+API clients: `cliClient`, `voiceClient`. Removed util: `cliPhoneNumber`. Home
+loses its call entry point. The `safety` locale namespace and the retired
+`dial`, `callerId` and `activeCall` sections of `home` are deleted in both
+English and French.
+
+Native calling is removed in full rather than half:
+
+- **Android** drops `READ_CONTACTS`, `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`,
+  `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_PHONE_CALL`, the
+  `CallHeadlessTaskService`, and the `io.wazo.callkeep.VoiceConnectionService`
+  declaration. `DamDamFirebaseMessagingService` no longer routes incoming-call
+  payloads.
+- **iOS** drops `NSContactsUsageDescription`,
+  `NSMicrophoneUsageDescription`, the whole `UIBackgroundModes` array
+  (`voip` and `audio`), `VoipCallKitBridge.{h,m}`, and the PushKit registration
+  and `PKPushRegistryDelegate` conformance in `AppDelegate.swift`.
+- **Dependencies** drop `react-native-callkeep`,
+  `react-native-voip-push-notification`, `react-native-contacts` and
+  `@telnyx/react-voice-commons-sdk`, and the Jest mocks that existed only for
+  them.
+
+**Half-removing this would have been a defect, not a smaller change.** The
+AppDelegate called `registerVoipPushes()` at launch; leaving that while removing
+the `voip` background mode would ship an app registering for a push type it no
+longer declares. The npm packages had to go with it, because the native bridge
+included `RNCallKeep/RNCallKeep.h` and `RNVoipPushNotificationManager.h`
+directly.
+
+The remaining Android permissions are `INTERNET`,
+`WRITE_EMBEDDED_SUBSCRIPTIONS`, `POST_NOTIFICATIONS` and
+`ACCESS_NETWORK_STATE`, plus the euicc/telephony feature declarations. iOS
+declares no usage description for any retired feature and no background mode.
+
+**Neither native build was run.** No macOS runner and no Android build is
+available in this environment, so the Xcode project edit (six references to the
+removed bridge files) and the manifest and Gradle changes are reviewed source
+changes, not verified builds. The screenshot jobs are the first place they run.

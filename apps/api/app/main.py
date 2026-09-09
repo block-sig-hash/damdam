@@ -17,23 +17,13 @@ from app.auth.hto import HTOAuthError, HTOService
 from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
 from app.checkins.routes import router as checkin_router
-from app.checkins.service import (
-    CheckInError,
-    CheckInNotificationService,
-    CheckInScheduler,
-    CheckInService,
-    NoopCheckInScheduler,
-)
 from app.config import Settings, get_settings
 from app.container import (
-    CeleryCheckInScheduler,
     CeleryEsimIssuanceScheduler,
     CeleryProvisioningScheduler,
-    CelerySOSScheduler,
     build_notification_service,
     build_otp_service,
     build_payment_providers,
-    build_sms_sender,
     default_dependencies,
 )
 from app.db import SessionFactory
@@ -55,8 +45,7 @@ from app.manifests.routes import pricing_router
 from app.manifests.routes import router as manifest_router
 from app.manifests.service import ManifestError, ManifestService
 from app.monitoring import PostHogExceptionMiddleware, build_exception_tracker
-from app.notifications.providers import FirebasePushSender
-from app.notifications.service import EmailSender, SMSNotificationSender, WhatsAppSender
+from app.notifications.service import EmailSender, WhatsAppSender
 from app.otp.providers.base import OTPProvider
 from app.otp.routes import router as otp_webhook_router
 from app.otp.service import FailoverScheduler, OTPError, RedisClient, utc_now
@@ -71,29 +60,15 @@ from app.payments.service import PaymentError, PaymentService
 from app.pricing.routes import router as retail_pricing_router
 from app.pricing.service import RetailPricingService
 from app.profile.device_tokens import DeviceTokenService
-from app.profile.emergency_contact import EmergencyContactService
-from app.profile.family_contacts import FamilyContactError, FamilyContactService
 from app.profile.routes import router as profile_router
 from app.reports.routes import router as reports_router
 from app.reports.service import ProvisioningReportService
 from app.retention.service import RetentionService
-from app.sos.notifications import (
-    PushSubscriptionManager,
-    PushSubscriptionService,
-    SOSChannelSender,
-    SOSNotificationService,
-    SOSProviderAdapter,
-)
+from app.retirement import RetiredFeatureError
 from app.sos.routes import router as sos_router
-from app.sos.service import NoopSOSScheduler, SOSError, SOSScheduler, SOSService
-from app.voice.caller_identity_service import CallerIdentityError, CallerIdentityService
 from app.voice.providers import TelnyxVoiceProvider, VoiceProvider
 from app.voice.routes import router as voice_router
 from app.voice.service import VoiceError, VoiceService
-from app.voice.verified_numbers import (
-    PhoneVerificationProvider,
-    TelnyxVerifiedNumbersProvider,
-)
 
 
 def create_app(
@@ -109,14 +84,8 @@ def create_app(
     provisioning_scheduler: ProvisioningScheduler | None = None,
     payment_providers: Mapping[str, PaymentProvider] | None = None,
     voice_provider: VoiceProvider | None = None,
-    phone_verification_provider: PhoneVerificationProvider | None = None,
     esim_providers: Mapping[str, EsimProvider] | None = None,
     esim_scheduler: EsimIssuanceScheduler | None = None,
-    sms_sender: SMSNotificationSender | None = None,
-    checkin_scheduler: CheckInScheduler | None = None,
-    sos_scheduler: SOSScheduler | None = None,
-    sos_sender: SOSChannelSender | None = None,
-    push_subscription_manager: PushSubscriptionManager | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     supplied = (redis_client, providers, scheduler, session_factory)
@@ -167,11 +136,6 @@ def create_app(
     notification_service = build_notification_service(
         resolved_settings, email_sender, whatsapp_sender
     )
-    resolved_checkin_scheduler = checkin_scheduler or (
-        NoopCheckInScheduler()
-        if resolved_settings.app_env == "test"
-        else CeleryCheckInScheduler()
-    )
     resolved_esim_scheduler = esim_scheduler or (
         NoopEsimIssuanceScheduler()
         if resolved_settings.app_env == "test"
@@ -186,9 +150,7 @@ def create_app(
         clock,
     )
     api.state.hto_service = HTOService(resolved_settings, notification_service, clock)
-    api.state.family_contact_service = FamilyContactService(notification_service, clock)
     api.state.device_token_service = DeviceTokenService(clock)
-    api.state.emergency_contact_service = EmergencyContactService()
     resolved_chaining_service = PackageChainingService(clock)
     resolved_audit_service = AuditLogService(clock)
     api.state.audit_service = resolved_audit_service
@@ -225,60 +187,19 @@ def create_app(
         clock,
         cast(RedisClient, redis_client),
     )
-    api.state.caller_identity_service = CallerIdentityService(
-        resolved_settings,
-        phone_verification_provider
-        or TelnyxVerifiedNumbersProvider(resolved_settings),
-        cast(RedisClient, redis_client),
-        clock,
-    )
-    resolved_sms_sender = build_sms_sender(resolved_settings, sms_sender)
-    api.state.checkin_service = CheckInService(
-        cast(RedisClient, redis_client), resolved_checkin_scheduler, clock
-    )
-    api.state.checkin_notification_service = CheckInNotificationService(
-        notification_service.whatsapp,
-        resolved_sms_sender,
-        resolved_checkin_scheduler,
-        clock,
-        resolved_settings.family_notify_fallback_seconds,
-        resolved_settings.family_notify_channel_primary,
-        resolved_settings.family_notify_channel_secondary,
-    )
-    resolved_sos_scheduler = sos_scheduler or (
-        NoopSOSScheduler()
-        if resolved_settings.app_env == "test"
-        else CelerySOSScheduler()
-    )
-    api.state.sos_service = SOSService(resolved_sos_scheduler, clock)
-    push_sender = FirebasePushSender(resolved_settings)
-    api.state.sos_notification_service = SOSNotificationService(
-        sos_sender
-        or SOSProviderAdapter(notification_service, push_sender, resolved_sms_sender),
-        clock,
-        resolved_sos_scheduler,
-        resolved_settings.family_notify_fallback_seconds,
-    )
-    api.state.push_subscription_service = PushSubscriptionService(
-        push_subscription_manager or push_sender
-    )
 
-    @api.exception_handler(CheckInError)
-    async def checkin_error_handler(
-        request: Request, exc: CheckInError
+    @api.exception_handler(RetiredFeatureError)
+    async def retired_feature_handler(
+        request: Request, exc: RetiredFeatureError
     ) -> JSONResponse:
-        statuses = {
-            "checkin_rate_limited": 429,
-            "checkin_id_conflict": 409,
-            "invalid_webhook_signature": 401,
-            "invalid_webhook_payload": 400,
-        }
+        # 410 rather than 404: the feature is gone on purpose, and a client
+        # must not read the refusal as a routing fault worth retrying.
         return JSONResponse(
-            status_code=statuses[exc.code],
+            status_code=410,
             content={
                 "error": exc.code,
                 "message": api_message(request, exc.code),
-                "details": {},
+                "details": {"feature": exc.feature, "upgrade_required": True},
             },
         )
 
@@ -425,29 +346,6 @@ def create_app(
             },
         )
 
-    @api.exception_handler(FamilyContactError)
-    async def family_contact_error_handler(
-        request: Request, exc: FamilyContactError
-    ) -> JSONResponse:
-        statuses = {
-            "family_contact_exists": 409,
-            "family_contact_not_found": 404,
-            "notification_unavailable": 503,
-        }
-        return JSONResponse(
-            status_code=statuses[exc.code],
-            content={
-                "error": exc.code,
-                "message": api_message(
-                    request,
-                    "family_contact_notification_unavailable"
-                    if exc.code == "notification_unavailable"
-                    else exc.code,
-                ),
-                "details": {},
-            },
-        )
-
     @api.exception_handler(ActivationError)
     async def activation_error_handler(
         request: Request, exc: ActivationError
@@ -479,7 +377,6 @@ def create_app(
             "invalid_webhook_signature": 401,
             "invalid_webhook_payload": 400,
             "package_not_found": 404,
-            "destination_geofence_not_configured": 404,
         }
         return JSONResponse(
             status_code=statuses[exc.code],
@@ -512,47 +409,6 @@ def create_app(
             "cli_not_verified": 403,
             "pstn_balance_exhausted": 409,
             "voice_unavailable": 503,
-        }
-        return JSONResponse(
-            status_code=statuses[exc.code],
-            content={
-                "error": exc.code,
-                "message": api_message(request, exc.code),
-                "details": {},
-            },
-        )
-
-    @api.exception_handler(CallerIdentityError)
-    async def caller_identity_error_handler(
-        request: Request, exc: CallerIdentityError
-    ) -> JSONResponse:
-        statuses = {
-            "invalid_phone_number": 400,
-            "phone_verification_unavailable": 503,
-            "cli_verification_rate_limited": 429,
-            "caller_identity_not_found": 404,
-            "invalid_state": 409,
-            "verification_code_invalid": 400,
-            "number_already_verified_elsewhere": 409,
-            "no_active_caller_id": 404,
-        }
-        return JSONResponse(
-            status_code=statuses[exc.code],
-            content={
-                "error": exc.code,
-                "message": api_message(request, exc.code),
-                "details": {},
-            },
-        )
-
-    @api.exception_handler(SOSError)
-    async def sos_error_handler(request: Request, exc: SOSError) -> JSONResponse:
-        statuses = {
-            "sos_id_conflict": 409,
-            "sos_not_found": 404,
-            "sos_already_resolved": 409,
-            "sos_already_cancelled": 409,
-            "push_subscription_failed": 503,
         }
         return JSONResponse(
             status_code=statuses[exc.code],

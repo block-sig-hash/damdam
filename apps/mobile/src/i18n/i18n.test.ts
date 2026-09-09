@@ -9,8 +9,6 @@ import homeEn from './locales/en/home.json';
 import homeFr from './locales/fr/home.json';
 import paymentsEn from './locales/en/payments.json';
 import paymentsFr from './locales/fr/payments.json';
-import safetyEn from './locales/en/safety.json';
-import safetyFr from './locales/fr/safety.json';
 
 function keys(value: unknown, prefix = ''): string[] {
   if (!value || typeof value !== 'object') return [prefix];
@@ -39,7 +37,6 @@ describe('mobile locale runtime', () => {
       [authEn, authFr],
       [homeEn, homeFr],
       [esimEn, esimFr],
-      [safetyEn, safetyFr],
       [paymentsEn, paymentsFr],
     ]) {
       expect(keys(french).sort()).toEqual(keys(english).sort());

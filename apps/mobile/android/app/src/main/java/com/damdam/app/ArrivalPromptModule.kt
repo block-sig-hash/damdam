@@ -1,17 +1,20 @@
 package com.damdam.app
 
-import android.app.PendingIntent
-import android.content.Intent
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
-import com.google.android.gms.location.Geofence
-import com.google.android.gms.location.GeofencingRequest
-import com.google.android.gms.location.LocationServices
 import com.google.firebase.messaging.FirebaseMessaging
 
-class ArrivalPromptModule(private val context: ReactApplicationContext) :
+/**
+ * Push installation for order and eSIM notifications.
+ *
+ * This also registered the Saudi arrival geofence until US-30 retired arrival
+ * geofencing. The React Native module name is unchanged so the JS binding and
+ * the native registration stay in step; renaming it needs an Android build,
+ * which this change does not run.
+ */
+class ArrivalPromptModule(context: ReactApplicationContext) :
   ReactContextBaseJavaModule(context) {
   override fun getName() = "ArrivalPromptModule"
 
@@ -25,40 +28,4 @@ class ArrivalPromptModule(private val context: ReactApplicationContext) :
       promise.reject("FCM_CONFIGURATION", "Push registration is not configured in this build.", error)
     }
   }
-
-  @ReactMethod
-  fun registerArrivalGeofence(
-    packageId: String,
-    latitude: Double,
-    longitude: Double,
-    radiusMeters: Float,
-    requestId: String,
-    promise: Promise,
-  ) {
-    val geofence = Geofence.Builder()
-      .setRequestId(requestId)
-      .setCircularRegion(latitude, longitude, radiusMeters)
-      .setExpirationDuration(Geofence.NEVER_EXPIRE)
-      .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER)
-      .build()
-    val request = GeofencingRequest.Builder()
-      .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
-      .addGeofence(geofence)
-      .build()
-    try {
-      LocationServices.getGeofencingClient(context)
-        .addGeofences(request, geofencePendingIntent(packageId))
-        .addOnSuccessListener { promise.resolve(null) }
-        .addOnFailureListener { promise.reject("GEOFENCE_REGISTRATION", "Arrival alert could not be enabled.", it) }
-    } catch (error: SecurityException) {
-      promise.reject("GEOFENCE_PERMISSION", "Location permission is required for arrival alerts.", error)
-    }
-  }
-
-  private fun geofencePendingIntent(packageId: String): PendingIntent = PendingIntent.getBroadcast(
-    context,
-    packageId.hashCode(),
-    Intent(context, ArrivalGeofenceReceiver::class.java).putExtra("package_id", packageId),
-    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
-  )
 }

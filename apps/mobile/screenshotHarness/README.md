@@ -23,7 +23,7 @@ response router (`fetchMock.ts`) instead of running a real backend.
 ## How it's structured
 
 - `fixtures.ts` — canned data (pricing tiers, eSIM profile, call
-  history, a fake `VoiceCallSession`, etc.)
+  history, package balances, etc.)
 - `fetchMock.ts` — installs a `global.fetch` override that answers
   the handful of endpoints target screens call on mount. Anything not
   explicitly routed gets a 404, so a screen missing a fixture fails
@@ -56,7 +56,7 @@ screen in place once tapped.
    - takeScreenshot: <key>-en
    ```
    If the screen has no `testID` of its own, `assertVisible` can
-   match visible text instead (see `sos-confirm.yaml` for an example).
+   match visible text instead.
    Every flow must then relaunch the harness, select
    `harness-locale-fr`, repeat the assertion, and capture
    `<key>-fr`. CI does not count images: `scripts/validateScreenshots.js`
@@ -76,17 +76,12 @@ picker, not at build time.
 
 ## What's explicitly out of scope
 
-**The native CallKit (iOS) / ConnectionService (Android) incoming-call
-UI itself is not capturable here, and isn't capturable by any CI
-approach** — it's OS-level chrome rendered outside the app's own view
-hierarchy, only reachable via a real VoIP push (Apple PushKit) or a
-real FCM-triggered Headless JS task (`callKit.ts`), neither of which
-can be triggered headlessly in CI without a live push/telecom event.
-The `active-call` target instead captures `ActiveCallScreen` — the
-in-app UI a pilgrim sees *after* answering — mounted directly with a
-fixture `VoiceCallSession`. That's a real, useful screen to visually
-review; it is not a substitute for seeing the native call UI, and
-this harness makes no attempt to fake one.
+**Calling is no longer an app surface at all.** US-30 retired in-app
+WebRTC calling, the dial pad and the caller-ID verification screens,
+so their harness targets and Maestro flows are gone. Carrier voice
+happens in the platform dialer, which is OS-level chrome outside this
+app's view hierarchy and outside any CI screenshot approach. Chunk 15
+owns whatever in-app call surface the carrier line needs.
 
 The `esim-activation-prompt-android` / `esim-activation-guide-ios`
 targets similarly bypass `EsimActivationFlow`'s real container (which

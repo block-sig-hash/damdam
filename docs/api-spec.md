@@ -1162,3 +1162,89 @@ the later request sees the revocation and returns `invalid_refresh_token` throug
 the existing error contract. The stored token's ownership, expiry, hash and
 revocation state remain authoritative alongside its signed claims. Request and
 response schemas, token lifetimes and the OpenAPI contract are unchanged.
+
+## 7.28 Amendment — Retired Endpoints Answer 410, Not Silence
+
+**Recorded 9 September 2026 by build chunk 04, subchunk 04B (US-30, AC-30.1).**
+
+The check-in, SOS, family-contact and emergency-contact endpoints are withdrawn
+under [SCOPE-DISPOSITION.md](implementation/SCOPE-DISPOSITION.md). Their routes
+stay registered so the refusal can be explicit:
+
+```
+HTTP/1.1 410 Gone
+{"error": "feature_retired",
+ "message": "<localized>",
+ "details": {"feature": "sos", "upgrade_required": true}}
+```
+
+`410` rather than `404`: the feature is gone deliberately, and a client must not
+read the refusal as a routing fault worth retrying. `410` rather than a success
+envelope: the original defect was that a client could be told an SOS alert had
+been raised when no operator would ever see it. `details.feature` is one of
+`checkins`, `sos`, `family_contacts`, `emergency_contact`, and clients should
+key an upgrade prompt on `error`, not on the message text, which is localized.
+
+Retired: `POST /v1/checkins`, `GET /v1/me/checkins`,
+`GET|POST /v1/webhooks/meta/whatsapp`, `POST /v1/sos`,
+`POST /v1/sos/{alert_id}/cancel`, `GET /v1/hto/sos-alerts`,
+`POST /v1/hto/sos-alerts/{alert_id}/resolve`, `POST /v1/hto/push-subscriptions`,
+`GET /v1/admin/sos-notifications/failed`,
+`POST /v1/admin/sos-notifications/retry-bulk`,
+`POST /v1/admin/sos-notifications/{notification_id}/retry`,
+`POST|PATCH /v1/me/family-contact` and `GET /v1/me/emergency-contact`.
+
+The retired endpoints no longer require authentication. There is nothing behind
+them to protect, and a caller should be told the feature is gone rather than
+that their credentials are wrong.
+
+Unchanged and explicitly retained: `DELETE /v1/me/account`,
+`PUT /v1/me/device-token`, and every authentication, order, payment, package and
+eSIM endpoint. `docs/api-spec.yaml` is regenerated from the application by
+`apps/api/scripts/export_api_spec.py`; CI fails on drift.
+
+## 7.29 Amendment — Arrival Geofencing and the Welfare Roster Fields
+
+**Recorded 9 September 2026 by build chunk 04, subchunk 04C (US-30).**
+
+`GET /v1/packages/{package_id}/geofence` joins the retired set from §7.28 and
+answers `410` with `details.feature` of `arrival_geofence`. The
+`destination_geofences` table and its rows are retained.
+
+`GET /v1/hto/pilgrims` no longer returns `last_checkin_at` or `sos_status`. This
+is a **breaking response change** for any operator client reading those fields;
+the only such client is the DamDam dashboard, which is updated in the same
+change. The removal is required rather than cosmetic — serving the fields is
+itself the welfare tracking that
+[SCOPE-DISPOSITION.md](implementation/SCOPE-DISPOSITION.md) forbids retaining.
+Every other field on the roster is unchanged.
+
+## 7.30 Amendment — App Voice Tokens and CLI Verification Retire
+
+**Recorded 9 September 2026 by build chunk 04, subchunk 04D (US-30).**
+
+`POST /v1/voice/token` answers `410` with `details.feature` of `app_voice`.
+WebRTC/SIP credentials are not the launch calling mechanism; the native dialer
+on the carrier eSIM is.
+
+`POST /v1/voice/cli/verify`, `POST /v1/voice/cli/{identity_id}/confirm`,
+`POST /v1/voice/cli/{identity_id}/consent`, `POST /v1/voice/cli/revoke`,
+`POST /v1/voice/cli/lost-sim` and `GET /v1/voice/cli/status` answer `410` with
+`details.feature` of `verified_cli`. External verified caller ID is deferred
+under D2, with a carrier-assigned number as the outbound identity.
+
+`GET /v1/voice/eligibility` **no longer returns `cli_not_verified`**. That gate
+was a launch dependency on a deferred feature: with enrolment retired, nobody
+could ever satisfy it, so every user would have been reported permanently
+ineligible to call. Remaining-minutes remains the only reason.
+
+Retained: `GET /v1/voice/eligibility`, `POST /v1/webhooks/telnyx/call-events`
+and `GET /v1/me/calls`, with the `call_logs`, `voice_credentials`,
+`verified_caller_identities` and `caller_id_consents` tables and their rows.
+Call history is financial history.
+
+**The call-event pipeline is now unreachable in production and chunk 15 owns
+it.** `_handle_initiated` bridges a WebRTC leg to PSTN using a SIP credential
+that only `POST /voice/token` ever provisioned and a verified caller identity
+nobody can obtain. It is left in place, with its tests, as the raw material for
+the carrier-voice model rather than redesigned here.

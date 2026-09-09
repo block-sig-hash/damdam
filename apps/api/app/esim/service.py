@@ -1,5 +1,5 @@
 from collections.abc import Callable, Mapping
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
@@ -14,7 +14,6 @@ from app.auth.models import (
     PricingTier,
     User,
 )
-from app.checkins.models import CheckIn
 from app.config import Settings
 from app.esim.models import (
     DeviceCompatibilityEvent,
@@ -33,7 +32,6 @@ from app.esim.providers import (
 from app.esim.schemas import DeviceCompatibilityCreate, HtoPilgrimSummary
 from app.notifications.service import NotificationError, NotificationService
 from app.packages.models import Package, PackageStatus
-from app.sos.models import SOSAlert, SOSStatus
 
 
 class EsimError(Exception):
@@ -382,28 +380,7 @@ class HtoPilgrimService:
 
         user_ids = {p.user_id for p in pilgrims if p.user_id is not None}
         esim_statuses: dict[UUID, str] = {}
-        last_checkins: dict[UUID, datetime] = {}
-        active_sos_user_ids: set[UUID] = set()
         if user_ids:
-            checkins = session.exec(
-                select(CheckIn).where(col(CheckIn.user_id).in_(user_ids))
-            ).all()
-            for checkin in checkins:
-                if checkin.user_id is None:
-                    continue
-                current = last_checkins.get(checkin.user_id)
-                if current is None or checkin.timestamp > current:
-                    last_checkins[checkin.user_id] = checkin.timestamp
-            active_sos_user_ids = {
-                user_id
-                for user_id in session.exec(
-                    select(SOSAlert.user_id).where(
-                        col(SOSAlert.user_id).in_(user_ids),
-                        SOSAlert.status == SOSStatus.ACTIVE,
-                    )
-                ).all()
-                if user_id is not None
-            }
             profiles = session.exec(
                 select(EsimProfile)
                 .join(Package, col(Package.id) == col(EsimProfile.package_id))
@@ -447,21 +424,6 @@ class HtoPilgrimService:
                 ),
                 activation_status=(
                     "activated" if pilgrim.user_id is not None else "not_activated"
-                ),
-                last_checkin_at=(
-                    (
-                        last_checkins[pilgrim.user_id]
-                        if last_checkins[pilgrim.user_id].tzinfo is not None
-                        else last_checkins[pilgrim.user_id].replace(tzinfo=timezone.utc)
-                    ).isoformat()
-                    if pilgrim.user_id in last_checkins
-                    else None
-                ),
-                sos_status=(
-                    "active"
-                    if pilgrim.user_id is not None
-                    and pilgrim.user_id in active_sos_user_ids
-                    else "none"
                 ),
             )
             for pilgrim in pilgrims

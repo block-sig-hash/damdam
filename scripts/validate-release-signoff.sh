@@ -86,23 +86,26 @@ TESTER=$(grep -oP '(?<=\*\*Tester name:\*\*\s).+' "${SIGNOFF_FILE}" | head -n1 |
 DATE_RAW=$(grep -oP '(?<=\*\*Date:\*\*\s)[0-9]{4}-[0-9]{2}-[0-9]{2}' "${SIGNOFF_FILE}" | head -n1)
 [ -n "${DATE_RAW:-}" ] || fail "${SIGNOFF_FILE} is missing a **Date:** value in YYYY-MM-DD format."
 
-REQUIRED_SCENARIOS=(
-  "Incoming call wake from killed state (Android)"
-  "Incoming call wake from killed state (iOS)"
-  "Incoming call wake from backgrounded state (Android)"
-  "Incoming call wake from backgrounded state (iOS)"
-  "CallKit lock-screen UI (iOS)"
-  "PushKit delivery (iOS)"
-  "Offline check-in survival through force-quit/reboot"
-  "Offline SOS survival through force-quit/reboot"
-)
-
-for scenario in "${REQUIRED_SCENARIOS[@]}"; do
-  row=$(grep -F "${scenario}" "${SIGNOFF_FILE}" | head -n1)
-  [ -n "${row}" ] || fail "${SIGNOFF_FILE} is missing the required scenario row: '${scenario}'."
-  echo "${row}" | grep -qiE '\b(PASS|FAIL)\b' \
-    || fail "${SIGNOFF_FILE}'s row for '${scenario}' has no PASS or FAIL result recorded."
-done
+# US-30 (chunk 04E) emptied this list. Every scenario it required --
+# incoming-call wake, CallKit lock-screen UI, PushKit delivery, offline
+# check-in and offline SOS survival -- tested a feature chunk 04 retired.
+# They could not be left in place: SCOPE-DISPOSITION.md forbids fabricating
+# retired-feature evidence to pass this gate, so a truthful signoff could
+# never satisfy them again.
+#
+# The list is deliberately NOT replaced with an empty loop that silently
+# passes. Chunk 27 re-cuts the real release gates against the reset product
+# and chunk 29 runs the physical-device pilot that produces the evidence; a
+# gate that quietly approves everything in between is worse than no gate.
+# Until chunk 27 defines them, this check fails loudly and says why.
+#
+# To define the new set, replace this block with a REQUIRED_SCENARIOS array
+# and keep docs/release-signoffs/TEMPLATE.md's scenario table in step -- the
+# two are parsed against each other.
+fail "Release scenario requirements have not been re-cut since US-30 retired \
+the incoming-call, CallKit/PushKit, offline check-in and offline SOS \
+scenarios this gate used to require. Chunk 27 owns the replacement set. Do \
+not bypass this by re-adding retired scenarios to the signoff."
 
 for platform in "Android" "iOS"; do
   row=$(grep -E "^\| ${platform} \|" "${SIGNOFF_FILE}" | head -n1)
@@ -126,4 +129,4 @@ if [ "${AGE_DAYS}" -gt "${REQUIRED_MAX_AGE_DAYS}" ]; then
   fail "${SIGNOFF_FILE} is dated ${DATE_RAW}, which is ${AGE_DAYS} days old -- signoffs older than ${REQUIRED_MAX_AGE_DAYS} days are not valid for promotion. Re-test and re-sign against the current commit."
 fi
 
-info "Release signoff for ${FILENAME_SHA} valid: tester=${TESTER}, date=${DATE_RAW} (${AGE_DAYS}d old), all required scenarios recorded."
+info "Release signoff for ${FILENAME_SHA} valid: tester=${TESTER}, date=${DATE_RAW} (${AGE_DAYS}d old)."

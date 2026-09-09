@@ -7,7 +7,6 @@
  */
 import {
   FIXTURE_ACTIVATION_REDEMPTION,
-  FIXTURE_CALL_HISTORY,
   FIXTURE_ESIM_PROFILE,
   FIXTURE_PRICING_TIERS,
 } from './fixtures';
@@ -50,11 +49,6 @@ const routes: Route[] = [
     method: 'POST',
     match: (path) => path.endsWith('/me/activation/redeem'),
     respond: () => jsonResponse(FIXTURE_ACTIVATION_REDEMPTION),
-  },
-  {
-    method: 'GET',
-    match: (path) => path.includes('/me/calls'),
-    respond: () => jsonResponse({ calls: FIXTURE_CALL_HISTORY }),
   },
 ];
 

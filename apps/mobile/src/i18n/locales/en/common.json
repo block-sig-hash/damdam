@@ -21,15 +21,6 @@
     "welcomeBack": "Welcome back",
     "packageActive": "Package active",
     "pinSet": "PIN set",
-    "nextSteps": "Next: family contact and departure date — coming in later stories."
-  },
-  "native": {
-    "unknown": "Unknown",
-    "callingPermissionTitle": "Calling permission required",
-    "callingPermissionBody": "DamDam needs to be enabled as a calling account to show incoming and outgoing calls on your lock screen.",
-    "enable": "Enable",
-    "callChannel": "DamDam calls",
-    "callInProgress": "DamDam call in progress",
-    "incomingCall": "Incoming call"
+    "nextSteps": "Continue to Home to manage your eSIM and connectivity."
   }
 }

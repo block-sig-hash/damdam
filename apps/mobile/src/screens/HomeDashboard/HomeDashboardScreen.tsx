@@ -1,19 +1,16 @@
 import {
   ChatCircle,
   CheckCircle,
-  Clock,
   Phone,
-  Siren,
   WarningCircle,
 } from 'phosphor-react-native';
 import React, { useState } from 'react';
 import {useTranslation} from 'react-i18next';
 import {Linking, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {SUPPORT_WHATSAPP_NUMBER} from '../../config/env';
-import { shouldShowDateActivationBanner } from '../../services/arrivalPrompts';
+import { shouldShowDateActivationBanner } from '../../services/activationLinks';
 import { color, radius, space, typography } from '../../theme/tokens';
 import { EsimActivationBanner } from './EsimActivationBanner';
-import {i18n} from '../../i18n';
 
 interface HomeDashboardScreenProps {
   departureDate: string | null;
@@ -25,11 +22,6 @@ interface HomeDashboardScreenProps {
   onActivateEsim: () => void;
   now?: Date;
   onOpenCall?: () => void;
-  onCheckIn?: () => Promise<'sent' | 'queued'>;
-  lastCheckInAt?: string | null;
-  queuedCheckIns?: number;
-  queuedSOSAlerts?: number;
-  onOpenSOS?: () => void;
 }
 
 export function HomeDashboardScreen({
@@ -42,24 +34,12 @@ export function HomeDashboardScreen({
   onActivateEsim,
   now = new Date(),
   onOpenCall,
-  onCheckIn,
-  lastCheckInAt = null,
-  queuedCheckIns = 0,
-  queuedSOSAlerts = 0,
-  onOpenSOS,
 }: HomeDashboardScreenProps): React.JSX.Element {
   const {t} = useTranslation('home');
   const [dismissedThisSession, setDismissedThisSession] = useState(false);
-  const [checkInFeedback, setCheckInFeedback] = useState<'sent' | 'queued' | 'failed'>();
-  const [checkingIn, setCheckingIn] = useState(false);
-  const lastCheckInTime = lastCheckInAt ? new Date(lastCheckInAt).getTime() : 0;
-  const rateLimited =
-    lastCheckInTime > 0 && now.getTime() - lastCheckInTime < 15 * 60 * 1000;
-  const checkInForeground = rateLimited ? color.gray500 : color.white;
   const showBanner =
     !dismissedThisSession &&
     shouldShowDateActivationBanner(departureDate, esimStatus, now);
-  const queuedEvents = queuedCheckIns + queuedSOSAlerts;
   const dataPercent = percentage(remainingDataGb, dataTotalGb);
   const minutesPercent = percentage(pstnMinutesRemaining, pstnMinutesTotal);
   const balanceTone =
@@ -70,100 +50,6 @@ export function HomeDashboardScreen({
   return (
     <ScrollView contentContainerStyle={styles.screen}>
       <Text style={styles.title}>{t('dashboard.title')}</Text>
-      <View style={styles.checkInControl}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('dashboard.imOkay')}
-          disabled={!onCheckIn || checkingIn || rateLimited}
-          onPress={() => {
-            if (!onCheckIn) return;
-            setCheckingIn(true);
-            onCheckIn()
-              .then(result =>
-                setCheckInFeedback(
-                  result === 'sent' ? 'sent' : 'queued',
-                ),
-              )
-              .catch(() => setCheckInFeedback('failed'))
-              .finally(() => setCheckingIn(false));
-          }}
-          style={({pressed}) => [
-            styles.checkInButton,
-            (!onCheckIn || checkingIn || rateLimited) && styles.disabledButton,
-            pressed && styles.pressedButton,
-          ]}>
-          <CheckCircle color={checkInForeground} size={24} weight="bold" />
-          <Text
-            style={[
-              styles.checkInButtonLabel,
-              rateLimited && styles.disabledButtonLabel,
-            ]}>
-            {checkingIn ? t('dashboard.savingCheckIn') : t('dashboard.imOkay')}
-          </Text>
-        </Pressable>
-        {rateLimited ? (
-          <Text style={styles.rateLimitHint}>{t('dashboard.checkInRateLimit')}</Text>
-        ) : null}
-      </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('dashboard.sosLabel')}
-        accessibilityHint={t('dashboard.sosHint')}
-        onPress={onOpenSOS}
-        disabled={!onOpenSOS}
-        style={({pressed}) => [styles.sosButton, pressed && styles.pressedButton]}>
-        <Siren color={color.white} size={28} weight="fill" />
-        <Text style={styles.sosButtonLabel}>{t('dashboard.sosLabel')}</Text>
-      </Pressable>
-      {checkInFeedback ? (
-        <View
-          accessibilityLiveRegion="polite"
-          style={
-            checkInFeedback === 'sent'
-              ? styles.successBanner
-              : checkInFeedback === 'queued'
-                ? styles.queueBanner
-                : styles.errorBanner
-          }>
-          {checkInFeedback === 'sent' ? (
-            <CheckCircle color={color.success500} size={24} weight="bold" />
-          ) : checkInFeedback === 'queued' ? (
-            <Clock color={color.gray700} size={24} weight="bold" />
-          ) : (
-            <WarningCircle color={color.error700} size={24} weight="bold" />
-          )}
-          <Text
-            style={[
-              styles.bannerText,
-              checkInFeedback === 'queued' && styles.queueBannerText,
-            ]}>
-            {t(`dashboard.checkIn${checkInFeedback === 'sent' ? 'Sent' : checkInFeedback === 'queued' ? 'Queued' : 'Failed'}`)}
-          </Text>
-        </View>
-      ) : null}
-      {queuedEvents > 0 ? (
-        <View style={styles.queueBanner} testID="queued-events-indicator">
-          <Clock color={color.gray700} size={24} weight="bold" />
-          <View style={styles.queueCopy}>
-            <Text style={[styles.bannerText, styles.queueBannerText]}>
-              {t('dashboard.queuedEvents', {count: queuedEvents})}
-            </Text>
-            <Text style={styles.queueDetail}>
-              {queueBreakdown(queuedCheckIns, queuedSOSAlerts)}
-            </Text>
-          </View>
-        </View>
-      ) : null}
-      <Text style={styles.lastCheckIn}>
-        {t('dashboard.lastCheckIn', {value: lastCheckInAt
-          ? new Date(lastCheckInAt).toLocaleString(i18n.language, {
-              day: 'numeric',
-              month: 'short',
-              hour: '2-digit',
-              minute: '2-digit',
-            })
-          : t('dashboard.notYet')})}
-      </Text>
       {showBanner ? (
         <EsimActivationBanner
           onActivate={onActivateEsim}
@@ -296,17 +182,6 @@ function formatMinutes(minutes: number): string {
   return Number.isInteger(minutes) ? String(minutes) : minutes.toFixed(2);
 }
 
-function queueBreakdown(checkIns: number, sosAlerts: number): string {
-  const pieces: string[] = [];
-  if (checkIns > 0) pieces.push(i18n.t('dashboard.queuedCheckIns', {ns: 'home', count: checkIns}));
-  if (sosAlerts > 0) {
-    pieces.push(i18n.t('dashboard.queuedSos', {ns: 'home', count: sosAlerts}));
-  }
-  return pieces.length === 2
-    ? i18n.t('dashboard.queueJoin', {ns: 'home', first: pieces[0], second: pieces[1]})
-    : pieces[0] ?? '';
-}
-
 function BalanceProgress({
   kind,
   label,
@@ -356,51 +231,7 @@ const styles = StyleSheet.create({
     gap: space.space6,
   },
   title: { ...typography.heading1, color: color.gray900 },
-  checkInControl: { gap: space.space2 },
-  checkInButton: {
-    minHeight: 64,
-    borderRadius: radius.button,
-    backgroundColor: color.primary500,
-    flexDirection: 'row',
-    gap: space.space2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkInButtonLabel: {
-    ...typography.bodyLarge,
-    fontWeight: '600',
-    color: color.white,
-  },
-  sosButton: {
-    minHeight: 64,
-    borderRadius: radius.button,
-    backgroundColor: color.error700,
-    flexDirection: 'row',
-    gap: space.space2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sosButtonLabel: {...typography.bodyLarge, fontWeight: '700', color: color.white},
-  disabledButton: { backgroundColor: color.gray300 },
-  disabledButtonLabel: { color: color.gray500 },
-  rateLimitHint: { ...typography.caption, color: color.gray600 },
   pressedButton: { opacity: 0.92, transform: [{scale: 0.98}] },
-  successBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.space3,
-    backgroundColor: color.success100,
-    borderLeftWidth: 4,
-    borderLeftColor: color.success500,
-    padding: space.space4,
-  },
-  queueBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.space3,
-    backgroundColor: color.gray100,
-    padding: space.space4,
-  },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -411,10 +242,6 @@ const styles = StyleSheet.create({
     padding: space.space4,
   },
   bannerText: { ...typography.body, color: color.gray900 },
-  queueBannerText: { color: color.gray700 },
-  queueCopy: {flex: 1, gap: space.space1},
-  queueDetail: {...typography.caption, color: color.gray600},
-  lastCheckIn: { ...typography.body, color: color.gray600 },
   packageCard: {
     backgroundColor: color.white,
     borderWidth: 1,

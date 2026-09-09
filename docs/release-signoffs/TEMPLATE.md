@@ -31,14 +31,12 @@ rename these.
 
 | Scenario | Result (PASS/FAIL) | Notes |
 |---|---|---|
-| Incoming call wake from killed state (Android) | | |
-| Incoming call wake from killed state (iOS) | | |
-| Incoming call wake from backgrounded state (Android) | | |
-| Incoming call wake from backgrounded state (iOS) | | |
-| CallKit lock-screen UI (iOS) | | |
-| PushKit delivery (iOS) | | |
-| Offline check-in survival through force-quit/reboot | | |
-| Offline SOS survival through force-quit/reboot | | |
+<!-- US-30 (chunk 04E) removed every scenario this table used to list:
+     incoming-call wake, CallKit lock-screen UI, PushKit delivery, offline
+     check-in survival and offline SOS survival all tested features chunk 04
+     retired. Chunk 27 re-cuts the release gates and fills this table in;
+     chunk 29's physical-device pilot produces the evidence. Never re-add a
+     retired scenario to make the gate pass. -->
 
 ## HTO usability test signoff
 

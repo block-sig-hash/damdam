@@ -209,6 +209,25 @@ explicitly warns against. Proposed split:
 | **04D** | Remove CLI verification and WebRTC/CallKit/VoIP-push dependencies where unused | 04C |
 | **04E** | Dry-run retention/backfill plan; obsolete release-gate changes | 04B–04D |
 
-**This handoff delivers 04A only.** It is the safety-critical part — the one the
-plan says to ship before further release — and it is independently reviewable
-without touching a single server route. 04B–04E remain explicitly open.
+### What was actually delivered
+
+All five subchunks, in the order above, one commit each.
+
+04B and 04C each grew slightly beyond the split proposed here, in both cases
+because the original boundary would have left a feature half-retired:
+
+- **Arrival geofencing** spans both tiers. 04C removes the client, so it also
+  retires `GET /packages/{id}/geofence`; removing only the caller would have
+  left a live endpoint for a retired feature.
+- **The operator welfare roster** is a server projection, not a screen.
+  `GET /hto/pilgrims` reported `last_checkin_at` and `sos_status` for every
+  person on a manifest. Deleting the dashboard pages alone would have satisfied
+  the letter of "remove the SOS surfaces" while leaving exactly the welfare
+  tracking [SCOPE-DISPOSITION.md](../SCOPE-DISPOSITION.md) says must not be
+  quietly retained, so the fields and the queries behind them went too.
+
+Server-side dead code was removed in the same commit that made it unreachable
+rather than left for a later subchunk. Retiring a route while keeping its
+service and deleting the tests that covered it would have dropped coverage
+below the 85% gate — the choice was between removing the code and weakening the
+gate.

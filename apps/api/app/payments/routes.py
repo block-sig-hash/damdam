@@ -7,13 +7,17 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.db import SessionFactory
 from app.payments.schemas import (
-    PackageGeofenceResponse,
     PackageStatusResponse,
     PurchaseRequest,
     PurchaseResponse,
     WebhookResponse,
 )
 from app.payments.service import PaymentService
+from app.retirement import (
+    ARRIVAL_GEOFENCE,
+    RETIRED_RESPONSES,
+    RetiredFeatureError,
+)
 
 router = APIRouter(tags=["payments"])
 
@@ -57,22 +61,19 @@ async def package_status(
         )
 
 
-@router.get("/packages/{package_id}/geofence", response_model=PackageGeofenceResponse)
-async def package_geofence(
-    package_id: UUID,
-    request: Request,
-    user: Annotated[User, Depends(get_current_user)],
-) -> PackageGeofenceResponse:
-    factory = cast(SessionFactory, request.app.state.session_factory)
-    service = cast(PaymentService, request.app.state.payment_service)
-    with factory() as session:
-        geofence, request_id = service.package_geofence(session, user, package_id)
-        return PackageGeofenceResponse(
-            latitude=geofence.latitude,
-            longitude=geofence.longitude,
-            radius_meters=geofence.radius_meters,
-            request_id=request_id,
-        )
+# Arrival geofencing retires with the Hajj framing (US-30, chunk 04). The
+# `destination_geofences` table and its rows are retained; only the behavior is
+# withdrawn.
+
+
+@router.get(
+    "/packages/{package_id}/geofence",
+    status_code=410,
+    responses=RETIRED_RESPONSES,
+)
+async def package_geofence(package_id: UUID) -> None:
+    del package_id
+    raise RetiredFeatureError(ARRIVAL_GEOFENCE)
 
 
 @router.post("/webhooks/{processor}", response_model=WebhookResponse)
