@@ -1,7 +1,7 @@
 # Implementation status
 
-Chunks 01, 02 and chunk 03's documented/simulated scope are **ACCEPTED after
-independent Codex review and fixes**.
+Chunks 01, 02, 05 and chunk 03's documented/simulated scope are **ACCEPTED
+after independent Codex review and fixes**.
 Chunk 01 merged in [PR #100](https://github.com/block-sig-hash/damdam/pull/100).
 Chunk 02's tested content and native evidence are recorded in
 [reviews/02.md](reviews/02.md); [PR #101](https://github.com/block-sig-hash/damdam/pull/101)
@@ -23,7 +23,7 @@ see [BASELINE.md](BASELINE.md).
 | 02 — Repair the CI baseline and screenshot harness | ACCEPTED | base `178c448` / corrected content `4e5ecc9` / CI head `aeb74f6` | [Independent review](reviews/02.md) | None blocking chunk 02; staging configuration remains D6/chunk 26 |
 | 03 — Prove Telnyx feasibility and document the carrier contract | ACCEPTED (documented/simulated scope); live scope EXTERNAL_BLOCKED | base `178c448` / submitted `fe569e1` / corrected code `6a24c19` | [Independent review](reviews/03.md) | **D1/D2 OPEN** — no Telnyx account, live call, rate deck or cleared market |
 | 04 — Retire family, safety and app-calling features safely | 04A ACCEPTED and merged; 04B–04E READY_FOR_REVIEW on `chunk/04-safe-feature-retirement` | base `12582f1`, rebased onto `5636d8a` / see [handoff](handoffs/04.md) | [04A review](reviews/04.md); 04B–04E not reviewed | Check-in/welfare disposition remains OPEN with founder/product; no welfare data deleted |
-| 05 — Introduce core domain models and migration boundaries | READY_FOR_REVIEW | base `12582f1`, rebased onto `5636d8a` / see [handoff](handoffs/05.md) | Not reviewed | D3 (selling entity) still OPEN — `legal_entities` is deliberately unseeded |
+| 05 — Introduce core domain models and migration boundaries | ACCEPTED after fixes | base `12582f1` / submitted `87baa40` / corrected code `07dc308` | [Independent review](reviews/05.md) | D3 remains OPEN — `legal_entities` is deliberately unseeded |
 | 06 — Implement global identity and account recovery | NOT_STARTED | — | — | See assignment |
 | 07 — Implement memberships, tenant isolation and administrator MFA | NOT_STARTED | — | — | See assignment |
 | 08 — Define the consumer and enterprise design system | NOT_STARTED | — | — | See assignment |
