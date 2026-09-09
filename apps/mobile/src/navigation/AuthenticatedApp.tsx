@@ -36,7 +36,7 @@ import type { AuthenticatedMobileSession } from './OnboardingNavigator';
 
 type AuthenticatedAppProps = Pick<
   AuthenticatedMobileSession,
-  'accessToken' | 'departureDate' | 'packageId'
+  'accessToken' | 'departureDate' | 'packageId' | 'userId'
 >;
 
 type Screen =
@@ -61,6 +61,7 @@ export function AuthenticatedApp({
   accessToken,
   departureDate,
   packageId: initialPackageId,
+  userId,
 }: AuthenticatedAppProps): React.JSX.Element {
   const [screen, setScreen] = useState<Screen>('home');
   const [packageId, setPackageId] = useState(initialPackageId);
@@ -90,14 +91,27 @@ export function AuthenticatedApp({
     packageId,
   );
   const pstnMinutesRemaining = balances?.pstnMinutesRemaining ?? 0;
+  // US-30 AC-30.4: the offline queues are bound to the signed-in account, and
+  // the binding is re-checked at dispatch time rather than captured once. A
+  // session with no user id (persisted before US-30) owns nothing, so its
+  // queues stay inert instead of adopting whatever is on the device.
+  const ownership = useMemo(
+    () => ({
+      ownerUserId: userId ?? '',
+      currentOwnerUserId: () => userId,
+    }),
+    [userId],
+  );
   const checkIns = useMemo(
     () =>
       new CheckInSyncService(
         new NitroCheckInOutbox(),
         item => sendCheckIn(accessToken, item),
         pending => setQueuedCheckIns(pending.length),
+        () => undefined,
+        ownership,
       ),
-    [accessToken],
+    [accessToken, ownership],
   );
   const sos = useMemo(
     () => new SOSSyncService(
@@ -121,8 +135,9 @@ export function AuthenticatedApp({
           }).catch(() => undefined);
         }
       },
+      ownership,
     ),
-    [accessToken],
+    [accessToken, ownership],
   );
   // iOS only (frontend-mobile.md §8.3); createCallKitVoiceGateway returns
   // the unmodified default gateway on Android, so this has no effect there.

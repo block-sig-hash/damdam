@@ -17,6 +17,8 @@ type OnboardingStep =
   | { name: 'verified'; result: AuthResponse; activationCode?: string }
   | {
       name: 'activated';
+      /** US-30 AC-30.4: carried so the authenticated session can own its queues. */
+      userId?: string;
       accessToken: string;
       refreshToken: string;
       phoneNumber: string;
@@ -28,6 +30,8 @@ type OnboardingStep =
   | { name: 'onboarded' };
 
 export interface AuthenticatedMobileSession {
+  /** US-30 AC-30.4: owner of anything this device queues offline. */
+  userId?: string;
   accessToken: string;
   /** AC-23.1/AC-23.2: needed by the session-persistence layer (useSessionGate)
    * to exchange for a fresh access token without forcing re-authentication. */
@@ -147,6 +151,7 @@ export function OnboardingNavigator({
             onContinue={(redemption) =>
               setStep({
                 name: 'activated',
+                userId: step.result.user.id,
                 accessToken: step.result.access_token,
                 refreshToken: step.result.refresh_token,
                 phoneNumber: step.result.user.phone_number,
@@ -163,6 +168,7 @@ export function OnboardingNavigator({
         return (
           <AuthenticationHandoff
             session={{
+              userId: step.result.user.id,
               accessToken: step.result.access_token,
               refreshToken: step.result.refresh_token,
               phoneNumber: step.result.user.phone_number,
@@ -180,6 +186,7 @@ export function OnboardingNavigator({
           onPinSet={() => {
             if (onAuthenticated) {
               onAuthenticated({
+                userId: step.result.user.id,
                 accessToken: step.result.access_token,
                 refreshToken: step.result.refresh_token,
                 phoneNumber: step.result.user.phone_number,
@@ -201,6 +208,7 @@ export function OnboardingNavigator({
         return (
           <AuthenticationHandoff
             session={{
+              userId: step.userId,
               accessToken: step.accessToken,
               refreshToken: step.refreshToken,
               phoneNumber: step.phoneNumber,
@@ -219,6 +227,7 @@ export function OnboardingNavigator({
           onPinSet={() => {
             if (onAuthenticated) {
               onAuthenticated({
+                userId: step.userId,
                 accessToken: step.accessToken,
                 refreshToken: step.refreshToken,
                 phoneNumber: step.phoneNumber,
