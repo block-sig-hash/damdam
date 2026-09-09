@@ -59,8 +59,11 @@ screen in place once tapped.
    match visible text instead (see `sos-confirm.yaml` for an example).
    Every flow must then relaunch the harness, select
    `harness-locale-fr`, repeat the assertion, and capture
-   `<key>-fr`. CI requires 32 non-empty images per platform (16
-   platform-applicable targets × 2 locales).
+   `<key>-fr`. CI does not count images: `scripts/validateScreenshots.js`
+   derives the expected set from these flow files and requires exactly
+   those images, each a structurally valid, non-degenerate PNG. Adding
+   a `takeScreenshot:` here is therefore all that is needed to extend
+   the gate — there is no separate count to update.
 3. If the screen renders differently per platform in a way worth
    capturing separately (like the eSIM activation flow), add
    `tags: [android-only]` / `tags: [ios-only]` to the flow file — see

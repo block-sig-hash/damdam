@@ -1,7 +1,7 @@
 import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from uuid import UUID, uuid4
 
@@ -17,6 +17,7 @@ from app.auth.models import (
     OrganizationType,
 )
 from app.auth.schemas import HTORegistrationRequest, to_e164
+from app.auth.tokens import decode_with_clock
 from app.config import Settings
 from app.notifications.service import NotificationError, NotificationService
 
@@ -107,17 +108,10 @@ class HTOService:
 
     def verify_email(self, session: Session, token: str) -> Organization:
         try:
-            claims = jwt.decode(
-                token,
-                self.settings.jwt_secret,
-                algorithms=["HS256"],
-                audience="hto_dashboard",
-                options={"verify_exp": False},
+            claims = decode_with_clock(
+                token, self.settings.jwt_secret, "hto_dashboard", self.clock()
             )
             if claims.get("type") != "email_verification":
-                raise HTOAuthError("invalid_verification_token")
-            expires_at = datetime.fromtimestamp(claims["exp"], timezone.utc)
-            if expires_at <= self.clock():
                 raise HTOAuthError("invalid_verification_token")
             organization_id = UUID(claims["sub"])
         except HTOAuthError:

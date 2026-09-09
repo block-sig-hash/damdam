@@ -199,10 +199,9 @@ sessions deliberately:
 - If a chunk needs multiple independent migrations or features, propose lettered
   subchunks rather than delivering an unreviewable diff.
 
-The output-token compression note that previously applied to
-`.github/workflows/claude-review.yml` is retained there. That workflow's own
-role is being re-evaluated now that Claude is the implementer rather than the
-reviewer — chunk 02 owns the decision.
+The output-token compression note for `.github/workflows/claude-review.yml`
+is retained there. Chunk 02 makes that workflow supplemental: its automated
+findings inform review, but only independent Codex review records acceptance.
 
 ## What NOT to do
 

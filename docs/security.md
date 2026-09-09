@@ -413,3 +413,20 @@ both data protection and the required line-management/reporting experience.
 **Emergency calling is not settled by removing SOS.** Carrier emergency-calling
 obligations on a real cellular line are a separate supplier and legal question
 under D1 and must be answered before any market is sold.
+
+## 10.15 Amendment — Token Clock and Refresh Concurrency
+
+**Recorded 8 September 2026 during independent chunk 02 review (US-42).**
+
+The shared token decoder verifies signed claims with the application's clock:
+mandatory expiry, and issued-at/not-before when present. Invalid dates are
+rejected, including nonfinite values; future-issued and not-yet-valid tokens
+are rejected. Production's clock remains real UTC time. Controlled test clocks
+therefore work both before and after real time without disabling date checks.
+
+Consumer refresh rotation obtains a PostgreSQL row lock before checking stored
+revocation and issuing a replacement. Revocation and replacement commit together,
+so simultaneous uses of one refresh token cannot create two valid replacements.
+The stored expiry is retained as a separate constraint from the JWT expiry.
+Regression evidence includes PostgreSQL concurrency and organization verification;
+these changes do not implement the broader identity/tenancy work in chunks 06/07.

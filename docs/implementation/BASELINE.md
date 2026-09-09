@@ -137,3 +137,51 @@ original five findings remain implementation work; none is fixed by this review.
 The working checkout is `/tmp/damdam-review-20260907`. A local bundle under the
 user's home directory preserves the reviewed branch; see the review handoff for
 the exact filename/head. No push, merge, deployment or live test occurred.
+
+---
+
+## Chunk 02 addendum — 8 September 2026
+
+Appended by chunk 02 (US-42). Everything above is the chunk 01 record as
+independently reviewed and accepted; nothing above has been rewritten. This
+section records only what changed afterwards.
+
+| Baseline item above | Status after chunk 02 |
+|---|---|
+| API `test_otp_request_and_verify_contract` failing | **Fixed in this branch, not yet on `develop`.** Reproduced locally first, then fixed. Full local suite: 343 passed, 0 failed, coverage 87.58%. See `docs/testing-qa.md` §14.14.1. |
+| iOS screenshot job intermittent | **Failure localized; mitigation committed, unverified.** Maestro's XCUITest driver startup timed out on the macOS runner (`IOSDriverTimeoutException` at ~2m36s on 09-07 versus a ~64s healthy startup on 09-08). `MAESTRO_DRIVER_STARTUP_TIMEOUT` is now set. **No macOS CI was available to confirm the mitigation** — this remains an evidence gap. See §14.14.3. |
+| Count-only screenshot assertion (`-eq 32`) | **Replaced** by exact matrix validation derived from the Maestro flows, with structural PNG checks and negative tests. The derived matrix independently reproduces 32 per platform, which is how the previous hardcoded figure was confirmed rather than assumed. See §14.14.2. |
+| OpenAPI drift "skipped after pytest failed; not independently proven passing" | **Now proven passing locally** — the drift check runs and reports no drift. Chunk 02 changes no route signature or schema. |
+| Staging deploy skipped | **Unchanged and correct.** Deployment is push-only by design; scheduled runs cannot deploy. Chunk 02 did not alter that policy. |
+| Production deployment history / branch-protection 404 | **Unchanged.** Not re-queried by chunk 02; still chunk 27's verification. |
+
+No claim here is a claim about `develop`: these results are from the
+`chunk/02-ci-baseline` branch and from local execution. CI on this branch has
+not been run, because the branch has not been pushed.
+
+
+### Independent chunk 02 review update
+
+The builder numbers above describe its submitted code. The independently
+corrected content is `4e5ecc9a55b4230c1b73923eff08fbf41b7f64bf`: 359 API tests pass
+at 87.65% coverage, plus 415 mobile tests and 66 dashboard tests. The screenshot
+validator now decodes pixels/CRCs and parses ordinary YAML; organization clocks
+and concurrent refresh rotation also have regressions. See
+[reviews/02.md](reviews/02.md) for exact checks and limits. The iOS logs identify
+a startup timeout, but cannot establish slowness rather than a hung driver.
+Native CI evidence and GitHub write access remain open; develop is unchanged.
+
+
+### Final chunk 02 evidence — 9 September 2026
+
+The previous access/native evidence gaps are closed. Both
+[PR CI](https://github.com/block-sig-hash/damdam/actions/runs/34268255191) and
+[on-demand CI including iOS](https://github.com/block-sig-hash/damdam/actions/runs/34268285562)
+passed at `aeb74f6`: 359 API tests, complete native builds/captures, 32 validated
+PNGs and 16 successful flows per platform, and Docker/restore checks. See
+[reviews/02.md](reviews/02.md) for accepted scope and exact content SHA.
+
+Chunk 01 merged in PR #100. Its push-to-develop deployment exposed a separate
+setup gap: all four staging secrets are unset. Deployment failed before server
+contact; the gate remains intact. That D6/chunk 26 issue does not invalidate
+passing chunk 02 verification and is not claimed fixed by this review.

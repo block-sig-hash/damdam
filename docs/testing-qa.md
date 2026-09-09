@@ -690,3 +690,212 @@ It is **not** a current fact, and neither it nor the 32 images observed on
 2026-09-08 carries into the redesigned matrix. §14.11 and §14.12's screenshot
 matrices are re-cut against the reset screens in chunk 08 and enforced as a
 release gate in chunk 27.
+
+---
+
+## 14.14 Amendment — Screenshot Matrix Validation and the iOS Driver Timeout
+
+**Recorded 8 September 2026 by build chunk 02. Registered story: US-42
+(AC-42.1, AC-42.2).**
+
+### 14.14.1 The auth clock defect, diagnosed and fixed
+
+`tests/test_auth_api.py::test_otp_request_and_verify_contract` failed on
+`develop` from at least 2026-09-01 with `OTPError: invalid_refresh_token`,
+raised from a PyJWT `ExpiredSignatureError`. It was not a flaky test and no
+code had changed.
+
+`TokenService.issue` mints tokens against an **injected** clock, and
+`TokenService.decode_access` deliberately validates `exp` against that same
+injected clock (`options={"verify_exp": False, "verify_iat": False}` plus a
+manual comparison), because PyJWT's own checks always use real wall-clock time
+regardless of the `now` they are handed. Two places did not follow that rule:
+
+- `POST /auth/token/refresh` passed `datetime.now(timezone.utc)` instead of the
+  application clock.
+- `TokenService.rotate` left PyJWT's `exp` verification enabled.
+
+The test clock is pinned to 2026-07-13, so a refresh token carried `exp` around
+2026-08-12. The test passed when written and began failing the moment real time
+passed that date — a July-versus-September mismatch that no rerun could clear.
+
+Both paths now use the injected clock, matching `decode_access`,
+`get_current_user` and `get_current_organization`. **Production expiry is
+unchanged**: in production the injected clock *is* wall-clock
+(`app.main.utc_now`), and `rotate` now enforces expiry twice — against the
+token's own `exp` claim and against the stored refresh-token row — both compared
+to `now`. `tests/test_auth_token_clock.py` pins valid, expired and exact-boundary
+cases, plus revocation-on-rotation and signature tampering, so relaxing PyJWT's
+check cannot silently relax expiry or authenticity.
+
+### 14.14.2 The screenshot gate is a matrix, not a count
+
+§14.12 stated the completeness gate as "32 PNGs (16 applicable targets × 2
+locales)", and both CI jobs enforced it as `test "${#screenshots[@]}" -eq 32`.
+A count is weaker than it looks. It accepts:
+
+- 32 copies of one screen;
+- a set where an expected screen is missing and an unrelated file makes up the
+  number;
+- zero-byte, truncated or non-PNG files;
+- a degenerate 1×1 capture.
+
+`apps/mobile/scripts/validateScreenshots.js` replaces it. The expected set is
+**derived from the Maestro flows themselves** — each `takeScreenshot:` name is
+one expected image, and a flow's `tags:` decide which platform runs it, matching
+Maestro's `--exclude-tags` selection. The validator then requires exact set
+equality and decodes every expected PNG, checking chunk CRCs and pixel data as
+well as dimensions. Files are limited to 64 MiB and 25 million pixels before
+decoding. The `yaml` parser accepts ordinary quoted names, inline tags and
+comments. Dynamic names and nested runFlow/repeat/retry commands fail explicitly
+until the matrix supports them; they cannot silently omit captures.
+
+Two consequences worth stating plainly:
+
+- **No count is hardcoded anywhere.** Adding or removing a `takeScreenshot:`
+  changes the gate. When chunk 08 redefines the screen matrix and chunk 27
+  enforces it for release, neither needs to update a magic number. The derived
+  matrix currently comes to 32 per platform, which is how the previous hardcoded
+  figure was confirmed correct rather than assumed.
+- **It is not a visual regression test.** There are no committed baselines, so
+  the validator cannot tell a correct screen from a wrong one that is
+  structurally valid. Pixel comparison belongs with the redesigned matrix, not
+  here; inventing baselines now would either accept anything or reject every
+  legitimate UI change.
+
+Negative coverage lives in `apps/mobile/scripts/validateScreenshots.test.js`:
+empty directory, absent directory, missing image substituted by an unrelated PNG
+at the same count, zero-byte image, non-PNG content, truncated write, and a 1×1
+capture — run against both platform matrices.
+
+### 14.14.3 The iOS screenshot job was flaky, not broken
+
+The 2026-09-07 and 2026-09-08 nightlies ran the same application commit
+(`6790c74`) with opposite outcomes. The logs give the reason directly:
+
+| Run | XCUITest driver | Outcome |
+|---|---|---|
+| [2026-09-07](https://github.com/block-sig-hash/damdam/actions/runs/34094962267) | `IOSDriverTimeoutException: iOS driver not ready in time` after ~2m36s | 0 flows ran, 0 screenshots, job failed |
+| [2026-09-08](https://github.com/block-sig-hash/damdam/actions/runs/34198388517) | ready in ~64s | 16/16 flows passed, 32 screenshots |
+
+The app built and the simulator booted in both. Slow XCUITest cold start is a
+plausible explanation, but these logs cannot distinguish it from a hung driver.
+The job now sets
+`MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"` — the remedy Maestro's own error
+message names — at roughly 4.7× the observed healthy startup, still bounded so a
+genuinely wedged driver fails rather than consuming the job's runtime.
+
+This is a mitigation with a real limit: **it has not been observed passing a
+previously-failing run, because that requires macOS CI, which was not available
+during chunk 02.** It remains an evidence gap until a nightly run exercises it.
+The Android job is left unchanged — its emulator path has not shown this failure,
+and adding an unneeded timeout there would be speculative.
+
+### 14.14.4 Documentation links are now a CI check
+
+`ci.yml` gains a `Docs — Link validation` job running
+`docs/implementation/tools/check-docs-links.sh` on documentation changes. The
+implementation packet routes every chunk through relative links between chunk
+files, review records, the story map and the specs; a broken link there drops an
+assignment or an acceptance criterion silently. The checker covers relative file
+links only — anchors and external URLs are out of its scope.
+
+### 14.14.5 Automated Claude review is supplemental
+
+`.github/workflows/claude-review.yml` is an advisory first-pass filter, not
+chunk acceptance. Since the working split changed (`AGENTS.md`), Claude is the
+implementer, so that workflow reviewing a Claude-authored PR is Claude reviewing
+its own work. Acceptance requires the independent Codex review recorded in
+`docs/implementation/reviews/NN.md`. The workflow's prompt now says so in its
+posted comment and is forbidden from declaring a PR accepted or ready to merge.
+
+### 14.14.6 Reproducible local toolchain, and what cannot be reproduced locally
+
+Chunk 02's assignment requires that a missing platform prerequisite is never
+reported as an application failure. These are the requirements to reproduce each
+CI job locally, and the point at which local reproduction stops.
+
+**API — fully reproducible locally.**
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+docker run -d --name dd-pg -e POSTGRES_USER=damdam_test -e POSTGRES_PASSWORD=damdam_test \
+  -e POSTGRES_DB=damdam_test -p 55432:5432 postgres:16-alpine
+export DATABASE_URL='postgresql+psycopg://damdam_test:damdam_test@localhost:55432/damdam_test'
+export TEST_DATABASE_URL="$DATABASE_URL"
+.venv/bin/alembic upgrade head   # required first: the *_postgres.py suites assume the schema
+.venv/bin/pytest --cov=app && .venv/bin/ruff check . && .venv/bin/mypy app
+```
+
+Two failure modes here are environment, not application, and must not be
+reported as defects:
+
+- `sqlalchemy.exc.ArgumentError: Could not parse SQLAlchemy URL` in the
+  `*_postgres.py` suites means `TEST_DATABASE_URL` is unset or malformed. Note
+  that `export A=... B=$A` in one statement does **not** work — `$A` expands
+  before `A` is assigned. Export them separately.
+- Widespread `*_postgres.py` failures with a valid URL usually mean
+  `alembic upgrade head` was not run first.
+
+**Mobile — reproducible except for capture.** `npm ci && npm test && npm run lint
+&& npm run type-check` runs anywhere. `scripts/validateScreenshots.js` needs only
+Node plus the declared `yaml` and `pngjs` development dependencies (`npm ci`
+first). Neither adds native binaries or changes the API image dependencies. Actually *producing*
+screenshots needs an Android emulator with KVM, or macOS with Xcode; neither is
+available in a typical Linux development container.
+
+**Not reproducible without the corresponding platform access:**
+
+| Evidence | Requires | Chunk 02 status |
+|---|---|---|
+| iOS screenshot capture, and confirmation of the driver-startup timeout | macOS runner with Xcode 16.1+ | **not run** — evidence gap, not a passing result |
+| Android screenshot capture | Linux host with KVM | not run |
+| Multi-arch `linux/arm64` image build | QEMU + buildx, long emulated build | see the independent review for current build evidence; no API dependency changed |
+| Signed builds, store submission | Apple/Google credentials (D6) | out of scope for chunk 02 |
+| Staging or production deployment | deployment secrets, push to a deploy branch | out of scope; deployment is push-only by design |
+
+A missing prerequisite in this table is recorded as **NOT RUN with its reason**.
+It is never recorded as a pass, and never as an application defect.
+
+### 14.14.7 Independent review corrections
+
+The shared decoder now applies expiry, issued-at and not-before to the same
+application clock for consumer tokens, organization access and organization
+email verification. Future dates and malformed/nonfinite claims are rejected;
+production still uses UTC wall-clock time. Refresh rotation locks its PostgreSQL
+row and checks stored ownership, expiry and revocation before replacing it.
+
+`tests/test_auth_clock_postgres.py` checks clocks before and after real time,
+invalid dates, stored expiry, concurrent reuse and organization verification
+against isolated PostgreSQL schemas. Existing SQLite unit suites remain in the
+repository; they are not the evidence for database locking. The signature-
+tampering regression changes actual signature bits, not unused base64 padding.
+
+The screenshot tests additionally reject corrupt or absent IDAT data with an
+otherwise intact header/end, and cover YAML quoting and unsupported nested
+flows. Their Jest environment is Node so the parser resolves its Node export.
+Only the PNG fixture's CRC32 calculation receives a bitwise lint exception.
+
+Changing `ci.yml` selects all four existing application/build path filters,
+including dashboard. Dashboard checks therefore apply to this chunk even though
+its application source is unchanged. Review results and remaining native CI
+requirements are recorded separately in the chunk's independent review record.
+
+
+### 14.14.8 Final native evidence — 9 September 2026
+
+The initial “not run” entries in this amendment describe implementation-time
+limitations and are superseded for chunk 02 by
+[on-demand CI run 34268285562](https://github.com/block-sig-hash/damdam/actions/runs/34268285562)
+and [PR run 34268255191](https://github.com/block-sig-hash/damdam/actions/runs/34268255191),
+both passing at `aeb74f6`. The on-demand run executes the configured 300-second
+iOS timeout. Both platforms produce 32 expected, independently decoded PNGs and
+16 successful flows with zero JUnit errors/failures. API, dashboard, mobile,
+Docker multi-architecture and WAL-G restore verification also pass.
+
+This demonstrates the configured harness operating successfully on these
+runners; it does not prove intermittency eliminated or replace physical-device
+and carrier proof. The post-chunk-01 staging deployment fails before server
+contact because its four required environment secrets are unset; D6/chunk 26
+owns that setup. Full review and scope limits are in
+[implementation/reviews/02.md](./implementation/reviews/02.md).
