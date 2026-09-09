@@ -10,6 +10,12 @@ EN = "en"
 FR = "fr"
 
 _API_EN = {
+    "identity_sent": "If that address can receive it, we have sent a message with the next step.",
+    "identity_verified": "Your email address is confirmed.",
+    "identity_token_invalid": "That link is no longer valid. Please request a new one.",
+    "identity_token_expired": "That link has expired. Please request a new one.",
+    "identifier_already_verified": "That address is already confirmed on another account.",
+    "identity_send_throttled": "Please wait before requesting another message.",
     "feature_retired": "This feature is no longer part of DamDam. Please update the app to the latest version.",
     "checkin_rate_limited": "You can check in once every 15 minutes.",
     "checkin_id_conflict": "This check-in identifier is already in use.",
@@ -100,6 +106,12 @@ _API_EN = {
 }
 
 _API_FR = {
+    "identity_sent": "Si cette adresse peut le recevoir, nous avons envoyé un message avec la suite.",
+    "identity_verified": "Votre adresse e-mail est confirmée.",
+    "identity_token_invalid": "Ce lien n’est plus valide. Veuillez en demander un nouveau.",
+    "identity_token_expired": "Ce lien a expiré. Veuillez en demander un nouveau.",
+    "identifier_already_verified": "Cette adresse est déjà confirmée sur un autre compte.",
+    "identity_send_throttled": "Veuillez patienter avant de demander un autre message.",
     "feature_retired": "Cette fonctionnalité ne fait plus partie de DamDam. Veuillez mettre à jour l’application vers la dernière version.",
     "checkin_rate_limited": "Vous pouvez signaler votre sécurité une fois toutes les 15 minutes.",
     "checkin_id_conflict": "Cet identifiant de pointage est déjà utilisé.",

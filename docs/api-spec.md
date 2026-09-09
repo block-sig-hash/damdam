@@ -1290,3 +1290,53 @@ The identity endpoints added by chunk 06 follow the same rule: requesting
 verification or recovery for an address returns an identical response whether or
 not it is known, and a message is only dispatched when the identifier exists and
 is verified.
+
+## 7.32 Amendment — Email Identity and Recovery Endpoints (US-29)
+
+**Recorded 9 September 2026 by build chunk 06**, on the founder decision of the
+same date: email is the launch account identity and primary recovery channel,
+and **recovery must not require access to a SIM**.
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `POST /v1/auth/email/verify/request` | Bearer | Claim an email for the signed-in account and send proof-of-ownership |
+| `POST /v1/auth/email/verify/confirm` | none | Confirm ownership with the emailed token |
+| `POST /v1/auth/email/recovery/request` | none | Request account recovery for an address |
+| `POST /v1/auth/email/recovery/confirm` | none | Consume the token, revoke prior sessions, issue a new one |
+
+### Uniform responses
+
+`verify/request` and `recovery/request` return **200** with an identical body
+whether or not the address is known, whether or not it is verified, and whether
+or not it belongs to the caller. A message is dispatched only when the
+identifier exists **and** is verified. A caller cannot use these endpoints to
+test who has an account.
+
+### Token semantics
+
+Tokens are single-use, expiring and **purpose-bound**. A verification token
+cannot complete a recovery and a recovery token cannot verify an identifier;
+both mismatches return the same `identity_token_invalid` as an unknown token, so
+the response does not reveal what the holder possesses.
+
+| Code | Status |
+|---|---|
+| `identity_token_invalid` | 400 |
+| `identity_token_expired` | 400 |
+| `identifier_already_verified` | 409 |
+| `identity_send_throttled` | 429, with `Retry-After` |
+
+### Throttling
+
+Per identifier **and per flow**, applied *before* the existence lookup so the
+limit behaves identically for known and unknown addresses. Verification and
+recovery hold separate budgets — the flow follows the endpoint the caller chose,
+not account state — so linking an address and then recovering with it is not
+blocked. Without this, the uniform response would be a way to post mail to a
+stranger repeatedly.
+
+### Delivery is not configured
+
+Chunk 06 ships a transport abstraction and a recording test transport. **No
+email provider is configured and nothing is sent.** Live delivery remains
+explicitly gated.

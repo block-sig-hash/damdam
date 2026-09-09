@@ -12,6 +12,7 @@ Three rules govern everything here:
 """
 
 import hashlib
+import math
 import secrets
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -33,8 +34,9 @@ TOKEN_BYTES = 32
 
 
 class IdentityError(Exception):
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, retry_after: int | None = None) -> None:
         self.code = code
+        self.retry_after = retry_after
         super().__init__(code)
 
 
@@ -56,10 +58,54 @@ class IdentityService:
         transport: DeliveryTransport,
         clock: Callable[[], datetime] = utc_now,
         token_ttl: timedelta = timedelta(hours=1),
+        redis: Any | None = None,
+        send_cooldown_seconds: int = 60,
+        sends_per_hour: int = 5,
     ) -> None:
         self.transport = transport
         self.clock = clock
         self.token_ttl = token_ttl
+        self.redis = redis
+        self.send_cooldown_seconds = send_cooldown_seconds
+        self.sends_per_hour = sends_per_hour
+
+    # --- abuse control ----------------------------------------------------
+
+    def _check_send_limit(
+        self, kind: IdentifierKind, value: str, purpose: IdentityTokenPurpose
+    ) -> None:
+        """Throttle per identifier, before deciding whether it exists.
+
+        This runs on every request, known address or not. If it only applied to
+        real accounts, the throttle would answer the question the uniform
+        response is there to hide -- and without it, a uniform "we sent it"
+        reply is a way to post mail to a stranger repeatedly.
+        """
+        if self.redis is None:
+            return
+        now = self.clock().timestamp()
+        # Scoped by purpose as well as identifier: verification and recovery
+        # are different flows chosen by the caller, so separate budgets leak
+        # nothing, and sharing one would stop someone linking an address and
+        # then recovering with it.
+        key = f"identity:sends:{purpose.value}:{kind.value}:{value}"
+        self.redis.zremrangebyscore(key, "-inf", now - 3600)
+        recent = self.redis.zrevrange(key, 0, 0, withscores=True)
+        if recent:
+            elapsed = now - float(recent[0][1])
+            if elapsed < self.send_cooldown_seconds:
+                raise IdentityError(
+                    "identity_send_throttled",
+                    math.ceil(self.send_cooldown_seconds - elapsed),
+                )
+        if self.redis.zcard(key) >= self.sends_per_hour:
+            oldest = self.redis.zrange(key, 0, 0, withscores=True)
+            raise IdentityError(
+                "identity_send_throttled",
+                math.ceil(3600 - (now - float(oldest[0][1]))),
+            )
+        self.redis.zadd(key, {f"{now}:{secrets.token_hex(4)}": now})
+        self.redis.expire(key, 3600)
 
     # --- tokens -----------------------------------------------------------
 
@@ -152,6 +198,9 @@ class IdentityService:
         confirmed.
         """
         normalized = normalize(kind, value)
+        self._check_send_limit(
+            kind, normalized, IdentityTokenPurpose.VERIFY_IDENTIFIER
+        )
         identifier = session.exec(
             select(AccountIdentifier).where(
                 AccountIdentifier.user_id == user.id,
@@ -260,6 +309,11 @@ class IdentityService:
         produces a message: an unverified claim must never be a way in.
         """
         normalized = normalize(kind, value)
+        # Throttle first, so the limit applies identically whether or not the
+        # address is known.
+        self._check_send_limit(
+            kind, normalized, IdentityTokenPurpose.RECOVER_ACCOUNT
+        )
         identifier = session.exec(
             select(AccountIdentifier).where(
                 AccountIdentifier.kind == kind,

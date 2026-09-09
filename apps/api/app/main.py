@@ -39,6 +39,11 @@ from app.esim.service import (
 )
 from app.health import LivenessResponse, ReadinessResponse, check_readiness
 from app.i18n import api_message, localize_validation_errors, request_locale
+from app.identity.delivery import (
+    DeliveryTransport,
+    RecordingDeliveryTransport,
+)
+from app.identity.service import IdentityError, IdentityService
 from app.manifests.invoices import InvoiceStorage, build_invoice_storage
 from app.manifests.orders import ManifestOrderService, ProvisioningScheduler
 from app.manifests.routes import pricing_router
@@ -84,6 +89,7 @@ def create_app(
     provisioning_scheduler: ProvisioningScheduler | None = None,
     payment_providers: Mapping[str, PaymentProvider] | None = None,
     voice_provider: VoiceProvider | None = None,
+    identity_transport: DeliveryTransport | None = None,
     esim_providers: Mapping[str, EsimProvider] | None = None,
     esim_scheduler: EsimIssuanceScheduler | None = None,
 ) -> FastAPI:
@@ -151,6 +157,12 @@ def create_app(
     )
     api.state.hto_service = HTOService(resolved_settings, notification_service, clock)
     api.state.device_token_service = DeviceTokenService(clock)
+    api.state.identity_transport = identity_transport or RecordingDeliveryTransport()
+    api.state.identity_service = IdentityService(
+        transport=api.state.identity_transport,
+        clock=clock,
+        redis=redis_client,
+    )
     resolved_chaining_service = PackageChainingService(clock)
     resolved_audit_service = AuditLogService(clock)
     api.state.audit_service = resolved_audit_service
@@ -187,6 +199,29 @@ def create_app(
         clock,
         cast(RedisClient, redis_client),
     )
+
+    @api.exception_handler(IdentityError)
+    async def identity_error_handler(
+        request: Request, exc: IdentityError
+    ) -> JSONResponse:
+        statuses = {
+            "identity_token_invalid": 400,
+            "identity_token_expired": 400,
+            "identifier_already_verified": 409,
+            "identity_send_throttled": 429,
+        }
+        headers = {}
+        if exc.retry_after is not None:
+            headers["Retry-After"] = str(exc.retry_after)
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+            headers=headers,
+        )
 
     @api.exception_handler(RetiredFeatureError)
     async def retired_feature_handler(
