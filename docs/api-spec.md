@@ -1145,3 +1145,20 @@ new endpoint is added here before it is implemented. New money fields carry an
 explicit ISO currency. Payment, provisioning, installation, activation and
 connectivity remain distinct states in every response — a paid order may be
 pending provisioning, and installation does not prove network attachment.
+
+## 7.27 Amendment — Consistent Token Validation and Atomic Refresh
+
+**Recorded 8 September 2026 during independent chunk 02 review (US-42).**
+
+Consumer access/refresh tokens, organization access tokens and organization
+email-verification tokens validate `exp`, and present `iat`/`nbf` claims, against
+the application clock. Production uses UTC wall-clock time. Expiry is exclusive:
+`exp <= now` is invalid; future `iat`/`nbf` and malformed/nonfinite dates are
+authentication errors. Signature, audience and token-purpose checks remain.
+
+`POST /auth/token/refresh` locks the persisted token row in its transaction.
+Concurrent requests with the same token may issue only one replacement pair;
+the later request sees the revocation and returns `invalid_refresh_token` through
+the existing error contract. The stored token's ownership, expiry, hash and
+revocation state remain authoritative alongside its signed claims. Request and
+response schemas, token lifetimes and the OpenAPI contract are unchanged.

@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import Annotated, cast
 from uuid import UUID
 
@@ -15,7 +14,7 @@ from app.auth.models import (
     UserStatus,
 )
 from app.auth.pin import PINError, PINService
-from app.auth.tokens import InvalidRefreshTokenError, TokenService
+from app.auth.tokens import InvalidRefreshTokenError, TokenService, decode_with_clock
 from app.db import SessionFactory
 
 bearer = HTTPBearer(auto_error=False)
@@ -52,17 +51,13 @@ def get_current_organization(
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTOAuthError("invalid_operator_token")
     try:
-        claims = jwt.decode(
+        claims = decode_with_clock(
             credentials.credentials,
             request.app.state.settings.jwt_secret,
-            algorithms=["HS256"],
-            audience="hto_dashboard",
-            options={"verify_exp": False},
+            "hto_dashboard",
+            request.app.state.clock(),
         )
         if claims.get("type") != "access":
-            raise HTOAuthError("invalid_operator_token")
-        expires_at = datetime.fromtimestamp(float(claims["exp"]), tz=timezone.utc)
-        if expires_at <= request.app.state.clock():
             raise HTOAuthError("invalid_operator_token")
         organization_id = UUID(claims["sub"])
     except HTOAuthError:

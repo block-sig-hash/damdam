@@ -1,9 +1,18 @@
 name: Claude Review
 
-# Claude is the QA/review layer, not the primary implementer, so
-# this triggers on PR events (review Codex's output) and on
-# explicit @claude mentions — not on every push, to keep cost
-# predictable per docs/AGENTS.md's cost-optimization guidance.
+# SUPPLEMENTAL ONLY. Since the 8 September 2026 working-split
+# change (AGENTS.md, chunk 01/US-27), Claude is the implementer and
+# Codex is the independent reviewer — so this workflow no longer
+# provides the review that gates a chunk. It is an automated
+# first-pass filter whose output is advisory: a green run here is
+# NOT chunk acceptance, and a finding here does not substitute for
+# the independent Codex review recorded in
+# docs/implementation/reviews/NN.md. Treating it as acceptance
+# would mean Claude reviewing its own implementation, which is
+# exactly what the split exists to prevent.
+#
+# It triggers on PR events and on explicit @claude mentions — not
+# on every push — to keep cost predictable per AGENTS.md.
 #
 # TOKEN OPTIMIZATION: this workflow's output is a structured
 # blocking/non-blocking checklist, not prose meant to explain or
@@ -173,30 +182,42 @@ jobs:
             Review this diff against docs/testing-qa.md and the
             linked user story's acceptance criteria in docs/prd.md.
 
+            State plainly at the top of your posted comment that
+            this is an automated supplemental review, and that
+            chunk acceptance requires the independent Codex review
+            recorded in docs/implementation/reviews/. Never write
+            that a chunk or PR is accepted, approved or ready to
+            merge — that is not this workflow's call to make.
+
             If this PR touches apps/mobile/src/screens or
-            apps/mobile/src/components (excluding the SosConfirm,
-            SosSent, and onboarding screens, which Claude implements
-            directly and reviews for design intent rather than
-            system compliance): verify the implementation actually
-            follows docs/design-system.md — check spacing, color,
-            and component choices against the system, not just
-            whether the screen renders and passes its tests. If a
-            rendered screenshot is available as a CI artifact on
-            this PR, look at it and flag anything that reads as
+            apps/mobile/src/components: verify the implementation
+            actually follows docs/design-system.md — check spacing,
+            color, and component choices against the system, not
+            just whether the screen renders and passes its tests.
+            If a rendered screenshot is available as a CI artifact
+            on this PR, look at it and flag anything that reads as
             generic, inconsistent with the system, or a plausible
             departure from what a real design review would catch —
             this is a design-quality gate, not just a code-quality
             one. If design-system.md doesn't yet cover a pattern
-            this PR needed, flag that as a system gap to fix once,
-            not a one-off judgment call Codex should have made
-            unassisted.
+            this PR needed, flag that as a system gap to fix once.
+            Note that docs/design-system.md is itself being revised
+            for the reset product in chunk 08 (see
+            design-system.md §15.3): until that lands, judge against
+            the existing system and flag the gap rather than
+            inventing a replacement pattern.
 
-            If this PR touches check-in, SOS, payment, or auth
-            logic (US-15, US-16, US-09, US-25, US-01/02/23 in
-            docs/prd.md): confirm test-first discipline was
-            followed per docs/testing-qa.md §14.1, and re-check
-            the offline/chaos scenarios in §14.4.1 are still
-            covered, not just that new tests were added.
+            If this PR touches any strict-TDD category in
+            docs/testing-qa.md §14.13.1 — authentication and
+            sessions, payments and idempotency, tenant isolation
+            and object-level authorization, order/provisioning
+            idempotency, ledger correctness, or the safety-transition
+            tests that cover feature retirement — confirm test-first
+            discipline was followed, and confirm the applicable
+            offline/chaos scenarios in §14.4.1 are still covered
+            rather than merely that new tests were added. Those
+            scenarios remain in force until the features, old
+            clients and jobs are verifiably retired.
 
             Flag missing tests, spec drift (implementation not
             matching docs/api-spec.md or docs/data-model.md), and
