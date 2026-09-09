@@ -147,6 +147,13 @@ describe('retired feature surface', () => {
     expect(activity).toContain('class MainActivity : ReactActivity()');
   });
 
+  it('registers no headless app-calling task at the JavaScript entry point', () => {
+    const entryPoint = readFileSync(join(SRC, '..', 'index.js'), 'utf8');
+    expect(entryPoint).not.toContain('callKit');
+    expect(entryPoint).not.toContain('DamDamIncomingCall');
+    expect(entryPoint).not.toContain('registerHeadlessTask');
+  });
+
   it('declares no iOS usage description for a retired feature', () => {
     const plist = readFileSync(
       join(SRC, '..', 'ios', 'DamDam', 'Info.plist'),
