@@ -21,8 +21,8 @@
       "adminRequired": "An administrator session is required."
     },
     "metadata": {
-      "title": "DamDam Operator Dashboard",
-      "description": "Register and manage your Hajj tour operator account."
+      "title": "DamDam Organization Dashboard",
+      "description": "Manage your organization's connectivity: people, lines, orders and billing."
     }
   },
   "auth": {
@@ -268,5 +268,69 @@
     "duration": "This can take up to 30 seconds for large manifests.",
     "loadFailed": "Could not load manifests.",
     "generateFailed": "Could not generate the report."
+  },
+  "states": {
+    "status": {
+      "paymentPaid": "Paid",
+      "provisioningRequested": "Setting up",
+      "provisioningOutcomeUnknown": "Confirming with the network",
+      "installationNotInstalled": "Not installed",
+      "activationActive": "Active",
+      "activationSuspended": "Suspended",
+      "networkDetached": "Not connected",
+      "familyPayment": "Payment",
+      "familyProvisioning": "Setup",
+      "familyInstallation": "Installation",
+      "familyActivation": "Line",
+      "familyNetwork": "Network"
+    },
+    "usage": {
+      "dataLabel": "Data",
+      "callsLabel": "Calls",
+      "updated": "Updated {when}",
+      "stale": "Last updated {when}",
+      "staleExplanation": "Usage can take a little while to reach us, so this may be behind what has actually been used. Budgets are applied on the reading we have.",
+      "neverUpdatedExplanation": "We will show usage here once the network reports it."
+    },
+    "pending": {
+      "title": "{count} lines are being set up",
+      "body": "Payment is complete. Setting up lines with the network usually takes a few minutes. You can leave this page — the order will keep going.",
+      "footnote": "Order {reference}"
+    },
+    "partialFailure": {
+      "title": "{failed} of {total} lines could not be set up",
+      "body": "{succeeded} lines are ready and assigned. The rest can be retried.",
+      "noCharge": "Retrying does not charge the organization again.",
+      "retry": "Retry the {failed} that failed"
+    },
+    "empty": {
+      "peopleTitle": "Nobody added yet",
+      "peopleBody": "Add people to assign lines to them and see usage and spend in one place.",
+      "peopleAction": "Add someone",
+      "ordersTitle": "No orders yet",
+      "ordersBody": "Bulk orders and their per-line progress will appear here."
+    },
+    "blocked": {
+      "title": "Some phones cannot use an eSIM",
+      "body": "{count} of the people on this import are on a device that does not support an eSIM, or is locked to one network. Those lines are not included in the order.",
+      "footnote": "We check this before payment so an organization is not billed for lines nobody can install.",
+      "action": "Review the {count} affected"
+    },
+    "error": {
+      "title": "That did not work",
+      "body": "Something went wrong at our end. Nothing was charged.",
+      "footnote": "If you contact us, quote {reference}.",
+      "retry": "Try again",
+      "contactSupport": "Contact support"
+    },
+    "gallery": {
+      "title": "Component gallery",
+      "subtitle": "Every state pattern in the design system, on one page. Narrow the window or switch language and everything here has to keep working.",
+      "sectionStatus": "Status pills",
+      "sectionUsage": "Usage",
+      "sectionStates": "States",
+      "internalOnly": "Internal operations",
+      "internalOnlyNote": "Internal support tools are a separate, visibly distinct area. An organization administrator never sees this styling, and nobody should mistake one for the other."
+    }
   }
 }

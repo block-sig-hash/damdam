@@ -169,3 +169,91 @@ a { color: var(--color-primary-500); font-weight: 700; }
   .registration-form { grid-template-columns: 1fr; }
   .dashboard-page, .dashboard-shell { padding: var(--space-5) var(--space-4); }
 }
+
+/* --- State patterns (chunk 08) -------------------------------------------
+   The dashboard half of the four states the product spends its time in. Same
+   rules as the mobile app; see components/states/StateComponents.tsx. */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Tint fill + dark text, never a saturated fill with white text: at pill size
+   a light tint is the only pairing that holds AA across every semantic colour
+   at once (design-system.md §1). */
+.status-pill {
+  display: inline-block;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+  font-weight: 600;
+  background: var(--color-gray-100);
+  color: var(--color-gray-900);
+}
+.status-pill-progress { background: var(--color-info-100); }
+.status-pill-positive { background: var(--color-success-100); }
+.status-pill-caution { background: var(--color-warning-100); color: var(--color-warning-700); }
+.status-pill-negative { background: var(--color-error-100); color: var(--color-error-700); }
+
+.usage-meter { display: grid; gap: var(--space-2); }
+.usage-meter-header { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); }
+.usage-meter-label { font-size: var(--type-caption-size); font-weight: 600; color: var(--color-gray-700); }
+.usage-meter-remaining { font-size: var(--type-body-size); font-weight: 600; color: var(--color-gray-900); }
+.usage-meter-track {
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-gray-200);
+  overflow: hidden;
+}
+.usage-meter-fill { height: 100%; border-radius: var(--radius-pill); background: var(--color-success-500); }
+.usage-meter-fill[data-severity="low"] { background: var(--color-warning-500); }
+.usage-meter-fill[data-severity="critical"] { background: var(--color-error-700); }
+/* Never reported is an empty grey bar, not a full green one. Painting it full
+   would be inventing a reading somebody then budgets against. */
+.usage-meter-fill[data-severity="unknown"] { background: var(--color-gray-300); }
+.usage-meter-updated, .usage-meter-explanation {
+  margin: 0;
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+  color: var(--color-gray-600);
+}
+/* A late reading is normal, not a fault. Colouring it as an alert trains
+   people to ignore alerts. */
+.usage-meter-updated.is-stale { color: var(--color-gray-700); font-weight: 600; }
+
+.state-message {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-card);
+  background: var(--color-gray-50);
+}
+.state-message-title { margin: 0; font-size: var(--type-heading3-size); line-height: var(--type-heading3-line); font-weight: var(--type-heading3-weight); }
+.state-message-body { margin: 0; font-size: var(--type-body-size); line-height: var(--type-body-line); color: var(--color-gray-900); }
+.state-message-footnote { margin: 0; font-size: var(--type-caption-size); line-height: var(--type-caption-line); color: var(--color-gray-700); }
+.state-message-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
+.state-message-actions button { width: auto; grid-column: auto; }
+
+.state-message-pending { background: var(--color-info-100); border-color: var(--color-info-500); }
+.state-message-blocked { background: var(--color-warning-100); border-color: var(--color-warning-500); }
+.state-message-blocked .state-message-title { color: var(--color-warning-700); }
+.state-message-error { background: var(--color-error-100); border-color: var(--color-error-700); }
+.state-message-error .state-message-title { color: var(--color-error-700); }
+.state-message-partial { background: var(--color-warning-100); border-color: var(--color-warning-500); }
+.state-message-partial .state-message-title { color: var(--color-warning-700); }
+
+.gallery-page { display: grid; gap: var(--space-8); }
+.gallery-section { display: grid; gap: var(--space-4); }
+.gallery-section > h2 { margin: 0; font-size: var(--type-heading2-size); }
+.gallery-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+.gallery-stack { display: grid; gap: var(--space-4); }

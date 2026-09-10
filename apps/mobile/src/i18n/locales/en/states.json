@@ -10,7 +10,7 @@
 
     "provisioningNotStarted": "Not started",
     "provisioningRequested": "Setting up",
-    "provisioningOutcomeUnknown": "Checking with the network",
+    "provisioningOutcomeUnknown": "Confirming with the network",
     "provisioningProvisioned": "Ready to install",
     "provisioningFailed": "Setup failed",
     "provisioningCancelled": "Cancelled",
@@ -37,8 +37,8 @@
   },
 
   "outcomeUnknown": {
-    "title": "We are checking with the network",
-    "body": "We did not get a clear answer about this line, so we are checking before doing anything else. You have not been charged twice and we will not order a second line.",
+    "title": "We are confirming with the network",
+    "body": "We did not get a clear answer about this line, so we are confirming it before doing anything else. You have not been charged twice and we will not order a second line.",
     "reassurance": "Nothing further is needed from you."
   },
 
