@@ -503,3 +503,28 @@ controls, restrictive browser origins, existing CSRF/session policy and masked
 audit metadata. No backend Telnyx key in browser/mobile; no new recording/contact
 collection. Evaluate actual mode/market emergency and privacy obligations before
 sale. Deferred incoming calling is not implicitly restored by SDK installation.
+
+---
+
+## 10.19 Amendment — Organization Authorization and MFA Recovery Boundary (US-29)
+
+**Recorded 10 September 2026 during independent chunk 07 review.** Individual
+membership and a server-side permission matrix govern organization access.
+Organization identifiers from paths, headers and resource ids never supply
+authority; a current active membership does. Missing or invalid authentication
+returns 401, while a valid principal without membership returns a uniform 403
+for both foreign and nonexistent tenants.
+
+Administrator step-up is stored per user and organization and is also bound to
+`users.auth_version`. Account recovery therefore invalidates existing access
+JWTs and existing MFA elevations together. Organization routes enforce the same
+authentication version as consumer routes; they cannot accept a token that
+recovery has superseded.
+
+Active MFA cannot be replaced using a bearer token alone. The existing TOTP or
+a single-use recovery code must disable it first. Credential and recovery-code
+rows are locked while codes are consumed, preventing concurrent reuse. Invalid
+HTTP attempts commit the durable failure counter before returning an error, and
+the lock response carries `Retry-After` as both structured detail and a header.
+The TOTP secret remains plaintext until chunk 26 supplies envelope encryption
+and key rotation; this is a production gate, not an accepted protection claim.

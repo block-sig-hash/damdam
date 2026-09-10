@@ -1,6 +1,6 @@
 # Implementation status
 
-Chunks 01, 02, 04, 05, 06 and chunk 03's documented/simulated scope are
+Chunks 01, 02, 04, 05, 06, 07 and chunk 03's documented/simulated scope are
 **ACCEPTED after independent Codex review and fixes**.
 Chunk 01 merged in [PR #100](https://github.com/block-sig-hash/damdam/pull/100).
 Chunk 02's tested content and native evidence are recorded in
@@ -34,7 +34,7 @@ is a dry run that executes nothing.
 | 04 — Retire family, safety and app-calling features safely | ACCEPTED after fixes (04A–04E), merged in PR #104 as `3fb2385` | base `12582f1` / submitted complete head `55394f5` / corrected app `d53c055` + native `6cf900a`, `e89d725` / CI head `0d4fee4` | [Independent review](reviews/04.md) | Check-in/welfare data disposition remains open; no welfare data deleted |
 | 05 — Introduce core domain models and migration boundaries | ACCEPTED after fixes; integrated on accepted chunk 04 | base `12582f1` / submitted `87baa40` / corrected code `07dc308` / integration `4c82ed9` / final invariant `2109aef` | [Independent review](reviews/05.md) | D3 remains OPEN — `legal_entities` is deliberately unseeded |
 | 06 — Implement global identity and account recovery | **ACCEPTED after fixes** (backend, migration and shared-device boundary) | base `d2f5349` / submitted `c07054e` / corrected `1ac8959` / integration `162d711` | [Independent review](reviews/06.md) | Live email delivery and mobile email screens remain gated to provider setup and chunks 18/21 |
-| 07 — Implement memberships, tenant isolation and administrator MFA | NOT_STARTED | — | — | See assignment |
+| 07 — Implement memberships, tenant isolation and administrator MFA | **ACCEPTED after fixes** | base `c07054e` / submitted `01e9d93` / integrated with accepted chunk 06 at `a9137e9` | [Independent review](reviews/07.md) | MFA secret-at-rest encryption remains assigned to chunk 26; shared organization login retirement remains assigned to the dashboard migration |
 | 08 — Define the consumer and enterprise design system | NOT_STARTED | — | — | See assignment |
 | 09 — Build supported-market catalog and immutable quotes | NOT_STARTED | — | — | See assignment |
 | 10 — Build the multi-currency ledger and atomic reservations | NOT_STARTED | — | — | See assignment |
@@ -93,6 +93,30 @@ prepaid charging — are proposals from the plan awaiting the founder, not
 approvals.
 
 D1–D6 begin **OPEN / verify current evidence**. Do not infer they are closed from a prior conversation or a passing mock. Record owner, decision, supporting artifact/date, and impact on each affected chunk.
+
+## Chunk 07 was started before chunk 06 was accepted
+
+`AGENTS.md` says the next dependent chunk starts only after acceptance. Chunk 07
+did not wait, at the user's instruction, and this is the record of that.
+
+- Chunk 07 is branched from `c07054e` — chunk 06's **submitted** head, with no
+  review record in `reviews/`. `reviews/06.md` does not exist.
+- Independent review of chunk 06 was **in progress** while chunk 07 was written,
+  in a separate worktree and database. Its in-flight fixes — a nullable
+  `users.phone_number`, `users.auth_version` and access-token identity binding,
+  an `AUTHENTICATE` token purpose, and a first-class email login — are **not in
+  this branch**.
+- Chunk 07 therefore contains **no** absorbed chunk 06 work, and nothing in it
+  depends on those fixes. Where the two overlap, chunk 07 avoided the collision
+  rather than duplicating it: the controlled migration creates no user account,
+  which is why it needs no nullable `phone_number`; and the second factor is
+  gated on a database row rather than a token claim, which is why it needs no
+  `auth_version`.
+
+**Chunk 06's accepted fixes must be carried forward into chunk 07's branch
+before chunk 07 is merged**, and chunk 07's review should confirm the two
+revocation mechanisms — `auth_version` for sessions, `organization_elevations`
+for step-up — converge rather than sit side by side.
 
 ## Updating this record
 

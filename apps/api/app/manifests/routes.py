@@ -1,10 +1,8 @@
 from typing import Annotated, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Request, Response, UploadFile, status
+from fastapi import APIRouter, File, Request, Response, UploadFile, status
 
-from app.auth.dependencies import get_current_organization
-from app.auth.models import Organization
 from app.manifests.orders import ManifestOrderService
 from app.manifests.schemas import (
     FamilyGroupRequest,
@@ -23,6 +21,8 @@ from app.manifests.schemas import (
     UnorderedPilgrimListResponse,
 )
 from app.manifests.service import ManifestService
+from app.organizations.dependencies import TenantContext, require_tenant
+from app.organizations.permissions import Permission
 
 router = APIRouter(prefix="/hto/manifests", tags=["HTO manifests"])
 pricing_router = APIRouter(prefix="/hto/pricing-tiers", tags=["HTO manifests"])
@@ -42,10 +42,12 @@ def _order_service(request: Request) -> ManifestOrderService:
 def create_manifest(
     payload: ManifestCreateRequest,
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.PEOPLE_MANAGE)],
 ) -> ManifestCreateResponse:
     with request.app.state.session_factory() as session:
-        manifest = _service(request).create(session, organization.id, payload.name)
+        manifest = _service(request).create(
+            session, context.organization_id, payload.name
+        )
     return ManifestCreateResponse(manifest_id=manifest.id)
 
 
@@ -53,13 +55,13 @@ def create_manifest(
 async def upload_manifest(
     manifest_id: UUID,
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.PEOPLE_MANAGE)],
     file: Annotated[UploadFile, File()],
 ) -> ManifestUploadResponse:
     contents = await file.read()
     with request.app.state.session_factory() as session:
         return _service(request).upload(
-            session, organization.id, manifest_id, file.filename, contents
+            session, context.organization_id, manifest_id, file.filename, contents
         )
 
 
@@ -67,20 +69,22 @@ async def upload_manifest(
 def confirm_manifest(
     manifest_id: UUID,
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.PEOPLE_MANAGE)],
 ) -> ManifestConfirmResponse:
     with request.app.state.session_factory() as session:
-        manifest = _service(request).confirm(session, organization.id, manifest_id)
+        manifest = _service(request).confirm(
+            session, context.organization_id, manifest_id
+        )
     return ManifestConfirmResponse(pilgrim_count=manifest.valid_rows)
 
 
 @router.get("", response_model=ManifestListResponse)
 def list_manifests(
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.PEOPLE_READ)],
 ) -> ManifestListResponse:
     with request.app.state.session_factory() as session:
-        manifests = _service(request).list_manifests(session, organization.id)
+        manifests = _service(request).list_manifests(session, context.organization_id)
     return ManifestListResponse(
         manifests=[
             ManifestSummary.model_validate(item, from_attributes=True)
@@ -92,9 +96,9 @@ def list_manifests(
 @pricing_router.get("", response_model=PricingTierListResponse)
 def list_pricing_tiers(
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.PEOPLE_READ)],
 ) -> PricingTierListResponse:
-    del organization
+    del context
     with request.app.state.session_factory() as session:
         tiers = _order_service(request).list_pricing(session)
     return PricingTierListResponse(tiers=tiers)
@@ -107,11 +111,11 @@ def list_pricing_tiers(
 def list_unordered_pilgrims(
     manifest_id: UUID,
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.PEOPLE_READ)],
 ) -> UnorderedPilgrimListResponse:
     with request.app.state.session_factory() as session:
         pilgrims = _order_service(request).list_unordered(
-            session, organization.id, manifest_id
+            session, context.organization_id, manifest_id
         )
     return UnorderedPilgrimListResponse(pilgrims=pilgrims)
 
@@ -121,12 +125,12 @@ def create_family_group(
     manifest_id: UUID,
     payload: FamilyGroupRequest,
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.PEOPLE_MANAGE)],
 ) -> FamilyGroupResponse:
     with request.app.state.session_factory() as session:
         group_id = _order_service(request).create_group(
             session,
-            organization.id,
+            context.organization_id,
             manifest_id,
             payload.manifest_pilgrim_ids,
             payload.group_size,
@@ -140,12 +144,12 @@ def update_family_group(
     group_id: UUID,
     payload: FamilyGroupRequest,
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.PEOPLE_MANAGE)],
 ) -> FamilyGroupResponse:
     with request.app.state.session_factory() as session:
         updated_id = _order_service(request).update_group(
             session,
-            organization.id,
+            context.organization_id,
             manifest_id,
             group_id,
             payload.manifest_pilgrim_ids,
@@ -159,11 +163,11 @@ def delete_family_group(
     manifest_id: UUID,
     group_id: UUID,
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.PEOPLE_MANAGE)],
 ) -> Response:
     with request.app.state.session_factory() as session:
         _order_service(request).delete_group(
-            session, organization.id, manifest_id, group_id
+            session, context.organization_id, manifest_id, group_id
         )
     return Response(status_code=204)
 
@@ -173,12 +177,12 @@ def place_manifest_order(
     manifest_id: UUID,
     payload: ManifestOrderRequest,
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.ORDER_PLACE)],
 ) -> ManifestOrderResponse:
     with request.app.state.session_factory() as session:
         return _order_service(request).place_order(
             session,
-            organization.id,
+            context.organization_id,
             manifest_id,
             payload.pricing_tier_id,
             payload.manifest_pilgrim_ids,
@@ -189,11 +193,11 @@ def place_manifest_order(
 def list_manifest_orders(
     manifest_id: UUID,
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.PEOPLE_READ)],
 ) -> ManifestOrderListResponse:
     with request.app.state.session_factory() as session:
         orders = _order_service(request).list_orders(
-            session, organization.id, manifest_id
+            session, context.organization_id, manifest_id
         )
     return ManifestOrderListResponse(orders=orders)
 
@@ -205,11 +209,11 @@ def get_manifest_order(
     manifest_id: UUID,
     order_id: UUID,
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.PEOPLE_READ)],
 ) -> ManifestOrderDetailResponse:
     with request.app.state.session_factory() as session:
         return _order_service(request).get_order(
-            session, organization.id, manifest_id, order_id
+            session, context.organization_id, manifest_id, order_id
         )
 
 
@@ -218,11 +222,11 @@ def download_manifest_invoice(
     manifest_id: UUID,
     order_id: UUID,
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.ORDER_READ)],
 ) -> Response:
     with request.app.state.session_factory() as session:
         pdf = _order_service(request).get_invoice(
-            session, organization.id, manifest_id, order_id
+            session, context.organization_id, manifest_id, order_id
         )
     return Response(
         content=pdf,

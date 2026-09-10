@@ -933,3 +933,20 @@ template together for outbound evidence; do not reinstate retired incoming-push
 or safety gates. Chunk29 records real identity, DTMF/audio, route and billed-cost
 evidence, separately for internet and native carrier calls. Missing live evidence
 is pending, never replaced by a mocked call or a screenshot.
+
+---
+
+## 14.17 Amendment — Organization Authorization and MFA Tests (US-29)
+
+Organization membership, invitation and MFA behavior is strict-TDD scope.
+PostgreSQL tests cover the last-owner lock, concurrent invitation acceptance,
+expired invitation replacement, TOTP replay, concurrent use of one TOTP and one
+recovery code, membership revocation listeners, and account-recovery invalidation
+of an existing step-up. HTTP tests separately prove authentication-version
+enforcement and that failed MFA attempts persist across requests until lockout.
+
+Cross-tenant API cases compare nonexistent and foreign organization responses,
+exercise path and header tenant selection, and keep personal orders unreachable
+from organization assignment. Migration tests populate the preceding identity
+revision before upgrading; a fresh upgrade must also reach
+`0029_organization_memberships` through the full revision chain.
