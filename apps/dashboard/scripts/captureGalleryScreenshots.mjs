@@ -31,9 +31,14 @@ async function main() {
   for (const capture of matrix.captures) {
     const query = capture.textScale === 200 ? "?textScale=200" : "";
     const url = `${baseUrl}/gallery${query}`;
-    const response = await fetch(url, {
-      headers: { "accept-language": `${capture.locale},${capture.locale};q=0.9` },
-    });
+    let response;
+    try {
+      response = await fetch(url, {
+        headers: { "accept-language": capture.locale },
+      });
+    } catch (error) {
+      throw new Error(`${capture.name} could not reach ${url}`, { cause: error });
+    }
     if (!response.ok) throw new Error(`${url} returned ${response.status}`);
     const html = await response.text();
     const languageMarker =

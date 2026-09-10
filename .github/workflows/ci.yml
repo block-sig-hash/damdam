@@ -185,27 +185,24 @@ jobs:
           cache-dependency-path: apps/dashboard/package-lock.json
       - run: npm ci
       - run: npm run build
-      - name: Start the production build
-        run: |
-          npm run start -- -p 3123 > /tmp/damdam-gallery-server.log 2>&1 &
-          echo "server_pid=$!" >> "$GITHUB_ENV"
-          for attempt in {1..60}; do
-            if curl --fail --silent http://127.0.0.1:3123/gallery > /dev/null; then
-              exit 0
-            fi
-            sleep 1
-          done
-          cat /tmp/damdam-gallery-server.log
-          exit 1
       - name: Capture and validate viewport, locale and text-scale matrix
         env:
           CHROME_BIN: google-chrome
           GALLERY_BASE_URL: http://127.0.0.1:3123
           SCREENSHOT_OUTPUT_DIR: ${{ github.workspace }}/artifacts/dashboard-gallery
-        run: npm run screenshots:gallery
-      - name: Stop gallery server
-        if: always()
-        run: kill "$server_pid" 2>/dev/null || true
+        run: |
+          npm run start -- -p 3123 > /tmp/damdam-gallery-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3123/gallery > /dev/null; then
+              npm run screenshots:gallery
+              exit
+            fi
+            sleep 1
+          done
+          cat /tmp/damdam-gallery-server.log
+          exit 1
       - name: Upload dashboard screenshot evidence
         if: always()
         uses: actions/upload-artifact@v4
