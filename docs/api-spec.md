@@ -1352,3 +1352,16 @@ Chunk 06 ships a transport abstraction and a recording test transport. **No
 email provider is configured and nothing is sent.** Non-test environments use a
 discarding transport so raw tokens are not retained in process memory. Live
 delivery remains explicitly gated.
+---
+
+## 7.33 Amendment — Outbound calling contract ownership (US-45)
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+V02 introduces newly specified authorization, scoped short-lived grants, call
+status/history and stop contracts; V03 adds reconciliation/charging behavior.
+Retired routes do not become live through this text. Inventory legacy callers,
+old-client compatibility and retained webhook consumers before changing routes.
+Server/provider controls bind payer, destination and identity, and reconcile
+unknown outcomes without duplicate legs. Update prose and generated OpenAPI when
+implementation adds actual routes; do not present planned endpoints as available.

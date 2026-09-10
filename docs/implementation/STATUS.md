@@ -97,3 +97,20 @@ D1–D6 begin **OPEN / verify current evidence**. Do not infer they are closed f
 Claude may record IN_PROGRESS, READY_FOR_REVIEW, EXTERNAL_BLOCKED and handoff links. Only an independent Codex review records ACCEPTED or CHANGES_REQUIRED. Acceptance identifies the reviewed/tested code. Explicitly list lettered subchunks and their unaccepted remainder where work was split.
 
 A review record can be carried forward only if the relevant code/configuration has not changed; subsequent changes require appropriate revalidation. Store approval/status text separately from executable runtime configuration.
+
+## Calling expansion approved — 9 September 2026
+
+The founder approved [VOICE-EXPANSION.md](VOICE-EXPANSION.md). This adds work;
+it does not reverse chunk 04 acceptance or imply restored calling code.
+
+| Chunk | Story | Status | Remaining gate |
+|---|---|---|---|
+| V01 — Internet-voice feasibility | US-44 | **ACCEPTED AFTER FIXES** (documented/preparatory scope); live route **EXTERNAL_BLOCKED** | corrected content `90f6a4c` / [review](reviews/V01.md), [handoff](handoffs/V01.md), [evidence](voice/) — Park Outbound Calls is the documented preparation route; emergency bypass, containment, bounds, billing and live client proof remain B1–B5 |
+| V02 — Outbound call control | US-45 | NOT_STARTED | Accepted V01 contract and 06/07/09/10/11; live controls gated |
+| V03 — Internet charging | US-46 | NOT_STARTED | V02/10/14; provider cutoff, rates and D5 |
+| V04 — Mobile outbound | US-47 | NOT_STARTED | V03/08/18; device/SDK and live evidence |
+| V05 — Browser outbound | US-48 | NOT_STARTED | V03/08 and 06/07 browser auth; browser/live evidence |
+
+Staging statements earlier in this file are the recorded chunk05 baseline, not
+a fresh host/deployment assessment. Staging work is occurring separately; this
+calling-plan change does not certify its completion or alter that checkout.

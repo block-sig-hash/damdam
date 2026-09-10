@@ -1,9 +1,10 @@
 # DamDam
 
-A global eSIM and carrier-voice platform for individual consumers
-and for enterprise and government organizations. Buy connectivity in
-DamDam, install an eSIM, then use your phone's normal dialer and
-mobile data — one carrier-enabled profile carries both.
+A connectivity platform for consumers, enterprises and government organizations.
+The approved target combines eSIM data, carrier native-dialer voice where proven,
+and outbound internet calling from the mobile app and website. Internet calling
+does not require an eSIM. See the [calling expansion plan](./docs/implementation/VOICE-EXPANSION.md)
+for scope, dependencies and supplier gates; these are planned capabilities.
 
 > **The product was reset on 8 September 2026** from a Hajj-pilgrim
 > app to the description above. The specs in `/docs` have not been

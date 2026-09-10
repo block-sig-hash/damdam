@@ -896,3 +896,16 @@ from `result.user.id`, so the optional type was simply inaccurate.
 PIN does not verify for B, B sees no stored PIN and no lockout, and ending a
 session clears the store. Any future device-persisted state belongs in
 `clearAccountScopedState()` and should be tested the same way.
+---
+
+## 8.14 Amendment — Outbound Internet Calls (US-47)
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+Add Calls via V04, supporting internet-only service, explicit rate/identity/payer,
+microphone consent at use, audio controls, DTMF and backend cost/history. Native
+carrier actions remain distinct with honest SIM-selection guidance. Handle
+account changes, lock/background/interruption and network loss per supported
+SDK/OS evidence; spending control survives client failure. Incoming push/ringing
+and third-party CLI stay deferred. The old permission removal remains correct
+for the retired build; add only required outbound permissions and native hooks.

@@ -1,9 +1,15 @@
 # Chunk 07 — Implement memberships, tenant isolation and administrator MFA
 
+> **Scope update — 9 September 2026:** Read [the approved calling amendment](../VOICE-EXPANSION.md). It supersedes earlier app/browser-calling deferrals and defines capability-specific release dependencies. Historical acceptance records remain valid for their reviewed scope.
+
 **Depends on:** chunk 05, chunk 06.
 **Plan mapping:** PR-03 part B / US-29.
 **Likely starting points:** auth/hto.py, auth/dependencies.py, organization models, dashboard auth and security specs.
 Paths refer to the inspected baseline; verify them in the actual current checkout.
+
+## Calling expansion requirements
+
+Personal browser calling needs no organization membership. Work-call grants/history and revocation use object-level tenant/payer scope; V02 implements calling-specific checks.
 
 ## Outcome and implementation scope
 
@@ -26,7 +32,7 @@ Implement only this chunk in the DamDam repository. Read `AGENTS.md`, `docs/READ
 
 The user's chosen workflow is Claude implementation followed by Codex review and, when needed, refactoring. The user has authorized this redesign and working split; older ownership tables and obsolete product freezes do not override it. Retain applicable test, security and migration safeguards.
 
-Product boundaries: generic consumer plus enterprise/government connectivity; Telnyx preferred for data and native-dialer voice on the same eSIM, subject to verified availability. Remove family/SOS; follow the scope record for remaining welfare retirement. External verified caller ID and app VoIP are deferred. No additional carrier integration, subscriptions, AI features, SSO/SCIM or microservice rewrite unless separately approved. Entity and global payment processor remain decisions, not assumptions.
+Product boundaries: generic consumer plus enterprise/government connectivity; Telnyx preferred for data and native-dialer voice on the same eSIM, subject to verified availability. Remove family/SOS; follow the scope record for remaining welfare retirement. External verified caller ID and incoming app/browser ringing remain deferred. Outbound internet calling is assigned to V01–V05; apply the calling amendment to this chunk. No additional carrier integration, subscriptions, AI features, SSO/SCIM or microservice rewrite unless separately approved. Entity and global payment processor remain decisions, not assumptions.
 
 Inspect the actual current branch, local changes and dependency review records. Start from the accepted predecessor commit on a dedicated branch/worktree; preserve unrelated work. Do not code against the historical SHA blindly. If a dependency changed, explain the resulting scope adjustment. Do not silently absorb a missing predecessor's work.
 

@@ -916,3 +916,20 @@ Mobile tests use a stateful Keychain double to prove an account's local PIN and
 lockout cannot authenticate or block another account on the same handset.
 Ownerless records from older builds read as absent. The eSIM compatibility
 warning remains device-scoped because it is handset state under AC-10.6.
+
+---
+
+## 14.16 Amendment — Three-Interface Calling Evidence
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+V01 supplies contract evidence; V02/V03 require failing-first authorization,
+idempotency and PostgreSQL financial/concurrency tests. V04/V05 require rendered
+journeys and supported physical-device/browser evidence. Chunk28 covers copied
+credential bypass, simultaneous mobile/browser calls, multiple provider legs,
+unknown originate, lost terminal CDR, corrections, worker/tab loss, membership
+revocation and cross-mode exposure where enabled. Chunk27 updates validator and
+template together for outbound evidence; do not reinstate retired incoming-push
+or safety gates. Chunk29 records real identity, DTMF/audio, route and billed-cost
+evidence, separately for internet and native carrier calls. Missing live evidence
+is pending, never replaced by a mocked call or a screenshot.

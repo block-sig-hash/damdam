@@ -2136,3 +2136,16 @@ Upgrade and legacy-only downgrade are exercised against a populated revision
 `0027_core_domain_model` database. Once an email-only user exists, downgrade to
 the non-null revision requires an explicit account migration; silently
 inventing a phone or platform would corrupt identity data.
+---
+
+## 6.46 Amendment — Calling domain extension proposal (US-45/US-46)
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+V02/V03 own future additive call-attempt, provider-leg, grant, event-inbox and
+settlement changes through the shared ledger. Every attempt binds immutable
+owner/tenant/payer/seller/currency, entitlement, destination, authorized identity,
+rate version and reservation. Internet-only service must not need an eSIM/carrier
+line. Preserve quantity-one recipient order items, historical calls and financial
+rows. These are design requirements; no new table or migration is implemented
+by this amendment. Detailed shapes precede the owning migration.

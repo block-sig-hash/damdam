@@ -99,3 +99,19 @@ eSIM silently on an unmanaged phone — the employee installs and consents unles
 a separately supported managed-device workflow exists; and a personal/work payer
 selection in the app never overrides which native SIM line the handset uses for
 a call.
+
+## Calling expansion — 9 September 2026
+
+[VOICE-EXPANSION.md](VOICE-EXPANSION.md) supersedes the historical voice reuse rows.
+V01 inventories old code; V02 owns authorization, provider adapters, call attempts
+and signed-event ingestion; V03 owns metering/settlement through chunk 10's ledger;
+V04 owns the mobile service wrapper/UI; V05 owns the consumer web calling area.
+Chunks 15–17 still own carrier lifecycle/usage/controls. These paths share identity,
+entitlements, ledger and audit contracts, but a WebRTC session is not a carrier
+line. Client SDK media may connect directly to Telnyx behind a wrapper; it never
+exposes a backend API key or determines spend authorization.
+
+New journey: signup → choose personal/work payer and an eligible internet-voice
+offer → approved checkout/funding → review destination rate and outbound identity
+→ call from mobile or browser → see reconciled history/cost. No eSIM installation
+or organization membership is required for a personal call.

@@ -53,6 +53,45 @@ Recorded so far: the documentation review dated 8 September 2026 in
 [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) §5. That is a reading of public
 documentation, not commercial confirmation, and it does not move D1.
 
+#### Evidence gathered — 2026-09-09 (chunk V01, US-44) — internet track
+
+- Gathered by: Claude, chunk V01. **Not a decision. D1 stays OPEN.**
+- Method: independent reading of current official Telnyx documentation.
+  No account, no API call, no SDK installed, no contact with Telnyx.
+- Scope: **internet calling only.** This adds an internet track to D1 and
+  changes nothing about the carrier evidence recorded on 2026-09-08.
+- Artifacts: [voice/CAPABILITY-MATRIX.md](voice/CAPABILITY-MATRIX.md),
+  [voice/API-CONTRACTS.md](voice/API-CONTRACTS.md),
+  [voice/COST-MODEL.md](voice/COST-MODEL.md),
+  [voice/LEGACY-REUSE.md](voice/LEGACY-REUSE.md),
+  [voice/GO-NO-GO.md](voice/GO-NO-GO.md),
+  [voice/ENQUIRY-DRAFT.md](voice/ENQUIRY-DRAFT.md) (**unsent**).
+
+Additional evidence D1 now requires for the internet track, none of it
+obtainable without an account:
+
+9.  Whether a WebRTC telephony credential can register and create ordinary
+    parked calls while being unable to connect directly to PSTN or emergency
+    routing; and which signed event fields bind the parked leg to one device
+    credential. **No per-destination token scope is documented**, and emergency
+    calls are documented to bypass parking.
+10. The provider-enforced lifetime of a client-created parked leg, the reaction
+    time of the Daily Spend Limit, hangup delay, and whether these establish any
+    finite hard-prepaid bound.
+11. Nigeria outbound rates, billing increment, minimum duration and connection
+    fee. Not published; `GET /v2/public/pricing` returns HTTP 404
+    unauthenticated.
+12. Whether Nigeria requires Level 2 destination verification.
+13. Native proof for the current SDK on React Native 0.86 / React 19 and browser
+    support. The published peer ranges include these versions, but installation,
+    native builds and calls have not been tested.
+
+Two published unit inputs are recorded: WebRTC and Voice API usage are each
+listed at **$0.002/min**. The number and duration of billed components, CDR
+correlation and Nigeria termination price for the chosen topology remain
+unknown. No comparison with carrier calling is possible until item 11 and live
+CDR evidence are available.
+
 #### Evidence gathered — 2026-09-08 (chunk 03, US-35)
 
 - Gathered by: Claude, chunk 03. **Not a decision. D1 stays OPEN.**
@@ -264,3 +303,24 @@ Append a dated entry under the relevant gate:
 
 Then update [STATUS.md](STATUS.md) for every chunk whose gate changed. Do not
 delete a superseded decision; append the replacement.
+
+## Approved product change — 9 September 2026: three calling interfaces
+
+- Decided by: founder, in this session: “ok go ahead with what you recommend”,
+  following the recommendation for outbound mobile/browser calling alongside
+  independently verified carrier voice.
+- Decision: implement [VOICE-EXPANSION.md](VOICE-EXPANSION.md). Internet-only service
+  is allowed; inbound app/browser ringing and third-party verified CLI remain
+  deferred. Assigned identity per mode must be authorized by the provider;
+  common-number reuse is a target, not a promise.
+- This supersedes D2's blanket app/browser deferral above. It does not settle
+  markets, rates, D3 entity, D4 processors or the unresolved D5 commercial policy.
+- D1 now has **separate carrier and internet-voice evidence tracks**. Both remain
+  OPEN for live offers. V01 owns internet authorization, billable legs, rate deck,
+  caller identity, resale eligibility, termination bounds and unsent enquiries.
+  V02–V05 may implement documented/simulated scope, naming every live gap.
+- D2 adds internet selling origins/destinations and supported browsers/OS; D3/D4
+  must cover the expanded service; D5 adds mode-specific tariffs and bounded
+  cross-mode exposure; D6 adds browser and outbound-mobile device evidence.
+- This is a scope approval, not acceptance of any new implementation or evidence
+  of external approval. Preserve the carrier proof requirements in chunk 03.
