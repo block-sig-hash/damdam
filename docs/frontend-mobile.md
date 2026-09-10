@@ -859,3 +859,38 @@ account changes, lock/background/interruption and network loss per supported
 SDK/OS evidence; spending control survives client failure. Incoming push/ringing
 and third-party CLI stay deferred. The old permission removal remains correct
 for the retired build; add only required outbound permissions and native hooks.
+
+---
+
+## 8.11 Amendment — The Reset Screen Contract and Screenshot Matrix (US-27)
+
+**Recorded 10 September 2026 by build chunk 08.** Documentation only — this
+chunk builds no product screen.
+
+§8.9 said the screen and locale screenshot matrix is re-cut in chunk 08. It is:
+[`apps/mobile/screenshotHarness/reset-matrix.json`](../apps/mobile/screenshotHarness/reset-matrix.json),
+checked against the matrix actually derived from the Maestro flows by
+`reset-matrix.test.ts`, and enforced as a release gate by chunk 27.
+
+What that file records:
+
+- **Captured today** — the five design-system gallery sections, in both
+  locales, on both platforms; plus the retained flows for screens that still
+  ship. Two eSIM activation screens are declared per-platform, because they
+  exist on one platform each and claiming them for both would leave the other
+  platform's matrix permanently and misleadingly incomplete.
+- **Still owed** — Home, Plans, My Line, Account and their supporting screens,
+  each against the chunk that owes it. A screen moves out of `pending` when a
+  flow captures it; the test fails if a pending name appears in the derived
+  matrix, so it cannot be ticked off by editing a list.
+
+The screen contract those chunks build against is
+[`design-system.md` §17.5](./design-system.md#175-the-consumer-surfaces), and
+the Calls states are §17.7. Both are contracts, not suggestions: §17.4's state
+rules are what the shared components already enforce.
+
+**No microphone permission was added.** Chunk 08 defines the Calls states; V04
+ships the capability. Chunk 04's retirement guard asserts `RECORD_AUDIO` is
+absent from the Android manifest, and this chunk keeps it that way — a design
+chunk requesting a permission the product does not use is exactly the drift that
+guard exists to catch.
