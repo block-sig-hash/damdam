@@ -1340,3 +1340,110 @@ stranger repeatedly.
 Chunk 06 ships a transport abstraction and a recording test transport. **No
 email provider is configured and nothing is sent.** Live delivery remains
 explicitly gated.
+
+## 7.33 Amendment — Organization Membership, Invitation and MFA Endpoints (US-29)
+
+**Recorded 10 September 2026 by build chunk 07.** Data model:
+[data-model.md §6.45](./data-model.md#645-amendment--organization-memberships-invitations-and-second-factors-us-29).
+
+### Endpoints
+
+| Endpoint | Auth | Permission | Purpose |
+|---|---|---|---|
+| `GET /v1/organizations` | member session | — | Organizations the caller belongs to |
+| `GET /v1/organizations/{id}/members` | tenant | `member:read` | List memberships |
+| `PATCH /v1/organizations/{id}/members/{user_id}` | tenant | `member:role_change` **+ step-up** | Change a role |
+| `DELETE /v1/organizations/{id}/members/{user_id}` | tenant | `member:revoke` **+ step-up** | Revoke a membership |
+| `POST /v1/organizations/{id}/invitations` | tenant | `member:invite` **+ step-up** | Invite an address to a role |
+| `GET /v1/organizations/{id}/invitations` | tenant | `member:read` | List live invitations |
+| `DELETE /v1/organizations/{id}/invitations/{invitation_id}` | tenant | `member:invite` **+ step-up** | Withdraw an invitation |
+| `POST /v1/organizations/{id}/step-up` | member session | `org:read` | Prove a second factor for one organization |
+| `GET /v1/invitations` | member session | — | Invitations addressed to the caller's **verified** identifiers |
+| `POST /v1/invitations/accept` | member session | — | Accept one, by token or by id |
+| `POST /v1/auth/mfa/enroll` | member session | — | Begin enrollment; returns the secret **once** |
+| `POST /v1/auth/mfa/enroll/confirm` | member session | — | Confirm with a code; returns recovery codes **once** |
+| `POST /v1/auth/mfa/disable` | member session | — | Disable, requiring a current code |
+
+### Naming the tenant
+
+A route with `{organization_id}` in the path names its tenant there. The legacy
+routes that do not (`/v1/hto/**`) accept **`X-Organization-Id`** from a member
+session. A member session that names no organization is refused with
+`organization_not_selected` (**400**) rather than defaulted to "their only one",
+which would change meaning the day they join a second.
+
+### Authentication and authorization are separate answers
+
+| Situation | Status | Error |
+|---|---|---|
+| No, malformed or expired bearer token | **401** | `invalid_access_token` |
+| Authenticated, but not a member of the named organization | **403** | `not_a_member` |
+| Member, but the role does not permit the action | **403** | `permission_denied` |
+
+Collapsing the first two would leave a client unable to tell "sign in again"
+from "not your organization", and would report an expired session as a
+cross-tenant refusal.
+
+### No cross-tenant oracle (AC-29.4)
+
+An organization that **does not exist** and one that **belongs to somebody
+else** return byte-identical responses. The same rule applies to invitations
+(`invitation_not_found` for another tenant's id) and, via
+`app/organizations/ownership.py`, to orders and order items
+(`order_not_found` / `order_item_not_found`).
+
+### The step-up requirement (AC-29.5)
+
+Permissions in `STEP_UP_PERMISSIONS` — every membership change, organization
+update, ownership transfer and billing change — require a **current second
+factor for that organization**. Reads never do: second factors that gate reads
+get shared, written down or turned off.
+
+| Code | Status | Meaning |
+|---|---|---|
+| `mfa_enrollment_required` | 403 | Privileged role with no active credential — send them to enrollment |
+| `mfa_required` | 403 | Enrolled, but no current step-up for this organization |
+| `mfa_code_invalid` | 400 | Wrong code, or a spent recovery code |
+| `mfa_code_replayed` | 409 | A real code, already used — wait for the next one |
+| `mfa_locked` | 423 | Too many wrong codes; `retry_after` in `details` |
+| `mfa_not_enrolled` | 409 | Confirm or disable called with nothing to act on |
+
+A step-up proves one tenant. Someone who administers two organizations proves
+themselves for the one they are acting in.
+
+### Membership and invitation codes
+
+| Code | Status |
+|---|---|
+| `not_a_member` | 403 |
+| `permission_denied` | 403 |
+| `role_change_forbidden` | 403 |
+| `shared_credential_forbidden` | 403 |
+| `membership_not_found` | 404 |
+| `cannot_modify_own_membership` | 409 |
+| `last_owner` | 409 |
+| `already_a_member` | 409 |
+| `organization_not_selected` | 400 |
+| `invitation_invalid` | 400 |
+| `invitation_expired` | 410 |
+| `invitation_not_found` | 404 |
+| `invitation_already_pending` | 409 |
+| `invitation_recipient_mismatch` | 403 |
+
+### The legacy shared organization credential
+
+`POST /v1/auth/hto/login` and its `hto_dashboard` token still open the manifest
+and reporting flows, so the dashboard keeps working while it migrates. They are
+refused for **every** step-up permission with `shared_credential_forbidden`
+(403). A password several people know cannot be attributed to one of them,
+cannot carry a second factor and cannot be revoked for one of them — so the
+privileged surface is individual-only from this chunk onward. Retiring the
+credential itself belongs to the chunk that retires the dashboard's login.
+
+### Invitation tokens are returned, not sent
+
+`POST /v1/organizations/{id}/invitations` returns the raw token in its response.
+Chunk 06 left delivery on a recording transport and no mail provider is
+configured, so the token is handed to the caller to send rather than pretending
+a delivery happened. Wiring it to the delivery transport belongs with the chunk
+that configures a provider.

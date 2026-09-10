@@ -389,3 +389,142 @@ def test_error_messages_are_localized(api, client, session_factory, clock):
     )
     assert response.status_code == 403
     assert "organisation" in response.json()["message"].lower()
+
+
+# --- the legacy shared credential boundary ---------------------------------
+
+
+def _shared_credential_token(api, organization_id) -> str:
+    """A real operator session, minted the way the legacy login mints one."""
+    from app.auth.models import HTOApprovalStatus, OrganizationType
+
+    with api.state.session_factory() as session:
+        organization = session.get(Organization, organization_id)
+        organization.org_type = OrganizationType.HTO_OPERATOR
+        organization.nahcon_licence_number = "NAHCON-TEST-1"
+        organization.email_verified = True
+        organization.approval_status = HTOApprovalStatus.APPROVED
+        session.add(organization)
+        session.commit()
+        pair = api.state.hto_service._issue_tokens(session, organization)
+    return pair.access_token
+
+
+def test_the_shared_credential_still_opens_the_reporting_flow(
+    api, client, session_factory, clock
+):
+    """Compatibility: the dashboard keeps working while it migrates."""
+    seeded = _seed(api, session_factory, clock)
+    token = _shared_credential_token(api, seeded["acme"])
+    response = client.get(
+        "/v1/hto/reports/provisioning.csv",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+
+
+def test_the_shared_credential_cannot_manage_people(
+    api, client, session_factory, clock
+):
+    """The replacement, made real before the dashboard has migrated.
+
+    A password several people know cannot be attributed to one of them, cannot
+    carry a second factor and cannot be revoked for one of them -- so it is
+    refused for every privileged action, whatever the organization's plan says.
+    """
+    seeded = _seed(api, session_factory, clock)
+    token = _shared_credential_token(api, seeded["acme"])
+    headers = {"Authorization": f"Bearer {token}"}
+
+    invited = client.post(
+        f"/v1/organizations/{seeded['acme']}/invitations",
+        headers=headers,
+        json={"email": JOINER_EMAIL, "role": "member"},
+    )
+    assert invited.status_code == 403
+    assert invited.json()["error"] == "shared_credential_forbidden"
+
+    revoked = client.delete(
+        f"/v1/organizations/{seeded['acme']}/members/{seeded['acme_owner']}",
+        headers=headers,
+    )
+    assert revoked.status_code == 403
+    assert revoked.json()["error"] == "shared_credential_forbidden"
+
+
+def test_a_shared_credential_cannot_read_another_organization(
+    api, client, session_factory, clock
+):
+    seeded = _seed(api, session_factory, clock)
+    token = _shared_credential_token(api, seeded["acme"])
+    response = client.get(
+        f"/v1/organizations/{seeded['other']}/members",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403
+    assert response.json()["error"] == "not_a_member"
+
+
+def test_a_member_session_must_name_its_tenant_on_the_legacy_routes(
+    api, client, session_factory, clock
+):
+    """No defaulting to "their only organization" -- that changes meaning the
+    day they join a second one."""
+    seeded = _seed(api, session_factory, clock)
+    headers = _auth(api, seeded["acme_owner"])
+
+    without_header = client.get("/v1/hto/manifests", headers=headers)
+    assert without_header.status_code == 400
+    assert without_header.json()["error"] == "organization_not_selected"
+
+    with_header = client.get(
+        "/v1/hto/manifests",
+        headers={**headers, "X-Organization-Id": str(seeded["acme"])},
+    )
+    assert with_header.status_code == 200
+
+
+def test_a_member_cannot_point_the_header_at_another_tenant(
+    api, client, session_factory, clock
+):
+    seeded = _seed(api, session_factory, clock)
+    response = client.get(
+        "/v1/hto/manifests",
+        headers={
+            **_auth(api, seeded["acme_owner"]),
+            "X-Organization-Id": str(seeded["other"]),
+        },
+    )
+    assert response.status_code == 403
+    assert response.json()["error"] == "not_a_member"
+
+
+def test_a_plain_member_cannot_export_another_tenants_report(
+    api, client, session_factory, clock
+):
+    """Object-level, not screen-level: the export is a route like any other."""
+    seeded = _seed(api, session_factory, clock)
+    with session_factory() as session:
+        plain = _user(session, "plain-member")
+        memberships = MembershipService(clock=clock)
+        memberships.seed_member(
+            session,
+            session.get(Organization, seeded["acme"]),
+            session.get(User, plain),
+            OrganizationRole.MEMBER,
+        )
+        session.commit()
+
+    own = client.get(
+        "/v1/hto/reports/provisioning.csv",
+        headers={**_auth(api, plain), "X-Organization-Id": str(seeded["acme"])},
+    )
+    assert own.status_code == 403
+    assert own.json()["error"] == "permission_denied"
+
+    foreign = client.get(
+        "/v1/hto/reports/provisioning.csv",
+        headers={**_auth(api, plain), "X-Organization-Id": str(seeded["other"])},
+    )
+    assert foreign.status_code == 403
+    assert foreign.json()["error"] == "not_a_member"
