@@ -2671,3 +2671,87 @@ minor-unit convention and the `x-paystack-signature` HMAC SHA-512 scheme are
 cited to Paystack's public API reference, **checked 10 September 2026**. No live
 or sandbox call has been made, and the adapter tests are not evidence that
 Paystack behaves as documented.
+
+---
+
+## 6.50 Amendment — Refunds, Disputes, Bank Funding and Receipts (US-34)
+
+**Recorded 10 September 2026 by build chunk 14.** Additive; migration
+`0034_refunds_and_reconciliation`. Nothing seeded, no existing row touched.
+
+### Money going out is not the mirror of money coming in
+
+| Table | Why it is its own table |
+|---|---|
+| `refunds` | Bounded by a specific captured charge, not by an order total |
+| `disputes` | The bank took the money and told us afterwards — a different event with a different accounting treatment |
+| `bank_transfer_receipts` | Evidence, imported separately from the decision to credit anybody |
+| `financial_documents` | Facts frozen at issue, never regenerated |
+| `exception_items` | What a human has to look at, with enough context to act |
+
+### The refund ceiling
+
+**Total refunded can never exceed the refundable charge.** Exceeding it is not a
+large refund; it is a payout, and a payout is a different product with a
+different licensing conversation attached.
+
+It spans rows, so it is not one constraint. It is held in two places:
+`request_refund` computes the remaining headroom under `SELECT … FOR UPDATE` on
+the payment attempt, so two concurrent partial refunds cannot both see the same
+room; and chunk 10's balance trigger would refuse the posting even if the
+service were wrong.
+
+**An in-flight refund counts against the headroom.** A refund whose outcome we
+have not seen may already have paid out, and excluding it is exactly how a
+second refund gets authorized on top of a first.
+
+### A refund posts only when it settles
+
+A refund that has not settled has not moved money. Posting on request would show
+a customer credited before their bank saw anything. When it does settle it posts
+a **new, opposite entry** with its own business event — never an edit, which
+chunk 10's trigger refuses anyway.
+
+### A dispute is not a refund
+
+A chargeback is the bank taking money back and telling us. Recording it as a
+refund would make the books say we chose to give it back. A **lost** dispute
+posts the loss to `adjustment`; a **won** one posts nothing, because the money
+never left and a reversal of a reversal invents two transactions that did not
+happen.
+
+Whether a lost dispute claws back the customer's remaining allowance is a policy
+question — **D5 is open** — so this chunk records the money and does not decide
+the service consequence.
+
+### Bank funding is reconciled evidence, not a screenshot
+
+`uq_bank_transfer_receipts_line` makes re-importing a statement harmless, which
+is the failure a manual funding process produces every time.
+
+Importing and crediting are **separate acts**. An import credits nobody;
+matching names both the account and `matched_by`, because a funding credit with
+no attributable decision is indistinguishable from the unaudited balance edit
+the assignment forbids. An unmatched line stays imported, uncredited, and goes
+to the exception queue — guessing whose payment it is credits one customer with
+another's money.
+
+Funding posts at the bank's **value date**, not the date somebody got round to
+reconciling it.
+
+### Documents are frozen
+
+`financial_documents.snapshot` holds the amounts, currency, seller and tax
+reference the document states, **copied rather than referenced**. A receipt
+regenerated from live data next year would show next year's prices with this
+year's date, and a customer comparing it against their bank statement would be
+right to complain. Numbers are unique per seller and kind: a tax authority
+asking for invoice 47 must get exactly one document.
+
+### The exception queue
+
+`exception_items` is the interface chunk 25 builds its operations screens on.
+Every row names its kind, its subject and why — an exception queue whose rows do
+not explain themselves is a list people learn to ignore. `sweep_excess_payments`
+turns chunk 12's recorded excess into something somebody actually sees: an
+excess payment nobody looks at is a customer charged twice and never refunded.
