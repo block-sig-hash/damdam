@@ -7,6 +7,10 @@ tags:
     id: "harness-locale-en"
 - assertVisible:
     id: "harness-locale-active-en"
+- scrollUntilVisible:
+    element:
+      id: "harness-target-esim-activation-prompt-android"
+    direction: DOWN
 - tapOn:
     id: "harness-target-esim-activation-prompt-android"
 - assertVisible:
@@ -18,6 +22,10 @@ tags:
     id: "harness-locale-fr"
 - assertVisible:
     id: "harness-locale-active-fr"
+- scrollUntilVisible:
+    element:
+      id: "harness-target-esim-activation-prompt-android"
+    direction: DOWN
 - tapOn:
     id: "harness-target-esim-activation-prompt-android"
 - assertVisible:

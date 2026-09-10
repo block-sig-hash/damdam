@@ -19,6 +19,7 @@
  * to its browser ESM build, which jest cannot require.
  */
 
+import { readFileSync } from 'fs';
 import { join } from 'path';
 
 import matrix from './reset-matrix.json';
@@ -139,6 +140,16 @@ describe('the re-cut screenshot matrix', () => {
   it('covers both locales, which is the requirement that keeps failing quietly', () => {
     // English always fits. French expansion is what the second locale is for.
     expect(matrix.locales).toEqual(['en', 'fr']);
+  });
+
+  it.each([
+    ['esim-activation-android.yaml', 'harness-target-esim-activation-prompt-android'],
+    ['esim-activation-ios.yaml', 'harness-target-esim-activation-guide-ios'],
+    ['activation-success.yaml', 'harness-target-activation-success'],
+  ])('scrolls each below-fold target into view in both locales: %s', (flow, target) => {
+    const contents = readFileSync(join(FLOWS, flow), 'utf8');
+    const marker = `- scrollUntilVisible:\n    element:\n      id: "${target}"\n    direction: DOWN`;
+    expect(contents.split(marker)).toHaveLength(3);
   });
 
   it('still owes the reset product its own screens', () => {
