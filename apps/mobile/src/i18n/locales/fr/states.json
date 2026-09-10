@@ -59,7 +59,7 @@
     "linesAction": "Voir les forfaits",
     "ordersTitle": "Aucune commande pour le moment",
     "ordersBody": "Vos reçus et votre historique de commandes apparaîtront ici.",
-    "peopleTitle": "Personne n'a encore été ajouté",
+    "peopleTitle": "Personne n'a encore été ajoutée",
     "peopleBody": "Ajoutez des personnes pour leur attribuer des lignes et suivre leur consommation au même endroit.",
     "peopleAction": "Ajouter une personne",
     "searchTitle": "Aucun résultat pour « {{query}} »",

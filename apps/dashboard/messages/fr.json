@@ -304,7 +304,7 @@
       "retry": "Relancer les {failed} en échec"
     },
     "empty": {
-      "peopleTitle": "Personne n'a encore été ajouté",
+      "peopleTitle": "Personne n'a encore été ajoutée",
       "peopleBody": "Ajoutez des personnes pour leur attribuer des lignes et suivre consommation et dépenses au même endroit.",
       "peopleAction": "Ajouter une personne",
       "ordersTitle": "Aucune commande pour le moment",
