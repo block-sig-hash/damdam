@@ -31,6 +31,7 @@ from app.payments.contract import (
     AttemptStatus,
     ExcessPayment,
     MerchantAccount,
+    MerchantPaymentMethod,
     PaymentAttempt,
     PaymentMethodKind,
 )
@@ -48,7 +49,8 @@ pytestmark = pytest.mark.skipif(
 
 NOW = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
 TABLES = (
-    "excess_payments, payment_attempts, payment_intents, merchant_accounts, "
+    "excess_payments, payment_attempts, payment_intents, merchant_payment_methods, "
+    "merchant_accounts, "
     "order_items, orders, legal_entities, users"
 )
 SECRET = "whsec_test_only_never_a_real_key"
@@ -106,6 +108,21 @@ def _merchant(
         created_at=NOW,
     )
     session.add(account)
+    session.flush()
+    session.add_all(
+        [
+            MerchantPaymentMethod(
+                merchant_account_id=account.id, method=PaymentMethodKind.CARD
+            ),
+            MerchantPaymentMethod(
+                merchant_account_id=account.id,
+                method=PaymentMethodKind.BANK_TRANSFER,
+            ),
+            MerchantPaymentMethod(
+                merchant_account_id=account.id, method=PaymentMethodKind.USSD
+            ),
+        ]
+    )
     session.flush()
     return account
 
@@ -200,6 +217,16 @@ class TestRouting:
         )
         assert chosen.live_enabled is False
 
+    def test_a_method_the_merchant_did_not_enable_is_not_routed(
+        self, session, router
+    ):
+        entity = _seller(session)
+        _merchant(session, entity)
+        session.commit()
+        with pytest.raises(PaymentRoutingError) as excinfo:
+            router.route(session, entity.id, "NGN", PaymentMethodKind.WALLET)
+        assert excinfo.value.code == "payment_method_not_supported"
+
     def test_the_database_refuses_going_live_without_an_approval_reference(
         self, session
     ):
@@ -216,6 +243,38 @@ class TestRouting:
         )
         with pytest.raises(IntegrityError):
             session.commit()
+        session.rollback()
+
+
+class TestIntentBinding:
+    def test_the_merchant_must_belong_to_the_orders_seller(self, session, router):
+        order_seller = _seller(session)
+        other_seller = _seller(session)
+        merchant = _merchant(session, other_seller)
+        order = _order(session, order_seller)
+        with pytest.raises(PaymentRoutingError) as excinfo:
+            router.create_intent(session, order, merchant, order.total_amount)
+        assert excinfo.value.code == "seller_mismatch"
+
+    def test_the_intent_amount_must_equal_the_order_total(self, session, router):
+        seller = _seller(session)
+        merchant = _merchant(session, seller)
+        order = _order(session, seller, amount="5000.00")
+        with pytest.raises(PaymentRoutingError) as excinfo:
+            router.create_intent(session, order, merchant, Decimal("1.00"))
+        assert excinfo.value.code == "amount_mismatch"
+
+    def test_an_intent_is_immutable_in_postgresql(self, session, router):
+        _order_row, intent, _attempt, _merchant_row = _ready(session, router)
+        with pytest.raises(Exception) as excinfo:
+            session.exec(
+                text(
+                    "UPDATE payment_intents SET amount = 1 "
+                    "WHERE id = CAST(:id AS uuid)"
+                ).bindparams(id=str(intent.id))
+            )
+            session.commit()
+        assert "payment intent is immutable" in str(excinfo.value)
         session.rollback()
 
 
@@ -407,6 +466,51 @@ class TestCapture:
         assert attempt.status is AttemptStatus.FAILED
         assert order.payment_state is PaymentState.UNPAID
 
+    def test_a_late_failure_cannot_downgrade_a_succeeded_attempt(
+        self, session, router
+    ):
+        _order_row, _intent, attempt, _merchant_row = _ready(session, router)
+        router.capture(session, _charge(attempt), "paystack")
+        session.commit()
+
+        result = router.capture(
+            session,
+            _charge(attempt, succeeded=False, status="failed"),
+            "paystack",
+        )
+        session.commit()
+        assert isinstance(result, PaymentAttempt)
+        assert result.status is AttemptStatus.SUCCEEDED
+
+    def test_excess_evidence_drops_provider_pii(self, session, router):
+        _ready(session, router)
+        stray = ProcessorCharge(
+            processor_reference="stray-safe-evidence",
+            status="success",
+            amount=Decimal("5000.00"),
+            currency="NGN",
+            succeeded=True,
+        )
+        result = router.capture(
+            session,
+            stray,
+            "paystack",
+            raw_payload={
+                "event": "charge.success",
+                "customer": {"email": "private@example.test"},
+                "authorization": {"last4": "4081"},
+            },
+        )
+        session.commit()
+        assert isinstance(result, ExcessPayment)
+        assert result.raw_payload == {
+            "processor_reference": "stray-safe-evidence",
+            "status": "success",
+            "amount": "5000.00",
+            "currency": "NGN",
+            "event": "charge.success",
+        }
+
     def test_a_new_attempt_is_refused_once_one_has_succeeded(self, session, router):
         order, intent, attempt, merchant = _ready(session, router)
         router.capture(session, _charge(attempt), "paystack")
@@ -455,6 +559,58 @@ class TestCapture:
                 )
             ).all()
             assert len(successes) == 1
+
+    def test_two_distinct_late_successes_record_one_as_excess(self, engine):
+        router = PaymentRouter(clock=Clock())
+        with Session(engine) as setup:
+            setup.exec(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+            setup.commit()
+            _order_row, intent, first, merchant = _ready(setup, router)
+            first.status = AttemptStatus.FAILED
+            setup.add(first)
+            setup.commit()
+            second = router.begin_attempt(
+                setup, intent, merchant, PaymentMethodKind.BANK_TRANSFER
+            )
+            second.status = AttemptStatus.FAILED
+            setup.add(second)
+            setup.commit()
+            attempt_ids = [first.id, second.id]
+            intent_id = intent.id
+
+        barrier = Barrier(2)
+
+        def deliver(attempt_id) -> str:
+            with Session(engine) as scoped:
+                scoped_attempt = scoped.get(PaymentAttempt, attempt_id)
+                barrier.wait(timeout=10)
+                result = router.capture(
+                    scoped, _charge(scoped_attempt), "paystack"
+                )
+                scoped.commit()
+                return type(result).__name__
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = list(pool.map(deliver, attempt_ids))
+
+        assert outcomes.count("PaymentAttempt") == 1, outcomes
+        assert outcomes.count("ExcessPayment") == 1, outcomes
+        with Session(engine) as check:
+            assert len(
+                check.exec(
+                    select(PaymentAttempt).where(
+                        PaymentAttempt.intent_id == intent_id,
+                        PaymentAttempt.status == AttemptStatus.SUCCEEDED,
+                    )
+                ).all()
+            ) == 1
+            assert len(
+                check.exec(
+                    select(ExcessPayment).where(
+                        ExcessPayment.intent_id == intent_id
+                    )
+                ).all()
+            ) == 1
 
 
 # --- what a redirect can and cannot do ---------------------------------------

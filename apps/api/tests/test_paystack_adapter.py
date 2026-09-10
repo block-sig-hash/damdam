@@ -30,6 +30,7 @@ from app.payments.paystack_adapter import PaystackAdapter
 from app.payments.routing import PaymentRoutingError
 
 SECRET = "sk_test_never_a_real_key"
+CHECKOUT_METADATA = {"customer_email": "buyer@example.test", "intent": "intent-1"}
 
 
 class FakeTransport:
@@ -75,9 +76,17 @@ class TestCheckout:
         transport = FakeTransport()
         transport.response = _initialize_response()
         _adapter(transport).create_checkout(
-            "key-1", Decimal(amount), currency, PaymentMethodKind.CARD, {}
+            "key-1",
+            Decimal(amount),
+            currency,
+            PaymentMethodKind.CARD,
+            CHECKOUT_METADATA,
         )
-        assert transport.calls[0][2]["amount"] == minor
+        assert transport.calls[0][2]["amount"] == str(minor)
+        assert transport.calls[0][2]["email"] == "buyer@example.test"
+        assert json.loads(transport.calls[0][2]["metadata"]) == {
+            "intent": "intent-1"
+        }
 
     def test_our_idempotency_key_is_the_processor_reference(self):
         # So a reconciliation can ask about the charge we made, by the name we
@@ -85,7 +94,11 @@ class TestCheckout:
         transport = FakeTransport()
         transport.response = _initialize_response("key-1")
         session = _adapter(transport).create_checkout(
-            "key-1", Decimal("100.00"), "NGN", PaymentMethodKind.CARD, {}
+            "key-1",
+            Decimal("100.00"),
+            "NGN",
+            PaymentMethodKind.CARD,
+            CHECKOUT_METADATA,
         )
         assert transport.calls[0][2]["reference"] == "key-1"
         assert session.processor_reference == "key-1"
@@ -109,7 +122,11 @@ class TestCheckout:
         transport.response = {"status": True, "data": {}}
         with pytest.raises(PaymentRoutingError) as excinfo:
             _adapter(transport).create_checkout(
-                "key-1", Decimal("100.00"), "NGN", PaymentMethodKind.CARD, {}
+                "key-1",
+                Decimal("100.00"),
+                "NGN",
+                PaymentMethodKind.CARD,
+                CHECKOUT_METADATA,
             )
         assert excinfo.value.code == "checkout_unavailable"
 
@@ -123,10 +140,32 @@ class TestCheckout:
             Decimal("100.00"),
             "NGN",
             PaymentMethodKind.BANK_TRANSFER,
-            {},
+            CHECKOUT_METADATA,
         )
         assert "bank_transfer" in transport.calls[0][2]["channels"]
         assert "card" not in transport.calls[0][2]["channels"]
+
+    def test_checkout_requires_the_email_paystack_requires(self):
+        transport = FakeTransport()
+        with pytest.raises(PaymentRoutingError) as excinfo:
+            _adapter(transport).create_checkout(
+                "key-1", Decimal("100"), "NGN", PaymentMethodKind.CARD, {}
+            )
+        assert excinfo.value.code == "payer_email_required"
+        assert transport.calls == []
+
+    def test_checkout_rejects_a_reference_paystack_will_not_accept(self):
+        transport = FakeTransport()
+        with pytest.raises(PaymentRoutingError) as excinfo:
+            _adapter(transport).create_checkout(
+                "intent:colon",
+                Decimal("100"),
+                "NGN",
+                PaymentMethodKind.CARD,
+                CHECKOUT_METADATA,
+            )
+        assert excinfo.value.code == "invalid_processor_reference"
+        assert transport.calls == []
 
 
 class TestWebhooks:
@@ -194,6 +233,25 @@ class TestWebhooks:
         charge = _adapter(FakeTransport()).parse_webhook(raw)
         assert charge.amount == Decimal("5000.00")
         assert charge.succeeded is True
+
+    @pytest.mark.parametrize(
+        "data",
+        [
+            {"status": "success", "amount": 100, "currency": "NGN"},
+            {"reference": "key-1", "status": "success", "amount": 100},
+            {
+                "reference": "key-1",
+                "status": "success",
+                "amount": 0,
+                "currency": "NGN",
+            },
+        ],
+    )
+    def test_incomplete_processor_facts_are_not_defaulted(self, data):
+        raw = json.dumps({"event": "charge.success", "data": data}).encode()
+        with pytest.raises(PaymentRoutingError) as excinfo:
+            _adapter(FakeTransport()).parse_webhook(raw)
+        assert excinfo.value.code == "invalid_processor_response"
 
 
 class TestVerification:

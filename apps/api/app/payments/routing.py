@@ -23,7 +23,6 @@ are open. A passing sandbox call is not merchant approval.
 
 import hashlib
 import hmac
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -31,16 +30,17 @@ from decimal import Decimal
 from typing import Any, Protocol
 from uuid import UUID
 
-from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
 from app.auth.models import utc_now
+from app.catalog.quotes import Quote, QuoteStatus
 from app.money import round_money
 from app.orders.models import Order, PaymentState
 from app.payments.contract import (
     AttemptStatus,
     ExcessPayment,
     MerchantAccount,
+    MerchantPaymentMethod,
     PaymentAttempt,
     PaymentIntent,
     PaymentMethodKind,
@@ -137,29 +137,50 @@ class PaymentRouter:
         about a person; a merchant account is a fact about who may take their
         money in that currency.
         """
-        # `method` is recorded on the attempt rather than used for selection:
-        # no processor here yet varies by it, and branching on it now would be
-        # a rule nobody asked for.
-        del method
-        account = session.exec(
-            select(MerchantAccount).where(
+        candidates = session.exec(
+            select(MerchantAccount)
+            .join(
+                MerchantPaymentMethod,
+                col(MerchantPaymentMethod.merchant_account_id)
+                == MerchantAccount.id,
+            )
+            .where(
                 MerchantAccount.legal_entity_id == seller_legal_entity_id,
                 MerchantAccount.currency == currency,
+                MerchantPaymentMethod.method == method,
             )
-        ).first()
-        if account is None:
+        ).all()
+        if not candidates:
+            any_account = session.exec(
+                select(MerchantAccount).where(
+                    MerchantAccount.legal_entity_id == seller_legal_entity_id,
+                    MerchantAccount.currency == currency,
+                )
+            ).first()
+            if any_account is not None:
+                raise PaymentRoutingError("payment_method_not_supported")
             raise PaymentRoutingError(
                 "no_merchant_account",
                 f"no merchant account for this seller in {currency}",
             )
-        if require_live and not account.live_enabled:
+        eligible = (
+            [candidate for candidate in candidates if candidate.live_enabled]
+            if require_live
+            else candidates
+        )
+        if require_live and not eligible:
             # Where D3/D4 bite. A sandbox that works is not merchant approval.
             raise PaymentRoutingError(
                 "live_collection_disabled",
-                f"{account.processor} is not approved for live collection in "
+                f"no processor is approved for live collection in "
                 f"{currency}; see DECISIONS.md D3/D4",
             )
-        return account
+        if len(eligible) != 1:
+            raise PaymentRoutingError(
+                "ambiguous_merchant_route",
+                "more than one merchant account matches seller, currency and method",
+            )
+        return eligible[0]
 
     # --- intents and attempts --------------------------------------------
 
@@ -171,21 +192,52 @@ class PaymentRouter:
         amount: Decimal,
         quote_id: UUID | None = None,
     ) -> PaymentIntent:
+        current_order = session.exec(
+            select(Order)
+            .where(Order.id == order.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        if current_order is None:
+            raise PaymentRoutingError("order_not_found")
         existing = session.exec(
-            select(PaymentIntent).where(PaymentIntent.order_id == order.id)
+            select(PaymentIntent).where(PaymentIntent.order_id == current_order.id)
         ).first()
         if existing is not None:
+            if (
+                existing.merchant_account_id != merchant.id
+                or existing.quote_id != quote_id
+                or existing.amount
+                != round_money(amount, current_order.currency)
+            ):
+                raise PaymentRoutingError("idempotency_conflict")
             return existing
-        if merchant.currency != order.currency:
+        if merchant.currency != current_order.currency:
             raise PaymentRoutingError("currency_mismatch")
+        if merchant.legal_entity_id != current_order.seller_legal_entity_id:
+            raise PaymentRoutingError("seller_mismatch")
+        rounded = round_money(amount, current_order.currency)
+        if rounded != current_order.total_amount:
+            raise PaymentRoutingError("amount_mismatch")
+        if quote_id is not None:
+            quote = session.get(Quote, quote_id)
+            if quote is None:
+                raise PaymentRoutingError("quote_not_found")
+            if (
+                quote.seller_legal_entity_id != current_order.seller_legal_entity_id
+                or quote.currency != current_order.currency
+                or quote.total_amount != rounded
+                or quote.status is QuoteStatus.VOID
+            ):
+                raise PaymentRoutingError("quote_mismatch")
 
         intent = PaymentIntent(
-            order_id=order.id,
+            order_id=current_order.id,
             quote_id=quote_id,
-            seller_legal_entity_id=order.seller_legal_entity_id,
+            seller_legal_entity_id=current_order.seller_legal_entity_id,
             merchant_account_id=merchant.id,
-            currency=order.currency,
-            amount=round_money(amount, order.currency),
+            currency=current_order.currency,
+            amount=rounded,
             created_at=self.clock(),
         )
         session.add(intent)
@@ -200,25 +252,64 @@ class PaymentRouter:
         method: PaymentMethodKind,
     ) -> PaymentAttempt:
         """Start one try at collecting. Refused if one already succeeded."""
+        current_intent = session.exec(
+            select(PaymentIntent)
+            .where(PaymentIntent.id == intent.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        if current_intent is None:
+            raise PaymentRoutingError("intent_not_found")
+        if (
+            merchant.id != current_intent.merchant_account_id
+            or merchant.legal_entity_id != current_intent.seller_legal_entity_id
+            or merchant.currency != current_intent.currency
+        ):
+            raise PaymentRoutingError("merchant_mismatch")
+        supports_method = session.exec(
+            select(MerchantPaymentMethod).where(
+                MerchantPaymentMethod.merchant_account_id == merchant.id,
+                MerchantPaymentMethod.method == method,
+            )
+        ).first()
+        if supports_method is None:
+            raise PaymentRoutingError("payment_method_not_supported")
         succeeded = session.exec(
             select(PaymentAttempt).where(
-                PaymentAttempt.intent_id == intent.id,
+                PaymentAttempt.intent_id == current_intent.id,
                 PaymentAttempt.status == AttemptStatus.SUCCEEDED,
             )
         ).first()
         if succeeded is not None:
             raise PaymentRoutingError("already_paid")
 
+        live = session.exec(
+            select(PaymentAttempt).where(
+                PaymentAttempt.intent_id == current_intent.id,
+                col(PaymentAttempt.status).in_(
+                    [
+                        AttemptStatus.CREATED,
+                        AttemptStatus.PENDING,
+                        AttemptStatus.UNKNOWN,
+                    ]
+                ),
+            )
+        ).first()
+        if live is not None:
+            raise PaymentRoutingError("attempt_in_progress")
+
         previous = session.exec(
-            select(PaymentAttempt).where(PaymentAttempt.intent_id == intent.id)
+            select(PaymentAttempt).where(PaymentAttempt.intent_id == current_intent.id)
         ).all()
         attempt = PaymentAttempt(
-            intent_id=intent.id,
+            intent_id=current_intent.id,
             processor=merchant.processor,
             method=method,
-            idempotency_key=f"intent:{intent.id}:attempt:{len(previous) + 1}",
-            currency=intent.currency,
-            amount=intent.amount,
+            idempotency_key=(
+                f"intent-{current_intent.id}-attempt-{len(previous) + 1}"
+            ),
+            currency=current_intent.currency,
+            amount=current_intent.amount,
             status=AttemptStatus.CREATED,
             created_at=self.clock(),
         )
@@ -276,14 +367,19 @@ class PaymentRouter:
                 raw_payload,
             )
 
-        if attempt.status is AttemptStatus.SUCCEEDED:
-            # A replayed webhook for a charge we already captured. Nothing to
-            # do, and nothing wrong.
-            return attempt
-
-        intent = session.get(PaymentIntent, attempt.intent_id)
+        intent = session.exec(
+            select(PaymentIntent)
+            .where(PaymentIntent.id == attempt.intent_id)
+            .with_for_update()
+        ).first()
         if intent is None:  # pragma: no cover - FK guarantees this
             raise PaymentRoutingError("intent_not_found")
+        attempt = session.exec(
+            select(PaymentAttempt)
+            .where(PaymentAttempt.id == attempt.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).one()
 
         mismatches = []
         if round_money(charge.amount, intent.currency) != intent.amount:
@@ -316,6 +412,12 @@ class PaymentRouter:
                 raw_payload,
             )
 
+        if attempt.status is AttemptStatus.SUCCEEDED:
+            # Exact replay after validating the persisted economic facts.
+            if attempt.processor_reference != charge.processor_reference:
+                raise PaymentRoutingError("idempotency_conflict")
+            return attempt
+
         other_success = session.exec(
             select(PaymentAttempt).where(
                 PaymentAttempt.intent_id == intent.id,
@@ -344,12 +446,7 @@ class PaymentRouter:
         if order is not None:
             order.payment_state = PaymentState.PAID
             session.add(order)
-        try:
-            session.flush()
-        except IntegrityError as exc:
-            # `ux_payment_attempts_one_success` -- a concurrent capture won.
-            session.rollback()
-            raise PaymentRoutingError("already_paid") from exc
+        session.flush()
         return attempt
 
     def _record_failure(
@@ -360,10 +457,17 @@ class PaymentRouter:
                 PaymentAttempt.processor == processor,
                 PaymentAttempt.idempotency_key == charge.processor_reference,
             )
+            .with_for_update()
         ).first()
         if attempt is None:
             raise PaymentRoutingError("attempt_not_found")
-        attempt.status = AttemptStatus.FAILED
+        if attempt.status is AttemptStatus.SUCCEEDED:
+            return attempt
+        attempt.status = (
+            AttemptStatus.FAILED
+            if charge.status in {"failed", "abandoned", "reversed", "declined"}
+            else AttemptStatus.UNKNOWN
+        )
         attempt.processor_status = charge.status
         attempt.processor_reference = charge.processor_reference
         session.add(attempt)
@@ -386,6 +490,13 @@ class PaymentRouter:
             )
         ).first()
         if existing is not None:
+            if (
+                existing.intent_id != intent_id
+                or existing.currency != charge.currency
+                or existing.amount
+                != round_money(charge.amount, charge.currency)
+            ):
+                raise PaymentRoutingError("idempotency_conflict")
             return existing
         excess = ExcessPayment(
             intent_id=intent_id,
@@ -394,7 +505,7 @@ class PaymentRouter:
             currency=charge.currency,
             amount=round_money(charge.amount, charge.currency),
             reason=reason[:500],
-            raw_payload=raw_payload,
+            raw_payload=_safe_evidence(charge, raw_payload),
             created_at=self.clock(),
         )
         session.add(excess)
@@ -420,36 +531,73 @@ class PaymentRouter:
                 "wrong_processor",
                 f"attempt was made through {attempt.processor}, not {adapter.name}",
             )
+        if attempt.status not in (
+            AttemptStatus.CREATED,
+            AttemptStatus.PENDING,
+            AttemptStatus.UNKNOWN,
+        ):
+            raise PaymentRoutingError("attempt_not_reconcilable")
         reference = attempt.processor_reference or attempt.idempotency_key
         charge = adapter.fetch_charge(reference)
         if charge is None:
-            attempt.status = AttemptStatus.UNKNOWN
-            attempt.failure_reason = (
+            current = session.exec(
+                select(PaymentAttempt)
+                .where(PaymentAttempt.id == attempt.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).one()
+            if current.status not in (
+                AttemptStatus.CREATED,
+                AttemptStatus.PENDING,
+                AttemptStatus.UNKNOWN,
+            ):
+                raise PaymentRoutingError("attempt_not_reconcilable")
+            current.status = AttemptStatus.UNKNOWN
+            current.failure_reason = (
                 f"{adapter.name} could not confirm the outcome of {reference}"
             )
-            session.add(attempt)
+            session.add(current)
             session.flush()
-            return attempt
+            return current
         result = self.capture(session, charge, adapter.name)
         if isinstance(result, PaymentAttempt):
             return result
         # The reconciliation turned up money that does not belong to this
         # attempt. The attempt itself remains unresolved.
-        attempt.status = AttemptStatus.UNKNOWN
-        attempt.failure_reason = f"reconciliation recorded excess {result.id}"
-        session.add(attempt)
+        current = session.exec(
+            select(PaymentAttempt)
+            .where(PaymentAttempt.id == attempt.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).one()
+        current.status = AttemptStatus.UNKNOWN
+        current.failure_reason = f"reconciliation recorded excess {result.id}"
+        session.add(current)
         session.flush()
-        return attempt
+        return current
 
 
-def canonical_metadata(intent: PaymentIntent) -> str:
+def canonical_metadata(intent: PaymentIntent) -> dict[str, str]:
     """What we ask a processor to echo back, so a reply can be tied to us."""
-    return json.dumps(
-        {
-            "intent": str(intent.id),
-            "order": str(intent.order_id),
-            "currency": intent.currency,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+    return {
+        "intent": str(intent.id),
+        "order": str(intent.order_id),
+        "currency": intent.currency,
+    }
+
+
+def _safe_evidence(
+    charge: ProcessorCharge, raw_payload: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Persist an allowlisted payment fact set, never a provider PII blob."""
+    evidence: dict[str, Any] = {
+        "processor_reference": charge.processor_reference,
+        "status": charge.status,
+        "amount": str(round_money(charge.amount, charge.currency)),
+        "currency": charge.currency,
+    }
+    if charge.merchant_reference is not None:
+        evidence["merchant_reference"] = charge.merchant_reference
+    if raw_payload is not None and isinstance(raw_payload.get("event"), str):
+        evidence["event"] = str(raw_payload["event"])[:100]
+    return evidence

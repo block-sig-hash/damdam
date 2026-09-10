@@ -39,6 +39,31 @@ _ENUMS = (
     ),
 )
 
+_PAYMENT_HISTORY_TRIGGER = """
+CREATE OR REPLACE FUNCTION damdam_payment_history() RETURNS trigger AS $$
+BEGIN
+    IF TG_TABLE_NAME = 'payment_intents' THEN
+        RAISE EXCEPTION 'payment intent is immutable';
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'payment attempt history is immutable';
+    END IF;
+    IF OLD.status = 'succeeded' AND NEW IS DISTINCT FROM OLD THEN
+        RAISE EXCEPTION 'succeeded payment attempt is immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_payment_intents_immutable
+    BEFORE UPDATE OR DELETE ON payment_intents
+    FOR EACH ROW EXECUTE FUNCTION damdam_payment_history();
+
+CREATE TRIGGER trg_payment_attempts_history
+    BEFORE UPDATE OR DELETE ON payment_attempts
+    FOR EACH ROW EXECUTE FUNCTION damdam_payment_history();
+"""
+
 
 def upgrade() -> None:
     bind = op.get_bind()
@@ -71,6 +96,12 @@ def upgrade() -> None:
             name="uq_merchant_accounts_identity",
         ),
         sa.UniqueConstraint("id", "currency", name="uq_merchant_accounts_id_currency"),
+        sa.UniqueConstraint(
+            "id",
+            "legal_entity_id",
+            "currency",
+            name="uq_merchant_accounts_intent_binding",
+        ),
         sa.CheckConstraint(
             "currency ~ '^[A-Z]{3}$'", name="ck_merchant_accounts_currency_iso4217"
         ),
@@ -79,6 +110,26 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "NOT live_enabled OR approval_reference IS NOT NULL",
             name="ck_merchant_accounts_live_needs_approval",
+        ),
+    )
+
+    op.create_table(
+        "merchant_payment_methods",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column(
+            "merchant_account_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("merchant_accounts.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        ),
+        sa.Column(
+            "method",
+            postgresql.ENUM(name="payment_method_kind", create_type=False),
+            nullable=False,
+        ),
+        sa.UniqueConstraint(
+            "merchant_account_id", "method", name="uq_merchant_payment_methods"
         ),
     )
 
@@ -118,6 +169,15 @@ def upgrade() -> None:
         # is singular, even when several attempts are made at it.
         sa.UniqueConstraint("order_id", name="uq_payment_intents_order"),
         sa.UniqueConstraint("id", "currency", name="uq_payment_intents_id_currency"),
+        sa.ForeignKeyConstraint(
+            ["merchant_account_id", "seller_legal_entity_id", "currency"],
+            [
+                "merchant_accounts.id",
+                "merchant_accounts.legal_entity_id",
+                "merchant_accounts.currency",
+            ],
+            name="fk_payment_intents_merchant_binding",
+        ),
         sa.CheckConstraint(
             "currency ~ '^[A-Z]{3}$'", name="ck_payment_intents_currency_iso4217"
         ),
@@ -164,6 +224,9 @@ def upgrade() -> None:
             "OR status <> 'succeeded'",
             name="ck_payment_attempts_succeeded",
         ),
+        sa.UniqueConstraint(
+            "processor", "idempotency_key", name="uq_payment_attempts_key"
+        ),
     )
     # The same charge cannot be recorded twice, which is what makes a replayed
     # webhook harmless.
@@ -181,6 +244,13 @@ def upgrade() -> None:
         ["intent_id"],
         unique=True,
         postgresql_where=sa.text("status = 'succeeded'"),
+    )
+    op.create_index(
+        "ux_payment_attempts_one_live",
+        "payment_attempts",
+        ["intent_id"],
+        unique=True,
+        postgresql_where=sa.text("status IN ('created', 'pending', 'unknown')"),
     )
     op.create_index(
         "ix_payment_attempts_intent", "payment_attempts", ["intent_id", "status"]
@@ -218,14 +288,29 @@ def upgrade() -> None:
         ["processor", "processor_reference"],
         unique=True,
     )
+    op.execute(sa.text(_PAYMENT_HISTORY_TRIGGER))
 
 
 def downgrade() -> None:
     bind = op.get_bind()
+    op.execute(
+        sa.text(
+            "DROP TRIGGER IF EXISTS trg_payment_attempts_history "
+            "ON payment_attempts"
+        )
+    )
+    op.execute(
+        sa.text(
+            "DROP TRIGGER IF EXISTS trg_payment_intents_immutable "
+            "ON payment_intents"
+        )
+    )
+    op.execute(sa.text("DROP FUNCTION IF EXISTS damdam_payment_history()"))
     for table in (
         "excess_payments",
         "payment_attempts",
         "payment_intents",
+        "merchant_payment_methods",
         "merchant_accounts",
     ):
         op.drop_table(table)

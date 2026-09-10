@@ -29,19 +29,23 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    DDL,
     JSON,
     Boolean,
     CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     String,
     UniqueConstraint,
+    event,
     text,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.schema import Table
 from sqlmodel import Field, SQLModel
 
 from app.auth.models import utc_now
@@ -110,6 +114,12 @@ class MerchantAccount(SQLModel, table=True):
             name="uq_merchant_accounts_identity",
         ),
         UniqueConstraint("id", "currency", name="uq_merchant_accounts_id_currency"),
+        UniqueConstraint(
+            "id",
+            "legal_entity_id",
+            "currency",
+            name="uq_merchant_accounts_intent_binding",
+        ),
         # Going live needs a named approval artefact. Not a checkbox somebody
         # ticked, and not a passing sandbox call.
         CheckConstraint(
@@ -136,6 +146,27 @@ class MerchantAccount(SQLModel, table=True):
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+class MerchantPaymentMethod(SQLModel, table=True):
+    """A payment rail explicitly enabled for one merchant relationship."""
+
+    __tablename__ = "merchant_payment_methods"
+    __table_args__ = (
+        UniqueConstraint(
+            "merchant_account_id", "method", name="uq_merchant_payment_methods"
+        ),
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    merchant_account_id: UUID = Field(
+        sa_column=Column(
+            ForeignKey("merchant_accounts.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
+    method: PaymentMethodKind = Field(
+        sa_column=_enum(PaymentMethodKind, "payment_method_kind")
+    )
 
 
 class PaymentIntent(SQLModel, table=True):
@@ -156,6 +187,15 @@ class PaymentIntent(SQLModel, table=True):
         UniqueConstraint("order_id", name="uq_payment_intents_order"),
         UniqueConstraint("id", "currency", name="uq_payment_intents_id_currency"),
         CheckConstraint("amount > 0", name="ck_payment_intents_amount"),
+        ForeignKeyConstraint(
+            ["merchant_account_id", "seller_legal_entity_id", "currency"],
+            [
+                "merchant_accounts.id",
+                "merchant_accounts.legal_entity_id",
+                "merchant_accounts.currency",
+            ],
+            name="fk_payment_intents_merchant_binding",
+        ),
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -194,6 +234,9 @@ class PaymentAttempt(SQLModel, table=True):
     __tablename__ = "payment_attempts"
     __table_args__ = (
         currency_check("payment_attempts"),
+        UniqueConstraint(
+            "processor", "idempotency_key", name="uq_payment_attempts_key"
+        ),
         Index(
             "ux_payment_attempts_processor_reference",
             "processor",
@@ -211,6 +254,15 @@ class PaymentAttempt(SQLModel, table=True):
             unique=True,
             postgresql_where=text("status = 'succeeded'"),
             sqlite_where=text("status = 'succeeded'"),
+        ),
+        Index(
+            "ux_payment_attempts_one_live",
+            "intent_id",
+            unique=True,
+            postgresql_where=text(
+                "status IN ('created', 'pending', 'unknown')"
+            ),
+            sqlite_where=text("status IN ('created', 'pending', 'unknown')"),
         ),
         CheckConstraint("amount > 0", name="ck_payment_attempts_amount"),
         CheckConstraint(
@@ -260,6 +312,51 @@ class PaymentAttempt(SQLModel, table=True):
     captured_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+
+
+_PAYMENT_HISTORY_TRIGGER = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE OR REPLACE FUNCTION damdam_payment_history() RETURNS trigger AS $$
+    BEGIN
+        IF TG_TABLE_NAME = 'payment_intents' THEN
+            RAISE EXCEPTION 'payment intent is immutable';
+        END IF;
+        IF TG_OP = 'DELETE' THEN
+            RAISE EXCEPTION 'payment attempt history is immutable';
+        END IF;
+        IF OLD.status = 'succeeded' AND NEW IS DISTINCT FROM OLD THEN
+            RAISE EXCEPTION 'succeeded payment attempt is immutable';
+        END IF;
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER trg_payment_intents_immutable
+        BEFORE UPDATE OR DELETE ON payment_intents
+        FOR EACH ROW EXECUTE FUNCTION damdam_payment_history();
+    """
+)
+
+_ATTEMPT_HISTORY_TRIGGER = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE TRIGGER trg_payment_attempts_history
+        BEFORE UPDATE OR DELETE ON payment_attempts
+        FOR EACH ROW EXECUTE FUNCTION damdam_payment_history();
+    """
+)
+
+_INTENT_TABLE: Table = PaymentIntent.__table__  # type: ignore[attr-defined]
+_PAYMENT_ATTEMPT_TABLE: Table = PaymentAttempt.__table__  # type: ignore[attr-defined]
+event.listen(
+    _INTENT_TABLE,
+    "after_create",
+    _PAYMENT_HISTORY_TRIGGER.execute_if(dialect="postgresql"),
+)
+event.listen(
+    _PAYMENT_ATTEMPT_TABLE,
+    "after_create",
+    _ATTEMPT_HISTORY_TRIGGER.execute_if(dialect="postgresql"),
+)
 
 
 class ExcessPayment(SQLModel, table=True):

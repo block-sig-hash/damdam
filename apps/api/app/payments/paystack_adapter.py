@@ -21,6 +21,7 @@ sandbox call has been made from this branch.
 """
 
 import json
+import re
 from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
@@ -42,6 +43,7 @@ from app.payments.routing import (
 #: is an unknown and unknowns reconcile.
 SUCCESS_STATUS = "success"
 DEFINITE_FAILURES = frozenset({"failed", "abandoned", "reversed"})
+_REFERENCE = re.compile(r"^[A-Za-z0-9.=-]+$")
 
 
 class PaystackAdapter:
@@ -90,6 +92,14 @@ class PaystackAdapter:
                 "currency_not_supported",
                 f"{self.name} is retained for NGN only; got {currency}",
             )
+        if not _REFERENCE.fullmatch(idempotency_key):
+            raise PaymentRoutingError("invalid_processor_reference")
+        customer_email = metadata.get("customer_email")
+        if not isinstance(customer_email, str) or "@" not in customer_email:
+            raise PaymentRoutingError("payer_email_required")
+        provider_metadata = {
+            key: value for key, value in metadata.items() if key != "customer_email"
+        }
 
         # Paystack takes the amount in the currency's minor unit as an integer.
         # Deriving the exponent rather than hardcoding 100 keeps this correct if
@@ -101,13 +111,18 @@ class PaystackAdapter:
             "POST",
             f"{self.base_url}/transaction/initialize",
             {
-                "amount": minor,
+                "amount": str(minor),
                 "currency": currency,
+                "email": customer_email,
                 "reference": idempotency_key,
                 "channels": _channels_for(method),
-                "metadata": metadata,
+                "metadata": json.dumps(
+                    provider_metadata, sort_keys=True, separators=(",", ":")
+                ),
             },
         )
+        if response.get("status") is not True:
+            raise PaymentRoutingError("checkout_unavailable")
         data = response.get("data") or {}
         reference = data.get("reference")
         url = data.get("authorization_url")
@@ -139,8 +154,15 @@ class PaystackAdapter:
         return verify_hmac_sha512(self.secret_key, raw_body, signature)
 
     def parse_webhook(self, raw_body: bytes) -> ProcessorCharge:
-        payload = json.loads(raw_body.decode())
+        try:
+            payload = json.loads(raw_body.decode())
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise PaymentRoutingError("invalid_processor_response") from exc
+        if not isinstance(payload, dict):
+            raise PaymentRoutingError("invalid_processor_response")
         data = payload.get("data") or {}
+        if not isinstance(data, dict):
+            raise PaymentRoutingError("invalid_processor_response")
         return self._charge_from(data)
 
     # --- reconciliation ---------------------------------------------------
@@ -168,17 +190,47 @@ class PaystackAdapter:
         return self._charge_from(data)
 
     def _charge_from(self, data: dict[str, Any]) -> ProcessorCharge:
-        currency = str(data.get("currency") or "NGN")
-        minor = int(data.get("amount") or 0)
-        status = str(data.get("status") or "unknown")
+        reference = data.get("reference")
+        currency = data.get("currency")
+        amount = data.get("amount")
+        status = data.get("status")
+        if (
+            not isinstance(reference, str)
+            or not reference
+            or not isinstance(currency, str)
+            or not currency
+            or isinstance(amount, bool)
+            or not isinstance(amount, int | str)
+            or not isinstance(status, str)
+            or not status
+        ):
+            raise PaymentRoutingError("invalid_processor_response")
+        try:
+            minor = int(amount)
+        except (TypeError, ValueError) as exc:
+            raise PaymentRoutingError("invalid_processor_response") from exc
+        if minor <= 0 or currency != currency.upper() or len(currency) != 3:
+            raise PaymentRoutingError("invalid_processor_response")
+        try:
+            exponent = currency_exponent(currency)
+        except ValueError as exc:
+            raise PaymentRoutingError("invalid_processor_response") from exc
+        subaccount = data.get("subaccount")
+        merchant_reference = None
+        if isinstance(subaccount, dict):
+            code = subaccount.get("subaccount_code")
+            merchant_reference = str(code) if code else None
+        elif isinstance(subaccount, str) and subaccount:
+            merchant_reference = subaccount
         return ProcessorCharge(
-            processor_reference=str(data.get("reference") or ""),
+            processor_reference=reference,
             status=status,
             # Back out of the minor unit with the same exponent we sent.
             amount=round_money(
-                Decimal(minor).scaleb(-currency_exponent(currency)), currency
+                Decimal(minor).scaleb(-exponent), currency
             ),
             currency=currency,
+            merchant_reference=merchant_reference,
             succeeded=status == SUCCESS_STATUS,
         )
 
@@ -195,4 +247,4 @@ def _channels_for(method: PaymentMethodKind) -> list[str]:
         return ["bank_transfer", "bank"]
     if method is PaymentMethodKind.USSD:
         return ["ussd"]
-    return ["card", "bank_transfer", "bank", "ussd"]
+    raise PaymentRoutingError("payment_method_not_supported")
