@@ -459,3 +459,31 @@ The quarantined rows retain their original location and timestamp data and are
 therefore still personal data. They are covered by the retention policy and must
 be included in the deletion plan produced in subchunk 04E; chunk 04A does not
 delete them.
+
+---
+
+## 10.17 Amendment — Email Identity and Immediate Recovery Revocation (US-29)
+
+**Recorded 10 September 2026 during independent chunk 06 review.** Account
+identity is proved through a single-use, expiring, purpose-bound email token.
+Only its hash is stored. Login request responses are uniform for existing and
+new addresses, while recovery sends only to a verified identifier. Phone account
+existence is likewise disclosed only after successful OTP verification.
+
+Recovery changes a durable per-user authentication version and revokes all
+persisted refresh tokens in the same transaction before a new pair is issued.
+Every consumer access and refresh token carries that version and is rejected
+when it differs from the user row, so recovery invalidates stateless access JWTs
+without waiting for their normal expiry. Email and legacy phone recovery share
+this rule.
+
+Verified identifiers have one owner and each account has at most one primary
+identifier by PostgreSQL partial unique indexes. Unverified duplicate claims do
+not reserve an address. Email confirmation locks the account before changing
+its primary identity, and concurrent ownership claims return a controlled
+conflict if the verified-owner constraint chooses the other claimant. A proved
+address stored on exactly one pre-identity user is adopted by that existing
+account; ambiguous legacy duplicates fail closed. Non-test deployments use a
+transport that discards tokens until a live email provider is configured,
+preventing a fallback recorder from retaining raw authentication credentials in
+process memory.

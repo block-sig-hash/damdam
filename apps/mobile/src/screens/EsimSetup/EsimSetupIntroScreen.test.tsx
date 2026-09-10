@@ -5,8 +5,6 @@ import { checkEsimCompatibility } from '../../utils/esimCompatibility';
 import { hasSeenEsimWarning } from '../../utils/esimWarningSeen';
 import { EsimSetupIntroScreen } from './EsimSetupIntroScreen';
 
-const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
-
 jest.mock('../../api/esimClient', () => ({
   logDeviceCompatibility: jest.fn(),
 }));
@@ -39,7 +37,7 @@ describe('EsimSetupIntroScreen', () => {
     const onProceed = jest.fn();
 
     await render(
-      <EsimSetupIntroScreen userId={TEST_USER_ID} accessToken="token" packageId="package-1" onProceed={onProceed} />,
+      <EsimSetupIntroScreen accessToken="token" packageId="package-1" onProceed={onProceed} />,
     );
 
     expect(await screen.findByTestId('esim-setup-download')).toBeTruthy();
@@ -58,7 +56,7 @@ describe('EsimSetupIntroScreen', () => {
     });
 
     await render(
-      <EsimSetupIntroScreen userId={TEST_USER_ID} accessToken="token" packageId="package-1" onProceed={jest.fn()} />,
+      <EsimSetupIntroScreen accessToken="token" packageId="package-1" onProceed={jest.fn()} />,
     );
 
     expect(await screen.findByTestId('device-compatibility-warning-modal')).toBeTruthy();
@@ -75,7 +73,7 @@ describe('EsimSetupIntroScreen', () => {
     const onProceed = jest.fn();
 
     await render(
-      <EsimSetupIntroScreen userId={TEST_USER_ID} accessToken="token" packageId="package-1" onProceed={onProceed} />,
+      <EsimSetupIntroScreen accessToken="token" packageId="package-1" onProceed={onProceed} />,
     );
     await screen.findByTestId('esim-warning-continue');
 

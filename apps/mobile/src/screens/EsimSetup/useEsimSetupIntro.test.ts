@@ -16,8 +16,6 @@ jest.mock('../../utils/esimWarningSeen', () => ({
   markEsimWarningSeen: jest.fn(),
 }));
 
-const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
-
 const mockCheck = checkEsimCompatibility as jest.MockedFunction<typeof checkEsimCompatibility>;
 const mockLog = logDeviceCompatibility as jest.MockedFunction<typeof logDeviceCompatibility>;
 const mockHasSeen = hasSeenEsimWarning as jest.MockedFunction<typeof hasSeenEsimWarning>;
@@ -41,8 +39,7 @@ describe('useEsimSetupIntro', () => {
     });
 
     const { result } = await renderHook(() =>
-      useEsimSetupIntro({ accessToken: 'token',
-      userId: TEST_USER_ID, packageId: 'package-1' }),
+      useEsimSetupIntro({ accessToken: 'token', packageId: 'package-1' }),
     );
 
     await waitFor(() => expect(result.current.stage).toBe('compatible'));
@@ -65,8 +62,7 @@ describe('useEsimSetupIntro', () => {
     mockHasSeen.mockResolvedValue(false);
 
     const { result } = await renderHook(() =>
-      useEsimSetupIntro({ accessToken: 'token',
-      userId: TEST_USER_ID, packageId: 'package-1' }),
+      useEsimSetupIntro({ accessToken: 'token', packageId: 'package-1' }),
     );
 
     await waitFor(() => expect(result.current.stage).toBe('warning'));
@@ -92,8 +88,7 @@ describe('useEsimSetupIntro', () => {
     mockHasSeen.mockResolvedValue(true);
 
     const { result } = await renderHook(() =>
-      useEsimSetupIntro({ accessToken: 'token',
-      userId: TEST_USER_ID, packageId: 'package-1' }),
+      useEsimSetupIntro({ accessToken: 'token', packageId: 'package-1' }),
     );
 
     await waitFor(() => expect(result.current.stage).toBe('qr-only'));
@@ -110,8 +105,7 @@ describe('useEsimSetupIntro', () => {
     mockHasSeen.mockResolvedValue(false);
 
     const { result } = await renderHook(() =>
-      useEsimSetupIntro({ accessToken: 'token',
-      userId: TEST_USER_ID, packageId: 'package-1' }),
+      useEsimSetupIntro({ accessToken: 'token', packageId: 'package-1' }),
     );
     await waitFor(() => expect(result.current.stage).toBe('warning'));
     expect(mockLog).toHaveBeenCalledTimes(1);
@@ -136,8 +130,7 @@ describe('useEsimSetupIntro', () => {
     mockHasSeen.mockResolvedValue(false);
 
     const { result } = await renderHook(() =>
-      useEsimSetupIntro({ accessToken: 'token',
-      userId: TEST_USER_ID, packageId: 'package-42' }),
+      useEsimSetupIntro({ accessToken: 'token', packageId: 'package-42' }),
     );
     await waitFor(() => expect(result.current.stage).toBe('warning'));
     expect(mockLog).toHaveBeenCalledTimes(1);

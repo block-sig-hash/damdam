@@ -26,8 +26,7 @@ from app.auth.schemas import (
     TokenResponse,
     UserResponse,
 )
-from app.auth.tokens import InvalidRefreshTokenError, TokenService
-from app.config import Settings
+from app.auth.tokens import InvalidRefreshTokenError
 from app.i18n import translate
 from app.identity.models import IdentifierKind
 from app.identity.schemas import (
@@ -242,6 +241,43 @@ def confirm_email_verification(
     return IdentityMessageResponse(message=translate("identity_verified", Locale.EN))
 
 
+@router.post("/email/login/request", response_model=IdentityMessageResponse)
+def request_email_login(
+    payload: EmailIdentifierRequest, request: Request
+) -> IdentityMessageResponse:
+    """Send the same response for email signup and returning login."""
+    with request.app.state.session_factory() as session:
+        _identity(request).request_authentication(
+            session, IdentifierKind.EMAIL, payload.email, payload.locale
+        )
+        session.commit()
+    return IdentityMessageResponse(message=translate("identity_sent", payload.locale))
+
+
+@router.post("/email/login/confirm", response_model=AuthResponse)
+def confirm_email_login(
+    payload: IdentityTokenRequest, request: Request
+) -> AuthResponse:
+    """Prove mailbox control, then create or authenticate the account."""
+    clock = cast(Callable[[], datetime], request.app.state.clock)
+    with request.app.state.session_factory() as session:
+        user, is_new_user = _identity(request).complete_authentication(
+            session, payload.token
+        )
+        pair = _service(request).tokens.issue(session, user, clock())
+        session.commit()
+        session.refresh(user)
+        return _auth_response(
+            session,
+            AuthResult(
+                access_token=pair.access_token,
+                refresh_token=pair.refresh_token,
+                user=user,
+                is_new_user=is_new_user,
+            ),
+        )
+
+
 @router.post("/email/recovery/request", response_model=IdentityMessageResponse)
 def request_email_recovery(
     payload: EmailIdentifierRequest, request: Request
@@ -259,11 +295,10 @@ def confirm_email_recovery(
     payload: IdentityTokenRequest, request: Request
 ) -> RecoverySessionResponse:
     """Consume a recovery token, revoke prior sessions and issue a new one."""
-    tokens = TokenService(cast(Settings, request.app.state.settings))
     clock = cast(Callable[[], datetime], request.app.state.clock)
     with request.app.state.session_factory() as session:
         user = _identity(request).complete_recovery(session, payload.token)
-        pair = tokens.issue(session, user, clock())
+        pair = _service(request).tokens.issue(session, user, clock())
         session.commit()
         return RecoverySessionResponse(
             access_token=pair.access_token,

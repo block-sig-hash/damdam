@@ -1,13 +1,8 @@
 """Account identifiers and purpose-bound identity tokens (US-29).
 
-The launch login/recovery **channel** is not yet decided: `DECISIONS.md` still
-carries "email-based account identity and recovery" as a *proposed default*
-owned by founder/product, with no recorded decision. So identity is modelled by
-identifier **kind** rather than by hard-coding email, which is also what
-IMPLEMENTATION-PLAN.md §4 describes — "account identities and recovery methods
-are independent of assigned carrier numbers", plural.
-
-Adopting email later is then a policy choice over this table, not a migration.
+Email is the adopted launch identity and recovery channel. Identifier kind
+remains explicit so verified phone numbers can support service-specific flows
+without becoming a required account key.
 """
 
 from datetime import datetime
@@ -48,6 +43,7 @@ class IdentityTokenPurpose(str, Enum):
 
     VERIFY_IDENTIFIER = "verify_identifier"
     RECOVER_ACCOUNT = "recover_account"
+    AUTHENTICATE = "authenticate"
 
 
 class AccountIdentifier(SQLModel, table=True):
@@ -68,6 +64,14 @@ class AccountIdentifier(SQLModel, table=True):
             "value",
             unique=True,
             postgresql_where=text("verified_at IS NOT NULL"),
+            sqlite_where=text("verified_at IS NOT NULL"),
+        ),
+        Index(
+            "ux_account_identifiers_primary_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("is_primary = true"),
+            sqlite_where=text("is_primary = 1"),
         ),
         Index("ix_account_identifiers_user_kind", "user_id", "kind"),
     )
@@ -102,9 +106,10 @@ class IdentityToken(SQLModel, table=True):
     __tablename__ = "identity_tokens"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    user_id: UUID = Field(
+    user_id: UUID | None = Field(
+        default=None,
         sa_column=Column(
-            ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+            ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
         )
     )
     identifier_id: UUID | None = Field(
@@ -115,6 +120,13 @@ class IdentityToken(SQLModel, table=True):
     )
     purpose: IdentityTokenPurpose = Field(
         sa_column=_enum(IdentityTokenPurpose, "identity_token_purpose")
+    )
+    target_kind: IdentifierKind = Field(
+        sa_column=_enum(IdentifierKind, "identifier_kind")
+    )
+    target_value: str = Field(sa_column=Column(String(320), nullable=False))
+    requested_locale: str = Field(
+        default="en", sa_column=Column(String(2), nullable=False)
     )
     token_hash: str = Field(
         sa_column=Column(String(64), nullable=False, unique=True, index=True)

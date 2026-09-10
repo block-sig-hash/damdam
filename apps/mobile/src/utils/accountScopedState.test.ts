@@ -126,4 +126,9 @@ describe('ending a session clears account-scoped state', () => {
   it('is safe to call when nothing is stored', async () => {
     await expect(clearAccountScopedState()).resolves.toBeUndefined();
   });
+
+  it('does not strand logout when secure storage cannot be cleared', async () => {
+    mockReset.mockRejectedValueOnce(new Error('keychain unavailable'));
+    await expect(clearAccountScopedState()).resolves.toBeUndefined();
+  });
 });

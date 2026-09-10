@@ -18,10 +18,18 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, update
+from sqlalchemy import CursorResult, func, update
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
-from app.auth.models import Locale, RefreshToken, User, utc_now
+from app.auth.models import (
+    AccountSource,
+    Locale,
+    RefreshToken,
+    User,
+    UserStatus,
+    utc_now,
+)
 from app.identity.delivery import DeliveryRequest, DeliveryTransport
 from app.identity.models import (
     AccountIdentifier,
@@ -116,16 +124,22 @@ class IdentityService:
     def _issue_token(
         self,
         session: Session,
-        user: User,
+        user: User | None,
         purpose: IdentityTokenPurpose,
         identifier: AccountIdentifier | None,
+        kind: IdentifierKind,
+        value: str,
+        locale: Locale,
     ) -> str:
         raw = secrets.token_urlsafe(TOKEN_BYTES)
         session.add(
             IdentityToken(
-                user_id=user.id,
+                user_id=user.id if user else None,
                 identifier_id=identifier.id if identifier else None,
                 purpose=purpose,
+                target_kind=kind,
+                target_value=value,
+                requested_locale=locale.value,
                 token_hash=self._hash(raw),
                 expires_at=self.clock() + self.token_ttl,
             )
@@ -216,7 +230,13 @@ class IdentityService:
             session.flush()
 
         raw = self._issue_token(
-            session, user, IdentityTokenPurpose.VERIFY_IDENTIFIER, identifier
+            session,
+            user,
+            IdentityTokenPurpose.VERIFY_IDENTIFIER,
+            identifier,
+            kind,
+            normalized,
+            locale,
         )
         self.transport.send(
             DeliveryRequest(
@@ -253,16 +273,46 @@ class IdentityService:
         if already is not None and already.user_id != identifier.user_id:
             raise IdentityError("identifier_already_verified")
 
-        identifier.verified_at = now or self.clock()
-        if not session.exec(
-            select(AccountIdentifier).where(
-                AccountIdentifier.user_id == identifier.user_id,
-                col(AccountIdentifier.is_primary).is_(True),
-            )
-        ).first():
-            identifier.is_primary = True
-        session.add(identifier)
-        session.flush()
+        moment = now or self.clock()
+        user = session.exec(
+            select(User).where(User.id == identifier.user_id).with_for_update()
+        ).first()
+        if user is None:
+            raise IdentityError("identity_token_invalid")
+
+        try:
+            # Keep the token consumption outside this savepoint: a losing
+            # concurrent claimant must not be able to retry the same proof.
+            # The database index decides the winner, while this boundary maps
+            # its conflict to the stable API error instead of leaking a 500.
+            with session.begin_nested():
+                identifier.verified_at = moment
+                if identifier.kind is IdentifierKind.EMAIL:
+                    # Email is the adopted account identity. Locking the user
+                    # and demoting first preserves the one-primary invariant.
+                    session.execute(
+                        update(AccountIdentifier)
+                        .where(
+                            col(AccountIdentifier.user_id) == user.id,
+                            col(AccountIdentifier.is_primary).is_(True),
+                            col(AccountIdentifier.id) != identifier.id,
+                        )
+                        .values(is_primary=False)
+                    )
+                    identifier.is_primary = True
+                    user.email = identifier.value
+                    session.add(user)
+                elif not session.exec(
+                    select(AccountIdentifier).where(
+                        AccountIdentifier.user_id == identifier.user_id,
+                        col(AccountIdentifier.is_primary).is_(True),
+                    )
+                ).first():
+                    identifier.is_primary = True
+                session.add(identifier)
+                session.flush()
+        except IntegrityError as exc:
+            raise IdentityError("identifier_already_verified") from exc
         return identifier
 
     def adopt_legacy_phone(self, session: Session, user: User) -> AccountIdentifier:
@@ -272,6 +322,8 @@ class IdentityService:
         as verified rather than asking established users to re-prove something
         they have been using to log in. Idempotent, so a backfill can be re-run.
         """
+        if user.phone_number is None:
+            raise IdentityError("identity_token_invalid")
         normalized = normalize(IdentifierKind.PHONE, user.phone_number)
         existing = session.exec(
             select(AccountIdentifier).where(
@@ -328,7 +380,13 @@ class IdentityService:
             return None
 
         raw = self._issue_token(
-            session, user, IdentityTokenPurpose.RECOVER_ACCOUNT, identifier
+            session,
+            user,
+            IdentityTokenPurpose.RECOVER_ACCOUNT,
+            identifier,
+            kind,
+            normalized,
+            locale,
         )
         self.transport.send(
             DeliveryRequest(
@@ -352,9 +410,19 @@ class IdentityService:
         """
         moment = now or self.clock()
         token = self._consume(session, raw, IdentityTokenPurpose.RECOVER_ACCOUNT, now)
-        user = session.get(User, token.user_id)
+        if token.user_id is None:
+            raise IdentityError("identity_token_invalid")
+        user = session.exec(
+            select(User).where(User.id == token.user_id).with_for_update()
+        ).first()
         if user is None:
             raise IdentityError("identity_token_invalid")
+
+        # Access JWTs are intentionally stateless. Incrementing the durable
+        # account version revokes every token already issued to this account,
+        # including access tokens that have not reached their expiry yet.
+        user.auth_version += 1
+        session.add(user)
 
         session.execute(
             update(RefreshToken)
@@ -377,3 +445,154 @@ class IdentityService:
         )
         session.flush()
         return user
+
+    # --- passwordless email authentication --------------------------------
+
+    def request_authentication(
+        self,
+        session: Session,
+        kind: IdentifierKind,
+        value: str,
+        locale: Locale = Locale.EN,
+    ) -> None:
+        """Send a uniform magic link for both signup and login.
+
+        Unlike recovery, authentication must deliver for an unknown address:
+        proving that address is how a new email-first account is created.
+        """
+        normalized = normalize(kind, value)
+        self._check_send_limit(kind, normalized, IdentityTokenPurpose.AUTHENTICATE)
+        identifier = session.exec(
+            select(AccountIdentifier).where(
+                AccountIdentifier.kind == kind,
+                AccountIdentifier.value == normalized,
+                col(AccountIdentifier.verified_at).is_not(None),
+            )
+        ).first()
+        user = session.get(User, identifier.user_id) if identifier else None
+        raw = self._issue_token(
+            session,
+            user,
+            IdentityTokenPurpose.AUTHENTICATE,
+            identifier,
+            kind,
+            normalized,
+            locale,
+        )
+        self.transport.send(
+            DeliveryRequest(
+                kind=kind,
+                value=normalized,
+                purpose=IdentityTokenPurpose.AUTHENTICATE,
+                token=raw,
+                locale=locale,
+            )
+        )
+
+    def complete_authentication(
+        self, session: Session, raw: str, now: datetime | None = None
+    ) -> tuple[User, bool]:
+        """Authenticate an existing email owner or create one account.
+
+        Competing valid links for the same new address race on the verified
+        identifier index. The losing savepoint is rolled back and then loads
+        the winning account, so two clicks cannot create two owners.
+        """
+        moment = now or self.clock()
+        token = self._consume(session, raw, IdentityTokenPurpose.AUTHENTICATE, moment)
+        if token.target_kind is not IdentifierKind.EMAIL:
+            raise IdentityError("identity_token_invalid")
+
+        identifier = session.exec(
+            select(AccountIdentifier).where(
+                AccountIdentifier.kind == token.target_kind,
+                AccountIdentifier.value == token.target_value,
+                col(AccountIdentifier.verified_at).is_not(None),
+            )
+        ).first()
+        is_new_user = identifier is None
+        user: User | None
+        if identifier is None:
+            # `users.email` predates verified account identifiers. If exactly
+            # one legacy account already carries the proved address, adopt it
+            # instead of silently creating a second customer record. Multiple
+            # matches are ambiguous and require support-assisted resolution.
+            legacy_ids = session.exec(
+                select(User.id)
+                .where(func.lower(func.trim(User.email)) == token.target_value)
+                .limit(2)
+            ).all()
+            if len(legacy_ids) > 1:
+                raise IdentityError("identity_token_invalid")
+            if legacy_ids:
+                user = session.exec(
+                    select(User).where(User.id == legacy_ids[0]).with_for_update()
+                ).one()
+                # Another valid link may have completed while this request was
+                # waiting for the legacy user lock.
+                identifier = session.exec(
+                    select(AccountIdentifier).where(
+                        AccountIdentifier.kind == token.target_kind,
+                        AccountIdentifier.value == token.target_value,
+                        col(AccountIdentifier.verified_at).is_not(None),
+                    )
+                ).first()
+                if identifier is None:
+                    session.execute(
+                        update(AccountIdentifier)
+                        .where(
+                            col(AccountIdentifier.user_id) == user.id,
+                            col(AccountIdentifier.is_primary).is_(True),
+                        )
+                        .values(is_primary=False)
+                    )
+                    identifier = AccountIdentifier(
+                        user_id=user.id,
+                        kind=IdentifierKind.EMAIL,
+                        value=token.target_value,
+                        verified_at=moment,
+                        is_primary=True,
+                    )
+                    session.add(identifier)
+                    session.flush()
+                is_new_user = False
+            else:
+                try:
+                    with session.begin_nested():
+                        user = User(
+                            email=token.target_value,
+                            account_source=AccountSource.DIRECT,
+                            locale=Locale(token.requested_locale),
+                            last_login_at=moment,
+                        )
+                        session.add(user)
+                        session.flush()
+                        identifier = AccountIdentifier(
+                            user_id=user.id,
+                            kind=IdentifierKind.EMAIL,
+                            value=token.target_value,
+                            verified_at=moment,
+                            is_primary=True,
+                        )
+                        session.add(identifier)
+                        session.flush()
+                except IntegrityError:
+                    identifier = session.exec(
+                        select(AccountIdentifier).where(
+                            AccountIdentifier.kind == token.target_kind,
+                            AccountIdentifier.value == token.target_value,
+                            col(AccountIdentifier.verified_at).is_not(None),
+                        )
+                    ).one()
+                    user = session.get(User, identifier.user_id)
+                    is_new_user = False
+        else:
+            user = session.get(User, identifier.user_id)
+
+        if user is None or user.status is not UserStatus.ACTIVE:
+            raise IdentityError("identity_token_invalid")
+        user.last_login_at = moment
+        user.locale = Locale(token.requested_locale)
+        session.add(user)
+        session.flush()
+        return user, is_new_user

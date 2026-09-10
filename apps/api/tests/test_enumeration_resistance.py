@@ -13,10 +13,10 @@ victim's phone or mailbox. Per-identifier throttling has to survive the change.
 """
 
 import pytest
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.auth.models import User
-from app.identity.models import IdentifierKind
+from app.identity.models import AccountIdentifier, IdentifierKind
 from app.otp.service import OTPError, OTPService
 
 KNOWN = "08012345678"
@@ -86,6 +86,23 @@ def test_existence_is_revealed_only_after_successful_verification(
         otp_service.request(session, UNKNOWN)
         fresh = otp_service.verify(session, UNKNOWN, "123456", "android")
         assert fresh.is_new_user is True
+
+
+def test_successful_phone_otp_records_a_verified_identifier(
+    otp_service: OTPService, session_factory: type[Session]
+) -> None:
+    with session_factory() as session:
+        otp_service.request(session, UNKNOWN)
+        result = otp_service.verify(session, UNKNOWN, "123456", "android")
+        identifier = session.exec(
+            select(AccountIdentifier).where(
+                AccountIdentifier.user_id == result.user.id,
+                AccountIdentifier.kind == IdentifierKind.PHONE,
+            )
+        ).one()
+        assert identifier.value == "+2348099998888"
+        assert identifier.verified_at is not None
+        assert identifier.is_primary is True
 
 
 # --- the uniform response must not become a flooding tool -------------------

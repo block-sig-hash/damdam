@@ -877,11 +877,9 @@ that account's id, and every read is checked against the account asking.**
   reads as absent, so it can neither authenticate nor lock out the wrong person.
 - A record with **no** owner predates this amendment and is also treated as
   absent, rather than adopted by whoever is signed in now.
-- `hasSeenEsimWarning` / `markEsimWarningSeen` are keyed per account. A
-  device-wide dismissal meant the first person to dismiss the compatibility
-  warning suppressed it for everyone who signed in later — including someone
-  whose device is genuinely incompatible.
-- `clearAccountScopedState()` clears both, and is called from **every**
+- The eSIM compatibility-warning dismissal remains device-scoped. It describes
+  the handset, not an account, and AC-10.6 requires it once per device.
+- `clearAccountScopedState()` clears the account PIN and is called from **every**
   session-ending path in `useSessionGate`.
 - A session persisted before US-29 has no `userId`, so `App.tsx` does not render
   the PIN gate for it at all; that session falls through to OTP sign-in rather
