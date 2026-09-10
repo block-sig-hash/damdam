@@ -37,7 +37,7 @@ is a dry run that executes nothing.
 | 07 — Implement memberships, tenant isolation and administrator MFA | **ACCEPTED after fixes** | base `c07054e` / submitted `01e9d93` / integrated with accepted chunk 06 at `a9137e9` | [Independent review](reviews/07.md) | MFA secret-at-rest encryption remains assigned to chunk 26; shared organization login retirement remains assigned to the dashboard migration |
 | 08 — Define the consumer and enterprise design system | **ACCEPTED after fixes** | base `99bee92` / submitted `5e341fb` / corrected design code `6b9ca37` plus the final review-head native repository guard, integrated with chunks 06–07 | [Independent review](reviews/08.md) | iOS remains nightly/manual; product screens remain assigned to chunks 18–24 |
 | 09 — Build supported-market catalog and immutable quotes | **ACCEPTED after fixes** | accepted base `8651aa9` / submitted `8286d5e` / corrected `3427e16` | [Independent review](reviews/09.md) | D2/D3 keep every market unpublishable; nothing is seeded |
-| 10 — Build the multi-currency ledger and atomic reservations | NOT_STARTED | — | — | See assignment |
+| 10 — Build the multi-currency ledger and atomic reservations | **READY_FOR_REVIEW** | rebased onto chunk 09 / see [handoff](handoffs/10.md) | Not reviewed | Backfill not run against production-shaped data; no reservation-expiry sweeper pending D5 |
 | 11 — Build order orchestration and durable recovery | NOT_STARTED | — | — | See assignment |
 | 12 — Implement payment routing and modernize Paystack | NOT_STARTED | — | — | See assignment |
 | 13 — Implement the selected global payment adapter and wallet checkout | NOT_STARTED | — | — | See assignment |
