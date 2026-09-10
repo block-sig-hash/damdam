@@ -1,21 +1,32 @@
-import React, {useEffect} from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { SafeAreaView, StatusBar, StyleSheet, View } from 'react-native';
-import { AuthenticatedApp } from './src/navigation/AuthenticatedApp';
-import { OnboardingNavigator } from './src/navigation/OnboardingNavigator';
+import { AuthNavigator } from './src/navigation/AuthNavigator';
+import { ConsumerApp } from './src/navigation/ConsumerApp';
 import { PinUnlockScreen } from './src/screens/PinUnlock/PinUnlockScreen';
 import { useSessionGate } from './src/hooks/useSessionGate';
 import { PostHogMonitoringProvider } from './src/monitoring/PostHogMonitoringProvider';
+import { clearSession } from './src/services/sessionStore';
 import { color } from './src/theme/tokens';
-import {i18n} from './src/i18n';
+import { i18n } from './src/i18n';
 
 /**
- * AC-23.1/AC-23.2/AC-23.3/AC-23.4 -- useSessionGate decides whether a
- * persisted session exists, is still within its 30-day inactivity
- * window, and whether the app-open/foreground-resume PIN gate applies,
- * per docs/frontend-mobile.md's PIN Unlock screen note (Screen 31).
+ * The root: signed out, PIN-gated, or in the app (AC-37.1).
+ *
+ * `useSessionGate` still owns the session lifetime — persistence, the 30-day
+ * inactivity ceiling and the PIN gate are US-23's work and unchanged. What
+ * chunk 18 changes is the two branches around it: the signed-out branch is now
+ * the email-first `AuthNavigator`, and the signed-in branch is the four-tab
+ * `ConsumerApp` rather than the single eSIM-activation host.
+ *
+ * The PIN gate now applies only where a PIN actually exists on this device
+ * (see `useSessionGate`'s `hasLocalPin`). An account created through the email
+ * identity flow never set one, and showing it a keypad no entry can satisfy is
+ * a locked door with no key.
  */
 function App(): React.JSX.Element {
   const { phase, session, onOnboarded, onPinUnlocked } = useSessionGate();
+  const [emailHint, setEmailHint] = useState<string | undefined>(undefined);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     if (session?.locale && i18n.language !== session.locale) {
@@ -23,13 +34,33 @@ function App(): React.JSX.Element {
     }
   }, [session?.locale]);
 
+  /**
+   * "Sign in with a different account", from the wrong-recipient invitation
+   * screen. It clears the stored session but deliberately leaves the pending
+   * deep link in place: the customer is on their way to sign in *as* the
+   * invited address, and that link is the thing they are coming back for.
+   */
+  const switchAccount = useCallback(async (hint?: string) => {
+    setSigningOut(true);
+    setEmailHint(hint);
+    await clearSession();
+    setSigningOut(false);
+  }, []);
+
   let content: React.JSX.Element;
-  if (phase === 'loading') {
+  if (phase === 'loading' || signingOut) {
     content = <View style={styles.root} />;
-  } else if (phase === 'pin-gate' && session && session.userId) {
+  } else if (
+    phase === 'pin-gate' &&
+    session &&
+    session.userId &&
+    session.phoneNumber
+  ) {
     // A session stored before US-29 carries no userId, so its PIN cannot be
-    // attributed to an account. Such a session falls through to OTP sign-in
-    // rather than unlocking against whatever PIN happens to be on the device.
+    // attributed to an account. Such a session falls through to sign-in rather
+    // than unlocking against whatever PIN happens to be on the device — and so
+    // does one with no phone number, whose "forgot your PIN" path would have
+    // nothing to send an OTP to.
     content = (
       <PinUnlockScreen
         phoneNumber={session.phoneNumber}
@@ -39,14 +70,16 @@ function App(): React.JSX.Element {
     );
   } else if (phase === 'authenticated' && session) {
     content = (
-      <AuthenticatedApp
+      <ConsumerApp
         accessToken={session.accessToken}
-        departureDate={session.departureDate}
-        packageId={session.packageId}
+        currentEmail={session.email ?? null}
+        onSwitchAccount={switchAccount}
       />
     );
   } else {
-    content = <OnboardingNavigator onAuthenticated={onOnboarded} />;
+    content = (
+      <AuthNavigator initialEmail={emailHint} onAuthenticated={onOnboarded} />
+    );
   }
 
   return (

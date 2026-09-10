@@ -26,7 +26,16 @@ export interface PersistedSession {
   userId?: string;
   accessToken: string;
   refreshToken: string;
-  phoneNumber: string;
+  /**
+   * Optional from chunk 18 onward. `users.phone_number` is nullable and an
+   * account created through the email identity flow (US-29) has none, so a
+   * required field here would make every email account's session unreadable --
+   * `readState` would reject it and the customer would be signed out on every
+   * cold start with no error to explain it.
+   */
+  phoneNumber?: string | null;
+  /** The verified email an email-first account signed in with, when there is one. */
+  email?: string | null;
   departureDate: string | null;
   packageId?: string;
   locale: 'en' | 'fr';
@@ -41,16 +50,19 @@ async function readState(): Promise<PersistedSession | null> {
   }
   try {
     const parsed = JSON.parse(credentials.password) as Partial<PersistedSession>;
-    if (
-      !parsed.accessToken ||
-      !parsed.refreshToken ||
-      !parsed.phoneNumber ||
-      !parsed.lastActiveAt
-    ) {
+    if (!parsed.accessToken || !parsed.refreshToken || !parsed.lastActiveAt) {
+      return null;
+    }
+    // At least one identifier, rather than a phone number specifically: the
+    // account may hold either, and a session with neither cannot label itself
+    // or start a recovery, so it is not a session worth restoring.
+    if (!parsed.phoneNumber && !parsed.email) {
       return null;
     }
     return {
       ...parsed,
+      phoneNumber: parsed.phoneNumber ?? null,
+      email: parsed.email ?? null,
       departureDate: parsed.departureDate ?? null,
       locale: parsed.locale === 'fr' ? 'fr' : 'en',
     } as PersistedSession;

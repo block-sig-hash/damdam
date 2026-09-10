@@ -1,0 +1,169 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Linking } from 'react-native';
+import {
+  clearPendingLink,
+  loadPendingLink,
+  parseDeepLink,
+  PENDING_LINK_KEY,
+  savePendingLink,
+  subscribeToDeepLinks,
+} from './deepLinks';
+
+/**
+ * AC-37.3: "An activation link works from both cold and warm launch."
+ *
+ * The cold case is the one that actually breaks in practice, and it breaks
+ * silently: subscribing to the `url` event without also reading
+ * `getInitialURL()` loses every link that *started* the app, which is nearly
+ * all of them. So the first test here fires no event at all.
+ */
+
+jest.mock('react-native', () => ({
+  Linking: {
+    addEventListener: jest.fn(),
+    getInitialURL: jest.fn(),
+  },
+}));
+
+const mockedLinking = Linking as jest.Mocked<typeof Linking>;
+
+function noEventsFrom(initialUrl: string | null): jest.Mock {
+  const remove = jest.fn();
+  mockedLinking.addEventListener.mockReturnValue({ remove } as never);
+  mockedLinking.getInitialURL.mockResolvedValue(initialUrl);
+  return remove;
+}
+
+beforeEach(async () => {
+  jest.clearAllMocks();
+  await AsyncStorage.clear();
+});
+
+describe('parseDeepLink', () => {
+  it('reads an invitation token from the app scheme and the web link alike', () => {
+    expect(parseDeepLink('damdam://invite/abc123')).toEqual({
+      kind: 'invitation',
+      token: 'abc123',
+    });
+    expect(parseDeepLink('https://damdam.app/invite/abc123')).toEqual({
+      kind: 'invitation',
+      token: 'abc123',
+    });
+  });
+
+  it('still reads the query-string form the older messages used', () => {
+    expect(parseDeepLink('damdam://invite?token=abc123')).toEqual({
+      kind: 'invitation',
+      token: 'abc123',
+    });
+  });
+
+  it('reads an eSIM activation link', () => {
+    expect(parseDeepLink('damdam://esim/activate?packageId=pkg-1')).toEqual({
+      kind: 'esim-activation',
+      packageId: 'pkg-1',
+    });
+  });
+
+  it('returns null for a link this build does not understand', () => {
+    // The OS hands the app every URL registered to it. Routing an unknown one
+    // somewhere arbitrary is worse than ignoring it.
+    expect(parseDeepLink('damdam://something-else/1')).toBeNull();
+    expect(parseDeepLink('https://example.test/invite/abc')).toBeNull();
+    expect(parseDeepLink('damdam://invite')).toBeNull();
+  });
+});
+
+describe('subscribeToDeepLinks', () => {
+  it('delivers a link that cold-started the app, with no url event at all', async () => {
+    noEventsFrom('damdam://invite/cold-token');
+    const onLink = jest.fn();
+
+    subscribeToDeepLinks(onLink);
+    await flush();
+
+    expect(onLink).toHaveBeenCalledWith({
+      kind: 'invitation',
+      token: 'cold-token',
+    });
+  });
+
+  it('delivers a link that arrived while the app was already running', async () => {
+    noEventsFrom(null);
+    const onLink = jest.fn();
+    subscribeToDeepLinks(onLink);
+    await flush();
+
+    const handler = mockedLinking.addEventListener.mock.calls[0][1] as (
+      event: { url: string },
+    ) => void;
+    handler({ url: 'damdam://invite/warm-token' });
+    await flush();
+
+    expect(onLink).toHaveBeenCalledWith({
+      kind: 'invitation',
+      token: 'warm-token',
+    });
+  });
+
+  it('persists the link before calling back, so a signed-out app keeps it', async () => {
+    // The whole reason the store exists: the customer taps an invitation with
+    // no session, gets sent to sign in, leaves the app to fetch the sign-in
+    // mail, and comes back. Nothing in memory survives that.
+    noEventsFrom('damdam://invite/persisted-token');
+
+    subscribeToDeepLinks(() => undefined);
+    await flush();
+
+    await expect(loadPendingLink()).resolves.toEqual({
+      kind: 'invitation',
+      token: 'persisted-token',
+    });
+  });
+
+  it('stops calling back after unsubscribe', async () => {
+    noEventsFrom(null);
+    const onLink = jest.fn();
+    const unsubscribe = subscribeToDeepLinks(onLink);
+    const handler = mockedLinking.addEventListener.mock.calls[0][1] as (
+      event: { url: string },
+    ) => void;
+
+    unsubscribe();
+    handler({ url: 'damdam://invite/after-unsubscribe' });
+    await flush();
+
+    expect(onLink).not.toHaveBeenCalled();
+  });
+});
+
+describe('the pending-link store', () => {
+  it('drops a stored row whose shape this build no longer understands', async () => {
+    // A build that changes the union leaves old rows behind. Half-understanding
+    // one routes the customer somewhere they never asked to go.
+    await AsyncStorage.setItem(
+      PENDING_LINK_KEY,
+      JSON.stringify({ kind: 'invitation' }),
+    );
+
+    await expect(loadPendingLink()).resolves.toBeNull();
+  });
+
+  it('drops a stored row that is not JSON at all', async () => {
+    await AsyncStorage.setItem(PENDING_LINK_KEY, 'not-json');
+
+    await expect(loadPendingLink()).resolves.toBeNull();
+  });
+
+  it('clears on request, so signing out does not leave someone elses invitation', async () => {
+    await savePendingLink({ kind: 'invitation', token: 'abc' });
+
+    await clearPendingLink();
+
+    await expect(loadPendingLink()).resolves.toBeNull();
+  });
+});
+
+function flush(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}

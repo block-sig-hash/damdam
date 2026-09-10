@@ -75,7 +75,46 @@ describe('sessionStore persistence (AC-23.1)', () => {
 
     const loaded = await loadSession();
 
-    expect(loaded).toEqual(persisted);
+    // `email` is normalized to null on read (chunk 18): a session written
+    // before the email identity flow existed has no such field, and leaving it
+    // `undefined` would make every consumer of the shape re-handle two ways of
+    // saying "no email".
+    expect(loaded).toEqual({ ...persisted, email: null });
+  });
+
+  it('restores an email-only session, which has no phone number at all', async () => {
+    // `users.phone_number` is nullable and an account created through the email
+    // identity flow (US-29) has none. Requiring one here would sign every such
+    // account out on every cold start, with nothing on screen to explain it.
+    const persisted: PersistedSession = {
+      userId: 'user-2',
+      accessToken: 'access-2',
+      refreshToken: 'refresh-2',
+      phoneNumber: null,
+      email: 'someone@example.test',
+      departureDate: null,
+      locale: 'en',
+      lastActiveAt: '2026-07-01T00:00:00.000Z',
+    };
+    mockGet.mockResolvedValue(credentialsFor(persisted));
+
+    await expect(loadSession()).resolves.toEqual(persisted);
+  });
+
+  it('refuses a stored session that identifies nobody', async () => {
+    const orphaned = {
+      accessToken: 'access-3',
+      refreshToken: 'refresh-3',
+      departureDate: null,
+      locale: 'en',
+      lastActiveAt: '2026-07-01T00:00:00.000Z',
+    };
+    mockGet.mockResolvedValue(credentialsFor(orphaned as PersistedSession));
+
+    // It cannot label itself in the account header and cannot start a
+    // recovery, so restoring it would produce a session the customer can
+    // neither recognize nor get out of.
+    await expect(loadSession()).resolves.toBeNull();
   });
 
   it('reports no session when the Keychain has nothing', async () => {

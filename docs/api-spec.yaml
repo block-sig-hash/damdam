@@ -1109,6 +1109,79 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /v1/invitations/preview:
+    post:
+      tags:
+      - Consumer
+      summary: Preview Invitation
+      description: 'Read an invitation link without accepting it (AC-37.3, AC-37.4).
+
+
+        POST rather than GET, and the token in the body rather than the path,
+
+        because an invitation token is a bearer credential for a membership and a
+
+        URL is the one part of a request that gets written down everywhere.'
+      operationId: preview_invitation_v1_invitations_preview_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationPreviewRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationPreviewResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/me/session:
+    get:
+      tags:
+      - Consumer
+      summary: Read Session
+      description: 'One round trip to the first authenticated frame.
+
+
+        Splitting this into "who am I" and "what do I have" would make every cold
+
+        start render a tab bar against an unknown service state and then correct
+
+        itself, which is the flicker the old Home screen had.'
+      operationId: read_session_v1_me_session_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+      security:
+      - HTTPBearer: []
+  /v1/me/services:
+    get:
+      tags:
+      - Consumer
+      summary: Read Services
+      operationId: read_services_v1_me_services_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicesResponse'
+      security:
+      - HTTPBearer: []
   /v1/auth/mfa/enroll:
     post:
       tags:
@@ -3313,6 +3386,77 @@ components:
       required:
       - invitations
       title: InvitationListResponse
+    InvitationPreviewRequest:
+      properties:
+        token:
+          type: string
+          title: Token
+      type: object
+      required:
+      - token
+      title: InvitationPreviewRequest
+      description: 'The token travels in the body, not the path.
+
+
+        A path segment reaches access logs, proxy logs and crash reports. An
+
+        invitation token is a bearer credential for a membership, so it goes where
+
+        those do not follow.'
+    InvitationPreviewResponse:
+      properties:
+        state:
+          $ref: '#/components/schemas/InvitationPreviewState'
+        organization_name:
+          type: string
+          title: Organization Name
+        role:
+          type: string
+          title: Role
+        invited_value_masked:
+          type: string
+          title: Invited Value Masked
+        invited_kind:
+          type: string
+          title: Invited Kind
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+        recipient_matches:
+          type: boolean
+          title: Recipient Matches
+        already_a_member:
+          type: boolean
+          title: Already A Member
+      type: object
+      required:
+      - state
+      - organization_name
+      - role
+      - invited_value_masked
+      - invited_kind
+      - recipient_matches
+      - already_a_member
+      title: InvitationPreviewResponse
+      description: 'What an invitation link says, before anything is claimed.
+
+
+        Returned to an authenticated caller only, and it never widens what that
+
+        caller could otherwise learn: the address is masked, and `recipient_matches`
+
+        answers "is this for me" without disclosing who else it might be for.'
+    InvitationPreviewState:
+      type: string
+      enum:
+      - pending
+      - expired
+      - accepted
+      - revoked
+      title: InvitationPreviewState
     InvitationRequest:
       properties:
         email:
@@ -3840,6 +3984,24 @@ components:
       required:
       - organizations
       title: OrganizationListResponse
+    OrganizationMembershipSummary:
+      properties:
+        organization_id:
+          type: string
+          format: uuid
+          title: Organization Id
+        name:
+          type: string
+          title: Name
+        role:
+          type: string
+          title: Role
+      type: object
+      required:
+      - organization_id
+      - name
+      - role
+      title: OrganizationMembershipSummary
     OrganizationRole:
       type: string
       enum:
@@ -4227,6 +4389,195 @@ components:
       required:
       - role
       title: RoleChangeRequest
+    ServiceDelivery:
+      type: string
+      enum:
+      - carrier_esim
+      - internet
+      title: ServiceDelivery
+      description: 'How a service reaches the customer.
+
+
+        The calling amendment requires an internet-only journey that never asks for
+
+        an eSIM installation. That is not a UI preference: an internet-calling grant
+
+        has no carrier line and no profile to install, so asking would be asking for
+
+        something that does not exist. This field is what the app branches on, and
+
+        it is derived from whether provisioning actually produced a carrier line --
+
+        not from the product''s name.'
+    ServiceOwner:
+      type: string
+      enum:
+      - personal
+      - organization
+      title: ServiceOwner
+    ServiceState:
+      type: string
+      enum:
+      - none
+      - pending
+      - active
+      title: ServiceState
+      description: 'The three states navigation and Home actually branch on (AC-37.1).
+
+
+        `PENDING` is not a loading state. It means a real service exists and is not
+
+        usable yet -- paid but unprovisioned, provisioned but not installed,
+
+        installed but not activated. The app must be able to tell that apart from
+
+        having nothing, because the route out is completely different: one is "buy
+
+        something", the other is "here is where your order got to".'
+    ServiceSummary:
+      properties:
+        order_item_id:
+          type: string
+          format: uuid
+          title: Order Item Id
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        order_reference:
+          type: string
+          title: Order Reference
+        product_name:
+          type: string
+          title: Product Name
+        delivery:
+          $ref: '#/components/schemas/ServiceDelivery'
+        owner:
+          $ref: '#/components/schemas/ServiceOwner'
+        organization_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Organization Id
+        organization_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Organization Name
+        payment_state:
+          type: string
+          title: Payment State
+        provisioning_state:
+          type: string
+          title: Provisioning State
+        installation_state:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Installation State
+        activation_state:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Activation State
+        requires_installation:
+          type: boolean
+          title: Requires Installation
+        ready_to_use:
+          type: boolean
+          title: Ready To Use
+        granted_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Granted At
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+        expired:
+          type: boolean
+          title: Expired
+          default: false
+      type: object
+      required:
+      - order_item_id
+      - order_id
+      - order_reference
+      - product_name
+      - delivery
+      - owner
+      - payment_state
+      - provisioning_state
+      - requires_installation
+      - ready_to_use
+      title: ServiceSummary
+      description: One line of connectivity, as the customer's account sees it.
+    ServicesResponse:
+      properties:
+        service_state:
+          $ref: '#/components/schemas/ServiceState'
+        services:
+          items:
+            $ref: '#/components/schemas/ServiceSummary'
+          type: array
+          title: Services
+      type: object
+      required:
+      - service_state
+      - services
+      title: ServicesResponse
+    SessionResponse:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        locale:
+          $ref: '#/components/schemas/Locale'
+        verified_emails:
+          items:
+            type: string
+          type: array
+          title: Verified Emails
+        verified_phone_numbers:
+          items:
+            type: string
+          type: array
+          title: Verified Phone Numbers
+        service_state:
+          $ref: '#/components/schemas/ServiceState'
+        organizations:
+          items:
+            $ref: '#/components/schemas/OrganizationMembershipSummary'
+          type: array
+          title: Organizations
+        pending_invitations:
+          type: integer
+          title: Pending Invitations
+      type: object
+      required:
+      - user_id
+      - locale
+      - verified_emails
+      - verified_phone_numbers
+      - service_state
+      - organizations
+      - pending_invitations
+      title: SessionResponse
+      description: 'Everything the app needs before it can draw its first authenticated
+        frame.
+
+
+        One request, deliberately: the alternative is a tab bar that renders, then
+
+        re-renders once the service call lands, which is the flicker every "no
+
+        service" screen in the old app had.'
     StepUpRequest:
       properties:
         code:
