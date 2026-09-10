@@ -35,6 +35,9 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from app.connectivity.contract import (
+    CARRIER_ONLY_CAPABILITIES,
+    INTERNET_ONLY_CAPABILITIES,
+    AdapterChannel,
     Capability,
     CapabilityNotAvailable,
     ConnectivityAdapter,
@@ -308,10 +311,17 @@ def _capability_absence_is_explained(harness: AdapterHarness) -> None:
     "nobody has looked yet". Those need different follow-up.
     """
     capabilities = harness.adapter.capabilities()
+    # The other channel's capabilities need no explanation: they are structurally
+    # unavailable, not an evidence gap somebody could close.
+    out_of_channel = (
+        INTERNET_ONLY_CAPABILITIES
+        if capabilities.channel is AdapterChannel.CARRIER
+        else CARRIER_ONLY_CAPABILITIES
+    )
     withheld = {
         capability
         for capability in Capability
-        if not capabilities.supports(capability)
+        if not capabilities.supports(capability) and capability not in out_of_channel
     }
     unexplained = {
         capability.value
@@ -321,6 +331,28 @@ def _capability_absence_is_explained(harness: AdapterHarness) -> None:
     _require(
         not unexplained,
         f"capabilities withheld with no recorded reason: {sorted(unexplained)}",
+    )
+
+
+def _channels_do_not_overlap(harness: AdapterHarness) -> None:
+    """A carrier adapter advertises no internet capability, and vice versa.
+
+    The failure the calling amendment names outright: *"Evidence for WebRTC
+    never closes carrier gates."* An adapter able to claim both lets a browser
+    calling test stand in for proof that a handset can dial from its own dialer
+    on a visited network, and those are not the same claim at all.
+    """
+    capabilities = harness.adapter.capabilities()
+    forbidden = (
+        INTERNET_ONLY_CAPABILITIES
+        if capabilities.channel is AdapterChannel.CARRIER
+        else CARRIER_ONLY_CAPABILITIES
+    )
+    overlap = capabilities.supported & forbidden
+    _require(
+        not overlap,
+        f"a {capabilities.channel.value} adapter advertises "
+        f"{sorted(capability.value for capability in overlap)}",
     )
 
 
@@ -470,6 +502,11 @@ CASES: tuple[ConformanceCase, ...] = (
         "withheld capabilities are explained",
         "'checked and absent' and 'nobody looked' need different follow-up",
         _capability_absence_is_explained,
+    ),
+    ConformanceCase(
+        "carrier and internet capabilities do not overlap",
+        "evidence for WebRTC never closes a carrier gate",
+        _channels_do_not_overlap,
     ),
     ConformanceCase(
         "reconciliation admits ignorance",

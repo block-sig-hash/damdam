@@ -20,6 +20,8 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.connectivity.contract import (
+    AdapterCapabilities,
+    AdapterChannel,
     Capability,
     CapabilityNotAvailable,
     ConnectivityError,
@@ -555,3 +557,58 @@ def test_an_unknown_sim_is_none_rather_than_an_error() -> None:
     transport = ScriptedTransport()
     transport.push(404, {})
     assert adapter(transport).fetch_line(str(uuid4())) is None
+
+
+# --- the calling amendment: carrier and internet stay apart ------------------
+
+
+def test_telnyx_is_a_carrier_channel_adapter() -> None:
+    """Its WebRTC product is a different integration behind a different adapter.
+
+    `VOICE-EXPANSION.md` assigns outbound internet calling to V02/V03 and keeps
+    chunks 15–17 on carrier lifecycle, usage and control.
+    """
+    capabilities = adapter(ScriptedTransport()).capabilities()
+    assert capabilities.channel is AdapterChannel.CARRIER
+    assert not capabilities.supports(Capability.INTERNET_VOICE)
+
+
+def test_a_carrier_adapter_cannot_advertise_internet_calling() -> None:
+    """Refused at construction, not merely discouraged in a comment.
+
+    The amendment: *"Evidence for WebRTC never closes carrier gates."* An
+    adapter able to claim both would let a browser calling test stand in for
+    proof that a handset can dial from its own dialer on a visited network.
+    """
+    with pytest.raises(ConnectivityError) as caught:
+        AdapterCapabilities(
+            supported=frozenset({Capability.DATA, Capability.INTERNET_VOICE}),
+            channel=AdapterChannel.CARRIER,
+        )
+    assert caught.value.code == "channel_capability_mismatch"
+
+
+def test_an_internet_adapter_cannot_advertise_native_voice() -> None:
+    with pytest.raises(ConnectivityError) as caught:
+        AdapterCapabilities(
+            supported=frozenset({Capability.NATIVE_VOICE}),
+            channel=AdapterChannel.INTERNET,
+        )
+    assert caught.value.code == "channel_capability_mismatch"
+
+
+def test_channel_neutral_capabilities_are_allowed_on_both() -> None:
+    """Data, top-up, suspension and usage belong to neither channel alone.
+
+    Over-restricting would be its own defect: an internet-calling adapter that
+    could not advertise usage reporting would have no way to say it meters
+    calls.
+    """
+    for channel in (AdapterChannel.CARRIER, AdapterChannel.INTERNET):
+        capabilities = AdapterCapabilities(
+            supported=frozenset(
+                {Capability.TOPUP, Capability.SUSPENSION, Capability.USAGE_EVENTS}
+            ),
+            channel=channel,
+        )
+        assert capabilities.supports(Capability.TOPUP)

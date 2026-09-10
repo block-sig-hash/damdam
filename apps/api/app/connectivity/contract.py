@@ -35,6 +35,28 @@ from typing import Any, Protocol
 from uuid import UUID
 
 
+class AdapterChannel(str, Enum):
+    """Which of the two calling worlds an adapter belongs to.
+
+    The approved calling amendment (`docs/implementation/VOICE-EXPANSION.md`,
+    9 September 2026) requires the internet-calling adapter and the carrier
+    adapter to expose **distinct** capabilities, and it says why in one line:
+    *"Evidence for WebRTC never closes carrier gates."*
+
+    The two are not degrees of the same thing. A WebRTC call proves a browser
+    reached a media server; it proves nothing about whether a handset can attach
+    to a visited network and dial from its own dialer. An adapter that could
+    advertise both would let the easy evidence stand in for the hard evidence,
+    which is exactly the substitution D1 exists to prevent.
+
+    `internet_capabilities()` below is the enforcement: a carrier-channel
+    adapter that advertises an internet capability is refused, and vice versa.
+    """
+
+    CARRIER = "carrier"
+    INTERNET = "internet"
+
+
 class Capability(str, Enum):
     """One thing an adapter can do, verified.
 
@@ -46,7 +68,18 @@ class Capability(str, Enum):
     """
 
     DATA = "data"
+    #: Calling from the handset's own dialer, over a carrier profile. Requires
+    #: a carrier line. Carrier channel only.
     NATIVE_VOICE = "native_voice"
+    #: Calling from the app or a browser, over the internet. Requires **no**
+    #: eSIM, no installation and no carrier line — the amendment is explicit
+    #: that internet calling must not depend on any of them. Internet channel
+    #: only, and owned by V02/V03 rather than by this chunk.
+    INTERNET_VOICE = "internet_voice"
+    #: A number the supplier assigns to a line. Reusing one number across the
+    #: carrier and internet channels is a *target*, not an assumption: the
+    #: amendment requires written supplier and live route evidence for it, so
+    #: nothing here treats an assignment on one channel as usable on the other.
     NUMBER_ASSIGNMENT = "number_assignment"
     #: Can the *profile itself* be handed to a customer to install? Separate
     #: from DATA because a supplier can sell connectivity through a channel
@@ -64,6 +97,12 @@ class Capability(str, Enum):
     USAGE_EVENTS = "usage_events"
 
 
+#: Capabilities that belong to exactly one channel. Anything absent from both
+#: sets — data, top-up, suspension, usage — is genuinely channel-neutral.
+CARRIER_ONLY_CAPABILITIES = frozenset({Capability.NATIVE_VOICE})
+INTERNET_ONLY_CAPABILITIES = frozenset({Capability.INTERNET_VOICE})
+
+
 @dataclass(frozen=True)
 class AdapterCapabilities:
     """What one adapter can do, and what established each claim.
@@ -72,6 +111,12 @@ class AdapterCapabilities:
     is not evidence of external compatibility.* An adapter that claims native
     voice on the strength of its own fake is claiming nothing, and the evidence
     reference is where a reviewer looks to find out which it is.
+
+    `channel` keeps the two calling worlds apart structurally. The constructor
+    refuses a carrier adapter that advertises an internet capability, and an
+    internet adapter that advertises native voice — not because the code could
+    not cope, but because the moment one adapter can claim both, a WebRTC
+    integration test starts closing a carrier gate.
     """
 
     supported: frozenset[Capability]
@@ -85,6 +130,23 @@ class AdapterCapabilities:
     #: with the reason. Kept apart from plain absence so a reviewer can tell
     #: "we checked and it is not there" from "nobody looked".
     undocumented: dict[str, str] = field(default_factory=dict)
+    channel: AdapterChannel = AdapterChannel.CARRIER
+
+    def __post_init__(self) -> None:
+        forbidden = (
+            INTERNET_ONLY_CAPABILITIES
+            if self.channel is AdapterChannel.CARRIER
+            else CARRIER_ONLY_CAPABILITIES
+        )
+        overlap = self.supported & forbidden
+        if overlap:
+            raise ConnectivityError(
+                "channel_capability_mismatch",
+                f"a {self.channel.value} adapter cannot advertise "
+                f"{sorted(capability.value for capability in overlap)}; the "
+                "calling amendment keeps carrier and internet capabilities "
+                "separate so evidence for one never closes the other's gate",
+            )
 
     def supports(self, capability: Capability) -> bool:
         return capability in self.supported

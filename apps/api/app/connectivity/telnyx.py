@@ -48,6 +48,7 @@ from app.auth.models import utc_now
 from app.connectivity.contract import (
     ActivationCredential,
     AdapterCapabilities,
+    AdapterChannel,
     Capability,
     ConnectivityError,
     ConnectivityOutcomeUnknown,
@@ -221,6 +222,11 @@ class TelnyxConnectivityAdapter:
                 for capability, reason in UNDOCUMENTED_REASONS.items()
                 if Capability(capability) not in self._verified
             },
+            # Telnyx Wireless is a *carrier* adapter. Its WebRTC product is a
+            # different integration behind a different adapter (V02), and the
+            # calling amendment is explicit that evidence for one never closes
+            # the other's gate.
+            channel=AdapterChannel.CARRIER,
         )
 
     # --- provisioning -----------------------------------------------------
