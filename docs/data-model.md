@@ -2598,14 +2598,21 @@ successful attempts against one intent is a fact the database can see, rather
 than two unrelated payments nobody correlates.
 
 Four fields on an intent never change: seller, merchant account, currency, and
-the order and quote it pays for. An attempt needing different values is a new
-attempt, not an edit.
+the order and quote it pays for. PostgreSQL rejects intent updates and binds
+merchant id, seller and currency with one composite foreign key. Service code
+also requires the intent amount to equal the order total. An attempt needing
+different values is a new attempt, not an edit.
 
 ### `ux_payment_attempts_one_success`
 
 A partial unique index over `status = 'succeeded'`, one per intent. Two
 successful charges for one order is the failure this chunk exists to prevent,
 and this refuses it rather than reporting it afterwards.
+
+Only one created, pending or unknown attempt may be live for an intent. Attempt
+creation locks the intent, and `(processor, idempotency_key)` is unique. Capture
+also locks the intent, so two different late successes serialize: one pays the
+order and the other is durably recorded as excess.
 
 ### Excess payments are recorded, never dropped
 
@@ -2616,6 +2623,9 @@ refusing to write it down would be losing their money. Chunk 14 refunds them.
 
 Dropping the webhook is the alternative, and the alternative is a customer who
 has been charged twice and a system that has never heard of the second charge.
+The stored evidence is an allowlist of reference, status, amount, currency,
+merchant reference and event name. The provider's raw customer and
+authorization objects are not retained.
 
 ### A redirect cannot mark an order paid
 
@@ -2640,6 +2650,9 @@ Seller, currency and method — never nationality, never an IP address. Both of
 those are guesses about a person; a merchant account is a fact about who may
 legally take their money in that currency, and routing on a guess is how a
 customer is charged through an entity with no relationship to them.
+`merchant_payment_methods` is the explicit method capability; an account that
+has not enabled a rail cannot be selected for it, and multiple eligible
+accounts are an ambiguity error rather than an arbitrary first row.
 
 ### Paystack, conditionally
 
@@ -2647,10 +2660,11 @@ customer is charged through an entity with no relationship to them.
 refuses any other currency rather than converting — a quiet conversion would be
 a foreign-exchange decision this product has not made.
 
-The amount is sent in the currency's minor unit with the exponent **derived**
-from `app/money.py` rather than hardcoded as 100. Getting that wrong is a silent
-hundredfold pricing error in either direction, and a mock built from the same
-assumption would agree with it.
+The amount is sent as a string in the currency's minor unit with the exponent
+**derived** from `app/money.py` rather than hardcoded as 100. A payer email is
+required before transport, metadata is JSON encoded, and locally generated
+references use only Paystack's documented character set. Missing reference,
+amount, currency or status in a response is rejected rather than defaulted.
 
 Vendor behaviour is documented rather than assumed: the endpoints, the
 minor-unit convention and the `x-paystack-signature` HMAC SHA-512 scheme are
