@@ -289,6 +289,163 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/email/verify/request:
+    post:
+      tags:
+      - authentication
+      summary: Request Email Verification
+      description: Claim an email for the signed-in account and send proof-of-ownership.
+      operationId: request_email_verification_v1_auth_email_verify_request_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailIdentifierRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/auth/email/verify/confirm:
+    post:
+      tags:
+      - authentication
+      summary: Confirm Email Verification
+      operationId: confirm_email_verification_v1_auth_email_verify_confirm_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/email/login/request:
+    post:
+      tags:
+      - authentication
+      summary: Request Email Login
+      description: Send the same response for email signup and returning login.
+      operationId: request_email_login_v1_auth_email_login_request_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailIdentifierRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/email/login/confirm:
+    post:
+      tags:
+      - authentication
+      summary: Confirm Email Login
+      description: Prove mailbox control, then create or authenticate the account.
+      operationId: confirm_email_login_v1_auth_email_login_confirm_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/email/recovery/request:
+    post:
+      tags:
+      - authentication
+      summary: Request Email Recovery
+      operationId: request_email_recovery_v1_auth_email_recovery_request_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailIdentifierRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/email/recovery/confirm:
+    post:
+      tags:
+      - authentication
+      summary: Confirm Email Recovery
+      description: Consume a recovery token, revoke prior sessions and issue a new
+        one.
+      operationId: confirm_email_recovery_v1_auth_email_recovery_confirm_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoverySessionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/admin/sos-notifications/failed:
     get:
       tags:
@@ -646,32 +803,401 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /v1/hto/manifests:
+  /v1/organizations:
     get:
       tags:
-      - HTO manifests
-      summary: List Manifests
-      operationId: list_manifests_v1_hto_manifests_get
+      - Organizations
+      summary: List My Organizations
+      description: Driven from memberships, so it can only ever list the caller's
+        own.
+      operationId: list_my_organizations_v1_organizations_get
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ManifestListResponse'
+                $ref: '#/components/schemas/OrganizationListResponse'
       security:
       - HTTPBearer: []
+  /v1/organizations/{organization_id}/members:
+    get:
+      tags:
+      - Organizations
+      summary: List Members
+      operationId: list_members_v1_organizations__organization_id__members_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/members/{user_id}:
+    patch:
+      tags:
+      - Organizations
+      summary: Change Member Role
+      operationId: change_member_role_v1_organizations__organization_id__members__user_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleChangeRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - Organizations
+      summary: Revoke Member
+      operationId: revoke_member_v1_organizations__organization_id__members__user_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: User Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/invitations:
+    post:
+      tags:
+      - Organizations
+      summary: Create Invitation
+      operationId: create_invitation_v1_organizations__organization_id__invitations_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationCreatedResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Organizations
+      summary: List Invitations
+      operationId: list_invitations_v1_organizations__organization_id__invitations_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/invitations/{invitation_id}:
+    delete:
+      tags:
+      - Organizations
+      summary: Revoke Invitation
+      operationId: revoke_invitation_v1_organizations__organization_id__invitations__invitation_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: invitation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Invitation Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/step-up:
+    post:
+      tags:
+      - Organizations
+      summary: Step Up
+      description: 'Prove the second factor for one organization.
+
+
+        Gated on `ORG_READ` rather than on the privileged permission being sought:
+
+        the caller must already be a member to step up at all, but requiring the
+
+        target permission here would turn this endpoint into a way to ask whether
+
+        they hold it.'
+      operationId: step_up_v1_organizations__organization_id__step_up_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StepUpRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepUpResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/invitations:
+    get:
+      tags:
+      - Organizations
+      summary: List My Invitations
+      description: Only invitations addressed to identifiers this account has *proved*.
+      operationId: list_my_invitations_v1_invitations_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationListResponse'
+      security:
+      - HTTPBearer: []
+  /v1/invitations/accept:
+    post:
+      tags:
+      - Organizations
+      summary: Accept Invitation
+      operationId: accept_invitation_v1_invitations_accept_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationAcceptRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/auth/mfa/enroll:
+    post:
+      tags:
+      - Organizations
+      summary: Begin Mfa Enrollment
+      operationId: begin_mfa_enrollment_v1_auth_mfa_enroll_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaEnrollmentResponse'
+      security:
+      - HTTPBearer: []
+  /v1/auth/mfa/enroll/confirm:
+    post:
+      tags:
+      - Organizations
+      summary: Confirm Mfa Enrollment
+      operationId: confirm_mfa_enrollment_v1_auth_mfa_enroll_confirm_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaCodeRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaConfirmedResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/auth/mfa/disable:
+    post:
+      tags:
+      - Organizations
+      summary: Disable Mfa
+      operationId: disable_mfa_v1_auth_mfa_disable_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StepUpRequest'
+        required: true
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/hto/manifests:
     post:
       tags:
       - HTO manifests
       summary: Create Manifest
       operationId: create_manifest_v1_hto_manifests_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ManifestCreateRequest'
-        required: true
       responses:
         '201':
           description: Successful Response
@@ -685,8 +1211,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - HTO manifests
+      summary: List Manifests
+      operationId: list_manifests_v1_hto_manifests_get
       security:
       - HTTPBearer: []
+      parameters:
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/hto/manifests/{manifest_id}/upload:
     post:
       tags:
@@ -703,6 +1257,15 @@ paths:
           type: string
           format: uuid
           title: Manifest Id
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       requestBody:
         required: true
         content:
@@ -738,6 +1301,15 @@ paths:
           type: string
           format: uuid
           title: Manifest Id
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       responses:
         '200':
           description: Successful Response
@@ -767,6 +1339,15 @@ paths:
           type: string
           format: uuid
           title: Manifest Id
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       responses:
         '200':
           description: Successful Response
@@ -796,6 +1377,15 @@ paths:
           type: string
           format: uuid
           title: Manifest Id
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       requestBody:
         required: true
         content:
@@ -838,6 +1428,15 @@ paths:
           type: string
           format: uuid
           title: Group Id
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       requestBody:
         required: true
         content:
@@ -879,6 +1478,15 @@ paths:
           type: string
           format: uuid
           title: Group Id
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       responses:
         '204':
           description: Successful Response
@@ -904,6 +1512,15 @@ paths:
           type: string
           format: uuid
           title: Manifest Id
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       requestBody:
         required: true
         content:
@@ -939,6 +1556,15 @@ paths:
           type: string
           format: uuid
           title: Manifest Id
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       responses:
         '200':
           description: Successful Response
@@ -975,6 +1601,15 @@ paths:
           type: string
           format: uuid
           title: Order Id
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       responses:
         '200':
           description: Successful Response
@@ -1011,6 +1646,15 @@ paths:
           type: string
           format: uuid
           title: Order Id
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       responses:
         '200':
           description: Successful Response
@@ -1029,6 +1673,18 @@ paths:
       - HTO manifests
       summary: List Pricing Tiers
       operationId: list_pricing_tiers_v1_hto_pricing_tiers_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       responses:
         '200':
           description: Successful Response
@@ -1036,8 +1692,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PricingTierListResponse'
-      security:
-      - HTTPBearer: []
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/webhooks/otp/termii:
     post:
       tags:
@@ -1470,6 +2130,15 @@ paths:
             format: uuid
           - type: 'null'
           title: Manifest Id
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       responses:
         '200':
           description: Successful Response
@@ -1519,6 +2188,15 @@ paths:
             format: date
           - type: 'null'
           title: Date To
+      - name: x-organization-id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: X-Organization-Id
       responses:
         '200':
           description: Successful Response
@@ -2223,6 +2901,20 @@ components:
       - fcm_token
       - platform
       title: DeviceTokenUpsert
+    EmailIdentifierRequest:
+      properties:
+        email:
+          type: string
+          maxLength: 255
+          minLength: 3
+          title: Email
+        locale:
+          $ref: '#/components/schemas/Locale'
+          default: en
+      type: object
+      required:
+      - email
+      title: EmailIdentifierRequest
     EsimDownloadResponse:
       properties:
         status:
@@ -2547,6 +3239,146 @@ components:
       - esim_status
       - activation_status
       title: HtoPilgrimSummary
+    IdentityMessageResponse:
+      properties:
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - message
+      title: IdentityMessageResponse
+      description: 'Deliberately says nothing about whether the address is known.
+
+
+        The same body is returned for a registered address, an unregistered one and
+
+        an unverified claim, so the response cannot be used to test who has an
+
+        account.'
+    IdentityTokenRequest:
+      properties:
+        token:
+          type: string
+          maxLength: 256
+          minLength: 16
+          title: Token
+      type: object
+      required:
+      - token
+      title: IdentityTokenRequest
+    InvitationAcceptRequest:
+      properties:
+        token:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token
+        invitation_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Invitation Id
+      type: object
+      title: InvitationAcceptRequest
+    InvitationCreatedResponse:
+      properties:
+        invitation:
+          $ref: '#/components/schemas/InvitationSummary'
+        token:
+          type: string
+          title: Token
+      type: object
+      required:
+      - invitation
+      - token
+      title: InvitationCreatedResponse
+      description: 'The raw token is returned to the *caller*, never persisted.
+
+
+        Chunk 07 has no configured mail provider (chunk 06 left delivery on a
+
+        recording transport), so the token is handed back for the dashboard to send
+
+        rather than fabricating a delivery that did not happen.'
+    InvitationListResponse:
+      properties:
+        invitations:
+          items:
+            $ref: '#/components/schemas/InvitationSummary'
+          type: array
+          title: Invitations
+      type: object
+      required:
+      - invitations
+      title: InvitationListResponse
+    InvitationRequest:
+      properties:
+        email:
+          type: string
+          maxLength: 320
+          minLength: 3
+          title: Email
+        role:
+          $ref: '#/components/schemas/OrganizationRole'
+      type: object
+      required:
+      - email
+      - role
+      title: InvitationRequest
+    InvitationStatus:
+      type: string
+      enum:
+      - pending
+      - accepted
+      - revoked
+      title: InvitationStatus
+      description: '`expired` is deliberately absent.
+
+
+        Expiry is a fact about `expires_at` and the current time, so storing it as
+        a
+
+        status would create a second, lagging answer that only a sweeper job keeps
+
+        true -- and a stale `pending` row would then be accepted after its deadline.'
+    InvitationSummary:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        organization_id:
+          type: string
+          format: uuid
+          title: Organization Id
+        role:
+          $ref: '#/components/schemas/OrganizationRole'
+        invited_value:
+          type: string
+          title: Invited Value
+        status:
+          $ref: '#/components/schemas/InvitationStatus'
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - organization_id
+      - role
+      - invited_value
+      - status
+      - created_at
+      title: InvitationSummary
     LivenessResponse:
       properties:
         status:
@@ -2856,6 +3688,71 @@ components:
       - invalid_rows
       - preview
       title: ManifestUploadResponse
+    MemberListResponse:
+      properties:
+        members:
+          items:
+            $ref: '#/components/schemas/MemberSummary'
+          type: array
+          title: Members
+      type: object
+      required:
+      - members
+      title: MemberListResponse
+    MemberSummary:
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        role:
+          $ref: '#/components/schemas/OrganizationRole'
+        status:
+          $ref: '#/components/schemas/MembershipStatus'
+        joined_at:
+          type: string
+          format: date-time
+          title: Joined At
+        revoked_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Revoked At
+      type: object
+      required:
+      - user_id
+      - role
+      - status
+      - joined_at
+      title: MemberSummary
+    MembershipResponse:
+      properties:
+        organization_id:
+          type: string
+          format: uuid
+          title: Organization Id
+        user_id:
+          type: string
+          format: uuid
+          title: User Id
+        role:
+          $ref: '#/components/schemas/OrganizationRole'
+        status:
+          $ref: '#/components/schemas/MembershipStatus'
+      type: object
+      required:
+      - organization_id
+      - user_id
+      - role
+      - status
+      title: MembershipResponse
+    MembershipStatus:
+      type: string
+      enum:
+      - active
+      - revoked
+      title: MembershipStatus
     MessageResponse:
       properties:
         message:
@@ -2865,6 +3762,42 @@ components:
       required:
       - message
       title: MessageResponse
+    MfaCodeRequest:
+      properties:
+        code:
+          type: string
+          maxLength: 64
+          minLength: 6
+          title: Code
+      type: object
+      required:
+      - code
+      title: MfaCodeRequest
+    MfaConfirmedResponse:
+      properties:
+        recovery_codes:
+          items:
+            type: string
+          type: array
+          title: Recovery Codes
+      type: object
+      required:
+      - recovery_codes
+      title: MfaConfirmedResponse
+    MfaEnrollmentResponse:
+      properties:
+        secret:
+          type: string
+          title: Secret
+        otpauth_uri:
+          type: string
+          title: Otpauth Uri
+      type: object
+      required:
+      - secret
+      - otpauth_uri
+      title: MfaEnrollmentResponse
+      description: Shown once. The secret is never readable again after this response.
     OTPRequest:
       properties:
         phone_number:
@@ -2896,6 +3829,48 @@ components:
       - otp
       - platform
       title: OTPVerifyRequest
+    OrganizationListResponse:
+      properties:
+        organizations:
+          items:
+            $ref: '#/components/schemas/OrganizationSummary'
+          type: array
+          title: Organizations
+      type: object
+      required:
+      - organizations
+      title: OrganizationListResponse
+    OrganizationRole:
+      type: string
+      enum:
+      - owner
+      - administrator
+      - billing
+      - member
+      title: OrganizationRole
+      description: 'Ordered by authority. `rank()` is what the escalation rules compare.
+
+
+        The order is load-bearing, not cosmetic: "may not grant a role above your
+
+        own" is meaningless without it.'
+    OrganizationSummary:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        name:
+          type: string
+          title: Name
+        role:
+          $ref: '#/components/schemas/OrganizationRole'
+      type: object
+      required:
+      - id
+      - name
+      - role
+      title: OrganizationSummary
     PINPayload:
       properties:
         pin:
@@ -3132,6 +4107,22 @@ components:
       - status
       - checks
       title: ReadinessResponse
+    RecoverySessionResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        refresh_token:
+          type: string
+          title: Refresh Token
+        user:
+          $ref: '#/components/schemas/UserResponse'
+      type: object
+      required:
+      - access_token
+      - refresh_token
+      - user
+      title: RecoverySessionResponse
     RefreshRequest:
       properties:
         refresh_token:
@@ -3228,6 +4219,42 @@ components:
         user, so the shape is part of the published contract, not an incidental
 
         detail of the handler.'
+    RoleChangeRequest:
+      properties:
+        role:
+          $ref: '#/components/schemas/OrganizationRole'
+      type: object
+      required:
+      - role
+      title: RoleChangeRequest
+    StepUpRequest:
+      properties:
+        code:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 6
+          - type: 'null'
+          title: Code
+        recovery_code:
+          anyOf:
+          - type: string
+            maxLength: 64
+            minLength: 8
+          - type: 'null'
+          title: Recovery Code
+      type: object
+      title: StepUpRequest
+    StepUpResponse:
+      properties:
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      type: object
+      required:
+      - expires_at
+      title: StepUpResponse
     TokenResponse:
       properties:
         access_token:
@@ -3284,7 +4311,9 @@ components:
           format: uuid
           title: Id
         phone_number:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Phone Number
         first_name:
           type: string
@@ -3309,7 +4338,9 @@ components:
         locale:
           $ref: '#/components/schemas/Locale'
         platform:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Platform
         status:
           type: string

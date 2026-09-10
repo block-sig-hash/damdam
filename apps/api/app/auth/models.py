@@ -80,10 +80,14 @@ class AdminRole(str, Enum):
 
 class User(SQLModel, table=True):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint("auth_version >= 0", name="ck_users_auth_version_nonnegative"),
+    )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    phone_number: str = Field(
-        sa_column=Column(String(14), unique=True, nullable=False, index=True)
+    phone_number: str | None = Field(
+        default=None,
+        sa_column=Column(String(14), unique=True, nullable=True, index=True),
     )
     first_name: str = Field(default="", max_length=100)
     last_name: str = Field(default="", max_length=100)
@@ -118,16 +122,18 @@ class User(SQLModel, table=True):
             nullable=False,
         ),
     )
-    platform: Platform = Field(
+    platform: Platform | None = Field(
+        default=None,
         sa_column=Column(
             SAEnum(
                 Platform,
                 name="platform",
                 values_callable=lambda choices: [choice.value for choice in choices],
             ),
-            nullable=False,
+            nullable=True,
         )
     )
+    auth_version: int = Field(default=0, ge=0)
     status: UserStatus = Field(
         default=UserStatus.ACTIVE,
         sa_column=Column(

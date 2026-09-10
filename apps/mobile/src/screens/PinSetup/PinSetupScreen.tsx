@@ -9,6 +9,8 @@ import { PIN_LENGTH, usePinSetup } from './usePinSetup';
 
 interface PinSetupScreenProps {
   accessToken: string;
+  /** The account the PIN is being set for (US-29). */
+  userId: string;
   onPinSet: () => void;
 }
 
@@ -19,11 +21,13 @@ interface PinSetupScreenProps {
  */
 export function PinSetupScreen({
   accessToken,
+  userId,
   onPinSet,
 }: PinSetupScreenProps): React.JSX.Element {
   const {t} = useTranslation(['auth', 'common']);
   const { stage, value, setValue, errorMessage, submit } = usePinSetup({
     accessToken,
+    userId,
     onPinSet,
   });
 

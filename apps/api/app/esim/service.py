@@ -247,6 +247,11 @@ class EsimProfileService:
         profile: EsimProfile,
         job: EsimIssuanceJob | None,
     ) -> None:
+        # Email-first accounts may not have linked a service phone yet. The
+        # profile remains available through the authenticated API; there is no
+        # WhatsApp destination to notify and no reason to retry provisioning.
+        if user.phone_number is None:
+            return
         try:
             self.notifications.send_esim_ready(
                 user.phone_number, profile.qr_code_url, user.locale.value

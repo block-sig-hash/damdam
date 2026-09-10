@@ -1464,6 +1464,41 @@ not close any external decision — D1–D6 are all open in
 defaults recorded there (welfare removal, email-based recovery, a new assigned
 number, prepaid charging) are proposals awaiting the founder, not approvals.
 
+---
+
+## Amendment — AC-01.7 Moves Behind Verification (US-29)
+
+**Recorded 9 September 2026 by build chunk 06, on the founder decision of the
+same date (see [DECISIONS.md](implementation/DECISIONS.md)).**
+
+AC-01.7 previously read: *"If the number already has an account, direct to
+login."* As implemented, `POST /auth/otp/request` answered `account_exists` for
+a registered number and `account_not_found` for an unregistered one — which
+made the endpoint a working oracle for testing whether **any** phone number had
+a DamDam account, with no authentication required.
+
+**The user-facing intent is unchanged. Its timing is not.**
+
+`POST /auth/otp/request` now returns the same response regardless of whether the
+number is registered, and always sends a code. The "direct to login" signal is
+delivered by `is_new_user` on the response to `POST /auth/otp/verify` — after
+the caller has proved control of the number.
+
+A person signing in sees the same journey. Someone probing numbers they do not
+control learns nothing.
+
+**Abuse controls are unchanged and remain load-bearing**: the per-identifier
+resend cooldown, the hourly request cap and the provider failover logic all
+still apply. A uniform response without them would be a way to flood a
+stranger's phone. The rate-limit budget remains scoped per flow (signup versus
+PIN recovery), which reveals nothing — the scope follows the endpoint the caller
+chose, not whether an account exists — and keeps recovery available immediately
+after signup.
+
+The same rule applies to the email identity endpoints introduced by chunk 06.
+
+---
+
 ## 11. Amendment — Outbound Mobile and Browser Calling Alongside Carrier Voice
 
 Approved by the founder on 9 September 2026. The full product, rollout, financial,

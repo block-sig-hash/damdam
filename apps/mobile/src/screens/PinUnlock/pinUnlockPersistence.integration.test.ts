@@ -3,6 +3,8 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { savePinLocally } from '../../utils/pinLocalStore';
 import { usePinUnlock } from './usePinUnlock';
 
+const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
+
 /**
  * Integration coverage for two claims the unit tests only prove at the
  * mocked-layer boundary: that a lock genuinely survives an app restart
@@ -59,13 +61,13 @@ beforeEach(() => {
 describe('PIN Unlock persistence (real pinLocalStore + usePinUnlock, faked Keychain only)', () => {
   it('a 30-minute lock genuinely survives what an app restart looks like: a fresh hook instance reading the same underlying store (AC-02.4/AC-23.5)', async () => {
     // "PIN Setup" happens first, for real, writing through savePinLocally.
-    await savePinLocally('4682');
+    await savePinLocally(TEST_USER_ID, '4682');
 
     // First "app session": mount usePinUnlock and fail 5 times for real,
     // through the real recordFailedPinAttempt/verifyPinLocally chain.
     const onUnlockedFirstSession = jest.fn();
     const { result: firstSession, unmount } = await renderHook(() =>
-      usePinUnlock({ onUnlocked: onUnlockedFirstSession }),
+      usePinUnlock({ userId: TEST_USER_ID, onUnlocked: onUnlockedFirstSession }),
     );
     await waitFor(() => expect(firstSession.current.stage).not.toBe('checking'));
     expect(firstSession.current.stage).toBe('entry');
@@ -101,7 +103,7 @@ describe('PIN Unlock persistence (real pinLocalStore + usePinUnlock, faked Keych
     // pinLocalStore genuinely persisted the deadline.
     const onUnlockedSecondSession = jest.fn();
     const { result: secondSession, unmount: unmountSecond } = await renderHook(() =>
-      usePinUnlock({ onUnlocked: onUnlockedSecondSession }),
+      usePinUnlock({ userId: TEST_USER_ID, onUnlocked: onUnlockedSecondSession }),
     );
     await waitFor(() => expect(secondSession.current.stage).not.toBe('checking'));
 
@@ -133,7 +135,7 @@ describe('PIN Unlock persistence (real pinLocalStore + usePinUnlock, faked Keych
     // (or one that never finished PIN Setup) actually looks like —
     // not a mocked "return null" stand-in for that state.
     const onUnlocked = jest.fn();
-    const { result } = await renderHook(() => usePinUnlock({ onUnlocked }));
+    const { result } = await renderHook(() => usePinUnlock({ userId: TEST_USER_ID, onUnlocked }));
 
     await waitFor(() => expect(result.current.stage).not.toBe('checking'));
 
@@ -142,9 +144,9 @@ describe('PIN Unlock persistence (real pinLocalStore + usePinUnlock, faked Keych
   });
 
   it('a correct PIN unlocks for real end-to-end, no network involved', async () => {
-    await savePinLocally('9317');
+    await savePinLocally(TEST_USER_ID, '9317');
     const onUnlocked = jest.fn();
-    const { result } = await renderHook(() => usePinUnlock({ onUnlocked }));
+    const { result } = await renderHook(() => usePinUnlock({ userId: TEST_USER_ID, onUnlocked }));
     await waitFor(() => expect(result.current.stage).not.toBe('checking'));
     expect(result.current.stage).toBe('entry');
 

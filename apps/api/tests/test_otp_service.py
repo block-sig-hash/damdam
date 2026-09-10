@@ -81,11 +81,17 @@ def test_success_creates_account_and_returns_session(
     assert user.verified_cli is False
 
 
-def test_existing_account_is_directed_to_login(
+def test_existing_account_is_directed_to_login_after_verification(
     otp_service: OTPService,
     session_factory: type[Session],
 ) -> None:
-    """AC-01.7: signup request for an existing account returns account_exists."""
+    """AC-01.7, as amended by the founder decision of 2026-09-09.
+
+    The request itself must not reveal that the number is registered -- that was
+    an enumeration oracle for any phone number. The "direct to login" signal
+    survives as `is_new_user=False`, delivered only once the caller has proved
+    control of the number by verifying the code.
+    """
     with session_factory() as session:
         session.add(
             User(
@@ -97,8 +103,11 @@ def test_existing_account_is_directed_to_login(
             )
         )
         session.commit()
-        with pytest.raises(OTPError, match="account_exists"):
-            otp_service.request(session, PHONE)
+
+        otp_service.request(session, PHONE)  # no exception, no signal
+
+        result = otp_service.verify(session, PHONE, "123456", "android")
+        assert result.is_new_user is False
 
 
 def test_unconfirmed_primary_fails_over_after_configured_threshold(

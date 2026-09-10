@@ -2097,7 +2097,48 @@ snapshot is unchanged — then downgrades and asserts it again.
 The nullable → backfill → constrain sequence, and what is deliberately deferred,
 is in [implementation/CORE-MODEL-UPGRADE.md](implementation/CORE-MODEL-UPGRADE.md).
 
-## 6.45 Amendment — Calling domain extension proposal (US-45/US-46)
+---
+
+## 6.45 Amendment — Email-First Account Identity and Session Versioning (US-29)
+
+**Recorded 10 September 2026 during independent chunk 06 review.** Revision
+`0028_account_identity` introduces `account_identifiers` and `identity_tokens`
+and makes `users.phone_number` and `users.platform` nullable. This is required
+for the adopted email-first account path: an account may exist before it has a
+phone number, SIM, or mobile platform.
+
+`account_identifiers` always belongs to a user. A partial unique index permits
+only one verified owner for each normalized `(kind, value)`, while unverified
+claims do not block the real owner. A second partial unique index permits only
+one primary identifier per user. Confirming an email makes it primary, demotes
+the former primary, and synchronizes the legacy `users.email` projection.
+
+`identity_tokens` stores only a SHA-256 token hash. Its purpose is one of
+`verify_identifier`, `recover_account`, or `authenticate`; the target kind and
+normalized value are stored with the requested locale. `user_id` is nullable
+only for an authentication token issued before a new email account exists.
+The token is consumed atomically and expires at the exact `expires_at` boundary.
+
+`users.auth_version` is a nonnegative integer starting at zero. Consumer access
+and refresh JWTs carry that version. Recovery locks the user, increments the
+version, revokes persisted refresh rows, and then issues the replacement pair;
+therefore already-issued stateless access tokens stop working immediately.
+Tokens minted before this column existed are interpreted as version zero so
+existing sessions remain usable until recovery.
+
+The migration backfills every existing non-null `users.phone_number` as a
+verified primary phone identifier without changing the number or account.
+When a passwordless login proves an email already stored on exactly one legacy
+user, that address is adopted by the existing account rather than creating a
+duplicate customer. An address shared by multiple legacy rows is treated as
+ambiguous and requires support-assisted resolution.
+Upgrade and legacy-only downgrade are exercised against a populated revision
+`0027_core_domain_model` database. Once an email-only user exists, downgrade to
+the non-null revision requires an explicit account migration; silently
+inventing a phone or platform would corrupt identity data.
+---
+
+## 6.46 Amendment — Calling domain extension proposal (US-45/US-46)
 
 9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
 
@@ -2108,3 +2149,144 @@ rate version and reservation. Internet-only service must not need an eSIM/carrie
 line. Preserve quantity-one recipient order items, historical calls and financial
 rows. These are design requirements; no new table or migration is implemented
 by this amendment. Detailed shapes precede the owning migration.
+
+---
+
+## 6.47 Amendment — Organization Memberships, Invitations and Second Factors (US-29)
+
+**Recorded 10 September 2026 by build chunk 07.** Additive: no column is
+dropped, no row is deleted, and `organizations.email` / `password_hash` are left
+exactly as they are. Migration `0029_organization_memberships`.
+
+### Why the legacy shape cannot carry the reset
+
+An organization had one email and one password hash on `organizations`.
+Everyone who administered the account shared them. That single fact produces
+every one of US-29's failures at once:
+
+| Question | Answer under the shared credential |
+|---|---|
+| Who did this? | Unanswerable — every action has the same actor |
+| Can one person's access be removed? | Only by changing everyone's password |
+| Can a second factor be required of somebody? | No — there is no somebody |
+| Can two organizations share a person? | Only by that person holding two passwords |
+
+`prd.md` §10 US-29 requires memberships, roles, invitations, administrator MFA
+and immediate revocation. None of them are expressible without an individual
+principal, so this amendment adds one.
+
+### The tables
+
+| Table | What it answers |
+|---|---|
+| `organization_members` | What may this person do in this organization, right now |
+| `organization_invitations` | Who has been offered a role, and is that offer still live |
+| `user_mfa_credentials` | *Can* this person prove a second factor |
+| `mfa_recovery_codes` | Single-use fallbacks for a lost authenticator |
+| `organization_elevations` | *Have* they proved it, for this tenant, recently |
+
+#### `organization_members`
+
+One row per `(organization_id, user_id)` pair, for the life of the pair, under
+`uq_organization_members_pair`. Revocation is a `status` change with
+`revoked_at`, never a delete — a deleted row cannot explain why an order placed
+last month was authorized, and re-adding someone would otherwise race the row
+that was supposed to be gone. The unique constraint is also what makes an
+invitation replay safe: two simultaneous acceptances both see "not a member
+yet", and only one insert survives.
+
+`ck_organization_members_revoked_at` ties `status` and `revoked_at` together, so
+a revoked row without a timestamp — or an active row carrying one — cannot
+exist.
+
+#### `organization_invitations`
+
+`invited_kind` + `invited_value` (normalized by
+`app.identity.service.normalize`, the same normalisation §6.45
+applies to `account_identifiers`) is the **binding**. Acceptance requires the
+accepting account to hold a *verified* identifier equal to that pair, so a
+forwarded link, a leaked mailbox archive or a guessed id is worth nothing, and
+an unverified claim on the address is worth nothing either.
+
+`ux_organization_invitations_pending` is partial over `status = 'pending'`: at
+most one live offer per address per organization, while accepted and revoked
+rows remain as history. Reissuing after expiry atomically marks the old row
+revoked before creating its replacement. `token_hash` stores only a SHA-256
+hash. `ck_organization_invitations_revoked_at` prevents a revoked status and
+its timestamp from drifting apart.
+
+`ck_organization_invitations_bootstrap` ties `is_bootstrap` to a null token and
+a null expiry — see the migration section below for why those two nulls belong
+together and nowhere else.
+
+#### `user_mfa_credentials` and `mfa_recovery_codes`
+
+`ux_user_mfa_credentials_live` is partial over `status <> 'disabled'`: one live
+credential per account. A second active secret is a second key to the same door,
+and nobody audits keys they did not know about. Disabled rows are retained so
+"this code was spent" keeps an answer.
+
+An active credential cannot be replaced with the bearer token alone. It must be
+disabled with a current TOTP or one of its single-use recovery codes first;
+otherwise theft of the first-factor session would also replace the second
+factor.
+
+`last_used_counter` holds the highest TOTP counter already spent. A code is good
+once, not for the whole thirty seconds it remains arithmetically valid — without
+it, a code seen over a shoulder or in a screenshot is reusable for the rest of
+its window.
+
+**Open gap, deliberately not papered over:** `user_mfa_credentials.secret` holds
+the raw shared secret. `security.md` §10.4 puts application-managed secret
+material behind envelope encryption, which chunk 26 owns end to end — KMS, key
+rotation and the decrypting service role. Encrypting it here with a key stored
+beside it would look like protection and provide none, so the column is plain
+and the gap is named. It is recorded in the chunk 07 handoff as an open item
+for chunk 26.
+
+#### `organization_elevations`
+
+Scoped to `(user_id, organization_id, auth_version)`. The durable row, rather
+than a JWT claim, makes membership and credential revocation immediate; binding
+it to the account's login generation also means account recovery cannot issue a
+new session that inherits a proof completed by the old session. Someone who
+administers two tenants proves themselves for the one they are acting in; a
+single proof authorizing both is exactly the confusion this scoping prevents.
+
+### The controlled migration, and what it does not do
+
+`0029` gives each existing organization **one pending owner invitation**
+addressed to the contact already on its row. That is the entire promotion path,
+and the exclusions are the substance:
+
+- **No user account is created.** Manufacturing an account for an address
+  nobody has proved is the auto-promotion AC-29.3's assignment forbids, and it
+  cannot be undone by anyone who later turns out not to own the mailbox.
+- **Nobody becomes an owner.** The organization gains its first owner when a
+  person proves they can read that mailbox and claims the offer.
+- **No `users` row is read for enrollment or promoted.** Historical customer
+  accounts are customers. None of them is enrolled as organization staff.
+- **Organizations that already have an active owner are skipped**, so a re-run
+  cannot put a live tenant's ownership back up for grabs.
+
+Bootstrap invitations carry no token and no expiry. A migration can neither send
+mail nor know when someone will read it, so a seeded invitation with the
+ordinary seven-day deadline would be dead before anyone saw it — and an expiring
+bootstrap offer would lock every un-migrated organization out of its own
+account. `ck_organization_invitations_bootstrap` confines both nulls to exactly
+that case.
+
+Verified by `tests/test_organization_migration_postgres.py`, which stands a
+database up at `0027`/`0028`, seeds legacy organizations and customers, and runs
+`alembic` for real — then downgrades and asserts chunk 06's backfill and every
+pre-existing row survived.
+
+### The shared credential is retained, and narrowed
+
+`organizations.email` and `organizations.password_hash` still work, and still
+open the manifest and reporting flows, so the dashboard keeps working until
+chunk 22/25 migrates it. They no longer open anything privileged: every
+permission in `STEP_UP_PERMISSIONS` is refused for a shared-credential session
+(`shared_credential_forbidden`). Retiring the columns themselves is the last
+step of the migration sequence in `implementation/IMPLEMENTATION-PLAN.md` §7 and
+belongs to the chunk that retires the dashboard's login, not to this one.

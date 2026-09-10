@@ -31,15 +31,21 @@ const noop = () => undefined;
  * screen resolves to its normal digit-entry state ('entry') rather
  * than 'no-local-pin' (a fresh install has no locally-stored PIN).
  */
+const FIXTURE_USER_ID = 'fixture-0000-4000-8000-000000000001';
+
 function PinUnlockTarget(): React.JSX.Element {
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
-    savePinLocally('1234')
+    savePinLocally(FIXTURE_USER_ID, '1234')
       .catch(() => undefined)
       .finally(() => setSeeded(true));
   }, []);
   if (!seeded) return <View />;
-  return <PinUnlockScreen phoneNumber={FIXTURE_PHONE_NUMBER} onUnlocked={noop} />;
+  return <PinUnlockScreen
+      phoneNumber={FIXTURE_PHONE_NUMBER}
+      userId={FIXTURE_USER_ID}
+      onUnlocked={noop}
+    />;
 }
 
 export interface HarnessTarget {
@@ -81,7 +87,11 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
   'pin-setup': {
     label: 'PIN Setup',
     render: () => (
-      <PinSetupScreen accessToken={FIXTURE_ACCESS_TOKEN} onPinSet={noop} />
+      <PinSetupScreen
+      accessToken={FIXTURE_ACCESS_TOKEN}
+      userId={FIXTURE_USER_ID}
+      onPinSet={noop}
+    />
     ),
   },
   'activation-code-entry': {

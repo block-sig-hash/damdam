@@ -84,14 +84,14 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    phone_number: str
+    phone_number: str | None
     first_name: str
     last_name: str
     email: str | None
     verified_cli: bool
     departure_date: date | None
     locale: Locale
-    platform: str
+    platform: str | None
     status: str
 
 

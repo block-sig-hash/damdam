@@ -11,6 +11,8 @@ import { PIN_LENGTH, usePinUnlock } from './usePinUnlock';
 
 interface PinUnlockScreenProps {
   phoneNumber: string;
+  /** The account whose PIN is being checked (US-29). */
+  userId: string;
   onUnlocked: (recovered?: AuthResponse) => void;
 }
 
@@ -22,6 +24,7 @@ interface PinUnlockScreenProps {
  */
 export function PinUnlockScreen({
   phoneNumber,
+  userId,
   onUnlocked,
 }: PinUnlockScreenProps): React.JSX.Element {
   const {t} = useTranslation('auth');
@@ -36,7 +39,7 @@ export function PinUnlockScreen({
     startRecovery,
     cancelRecovery,
     handleRecovered,
-  } = usePinUnlock({ onUnlocked });
+  } = usePinUnlock({ userId, onUnlocked });
 
   useEffect(() => {
     if (value.length === PIN_LENGTH && stage === 'entry') {
