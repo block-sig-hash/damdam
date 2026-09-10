@@ -36,7 +36,7 @@ is a dry run that executes nothing.
 | 06 — Implement global identity and account recovery | **ACCEPTED after fixes** (backend, migration and shared-device boundary) | base `d2f5349` / submitted `c07054e` / corrected `1ac8959` / integration `162d711` | [Independent review](reviews/06.md) | Live email delivery and mobile email screens remain gated to provider setup and chunks 18/21 |
 | 07 — Implement memberships, tenant isolation and administrator MFA | **ACCEPTED after fixes** | base `c07054e` / submitted `01e9d93` / integrated with accepted chunk 06 at `a9137e9` | [Independent review](reviews/07.md) | MFA secret-at-rest encryption remains assigned to chunk 26; shared organization login retirement remains assigned to the dashboard migration |
 | 08 — Define the consumer and enterprise design system | **ACCEPTED after fixes** | base `99bee92` / submitted `5e341fb` / corrected design code `6b9ca37` plus the final review-head native repository guard, integrated with chunks 06–07 | [Independent review](reviews/08.md) | iOS remains nightly/manual; product screens remain assigned to chunks 18–24 |
-| 09 — Build supported-market catalog and immutable quotes | NOT_STARTED | — | — | See assignment |
+| 09 — Build supported-market catalog and immutable quotes | **READY_FOR_REVIEW** | rebased onto accepted chunk 08 / see [handoff](handoffs/09.md) | Not reviewed | D2/D3 keep every market unpublishable; nothing is seeded |
 | 10 — Build the multi-currency ledger and atomic reservations | NOT_STARTED | — | — | See assignment |
 | 11 — Build order orchestration and durable recovery | NOT_STARTED | — | — | See assignment |
 | 12 — Implement payment routing and modernize Paystack | NOT_STARTED | — | — | See assignment |
