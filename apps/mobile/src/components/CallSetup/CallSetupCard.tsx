@@ -33,11 +33,13 @@ import { color, minTouchTarget, radius, space, typography } from '../../theme/to
 
 export type CallMode = 'carrier' | 'internet';
 
-export interface CallPayer {
-  kind: 'personal' | 'work';
-  /** Required when `kind` is `work`. */
-  organization?: string;
-}
+export type CallPayer =
+  | { kind: 'personal' }
+  | {
+      kind: 'work';
+      /** Work disclosure copy must always name the organization paying. */
+      organization: string;
+    };
 
 interface CallSetupCardProps {
   mode: CallMode;
@@ -91,7 +93,7 @@ export function CallSetupCard({
   const isWork = payer.kind === 'work';
   // No rate, no call. Placing one we cannot price is how somebody discovers the
   // cost afterwards, and there is no honest way to show them a number first.
-  const callable = ratePerMinute !== null;
+  const callable = Boolean(ratePerMinute?.trim());
 
   return (
     <View style={styles.card} testID={testID}>
@@ -117,12 +119,12 @@ export function CallSetupCard({
       <Row
         label={
           isWork
-            ? t('calls.payerLabelWork', { organization: payer.organization ?? '' })
+            ? t('calls.payerLabelWork', { organization: payer.organization })
             : t('calls.payerLabelPersonal')
         }
         value={
           isWork
-            ? t('calls.payerWorkNote', { organization: payer.organization ?? '' })
+            ? t('calls.payerWorkNote', { organization: payer.organization })
             : t('calls.payerPersonalNote')
         }
         testID={`${testID}-payer`}
@@ -131,12 +133,12 @@ export function CallSetupCard({
       <Row
         label={t('calls.rateLabel')}
         value={
-          ratePerMinute
+          callable
             ? t('calls.ratePerMinute', { amount: ratePerMinute, destination })
             : t('calls.rateUnknown')
         }
         detail={
-          ratePerMinute ? t('calls.rateEstimate', { currency }) : t('calls.rateUnknownDetail')
+          callable ? t('calls.rateEstimate', { currency }) : t('calls.rateUnknownDetail')
         }
         testID={`${testID}-rate`}
       />

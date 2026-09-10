@@ -203,7 +203,7 @@ describe('StateMessage', () => {
         testID="state"
       />,
     );
-    expect(screen.getByTestId('state').props.accessibilityLabel).toBe(
+    expect(screen.getByTestId('state-summary').props.accessibilityLabel).toBe(
       'Your line is being set up. We have your payment. You do not need to wait here.',
     );
   });
@@ -224,6 +224,8 @@ describe('StateMessage', () => {
     );
     const action = screen.getByTestId('state-action');
     expect(action.props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByTestId('state').props.accessible).not.toBe(true);
+    expect(screen.getByTestId('state-summary').props.accessible).toBe(true);
   });
 
   it('distinguishes blocked from failed', async () => {
@@ -296,9 +298,11 @@ describe('PartialFailureNotice', () => {
         testID="partial"
       />,
     );
-    expect(screen.getByTestId('partial').props.accessibilityLabel).toBe(
+    expect(screen.getByTestId('partial-summary').props.accessibilityLabel).toBe(
       '2 of 40 lines could not be set up. 38 lines are ready. Retrying does not charge you again.',
     );
+    expect(screen.getByTestId('partial').props.accessible).not.toBe(true);
+    expect(screen.getByTestId('partial-retry')).toBeTruthy();
   });
 });
 

@@ -66,30 +66,33 @@ export function StateMessage({
   return (
     <View
       testID={testID}
-      // One node for the whole message, so a screen reader reads the situation
-      // as a sentence instead of three disconnected fragments.
-      accessible
-      accessibilityRole="summary"
-      accessibilityLabel={announce(title, body, footnote)}
       style={[
         styles.container,
         { backgroundColor: variantStyle.background, borderColor: variantStyle.border },
       ]}
     >
-      <Text
-        style={[styles.title, { color: variantStyle.title }]}
-        testID={testID ? `${testID}-title` : undefined}
+      <View
+        accessible
+        accessibilityRole="summary"
+        accessibilityLabel={announce(title, body, footnote)}
+        testID={testID ? `${testID}-summary` : undefined}
+        style={styles.summary}
       >
-        {title}
-      </Text>
-      <Text style={styles.body} testID={testID ? `${testID}-body` : undefined}>
-        {body}
-      </Text>
-      {footnote ? (
-        <Text style={styles.footnote} testID={testID ? `${testID}-footnote` : undefined}>
-          {footnote}
+        <Text
+          style={[styles.title, { color: variantStyle.title }]}
+          testID={testID ? `${testID}-title` : undefined}
+        >
+          {title}
         </Text>
-      ) : null}
+        <Text style={styles.body} testID={testID ? `${testID}-body` : undefined}>
+          {body}
+        </Text>
+        {footnote ? (
+          <Text style={styles.footnote} testID={testID ? `${testID}-footnote` : undefined}>
+            {footnote}
+          </Text>
+        ) : null}
+      </View>
       {actionLabel && onAction ? (
         <View style={styles.actions}>
           <PrimaryButton
@@ -118,6 +121,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.card,
   },
+  summary: { gap: space.space2 },
   title: {
     fontSize: typography.heading3.fontSize,
     lineHeight: typography.heading3.lineHeight,

@@ -1,4 +1,5 @@
 import { getTranslations } from "next-intl/server";
+import { notFound } from "next/navigation";
 
 import {
   PartialFailureNotice,
@@ -20,11 +21,24 @@ import {
  * It is also the dashboard's screenshot surface. Narrow the viewport, raise the
  * text size or switch language and this page is where that shows up first.
  */
-export default async function GalleryPage() {
+export default async function GalleryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ textScale?: string }>;
+}) {
+  if (process.env.DESIGN_GALLERY_ENABLED !== "true") {
+    notFound();
+  }
+
   const t = await getTranslations("states");
+  const textScale = (await searchParams).textScale === "200";
 
   return (
-    <main className="dashboard-page gallery-page">
+    <main
+      className="dashboard-page gallery-page"
+      data-text-scale={textScale ? "200" : "100"}
+      style={textScale ? { zoom: 2 } : undefined}
+    >
       <header>
         <p className="eyebrow">{t("gallery.title")}</p>
         <h1>{t("gallery.title")}</h1>

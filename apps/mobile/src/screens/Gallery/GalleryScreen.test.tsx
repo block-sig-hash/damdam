@@ -19,7 +19,7 @@ import statesEn from '../../i18n/locales/en/states.json';
 import statesFr from '../../i18n/locales/fr/states.json';
 
 describe('GalleryScreen', () => {
-  afterEach(async () => {
+  beforeEach(async () => {
     await setAppLocale('en');
   });
 

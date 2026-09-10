@@ -18,11 +18,11 @@ import { setAppLocale } from '../../i18n';
 import statesEn from '../../i18n/locales/en/states.json';
 import statesFr from '../../i18n/locales/fr/states.json';
 
-describe('CallSetupCard', () => {
-  afterEach(async () => {
-    await setAppLocale('en');
-  });
+beforeEach(async () => {
+  await setAppLocale('en');
+});
 
+describe('CallSetupCard', () => {
   it('says which of the two modes is about to happen', async () => {
     // They bill, route and fail differently. Someone who thinks they are making
     // one while making the other gets a surprise on a bill, or a call that will
@@ -110,6 +110,25 @@ describe('CallSetupCard', () => {
         payer={{ kind: 'personal' }}
         destination="Somewhere unpriced"
         ratePerMinute={null}
+        currency="NGN"
+        onCall={() => undefined}
+        testID="call"
+      />,
+    );
+    expect(screen.getByTestId('call-action').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByTestId('call-rate').props.accessibilityLabel).toContain(
+      'We will not place a call we cannot price',
+    );
+  });
+
+  it('treats an empty formatted rate as unpriced', async () => {
+    await render(
+      <CallSetupCard
+        mode="internet"
+        outboundIdentity="+234 801 234 5678"
+        payer={{ kind: 'personal' }}
+        destination="Unknown destination"
+        ratePerMinute="   "
         currency="NGN"
         onCall={() => undefined}
         testID="call"

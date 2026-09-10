@@ -51,20 +51,25 @@ export function PartialFailureNotice({
   return (
     <View
       testID={testID}
-      accessible
-      accessibilityRole="summary"
-      accessibilityLabel={announce(title, body, noChargeNote)}
       style={styles.container}
     >
-      <Text style={styles.title} testID={testID ? `${testID}-title` : undefined}>
-        {title}
-      </Text>
-      <Text style={styles.body} testID={testID ? `${testID}-body` : undefined}>
-        {body}
-      </Text>
-      <Text style={styles.note} testID={testID ? `${testID}-no-charge` : undefined}>
-        {noChargeNote}
-      </Text>
+      <View
+        accessible
+        accessibilityRole="summary"
+        accessibilityLabel={announce(title, body, noChargeNote)}
+        testID={testID ? `${testID}-summary` : undefined}
+        style={styles.summary}
+      >
+        <Text style={styles.title} testID={testID ? `${testID}-title` : undefined}>
+          {title}
+        </Text>
+        <Text style={styles.body} testID={testID ? `${testID}-body` : undefined}>
+          {body}
+        </Text>
+        <Text style={styles.note} testID={testID ? `${testID}-no-charge` : undefined}>
+          {noChargeNote}
+        </Text>
+      </View>
       {failed > 0 ? (
         <PrimaryButton
           label={retrying && retryingLabel ? retryingLabel : retryLabel}
@@ -88,6 +93,7 @@ const styles = StyleSheet.create({
     // is recoverable without paying again.
     backgroundColor: color.warning100,
   },
+  summary: { gap: space.space2 },
   title: {
     fontSize: typography.heading3.fontSize,
     lineHeight: typography.heading3.lineHeight,
