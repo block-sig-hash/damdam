@@ -102,6 +102,8 @@ class CatalogService:
             )
         if market.evidence_reference is None or market.verified_at is None:
             raise CatalogError("market_not_verified")
+        if not legal_entity.active:
+            raise CatalogError("seller_inactive")
         now = self.clock()
         market.legal_entity_id = legal_entity.id
         market.status = PublicationStatus.PUBLISHED
@@ -123,6 +125,11 @@ class CatalogService:
         if market is None:
             # One code for "no such market" and "not published yet". A caller
             # probing which markets are coming next learns nothing.
+            raise CatalogError(
+                "market_unavailable", f"{country}/{currency} is not on sale"
+            )
+        seller = session.get(LegalEntity, market.legal_entity_id)
+        if seller is None or not seller.active:
             raise CatalogError(
                 "market_unavailable", f"{country}/{currency} is not on sale"
             )
@@ -202,6 +209,11 @@ class CatalogService:
             raise CatalogError("device_not_esim_capable")
         if rule.requires_unlocked_device and device.is_unlocked is False:
             raise CatalogError("device_locked")
+        if rule.requires_unlocked_device and device.is_unlocked is None:
+            raise CatalogError(
+                "device_lock_not_checked",
+                "this plan needs an unlocked device; check it before quoting",
+            )
 
     def covers(self, session: Session, product: Product, country: str) -> bool:
         return (

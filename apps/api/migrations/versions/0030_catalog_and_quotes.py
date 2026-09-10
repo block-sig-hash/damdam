@@ -43,6 +43,12 @@ _ENUMS = (
 _QUOTE_TRIGGER = """
 CREATE OR REPLACE FUNCTION damdam_quotes_immutable() RETURNS trigger AS $$
 BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'quotes are immutable (quote %)', OLD.id;
+    END IF;
+    IF OLD.status <> 'issued' AND NEW.status IS DISTINCT FROM OLD.status THEN
+        RAISE EXCEPTION 'quote status % is terminal (quote %)', OLD.status, OLD.id;
+    END IF;
     IF NEW.id IS DISTINCT FROM OLD.id
         OR NEW.reference IS DISTINCT FROM OLD.reference
         OR NEW.seller_legal_entity_id IS DISTINCT FROM OLD.seller_legal_entity_id
@@ -67,7 +73,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_quotes_immutable
-    BEFORE UPDATE ON quotes
+    BEFORE UPDATE OR DELETE ON quotes
     FOR EACH ROW EXECUTE FUNCTION damdam_quotes_immutable();
 """
 
@@ -79,7 +85,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_quote_items_immutable
-    BEFORE UPDATE ON quote_items
+    BEFORE UPDATE OR DELETE ON quote_items
     FOR EACH ROW EXECUTE FUNCTION damdam_quote_items_immutable();
 """
 

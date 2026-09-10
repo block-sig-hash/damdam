@@ -304,6 +304,34 @@ class TestPublicationGating:
             service.publish_market(session, market, entity)
         assert excinfo.value.code == "market_not_verified"
 
+    def test_an_inactive_seller_cannot_publish_or_keep_selling(
+        self, session, service
+    ):
+        entity = _entity(session)
+        market = _market(session, entity, status=PublicationStatus.VERIFIED)
+        entity.active = False
+        session.add(entity)
+        session.commit()
+
+        with pytest.raises(CatalogError) as excinfo:
+            service.publish_market(session, market, entity)
+        assert excinfo.value.code == "seller_inactive"
+
+        market.status = PublicationStatus.PUBLISHED
+        market.published_at = NOW
+        session.add(market)
+        session.commit()
+        product = _product(session)
+        _price(session, product, entity)
+        _offering(session, product)
+        _eligibility(session, product)
+        session.commit()
+        with pytest.raises(CatalogError) as excinfo:
+            service.issue_quote(
+                session, "NG", "NGN", [LineRequest(product.id)], ESIM_PHONE
+            )
+        assert excinfo.value.code == "market_unavailable"
+
 
 # --- supplier capability ----------------------------------------------------
 
@@ -421,6 +449,18 @@ class TestDeviceEligibility:
                 session, "NG", "NGN", [LineRequest(product.id)], DeviceFacts()
             )
         assert excinfo.value.code == "device_not_checked"
+
+    def test_an_unchecked_unlock_state_is_refused(self, session, service):
+        _, _, product = _sellable_data_product(session, service)
+        with pytest.raises(CatalogError) as excinfo:
+            service.issue_quote(
+                session,
+                "NG",
+                "NGN",
+                [LineRequest(product.id)],
+                DeviceFacts(supports_esim=True, is_unlocked=None),
+            )
+        assert excinfo.value.code == "device_lock_not_checked"
 
     def test_an_internet_only_offer_needs_no_esim_check_at_all(self, session, service):
         """VOICE-EXPANSION.md: internet calling is sold without an eSIM."""
@@ -591,6 +631,44 @@ class TestQuotes:
         session.commit()
         session.refresh(quote)
         assert quote.status is QuoteStatus.REDEEMED
+
+    def test_a_redeemed_quote_cannot_be_reopened_in_the_database(
+        self, session, service
+    ):
+        _, _, product = _sellable_data_product(session, service)
+        quote, _ = service.issue_quote(
+            session, "NG", "NGN", [LineRequest(product.id)], ESIM_PHONE
+        )
+        service.redeem(session, quote.id)
+        session.commit()
+
+        with pytest.raises(Exception) as excinfo:
+            session.exec(
+                text(
+                    "UPDATE quotes SET status = 'issued', redeemed_at = NULL "
+                    "WHERE id = CAST(:id AS uuid)"
+                ).bindparams(id=str(quote.id))
+            )
+            session.commit()
+        assert "terminal" in str(excinfo.value).lower()
+        session.rollback()
+
+    def test_quote_items_cannot_be_deleted(self, session, service):
+        _, _, product = _sellable_data_product(session, service)
+        quote, items = service.issue_quote(
+            session, "NG", "NGN", [LineRequest(product.id)], ESIM_PHONE
+        )
+        session.commit()
+
+        with pytest.raises(Exception) as excinfo:
+            session.exec(
+                text("DELETE FROM quote_items WHERE id = CAST(:id AS uuid)").bindparams(
+                    id=str(items[0].id)
+                )
+            )
+            session.commit()
+        assert "immutable" in str(excinfo.value).lower()
+        session.rollback()
 
     def test_a_quote_item_cannot_carry_a_different_currency(self, session, service):
         _, _, product = _sellable_data_product(session, service)

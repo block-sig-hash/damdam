@@ -270,6 +270,10 @@ _QUOTE_IMMUTABLE_TRIGGER = DDL(  # type: ignore[no-untyped-call]
     """
     CREATE OR REPLACE FUNCTION damdam_quotes_immutable() RETURNS trigger AS $$
     BEGIN
+        IF OLD.status <> 'issued' AND NEW.status IS DISTINCT FROM OLD.status THEN
+            RAISE EXCEPTION
+                'quote status %% is terminal (quote %%)', OLD.status, OLD.id;
+        END IF;
         IF NEW.id IS DISTINCT FROM OLD.id
             OR NEW.reference IS DISTINCT FROM OLD.reference
             OR NEW.seller_legal_entity_id IS DISTINCT FROM OLD.seller_legal_entity_id
@@ -295,7 +299,7 @@ _QUOTE_IMMUTABLE_TRIGGER = DDL(  # type: ignore[no-untyped-call]
     $$ LANGUAGE plpgsql;
 
     CREATE TRIGGER trg_quotes_immutable
-        BEFORE UPDATE ON quotes
+        BEFORE UPDATE OR DELETE ON quotes
         FOR EACH ROW EXECUTE FUNCTION damdam_quotes_immutable();
     """
 )
@@ -310,7 +314,7 @@ _QUOTE_ITEM_IMMUTABLE_TRIGGER = DDL(  # type: ignore[no-untyped-call]
     $$ LANGUAGE plpgsql;
 
     CREATE TRIGGER trg_quote_items_immutable
-        BEFORE UPDATE ON quote_items
+        BEFORE UPDATE OR DELETE ON quote_items
         FOR EACH ROW EXECUTE FUNCTION damdam_quote_items_immutable();
     """
 )
