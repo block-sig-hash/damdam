@@ -168,6 +168,56 @@ class RecordingSupplier:
 
 
 class TestLostResponse:
+    def test_an_accepted_result_requires_a_supplier_reference(
+        self, session, service
+    ):
+        item = _item(session)
+        attempt = service.begin_attempt(session, item, "telnyx")
+        with pytest.raises(FulfilmentError) as excinfo:
+            service.record_result(session, attempt, SupplierResult(accepted=True))
+        assert excinfo.value.code == "accepted_result_missing_reference"
+
+    def test_a_terminal_acceptance_cannot_be_downgraded_by_a_late_result(
+        self, session, service
+    ):
+        item = _item(session)
+        attempt = service.begin_attempt(session, item, "telnyx")
+        service.record_result(
+            session, attempt, SupplierResult(True, provider_reference="profile-1")
+        )
+        session.commit()
+
+        with pytest.raises(FulfilmentError) as excinfo:
+            service.record_result(
+                session,
+                attempt,
+                SupplierResult(False, rejection_reason="late rejection"),
+            )
+        assert excinfo.value.code == "attempt_already_resolved"
+        session.refresh(item)
+        assert item.provisioning_state is ProvisioningState.PROVISIONED
+
+    def test_the_database_refuses_to_rewrite_a_terminal_attempt(
+        self, session, service
+    ):
+        item = _item(session)
+        attempt = service.begin_attempt(session, item, "telnyx")
+        service.record_result(
+            session, attempt, SupplierResult(True, provider_reference="profile-1")
+        )
+        session.commit()
+
+        with pytest.raises(Exception) as excinfo:
+            session.exec(
+                text(
+                    "UPDATE supplier_attempts SET outcome = 'rejected' "
+                    "WHERE id = CAST(:id AS uuid)"
+                ).bindparams(id=str(attempt.id))
+            )
+            session.commit()
+        assert "terminal supplier attempt is immutable" in str(excinfo.value)
+        session.rollback()
+
     def test_a_lost_response_is_unknown_not_failed(self, session, service):
         """The distinction the whole chunk turns on.
 
@@ -381,6 +431,15 @@ class TestOutbox:
             session.commit()
         session.rollback()
 
+    def test_a_dedupe_key_cannot_name_different_work(self, session, service):
+        service.enqueue(session, "provision", "work:meaningful", {"item": "one"})
+        session.commit()
+        with pytest.raises(FulfilmentError) as excinfo:
+            service.enqueue(
+                session, "provision", "work:meaningful", {"item": "two"}
+            )
+        assert excinfo.value.code == "idempotency_conflict"
+
     def test_a_claimed_message_is_not_claimed_twice(self, session, service):
         service.enqueue(session, "provision", "work:1", {})
         session.commit()
@@ -413,6 +472,38 @@ class TestOutbox:
         assert recovered.id == claimed.id
         assert recovered.leased_by == "worker-b"
         assert recovered.attempts == 2
+
+    def test_an_expired_worker_cannot_complete_a_reassigned_lease(
+        self, engine, service, clock
+    ):
+        with Session(engine) as setup:
+            setup.exec(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+            service.enqueue(setup, "provision", "work:stale", {})
+            setup.commit()
+
+        with Session(engine) as first_worker:
+            stale = service.claim(first_worker, "worker-a")
+            assert stale is not None
+            stale_id = stale.id
+            first_worker.commit()
+            first_worker.expunge(stale)
+
+        clock.advance(minutes=6)
+        with Session(engine) as second_worker:
+            recovered = service.claim(second_worker, "worker-b")
+            second_worker.commit()
+            assert recovered is not None
+
+        with Session(engine) as late_worker:
+            with pytest.raises(FulfilmentError) as excinfo:
+                service.complete(late_worker, stale)
+            assert excinfo.value.code == "stale_lease"
+
+        with Session(engine) as check:
+            current = check.get(OutboxMessage, stale_id)
+            assert current is not None
+            assert current.status is OutboxStatus.IN_PROGRESS
+            assert current.leased_by == "worker-b"
 
     def test_a_live_lease_is_respected(self, session, service, clock):
         service.enqueue(session, "provision", "work:1", {})
@@ -517,6 +608,21 @@ class TestInbox:
         assert service.accept_once(session, "telnyx", "evt-1", "x") is True
         assert service.accept_once(session, "paystack", "evt-1", "y") is True
         session.commit()
+
+    def test_a_duplicate_does_not_rollback_the_callers_transaction(
+        self, session, service
+    ):
+        item = _item(session)
+        assert service.accept_once(session, "telnyx", "evt-existing", "x")
+        session.commit()
+
+        item.provisioning_state = ProvisioningState.REQUESTED
+        session.add(item)
+        assert not service.accept_once(session, "telnyx", "evt-existing", "x")
+        session.commit()
+
+        session.refresh(item)
+        assert item.provisioning_state is ProvisioningState.REQUESTED
 
     def test_concurrent_deliveries_are_handled_once(self, engine, service):
         with Session(engine) as setup:

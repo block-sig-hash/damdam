@@ -42,6 +42,24 @@ _ENUMS = (
     ),
 )
 
+_ATTEMPT_HISTORY_TRIGGER = """
+CREATE OR REPLACE FUNCTION damdam_supplier_attempt_history() RETURNS trigger AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'supplier attempt history is immutable';
+    END IF;
+    IF OLD.outcome IN ('accepted', 'rejected') AND NEW IS DISTINCT FROM OLD THEN
+        RAISE EXCEPTION 'terminal supplier attempt is immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_supplier_attempt_history
+    BEFORE UPDATE OR DELETE ON supplier_attempts
+    FOR EACH ROW EXECUTE FUNCTION damdam_supplier_attempt_history();
+"""
+
 
 def upgrade() -> None:
     bind = op.get_bind()
@@ -66,6 +84,7 @@ def upgrade() -> None:
         sa.Column("available_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("leased_until", sa.DateTime(timezone=True), nullable=True),
         sa.Column("leased_by", sa.String(100), nullable=True),
+        sa.Column("lease_token", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("last_error", sa.String(1000), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
@@ -75,9 +94,9 @@ def upgrade() -> None:
         # recovery logic can reason about.
         sa.CheckConstraint(
             "(status = 'in_progress' AND leased_until IS NOT NULL "
-            "AND leased_by IS NOT NULL) "
+            "AND leased_by IS NOT NULL AND lease_token IS NOT NULL) "
             "OR (status <> 'in_progress' AND leased_until IS NULL "
-            "AND leased_by IS NULL)",
+            "AND leased_by IS NULL AND lease_token IS NULL)",
             name="ck_outbox_messages_lease",
         ),
     )
@@ -157,10 +176,18 @@ def upgrade() -> None:
     op.create_index(
         "ix_supplier_attempts_outcome", "supplier_attempts", ["outcome", "created_at"]
     )
+    op.execute(sa.text(_ATTEMPT_HISTORY_TRIGGER))
 
 
 def downgrade() -> None:
     bind = op.get_bind()
+    op.execute(
+        sa.text(
+            "DROP TRIGGER IF EXISTS trg_supplier_attempt_history "
+            "ON supplier_attempts"
+        )
+    )
+    op.execute(sa.text("DROP FUNCTION IF EXISTS damdam_supplier_attempt_history()"))
     for table in ("supplier_attempts", "inbox_messages", "outbox_messages"):
         op.drop_table(table)
     for name, _ in _ENUMS:

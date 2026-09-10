@@ -32,6 +32,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    DDL,
     JSON,
     CheckConstraint,
     Column,
@@ -41,10 +42,12 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    event,
     text,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.schema import Table
 from sqlmodel import Field, SQLModel
 
 from app.auth.models import utc_now
@@ -97,9 +100,9 @@ class OutboxMessage(SQLModel, table=True):
         CheckConstraint("attempts >= 0", name="ck_outbox_messages_attempts"),
         CheckConstraint(
             "(status = 'in_progress' AND leased_until IS NOT NULL "
-            "AND leased_by IS NOT NULL) "
+            "AND leased_by IS NOT NULL AND lease_token IS NOT NULL) "
             "OR (status <> 'in_progress' AND leased_until IS NULL "
-            "AND leased_by IS NULL)",
+            "AND leased_by IS NULL AND lease_token IS NULL)",
             name="ck_outbox_messages_lease",
         ),
         Index(
@@ -139,6 +142,9 @@ class OutboxMessage(SQLModel, table=True):
     leased_by: str | None = Field(
         default=None, sa_column=Column(String(100), nullable=True)
     )
+    # Distinguishes successive leases held by the same named worker. The name
+    # alone cannot stop a timed-out handler from completing a later lease.
+    lease_token: UUID | None = Field(default=None, sa_column=Column(nullable=True))
     last_error: str | None = Field(
         default=None, sa_column=Column(String(1000), nullable=True)
     )
@@ -277,3 +283,31 @@ class SupplierAttempt(SQLModel, table=True):
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+
+
+_ATTEMPT_HISTORY_TRIGGER = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE OR REPLACE FUNCTION damdam_supplier_attempt_history() RETURNS trigger AS $$
+    BEGIN
+        IF TG_OP = 'DELETE' THEN
+            RAISE EXCEPTION 'supplier attempt history is immutable';
+        END IF;
+        IF OLD.outcome IN ('accepted', 'rejected') AND NEW IS DISTINCT FROM OLD THEN
+            RAISE EXCEPTION 'terminal supplier attempt is immutable';
+        END IF;
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER trg_supplier_attempt_history
+        BEFORE UPDATE OR DELETE ON supplier_attempts
+        FOR EACH ROW EXECUTE FUNCTION damdam_supplier_attempt_history();
+    """
+)
+
+_ATTEMPT_TABLE: Table = SupplierAttempt.__table__  # type: ignore[attr-defined]
+event.listen(
+    _ATTEMPT_TABLE,
+    "after_create",
+    _ATTEMPT_HISTORY_TRIGGER.execute_if(dialect="postgresql"),
+)

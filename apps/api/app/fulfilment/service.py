@@ -23,9 +23,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import update
+from sqlalchemy import and_, or_, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
@@ -96,6 +96,14 @@ class FulfilmentService:
         self.lease = lease or self.LEASE
         self.max_attempts = max_attempts or self.MAX_ATTEMPTS
 
+    @staticmethod
+    def _lock_key(session: Session, key: str) -> None:
+        if session.get_bind().dialect.name == "postgresql":
+            session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+                .bindparams(key=key)
+            )
+
     # --- outbox -----------------------------------------------------------
 
     def enqueue(
@@ -112,10 +120,16 @@ class FulfilmentService:
         describes commit together. A helper that committed here would break the
         one property the pattern exists for.
         """
+        self._lock_key(session, f"outbox:{dedupe_key}")
         existing = session.exec(
             select(OutboxMessage).where(OutboxMessage.dedupe_key == dedupe_key)
         ).first()
         if existing is not None:
+            if existing.topic != topic or existing.payload != payload:
+                raise FulfilmentError(
+                    "idempotency_conflict",
+                    f"outbox key {dedupe_key} already names different work",
+                )
             return existing
         message = OutboxMessage(
             topic=topic,
@@ -143,42 +157,80 @@ class FulfilmentService:
         message forever and the order silently never completes.
         """
         now = self.clock()
+        if not worker.strip():
+            raise FulfilmentError("invalid_worker")
         statement = (
             select(OutboxMessage)
             .where(
-                col(OutboxMessage.status).in_(
-                    [OutboxStatus.PENDING, OutboxStatus.IN_PROGRESS]
+                or_(
+                    col(OutboxMessage.status) == OutboxStatus.PENDING,
+                    and_(
+                        col(OutboxMessage.status) == OutboxStatus.IN_PROGRESS,
+                        col(OutboxMessage.leased_until) <= now,
+                    ),
                 ),
                 col(OutboxMessage.available_at) <= now,
             )
             .order_by(col(OutboxMessage.available_at))
             .with_for_update(skip_locked=True)
+            .limit(1)
         )
         if topic is not None:
             statement = statement.where(OutboxMessage.topic == topic)
 
-        for candidate in session.exec(statement).all():
-            if candidate.status is OutboxStatus.IN_PROGRESS:
-                leased_until = candidate.leased_until
-                if leased_until is not None and _aware(leased_until) > now:
-                    continue  # somebody else still holds a live lease
-            candidate.status = OutboxStatus.IN_PROGRESS
-            candidate.leased_until = now + self.lease
-            candidate.leased_by = worker
-            candidate.attempts += 1
-            session.add(candidate)
-            session.flush()
-            return candidate
-        return None
+        candidate = session.exec(statement).first()
+        if candidate is None:
+            return None
+        candidate.status = OutboxStatus.IN_PROGRESS
+        candidate.leased_until = now + self.lease
+        candidate.leased_by = worker
+        candidate.lease_token = uuid4()
+        # Preserve the claim identity across Session commit expiration. A
+        # mapped attribute may reload the *next* worker's token, which would
+        # let a stale handler accidentally authenticate as the new lease.
+        candidate.__dict__["_claimed_message_id"] = candidate.id
+        candidate.__dict__["_claimed_lease_token"] = candidate.lease_token
+        candidate.attempts += 1
+        session.add(candidate)
+        session.flush()
+        return candidate
+
+    def _active_lease(
+        self, session: Session, message: OutboxMessage
+    ) -> OutboxMessage:
+        expected_token = message.__dict__.get("_claimed_lease_token")
+        message_id = message.__dict__.get("_claimed_message_id")
+        if expected_token is None or message_id is None:
+            raise FulfilmentError("stale_lease")
+        current = session.exec(
+            select(OutboxMessage)
+            .where(OutboxMessage.id == message_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        now = self.clock()
+        if (
+            current is None
+            or current.status is not OutboxStatus.IN_PROGRESS
+            or current.lease_token != expected_token
+            or current.leased_until is None
+            or _aware(current.leased_until) <= now
+        ):
+            raise FulfilmentError("stale_lease")
+        return current
 
     def complete(self, session: Session, message: OutboxMessage) -> OutboxMessage:
-        message.status = OutboxStatus.DONE
-        message.leased_until = None
-        message.leased_by = None
-        message.completed_at = self.clock()
-        session.add(message)
+        current = self._active_lease(session, message)
+        current.status = OutboxStatus.DONE
+        current.leased_until = None
+        current.leased_by = None
+        current.lease_token = None
+        current.completed_at = self.clock()
+        message.__dict__.pop("_claimed_message_id", None)
+        message.__dict__.pop("_claimed_lease_token", None)
+        session.add(current)
         session.flush()
-        return message
+        return current
 
     def fail(
         self, session: Session, message: OutboxMessage, error: str
@@ -189,23 +241,27 @@ class FulfilmentService:
         alert nobody can act on. Dead-lettering is the honest end state: the
         work did not happen, and somebody has to look.
         """
+        current = self._active_lease(session, message)
         now = self.clock()
-        message.last_error = error[:1000]
-        message.leased_until = None
-        message.leased_by = None
-        if message.attempts >= self.max_attempts:
-            message.status = OutboxStatus.DEAD_LETTER
-            message.completed_at = now
+        current.last_error = error[:1000]
+        current.leased_until = None
+        current.leased_by = None
+        current.lease_token = None
+        message.__dict__.pop("_claimed_message_id", None)
+        message.__dict__.pop("_claimed_lease_token", None)
+        if current.attempts >= self.max_attempts:
+            current.status = OutboxStatus.DEAD_LETTER
+            current.completed_at = now
         else:
-            message.status = OutboxStatus.PENDING
+            current.status = OutboxStatus.PENDING
             # Exponential backoff, moving the row forward rather than sleeping
             # a worker: a delayed job should cost no worker time.
-            message.available_at = now + timedelta(
-                seconds=min(300, 2**message.attempts)
+            current.available_at = now + timedelta(
+                seconds=min(300, 2**current.attempts)
             )
-        session.add(message)
+        session.add(current)
         session.flush()
-        return message
+        return current
 
     # --- inbox ------------------------------------------------------------
 
@@ -218,18 +274,18 @@ class FulfilmentService:
         prior read: two concurrent deliveries of the same webhook both see "not
         handled", and exactly one of them wins the insert.
         """
-        session.add(
-            InboxMessage(
-                source=source,
-                external_id=external_id,
-                received_at=self.clock(),
-                disposition=disposition,
-            )
-        )
         try:
-            session.flush()
+            with session.begin_nested():
+                session.add(
+                    InboxMessage(
+                        source=source,
+                        external_id=external_id,
+                        received_at=self.clock(),
+                        disposition=disposition,
+                    )
+                )
+                session.flush()
         except IntegrityError:
-            session.rollback()
             return False
         return True
 
@@ -262,9 +318,18 @@ class FulfilmentService:
         the double-purchase guard in service form; the partial unique index is
         the same guard in the database.
         """
+        current_item = session.exec(
+            select(OrderItem)
+            .where(OrderItem.id == item.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        if current_item is None:
+            raise FulfilmentError("order_item_not_found")
+
         live = session.exec(
             select(SupplierAttempt).where(
-                SupplierAttempt.order_item_id == item.id,
+                SupplierAttempt.order_item_id == current_item.id,
                 col(SupplierAttempt.outcome).in_(
                     [
                         AttemptOutcome.IN_FLIGHT,
@@ -276,28 +341,60 @@ class FulfilmentService:
             )
         ).first()
         if live is not None:
+            if live.provider != provider:
+                raise FulfilmentError("attempt_provider_conflict")
             return live
 
+        if current_item.provisioning_state is ProvisioningState.CANCELLED:
+            raise FulfilmentError("item_cancelled")
+        if current_item.provisioning_state is ProvisioningState.PROVISIONED:
+            raise FulfilmentError("already_provisioned")
+
         previous = session.exec(
-            select(SupplierAttempt).where(SupplierAttempt.order_item_id == item.id)
+            select(SupplierAttempt).where(
+                SupplierAttempt.order_item_id == current_item.id
+            )
         ).all()
         attempt_number = len(previous) + 1
         now = self.clock()
         attempt = SupplierAttempt(
-            order_item_id=item.id,
+            order_item_id=current_item.id,
             provider=provider,
-            idempotency_key=self.idempotency_key(item.id, attempt_number),
+            idempotency_key=self.idempotency_key(current_item.id, attempt_number),
             attempt_number=attempt_number,
             outcome=AttemptOutcome.IN_FLIGHT,
             requested_at=now,
             created_at=now,
         )
         session.add(attempt)
-        item.provisioning_state = ProvisioningState.REQUESTED
-        item.operation_reference = attempt.idempotency_key
-        session.add(item)
+        current_item.provisioning_state = ProvisioningState.REQUESTED
+        current_item.operation_reference = attempt.idempotency_key
+        session.add(current_item)
         session.flush()
         return attempt
+
+    def _locked_attempt(
+        self, session: Session, attempt: SupplierAttempt
+    ) -> tuple[OrderItem, SupplierAttempt]:
+        # Every state transition takes the order item first. The consistent
+        # order serializes begin/result/unknown/cancel without deadlocks.
+        item = session.exec(
+            select(OrderItem)
+            .where(OrderItem.id == attempt.order_item_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        if item is None:  # pragma: no cover - FK guarantees this
+            raise FulfilmentError("order_item_not_found")
+        current = session.exec(
+            select(SupplierAttempt)
+            .where(SupplierAttempt.id == attempt.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        if current is None:
+            raise FulfilmentError("attempt_not_found")
+        return item, current
 
     def record_result(
         self,
@@ -305,24 +402,41 @@ class FulfilmentService:
         attempt: SupplierAttempt,
         result: SupplierResult,
     ) -> SupplierAttempt:
+        if result.accepted and not (result.provider_reference or "").strip():
+            raise FulfilmentError("accepted_result_missing_reference")
         now = self.clock()
-        item = session.get(OrderItem, attempt.order_item_id)
-        if item is None:  # pragma: no cover - FK guarantees this
-            raise FulfilmentError("order_item_not_found")
+        item, current = self._locked_attempt(session, attempt)
+
+        if current.outcome is AttemptOutcome.ACCEPTED:
+            if (
+                result.accepted
+                and current.provider_reference == result.provider_reference
+            ):
+                return current
+            raise FulfilmentError("attempt_already_resolved")
+        if current.outcome is AttemptOutcome.REJECTED:
+            if (
+                not result.accepted
+                and current.review_reason == result.rejection_reason
+            ):
+                return current
+            raise FulfilmentError("attempt_already_resolved")
+        if item.provisioning_state is ProvisioningState.CANCELLED:
+            raise FulfilmentError("item_cancelled")
 
         if result.accepted:
-            attempt.outcome = AttemptOutcome.ACCEPTED
-            attempt.provider_reference = result.provider_reference
+            current.outcome = AttemptOutcome.ACCEPTED
+            current.provider_reference = result.provider_reference
             item.provisioning_state = ProvisioningState.PROVISIONED
         else:
-            attempt.outcome = AttemptOutcome.REJECTED
-            attempt.review_reason = result.rejection_reason
+            current.outcome = AttemptOutcome.REJECTED
+            current.review_reason = result.rejection_reason
             item.provisioning_state = ProvisioningState.FAILED
-        attempt.resolved_at = now
-        session.add(attempt)
+        current.resolved_at = now
+        session.add(current)
         session.add(item)
         session.flush()
-        return attempt
+        return current
 
     def record_unknown(
         self, session: Session, attempt: SupplierAttempt, reason: str
@@ -333,15 +447,19 @@ class FulfilmentService:
         look retryable, and the retry buys a second line the supplier has
         already sold us.
         """
-        attempt.outcome = AttemptOutcome.OUTCOME_UNKNOWN
-        attempt.review_reason = reason[:500]
-        item = session.get(OrderItem, attempt.order_item_id)
-        if item is not None:
-            item.provisioning_state = ProvisioningState.OUTCOME_UNKNOWN
-            session.add(item)
-        session.add(attempt)
+        item, current = self._locked_attempt(session, attempt)
+        if current.outcome not in (
+            AttemptOutcome.IN_FLIGHT,
+            AttemptOutcome.OUTCOME_UNKNOWN,
+        ):
+            raise FulfilmentError("attempt_not_markable_unknown")
+        current.outcome = AttemptOutcome.OUTCOME_UNKNOWN
+        current.review_reason = reason[:500]
+        item.provisioning_state = ProvisioningState.OUTCOME_UNKNOWN
+        session.add(item)
+        session.add(current)
         session.flush()
-        return attempt
+        return current
 
     def reconcile(
         self, session: Session, attempt: SupplierAttempt, client: SupplierClient
@@ -373,15 +491,21 @@ class FulfilmentService:
 
         answer = client.reconcile(attempt.idempotency_key)
         if answer is None:
-            attempt.outcome = AttemptOutcome.HELD_FOR_REVIEW
-            attempt.review_reason = (
+            _item, current = self._locked_attempt(session, attempt)
+            if current.outcome not in (
+                AttemptOutcome.OUTCOME_UNKNOWN,
+                AttemptOutcome.IN_FLIGHT,
+            ):
+                raise FulfilmentError("attempt_not_reconcilable")
+            current.outcome = AttemptOutcome.HELD_FOR_REVIEW
+            current.review_reason = (
                 "supplier could not confirm the outcome of "
-                f"{attempt.idempotency_key}; held for operations review"
+                f"{current.idempotency_key}; held for operations review"
             )
-            attempt.resolved_at = None
-            session.add(attempt)
+            current.resolved_at = None
+            session.add(current)
             session.flush()
-            return attempt
+            return current
         return self.record_result(session, attempt, answer)
 
     # --- cancellation -----------------------------------------------------
@@ -394,9 +518,17 @@ class FulfilmentService:
         supplier may be about to accept. It is refused, and the reconciliation
         resolves the truth first.
         """
+        current_item = session.exec(
+            select(OrderItem)
+            .where(OrderItem.id == item.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        if current_item is None:
+            raise FulfilmentError("order_item_not_found")
         live = session.exec(
             select(SupplierAttempt).where(
-                SupplierAttempt.order_item_id == item.id,
+                SupplierAttempt.order_item_id == current_item.id,
                 col(SupplierAttempt.outcome).in_(
                     [
                         AttemptOutcome.IN_FLIGHT,
@@ -411,18 +543,18 @@ class FulfilmentService:
                 "cancel_conflicts_with_attempt",
                 "a supplier request is outstanding; reconcile it first",
             )
-        if item.provisioning_state is ProvisioningState.PROVISIONED:
+        if current_item.provisioning_state is ProvisioningState.PROVISIONED:
             raise FulfilmentError("already_provisioned")
 
-        item.provisioning_state = ProvisioningState.CANCELLED
-        session.add(item)
+        current_item.provisioning_state = ProvisioningState.CANCELLED
+        session.add(current_item)
         # Any queued provisioning work for this item is dropped, so a worker
         # that claims it later does not provision something already cancelled.
         session.execute(
             update(OutboxMessage)
             .where(
                 col(OutboxMessage.dedupe_key)
-                == f"order_item:{item.id}:provision",
+                == f"order_item:{current_item.id}:provision",
                 col(OutboxMessage.status) == OutboxStatus.PENDING,
             )
             .values(
@@ -432,7 +564,7 @@ class FulfilmentService:
             )
         )
         session.flush()
-        return item
+        return current_item
 
 
 def _aware(moment: datetime) -> datetime:
