@@ -222,7 +222,7 @@ def _unsupported_currency_is_refused(harness: AdapterHarness) -> None:
             Decimal("10.000"),
             unsupported,
             PaymentMethodKind.CARD,
-            {},
+            {"customer_email": "conformance@example.test"},
         )
     except PaymentRoutingError:
         return
@@ -239,7 +239,11 @@ def _our_key_is_the_reference(harness: AdapterHarness) -> None:
     """
     harness.respond(_checkout_envelope(harness, "conf-9"))
     session = harness.adapter.create_checkout(
-        "conf-9", Decimal("10.00"), harness.currency, PaymentMethodKind.CARD, {}
+        "conf-9",
+        Decimal("10.00"),
+        harness.currency,
+        PaymentMethodKind.CARD,
+        {"customer_email": "conformance@example.test"},
     )
     _require(
         session.processor_reference == "conf-9",
