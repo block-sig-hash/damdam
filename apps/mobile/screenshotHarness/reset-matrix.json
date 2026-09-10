@@ -1,0 +1,108 @@
+{
+  "$comment": "The reset screen/locale screenshot matrix, re-cut by chunk 08 (design-system.md §15.3: 'The screenshot matrix is re-cut here'). Neither the historical 0/32 nor the 32 images observed on 2026-09-08 carries forward -- both describe the Hajj screen set. Chunk 27 enforces completeness as a release gate; this file is what it enforces against. reset-matrix.test.ts keeps every claim here honest against the matrix actually derived from the Maestro flows.",
+  "locales": [
+    "en",
+    "fr"
+  ],
+  "implemented": {
+    "$comment": "Captured today. Each name is the Maestro `takeScreenshot` basename without its locale suffix, and each must exist in the derived matrix for both locales on every platform the group declares. `platforms` is required: two eSIM activation screens exist on one platform only, and declaring them for both would make the other platform's matrix permanently and misleadingly incomplete.",
+    "designSystem": {
+      "owner": "chunk 08",
+      "screens": [
+        "gallery-status",
+        "gallery-usage",
+        "gallery-states",
+        "gallery-calls",
+        "gallery-banners"
+      ],
+      "why": "The design system's own evidence. Product screens for the reset are not built yet, and capturing half-built versions would produce a matrix to throw away the moment chunks 18-24 land. These prove what those screens would otherwise each get wrong separately: the tint rule, French expansion, no state carried by colour alone, and a stale reading that still says how stale it is.",
+      "platforms": [
+        "ios",
+        "android"
+      ]
+    },
+    "retained": {
+      "owner": "chunks 02, 04, 06",
+      "screens": [
+        "otp-verification",
+        "pin-setup",
+        "pin-unlock",
+        "activation-code-entry",
+        "activation-success",
+        "package-selection",
+        "esim-qr-code"
+      ],
+      "why": "Screens that still ship. Their coverage is retained rather than dropped: they are superseded by the reset journeys, not yet removed from the product, and deleting a flow for a screen a customer can still reach would lose real coverage to make a number look tidier.",
+      "platforms": [
+        "ios",
+        "android"
+      ]
+    },
+    "retainedAndroidOnly": {
+      "owner": "chunk 04",
+      "platforms": [
+        "android"
+      ],
+      "screens": [
+        "esim-activation-prompt-android"
+      ],
+      "why": "The single-tap activation prompt exists only on Android. Declaring it for both platforms would make the iOS matrix permanently, misleadingly incomplete."
+    },
+    "retainedIosOnly": {
+      "owner": "chunk 04",
+      "platforms": [
+        "ios"
+      ],
+      "screens": [
+        "esim-activation-guide-ios"
+      ],
+      "why": "iOS has no single-tap path, so it gets the manual guide instead. Same reason as above, the other way round."
+    }
+  },
+  "pending": {
+    "$comment": "Owed by the reset, not yet built. Listed with an owning chunk so chunk 27's release gate can fail against a named owner rather than a silence. A screen may only move to `implemented` when a flow actually captures it -- reset-matrix.test.ts fails if a pending name appears in the derived matrix, so it cannot be quietly ticked off.",
+    "consumer": {
+      "owner": "chunks 18-21",
+      "screens": [
+        "home",
+        "plans",
+        "plan-detail",
+        "checkout",
+        "my-line",
+        "my-line-installation",
+        "account",
+        "receipts"
+      ]
+    },
+    "enterprise": {
+      "owner": "chunks 22-24",
+      "screens": [
+        "people",
+        "people-import",
+        "bulk-order",
+        "bulk-order-progress",
+        "lines",
+        "billing",
+        "budgets",
+        "offboarding"
+      ]
+    },
+    "calls": {
+      "owner": "chunks V04, V05",
+      "screens": [
+        "call-setup",
+        "call-active",
+        "call-history"
+      ],
+      "why": "Chunk 08 defines these states and captures them in `gallery-calls`. A real call surface needs the microphone permission and a call client, neither of which this chunk ships."
+    },
+    "internalOperations": {
+      "owner": "chunk 25",
+      "screens": [
+        "internal-support-lookup",
+        "internal-exception-queue"
+      ],
+      "why": "Visibly separate from any organization surface. §17.6 of design-system.md gives the rule; chunk 25 builds the screens."
+    }
+  }
+}
