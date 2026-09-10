@@ -18,7 +18,7 @@ rather than a hypothetical:
 
 from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 from uuid import UUID
 
 from sqlmodel import Session, col, select
@@ -46,6 +46,31 @@ class MembershipError(Exception):
         super().__init__(code)
 
 
+class RevocationListener(Protocol):
+    """Something that must react when a person loses a membership.
+
+    The seam exists because losing organization access has to withdraw more
+    than the membership row -- outstanding work-call grants and issued
+    credentials, for one (`VOICE-EXPANSION.md`, the chunks 06-07 row). Chunk 07
+    owns the *moment*; the capabilities own what they withdraw, and V02
+    registers the calling-specific listener when there is a call grant to
+    revoke.
+
+    A listener rather than a direct call into calling code, for a reason that
+    matters here: a listener cannot reach personal service. It is handed an
+    organization and a person, so "revoked membership blocks new work calls
+    without affecting personal service" is a property of the interface rather
+    than of each implementation remembering to check.
+
+    Listeners run inside the revoking transaction. One that raises aborts the
+    revocation rather than leaving a membership removed and its grants live.
+    """
+
+    def on_membership_revoked(
+        self, session: Session, organization_id: UUID, user_id: UUID, at: datetime
+    ) -> None: ...
+
+
 def may_manage(actor: OrganizationRole, target: OrganizationRole) -> bool:
     """May the actor act on a membership currently holding `target`?
 
@@ -66,8 +91,18 @@ def may_grant(actor: OrganizationRole, new_role: OrganizationRole) -> bool:
 
 
 class MembershipService:
-    def __init__(self, clock: Callable[[], datetime] = utc_now) -> None:
+    def __init__(
+        self,
+        clock: Callable[[], datetime] = utc_now,
+        revocation_listeners: "list[RevocationListener] | None" = None,
+    ) -> None:
         self.clock = clock
+        self.revocation_listeners: list[RevocationListener] = list(
+            revocation_listeners or []
+        )
+
+    def add_revocation_listener(self, listener: RevocationListener) -> None:
+        self.revocation_listeners.append(listener)
 
     # --- reads ------------------------------------------------------------
 
@@ -328,6 +363,13 @@ class MembershipService:
         if mfa is not None:
             mfa.revoke_elevations(
                 session, target.user_id, target.organization_id, now
+            )
+        # Same transaction, same reason: anything else this membership was
+        # holding open goes with it. Scoped to (organization, person), so
+        # nothing a listener does can reach the person's own service.
+        for listener in self.revocation_listeners:
+            listener.on_membership_revoked(
+                session, target.organization_id, target.user_id, now
             )
         session.flush()
         return target

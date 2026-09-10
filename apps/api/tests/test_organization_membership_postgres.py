@@ -451,3 +451,87 @@ def test_seeded_membership_records_when_it_started(session, service):
     joined = members["owner"].joined_at
     assert joined is not None
     assert joined.replace(tzinfo=timezone.utc) - NOW < timedelta(seconds=1)
+
+
+# --- what else a revoked membership takes with it -------------------------
+
+
+class _RecordingListener:
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []
+
+    def on_membership_revoked(self, session, organization_id, user_id, at) -> None:
+        del session
+        self.calls.append((organization_id, user_id, at))
+
+
+def test_revocation_notifies_listeners_scoped_to_the_tenant_and_person(session):
+    """`VOICE-EXPANSION.md` chunks 06-07: losing a membership must withdraw the
+    work-call grants and credentials it was holding open. Chunk 07 owns the
+    moment; V02 registers what to withdraw.
+
+    The listener is handed an organization *and* a person, so it has no way to
+    reach that person's personal service -- "without affecting personal
+    service" is a property of the seam, not of each listener remembering.
+    """
+    listener = _RecordingListener()
+    service = MembershipService(clock=lambda: NOW, revocation_listeners=[listener])
+    organization, members = _seed(
+        session,
+        service,
+        {"owner": OrganizationRole.OWNER, "admin": OrganizationRole.ADMINISTRATOR},
+    )
+
+    service.revoke(
+        session, actor=members["owner"], target_user_id=members["admin"].user_id
+    )
+    session.commit()
+
+    assert listener.calls == [
+        (organization.id, members["admin"].user_id, NOW)
+    ]
+
+
+def test_a_failing_listener_aborts_the_revocation(session):
+    """Better a refused revocation than a removed membership with live grants."""
+
+    class _Failing:
+        def on_membership_revoked(self, session, organization_id, user_id, at):
+            raise RuntimeError("grant withdrawal unavailable")
+
+    service = MembershipService(clock=lambda: NOW, revocation_listeners=[_Failing()])
+    _, members = _seed(
+        session,
+        service,
+        {"owner": OrganizationRole.OWNER, "admin": OrganizationRole.ADMINISTRATOR},
+    )
+
+    with pytest.raises(RuntimeError):
+        service.revoke(
+            session, actor=members["owner"], target_user_id=members["admin"].user_id
+        )
+    session.rollback()
+    still_active = service.active_membership(
+        session, members["admin"].organization_id, members["admin"].user_id
+    )
+    assert still_active is not None
+    assert still_active.status is MembershipStatus.ACTIVE
+
+
+def test_a_role_change_does_not_fire_the_revocation_seam(session):
+    """A demotion is not an offboarding; V02 decides what a role change means."""
+    listener = _RecordingListener()
+    service = MembershipService(clock=lambda: NOW, revocation_listeners=[listener])
+    _, members = _seed(
+        session,
+        service,
+        {"owner": OrganizationRole.OWNER, "admin": OrganizationRole.ADMINISTRATOR},
+    )
+    service.change_role(
+        session,
+        actor=members["owner"],
+        target_user_id=members["admin"].user_id,
+        new_role=OrganizationRole.MEMBER,
+    )
+    session.commit()
+    assert listener.calls == []
