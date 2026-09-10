@@ -80,7 +80,11 @@ async function main() {
     html = html
       .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
       .replace(/<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi, "")
-      .replace("</head>", `<style>${styles.join("\n")}</style></head>`);
+      .replace("</head>", `<style>${styles.join("\n")}</style></head>`)
+      .replace(
+        "</body>",
+        `<script>document.documentElement.dataset.horizontalOverflow = String(document.documentElement.scrollWidth > document.documentElement.clientWidth)</script></body>`,
+      );
     const snapshot = path.join(outputDir, `${snapshotKey}.html`);
     fs.writeFileSync(snapshot, html);
     snapshots.set(snapshotKey, { file: snapshot, sourceUrl: url });
@@ -93,19 +97,34 @@ async function main() {
     if (!snapshot) throw new Error(`${capture.name} has no rendered source snapshot`);
 
     const file = path.join(outputDir, `${capture.name}.png`);
+    const browserArgs = [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-gpu",
+      "--disable-dev-shm-usage",
+      "--hide-scrollbars",
+      `--window-size=${capture.width},${capture.height}`,
+      `--lang=${capture.locale}`,
+      `--accept-lang=${capture.locale}`,
+    ];
+    const snapshotUrl = pathToFileURL(snapshot.file).href;
+    const overflowProbe = spawnSync(chrome, [...browserArgs, "--dump-dom", snapshotUrl], {
+      encoding: "utf8",
+    });
+    if (overflowProbe.status !== 0) {
+      throw new Error(
+        `Chrome overflow probe failed for ${capture.name}: ${overflowProbe.stderr || overflowProbe.stdout}`,
+      );
+    }
+    if (!overflowProbe.stdout.includes('data-horizontal-overflow="false"')) {
+      throw new Error(`${capture.name} has content wider than its ${capture.width}px viewport`);
+    }
     const result = spawnSync(
       chrome,
       [
-        "--headless=new",
-        "--no-sandbox",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--hide-scrollbars",
-        `--window-size=${capture.width},${capture.height}`,
-        `--lang=${capture.locale}`,
-        `--accept-lang=${capture.locale}`,
+        ...browserArgs,
         `--screenshot=${file}`,
-        pathToFileURL(snapshot.file).href,
+        snapshotUrl,
       ],
       { encoding: "utf8" },
     );
