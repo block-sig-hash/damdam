@@ -33,7 +33,7 @@ is a dry run that executes nothing.
 | 05 — Introduce core domain models and migration boundaries | ACCEPTED after fixes; integrated on accepted chunk 04 | base `12582f1` / submitted `87baa40` / corrected code `07dc308` / integration `4c82ed9` / final invariant `2109aef` | [Independent review](reviews/05.md) | D3 remains OPEN — `legal_entities` is deliberately unseeded |
 | 06 — Implement global identity and account recovery | NOT_STARTED | — | — | See assignment |
 | 07 — Implement memberships, tenant isolation and administrator MFA | NOT_STARTED | — | — | See assignment |
-| 08 — Define the consumer and enterprise design system | NOT_STARTED | — | — | See assignment |
+| 08 — Define the consumer and enterprise design system | **READY_FOR_REVIEW** | base `99bee92` (`origin/develop`, both dependencies accepted) / see [handoff](handoffs/08.md) | Not reviewed | **Screenshots NOT CAPTURED** — no browser or emulator in this environment; see [evidence/08](evidence/08/README.md). Product screens remain with chunks 18–24 |
 | 09 — Build supported-market catalog and immutable quotes | NOT_STARTED | — | — | See assignment |
 | 10 — Build the multi-currency ledger and atomic reservations | NOT_STARTED | — | — | See assignment |
 | 11 — Build order orchestration and durable recovery | NOT_STARTED | — | — | See assignment |
