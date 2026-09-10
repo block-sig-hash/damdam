@@ -1,6 +1,6 @@
 # Implementation status
 
-Chunks 01, 02, 04, 05, 06, 07 and chunk 03's documented/simulated scope are
+Chunks 01, 02, 04, 05, 06, 07, 08 and chunk 03's documented/simulated scope are
 **ACCEPTED after independent Codex review and fixes**.
 Chunk 01 merged in [PR #100](https://github.com/block-sig-hash/damdam/pull/100).
 Chunk 02's tested content and native evidence are recorded in
@@ -35,7 +35,7 @@ is a dry run that executes nothing.
 | 05 — Introduce core domain models and migration boundaries | ACCEPTED after fixes; integrated on accepted chunk 04 | base `12582f1` / submitted `87baa40` / corrected code `07dc308` / integration `4c82ed9` / final invariant `2109aef` | [Independent review](reviews/05.md) | D3 remains OPEN — `legal_entities` is deliberately unseeded |
 | 06 — Implement global identity and account recovery | **ACCEPTED after fixes** (backend, migration and shared-device boundary) | base `d2f5349` / submitted `c07054e` / corrected `1ac8959` / integration `162d711` | [Independent review](reviews/06.md) | Live email delivery and mobile email screens remain gated to provider setup and chunks 18/21 |
 | 07 — Implement memberships, tenant isolation and administrator MFA | **ACCEPTED after fixes** | base `c07054e` / submitted `01e9d93` / integrated with accepted chunk 06 at `a9137e9` | [Independent review](reviews/07.md) | MFA secret-at-rest encryption remains assigned to chunk 26; shared organization login retirement remains assigned to the dashboard migration |
-| 08 — Define the consumer and enterprise design system | **READY_FOR_REVIEW after fixes** | base `99bee92` / submitted `5e341fb` / integrated with accepted chunks 06–07 | Review in progress | Screenshot evidence is generated and validated by CI; product screens remain assigned to chunks 18–24 |
+| 08 — Define the consumer and enterprise design system | **ACCEPTED after fixes** | base `99bee92` / submitted `5e341fb` / accepted code `6b9ca37` integrated with chunks 06–07 | [Independent review](reviews/08.md) | iOS remains nightly/manual; product screens remain assigned to chunks 18–24 |
 | 09 — Build supported-market catalog and immutable quotes | NOT_STARTED | — | — | See assignment |
 | 10 — Build the multi-currency ledger and atomic reservations | NOT_STARTED | — | — | See assignment |
 | 11 — Build order orchestration and durable recovery | NOT_STARTED | — | — | See assignment |

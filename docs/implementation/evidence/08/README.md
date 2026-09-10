@@ -1,58 +1,48 @@
 # Chunk 08 evidence
 
-## What is here
+The submitted branch contained three production-rendered snapshots:
+`gallery-en.html`, `gallery-fr.html` and `gallery.css`. They are retained as the
+historical submission evidence. Independent review found that HTML alone did
+not satisfy the visual acceptance criterion, so CI evidence supersedes it.
 
-| File | What it is |
+## Accepted browser evidence
+
+[CI run 34491797307](https://github.com/block-sig-hash/damdam/actions/runs/34491797307)
+produced a `dashboard-gallery-screenshots` artifact with eight PNGs:
+
+| Locale | Viewports and text scale |
 |---|---|
-| `gallery-en.html` | The dashboard `/gallery` route, server-rendered, English |
-| `gallery-fr.html` | The same route with `Accept-Language: fr` |
-| `gallery.css` | The stylesheet those pages load, exactly as served |
+| English | 320, 768 and 1280 pixels at 100%; 320 pixels at 200% text |
+| French | 320, 768 and 1280 pixels at 100%; 320 pixels at 200% text |
 
-Captured **10 September 2026** from a production build:
+The artifact manifest records Google Chrome 152.0.7977.82 and the exact capture
+dimensions. CI validates PNG signatures and dimensions, scans the rendered DOM
+for horizontal overflow, and fails before upload if any element exceeds the
+viewport. Review included visual inspection of all viewport and large-text
+variants.
 
-```
-cd apps/dashboard
-npm run build
-npx next start -p 3123
-curl -s http://127.0.0.1:3123/gallery > gallery-en.html
-curl -s -H 'Accept-Language: fr' http://127.0.0.1:3123/gallery > gallery-fr.html
-```
+The production `/gallery` route returns 404 by default. CI enables it with
+`DESIGN_GALLERY_ENABLED=true` only for this evidence job and verifies both the
+disabled and enabled behavior.
 
-Open either HTML file alongside `gallery.css` to see the rendered page. The two
-differ only in language; both contain all five status-pill tones, all three
-usage severities including `unknown`, and all five state messages.
+## Accepted Android evidence
 
-`gallery.css` carries **55 token custom properties** — `--color-primary-500:
-#0b6b66` and the rest. That is the end-to-end proof that
-`design-tokens/tokens.json` reaches a browser, not merely a test.
+The same run produced `mobile-screenshots-android`: **13 successful Maestro
+flows, 0 failures and 26 PNGs** on the CI Android emulator. This covers English
+and French for the five new gallery surfaces and the retained reset journey:
+OTP, PIN setup/unlock, package selection, activation code, platform eSIM prompt,
+QR installation and activation success. The validator derives the expected
+names from the flow files and rejects missing, unexpected, empty, corrupt or
+wrong-dimension images.
 
-## What is NOT here, and why
+The reviewer inspected representative state, usage, calling and activation
+captures in both locales. The review copies are stored outside the repository
+at `/home/iadamu/artifacts/damdam-chunk08-dashboard-gallery-final-code` and
+`/home/iadamu/artifacts/damdam-chunk08-mobile-android-final`.
 
-**No screenshots.** This environment has no browser and no emulator:
+## Remaining visual gate
 
-```
-$ which chromium chromium-browser google-chrome firefox   # nothing
-$ which emulator adb                                      # nothing
-```
-
-So the chunk's acceptance criterion — *"Render representative mobile and
-dashboard views, including narrow screens, larger text and French. Return
-screenshots with device/viewport details"* — is **NOT MET**, and nothing here is
-offered as a substitute for it. Rendered HTML is not a screenshot: it cannot
-show whether French wraps or clips at 320px, and that is precisely what the
-criterion exists to check.
-
-What has been done instead is to make the capture reproducible for whoever has
-the hardware:
-
-- **Mobile.** Five gallery flows are in `apps/mobile/maestro/screens/`, and the
-  matrix derived from them names 26 images per platform. CI's
-  `screenshot-mobile-android` job runs them on a real emulator. The harness
-  *logic* is verified — `reset-matrix.test.ts` and `validateScreenshots.test.js`
-  both pass locally — but no image has been produced here.
-- **Dashboard.** `/gallery` is the surface to capture: 320px, 768px and 1280px,
-  in both locales, and again at 200% text size.
-
-Chunk 27 owns the release gate over the matrix. Its input,
-`apps/mobile/screenshotHarness/reset-matrix.json`, exists and is tested; the
-images it will gate on have not been taken.
+iOS capture runs on the workflow's nightly/manual path and was not part of this
+pull-request run. Chunk 27 still owns the signed-device release matrix and the
+visual-regression policy; these accepted images establish real baselines for
+that work without claiming physical-device proof.
