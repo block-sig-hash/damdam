@@ -1,8 +1,8 @@
 """Out-of-band delivery of identity tokens, behind a transport abstraction.
 
-The launch channel is undecided, and live sending is explicitly not authorised
-by chunk 06. So the service depends on this Protocol, never on an email client:
-choosing email later means supplying a transport, not rewriting the flow.
+Email is the adopted launch channel, while live provider delivery remains gated
+on provider configuration and secret provisioning. The service depends on this
+Protocol so that selecting that provider does not rewrite the identity flow.
 
 `RecordingDeliveryTransport` is the test transport. It is the only
 implementation this chunk ships that actually does anything, and it sends
@@ -51,7 +51,7 @@ class RecordingDeliveryTransport:
 class NullDeliveryTransport:
     """Discards messages.
 
-    The default wiring until a channel is adopted and its provider configured.
+    The default wiring until the adopted email provider is configured.
     Deliberately not an error: the identity flows must be exercisable in staging
     without live delivery, and a silent drop is safer than a half-configured
     provider that emails real people from a test environment.

@@ -2099,7 +2099,60 @@ is in [implementation/CORE-MODEL-UPGRADE.md](implementation/CORE-MODEL-UPGRADE.m
 
 ---
 
-## 6.45 Amendment — Organization Memberships, Invitations and Second Factors (US-29)
+## 6.45 Amendment — Email-First Account Identity and Session Versioning (US-29)
+
+**Recorded 10 September 2026 during independent chunk 06 review.** Revision
+`0028_account_identity` introduces `account_identifiers` and `identity_tokens`
+and makes `users.phone_number` and `users.platform` nullable. This is required
+for the adopted email-first account path: an account may exist before it has a
+phone number, SIM, or mobile platform.
+
+`account_identifiers` always belongs to a user. A partial unique index permits
+only one verified owner for each normalized `(kind, value)`, while unverified
+claims do not block the real owner. A second partial unique index permits only
+one primary identifier per user. Confirming an email makes it primary, demotes
+the former primary, and synchronizes the legacy `users.email` projection.
+
+`identity_tokens` stores only a SHA-256 token hash. Its purpose is one of
+`verify_identifier`, `recover_account`, or `authenticate`; the target kind and
+normalized value are stored with the requested locale. `user_id` is nullable
+only for an authentication token issued before a new email account exists.
+The token is consumed atomically and expires at the exact `expires_at` boundary.
+
+`users.auth_version` is a nonnegative integer starting at zero. Consumer access
+and refresh JWTs carry that version. Recovery locks the user, increments the
+version, revokes persisted refresh rows, and then issues the replacement pair;
+therefore already-issued stateless access tokens stop working immediately.
+Tokens minted before this column existed are interpreted as version zero so
+existing sessions remain usable until recovery.
+
+The migration backfills every existing non-null `users.phone_number` as a
+verified primary phone identifier without changing the number or account.
+When a passwordless login proves an email already stored on exactly one legacy
+user, that address is adopted by the existing account rather than creating a
+duplicate customer. An address shared by multiple legacy rows is treated as
+ambiguous and requires support-assisted resolution.
+Upgrade and legacy-only downgrade are exercised against a populated revision
+`0027_core_domain_model` database. Once an email-only user exists, downgrade to
+the non-null revision requires an explicit account migration; silently
+inventing a phone or platform would corrupt identity data.
+---
+
+## 6.46 Amendment — Calling domain extension proposal (US-45/US-46)
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+V02/V03 own future additive call-attempt, provider-leg, grant, event-inbox and
+settlement changes through the shared ledger. Every attempt binds immutable
+owner/tenant/payer/seller/currency, entitlement, destination, authorized identity,
+rate version and reservation. Internet-only service must not need an eSIM/carrier
+line. Preserve quantity-one recipient order items, historical calls and financial
+rows. These are design requirements; no new table or migration is implemented
+by this amendment. Detailed shapes precede the owning migration.
+
+---
+
+## 6.47 Amendment — Organization Memberships, Invitations and Second Factors (US-29)
 
 **Recorded 10 September 2026 by build chunk 07.** Additive: no column is
 dropped, no row is deleted, and `organizations.email` / `password_hash` are left
@@ -2149,7 +2202,7 @@ exist.
 #### `organization_invitations`
 
 `invited_kind` + `invited_value` (normalized by
-`app.identity.service.normalize`, the same normalisation §6.44's successor
+`app.identity.service.normalize`, the same normalisation §6.45
 applies to `account_identifiers`) is the **binding**. Acceptance requires the
 accepting account to hold a *verified* identifier equal to that pair, so a
 forwarded link, a leaked mailbox archive or a guessed id is worth nothing, and
@@ -2157,7 +2210,10 @@ an unverified claim on the address is worth nothing either.
 
 `ux_organization_invitations_pending` is partial over `status = 'pending'`: at
 most one live offer per address per organization, while accepted and revoked
-rows remain as history. `token_hash` stores only a SHA-256 hash.
+rows remain as history. Reissuing after expiry atomically marks the old row
+revoked before creating its replacement. `token_hash` stores only a SHA-256
+hash. `ck_organization_invitations_revoked_at` prevents a revoked status and
+its timestamp from drifting apart.
 
 `ck_organization_invitations_bootstrap` ties `is_bootstrap` to a null token and
 a null expiry — see the migration section below for why those two nulls belong
@@ -2169,6 +2225,11 @@ together and nowhere else.
 credential per account. A second active secret is a second key to the same door,
 and nobody audits keys they did not know about. Disabled rows are retained so
 "this code was spent" keeps an answer.
+
+An active credential cannot be replaced with the bearer token alone. It must be
+disabled with a current TOTP or one of its single-use recovery codes first;
+otherwise theft of the first-factor session would also replace the second
+factor.
 
 `last_used_counter` holds the highest TOTP counter already spent. A code is good
 once, not for the whole thirty seconds it remains arithmetically valid — without
@@ -2185,13 +2246,12 @@ for chunk 26.
 
 #### `organization_elevations`
 
-Scoped to `(user_id, organization_id)`, not to a session or a token claim. That
-is what makes AC-29.5's "immediately" achievable: revoking a membership,
-changing a role or disabling a credential updates rows in the same transaction,
-and the next request reads the new state rather than waiting for a JWT to
-expire. Someone who administers two tenants proves themselves for the one they
-are acting in; a single proof authorizing both is exactly the confusion this
-scoping prevents.
+Scoped to `(user_id, organization_id, auth_version)`. The durable row, rather
+than a JWT claim, makes membership and credential revocation immediate; binding
+it to the account's login generation also means account recovery cannot issue a
+new session that inherits a proof completed by the old session. Someone who
+administers two tenants proves themselves for the one they are acting in; a
+single proof authorizing both is exactly the confusion this scoping prevents.
 
 ### The controlled migration, and what it does not do
 

@@ -58,6 +58,12 @@ class TokenPair:
     refresh_token: str
 
 
+@dataclass(frozen=True)
+class AccessIdentity:
+    user_id: UUID
+    auth_version: int
+
+
 class TokenService:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -77,6 +83,7 @@ class TokenService:
                 "aud": "pilgrim",
                 "type": "access",
                 "jti": str(access_jti),
+                "ver": user.auth_version,
                 "iat": now,
                 "exp": access_expiry,
             },
@@ -89,6 +96,7 @@ class TokenService:
                 "aud": "pilgrim",
                 "type": "refresh",
                 "jti": str(refresh_jti),
+                "ver": user.auth_version,
                 "iat": now,
                 "exp": refresh_expiry,
             },
@@ -112,6 +120,7 @@ class TokenService:
                 raise InvalidRefreshTokenError
             token_id = UUID(claims["jti"])
             user_id = UUID(claims["sub"])
+            token_version = self._auth_version(claims)
         except InvalidRefreshTokenError:
             raise
         except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
@@ -133,7 +142,11 @@ class TokenService:
         if expires_at <= now:
             raise InvalidRefreshTokenError
         user = session.get(User, user_id)
-        if user is None or user.status != UserStatus.ACTIVE:
+        if (
+            user is None
+            or user.status != UserStatus.ACTIVE
+            or user.auth_version != token_version
+        ):
             raise InvalidRefreshTokenError
 
         stored.revoked_at = now
@@ -141,11 +154,29 @@ class TokenService:
         session.commit()
         return pair
 
-    def decode_access(self, token: str, now: datetime) -> UUID:
+    @staticmethod
+    def _auth_version(claims: dict[str, Any]) -> int:
+        # Tokens minted before auth_version was introduced have version zero.
+        # This keeps existing sessions valid until a recovery increments the
+        # account version. Booleans are rejected because bool is an int subtype.
+        value = claims.get("ver", 0)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise InvalidRefreshTokenError
+        return int(value)
+
+    def decode_access_identity(self, token: str, now: datetime) -> AccessIdentity:
         try:
             claims = decode_with_clock(token, self.settings.jwt_secret, "pilgrim", now)
             if claims.get("type") != "access":
                 raise InvalidRefreshTokenError
-            return UUID(claims["sub"])
+            return AccessIdentity(
+                user_id=UUID(claims["sub"]),
+                auth_version=self._auth_version(claims),
+            )
+        except InvalidRefreshTokenError:
+            raise
         except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
             raise InvalidRefreshTokenError from exc
+
+    def decode_access(self, token: str, now: datetime) -> UUID:
+        return self.decode_access_identity(token, now).user_id

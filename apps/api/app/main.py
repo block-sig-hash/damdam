@@ -41,6 +41,7 @@ from app.health import LivenessResponse, ReadinessResponse, check_readiness
 from app.i18n import api_message, localize_validation_errors, request_locale
 from app.identity.delivery import (
     DeliveryTransport,
+    NullDeliveryTransport,
     RecordingDeliveryTransport,
 )
 from app.identity.service import IdentityError, IdentityService
@@ -163,7 +164,11 @@ def create_app(
     )
     api.state.hto_service = HTOService(resolved_settings, notification_service, clock)
     api.state.device_token_service = DeviceTokenService(clock)
-    api.state.identity_transport = identity_transport or RecordingDeliveryTransport()
+    api.state.identity_transport = identity_transport or (
+        RecordingDeliveryTransport()
+        if resolved_settings.app_env == "test"
+        else NullDeliveryTransport()
+    )
     api.state.identity_service = IdentityService(
         transport=api.state.identity_transport,
         clock=clock,
@@ -292,6 +297,7 @@ def create_app(
     async def mfa_error_handler(request: Request, exc: MfaError) -> JSONResponse:
         statuses = {
             "mfa_not_enrolled": 409,
+            "mfa_already_enrolled": 409,
             "mfa_code_invalid": 400,
             "mfa_code_replayed": 409,
             "mfa_locked": 423,
@@ -300,8 +306,10 @@ def create_app(
             "not_a_member": 403,
         }
         details: dict[str, Any] = {}
+        headers: dict[str, str] = {}
         if exc.retry_after is not None:
             details["retry_after"] = exc.retry_after
+            headers["Retry-After"] = str(exc.retry_after)
         return JSONResponse(
             status_code=statuses.get(exc.code, 400),
             content={
@@ -309,6 +317,7 @@ def create_app(
                 "message": api_message(request, exc.code),
                 "details": details,
             },
+            headers=headers,
         )
 
     @api.exception_handler(RetiredFeatureError)
@@ -350,6 +359,9 @@ def create_app(
             "otp_expired": 400,
             "rate_limited": 429,
             "locked": 423,
+            # Returned only after successful OTP verification, never by the
+            # unauthenticated request endpoint.
+            "account_not_found": 404,
             "otp_unavailable": 503,
             "invalid_refresh_token": 401,
             "invalid_webhook_signature": 401,

@@ -1,7 +1,5 @@
 import * as Keychain from 'react-native-keychain';
 
-import { clearEsimWarningSeen } from './esimWarningSeen';
-
 /**
  * AC-02.4/AC-23.5: mirrors apps/api/app/auth/pin.py's PINService
  * constants exactly, for the same 5-attempt/30-minute lockout — but
@@ -129,15 +127,18 @@ export async function clearPinLocally(): Promise<void> {
 }
 
 /**
- * Clears every device-persisted store that belongs to a signed-in account.
+ * Clears the device-persisted PIN that belongs to the signed-in account.
  *
  * Called from each session-ending path in `useSessionGate`. Before US-29 only
  * the session Keychain entry was cleared, which left a PIN behind for the next
- * person to sign in on the same device. Anything account-scoped added later
- * belongs here too -- `accountScopedState.test.ts` fails if a new persisted
- * store appears without account scoping.
+ * person to sign in on the same device.
  */
 export async function clearAccountScopedState(): Promise<void> {
-  await clearPinLocally();
-  await clearEsimWarningSeen();
+  try {
+    await clearPinLocally();
+  } catch {
+    // Session expiry/revocation must still complete if secure storage is
+    // temporarily unavailable. The userId check keeps any uncleared PIN from
+    // authenticating a different account on the device.
+  }
 }

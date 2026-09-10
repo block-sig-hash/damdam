@@ -296,7 +296,11 @@ def begin_mfa_enrollment(
     user: Annotated[User, Depends(get_current_user)],
 ) -> MfaEnrollmentResponse:
     with request.app.state.session_factory() as session:
-        enrollment = _mfa(request).begin_enrollment(session, user)
+        try:
+            enrollment = _mfa(request).begin_enrollment(session, user)
+        except MfaError:
+            session.commit()
+            raise
         response = MfaEnrollmentResponse(
             secret=enrollment.secret_base32,
             otpauth_uri=enrollment.otpauth_uri,
@@ -312,7 +316,14 @@ def confirm_mfa_enrollment(
     user: Annotated[User, Depends(get_current_user)],
 ) -> MfaConfirmedResponse:
     with request.app.state.session_factory() as session:
-        confirmed = _mfa(request).confirm_enrollment(session, user, payload.code)
+        try:
+            confirmed = _mfa(request).confirm_enrollment(session, user, payload.code)
+        except MfaError:
+            # Invalid guesses update the durable attempt budget. Letting the
+            # context manager roll this transaction back would make the HTTP
+            # lockout disappear even though direct service tests pass.
+            session.commit()
+            raise
         response = MfaConfirmedResponse(recovery_codes=confirmed.recovery_codes)
         session.commit()
     return response
@@ -320,12 +331,24 @@ def confirm_mfa_enrollment(
 
 @mfa_router.post("/disable", status_code=status.HTTP_204_NO_CONTENT)
 def disable_mfa(
-    payload: MfaCodeRequest,
+    payload: StepUpRequest,
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
 ) -> Response:
+    if (payload.code is None) == (payload.recovery_code is None):
+        raise MfaError("mfa_code_invalid")
     with request.app.state.session_factory() as session:
-        _mfa(request).disable(session, user, payload.code)
+        try:
+            if payload.code is not None:
+                _mfa(request).disable(session, user, payload.code)
+            else:
+                assert payload.recovery_code is not None
+                _mfa(request).disable_with_recovery_code(
+                    session, user, payload.recovery_code
+                )
+        except MfaError:
+            session.commit()
+            raise
         session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -352,19 +375,23 @@ def step_up(
             session, organization_id, user.id, Permission.ORG_READ
         )
         service = _mfa(request)
-        if payload.code is not None:
-            elevation = service.elevate(
-                session,
-                user,
-                organization_id,
-                payload.code,
-                memberships=memberships,
-            )
-        else:
-            assert payload.recovery_code is not None
-            elevation = service.elevate_with_recovery_code(
-                session, user, organization_id, payload.recovery_code
-            )
+        try:
+            if payload.code is not None:
+                elevation = service.elevate(
+                    session,
+                    user,
+                    organization_id,
+                    payload.code,
+                    memberships=memberships,
+                )
+            else:
+                assert payload.recovery_code is not None
+                elevation = service.elevate_with_recovery_code(
+                    session, user, organization_id, payload.recovery_code
+                )
+        except MfaError:
+            session.commit()
+            raise
         session.commit()
         session.refresh(elevation)
         return StepUpResponse(expires_at=elevation.expires_at)

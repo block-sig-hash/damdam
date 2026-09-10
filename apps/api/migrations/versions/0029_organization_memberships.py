@@ -185,6 +185,11 @@ def upgrade() -> None:
             "AND accepted_by_user_id IS NULL)",
             name="ck_organization_invitations_accepted",
         ),
+        sa.CheckConstraint(
+            "(status = 'revoked' AND revoked_at IS NOT NULL) "
+            "OR (status <> 'revoked' AND revoked_at IS NULL)",
+            name="ck_organization_invitations_revoked_at",
+        ),
     )
     # Partial: at most one *live* offer per address per organization, while any
     # number of accepted or revoked ones may remain as history.
@@ -291,9 +296,15 @@ def upgrade() -> None:
             nullable=False,
             index=True,
         ),
+        sa.Column(
+            "auth_version", sa.Integer(), nullable=False, server_default="0"
+        ),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "auth_version >= 0", name="ck_organization_elevations_auth_version"
+        ),
     )
     op.create_index(
         "ix_organization_elevations_live",

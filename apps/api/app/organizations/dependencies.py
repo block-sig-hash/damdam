@@ -82,15 +82,19 @@ def _member_session(
     token_service = cast(TokenService, request.app.state.otp_service.tokens)
     pin_service = cast(PINService, request.app.state.pin_service)
     try:
-        user_id = token_service.decode_access(
+        identity = token_service.decode_access_identity(
             credentials.credentials, pin_service.clock()
         )
     except (InvalidRefreshTokenError, ValueError):
         return None
     factory = cast(SessionFactory, request.app.state.session_factory)
     with factory() as session:
-        user = session.get(User, user_id)
-        if user is None or user.status != UserStatus.ACTIVE:
+        user = session.get(User, identity.user_id)
+        if (
+            user is None
+            or user.status != UserStatus.ACTIVE
+            or user.auth_version != identity.auth_version
+        ):
             return None
         session.expunge(user)
         return user

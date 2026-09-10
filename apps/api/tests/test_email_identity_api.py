@@ -14,12 +14,15 @@ from uuid import UUID
 
 import httpx
 import pytest
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlmodel import select
 
 from app.auth.dependencies import get_current_user
-from app.auth.models import RefreshToken
+from app.auth.models import RefreshToken, User
+from app.auth.pin import PINError
 from app.auth.routes import request_otp, verify_otp
 from app.auth.schemas import OTPRequest, OTPVerifyRequest
+from app.identity.delivery import NullDeliveryTransport
 from app.identity.models import AccountIdentifier, IdentifierKind
 from app.main import create_app
 
@@ -33,6 +36,7 @@ class ApiClient:
     def __init__(self, api, headers: dict[str, str]) -> None:
         self.api = api
         self.headers = headers
+        self.refresh_token: str | None = None
 
     def request(self, method: str, path: str, **kwargs) -> httpx.Response:
         async def run() -> httpx.Response:
@@ -78,10 +82,11 @@ def _authenticated(api, phone: str = "08012345678") -> tuple[ApiClient, UUID]:
         return auth.user
 
     api.dependency_overrides[get_current_user] = current_user_override
-    return (
-        ApiClient(api, headers={"Authorization": f"Bearer {auth.access_token}"}),
-        auth.user.id,
+    client = ApiClient(
+        api, headers={"Authorization": f"Bearer {auth.access_token}"}
     )
+    client.refresh_token = auth.refresh_token
+    return client, auth.user.id
 
 
 def _anonymous(api) -> ApiClient:
@@ -122,6 +127,16 @@ def test_link_then_confirm_marks_the_identifier_verified(
         ).one()
         assert identifier.user_id == user_id
         assert identifier.verified_at is not None
+        assert identifier.is_primary is True
+        phone = session.exec(
+            select(AccountIdentifier).where(
+                AccountIdentifier.user_id == user_id,
+                AccountIdentifier.kind == IdentifierKind.PHONE,
+            )
+        ).one()
+        assert phone.is_primary is False
+        account = session.get(User, user_id)
+        assert account is not None and account.email == VICTIM_EMAIL
 
 
 def test_a_confirmation_token_cannot_be_replayed(api, transport):
@@ -150,7 +165,11 @@ def test_email_is_normalised_before_storage(api, transport, session_factory):
         "/v1/auth/email/verify/confirm", json={"token": transport.last_token()}
     )
     with session_factory() as session:
-        stored = session.exec(select(AccountIdentifier)).one()
+        stored = session.exec(
+            select(AccountIdentifier).where(
+                AccountIdentifier.kind == IdentifierKind.EMAIL
+            )
+        ).one()
     assert stored.value == VICTIM_EMAIL
 
 
@@ -215,6 +234,164 @@ def test_recovery_revokes_sessions_held_by_anyone_else(
         ).all()
     # Only the freshly issued recovery session may remain live.
     assert len(stale) == 1
+
+
+def test_email_is_a_first_class_signup_and_login_identity(
+    api, transport, session_factory, clock
+):
+    anon = _anonymous(api)
+
+    requested = anon.post(
+        "/v1/auth/email/login/request",
+        json={"email": VICTIM_EMAIL, "locale": "fr"},
+    )
+    assert requested.status_code == 200
+    first = anon.post(
+        "/v1/auth/email/login/confirm", json={"token": transport.last_token()}
+    )
+
+    assert first.status_code == 200
+    assert first.json()["is_new_user"] is True
+    assert first.json()["user"]["phone_number"] is None
+    assert first.json()["user"]["platform"] is None
+    assert first.json()["user"]["email"] == VICTIM_EMAIL
+    with session_factory() as session:
+        users = session.exec(select(User)).all()
+        identifiers = session.exec(
+            select(AccountIdentifier).where(
+                AccountIdentifier.kind == IdentifierKind.EMAIL,
+                AccountIdentifier.value == VICTIM_EMAIL,
+            )
+        ).all()
+    assert len(users) == 1
+    assert len(identifiers) == 1
+    assert identifiers[0].verified_at is not None
+    assert identifiers[0].is_primary is True
+
+    clock.advance(seconds=61)
+    anon.post(
+        "/v1/auth/email/login/request",
+        json={"email": VICTIM_EMAIL, "locale": "en"},
+    )
+    second = anon.post(
+        "/v1/auth/email/login/confirm", json={"token": transport.last_token()}
+    )
+    assert second.status_code == 200
+    assert second.json()["is_new_user"] is False
+    assert second.json()["user"]["id"] == first.json()["user"]["id"]
+
+
+def test_email_login_adopts_a_single_legacy_email_account(
+    api, transport, session_factory
+):
+    """A pre-identity email must not produce a duplicate customer account."""
+    with session_factory() as session:
+        legacy = User(
+            phone_number="+2348012345678",
+            email=VICTIM_EMAIL,
+            platform="android",
+        )
+        session.add(legacy)
+        session.commit()
+        legacy_id = legacy.id
+
+    anon = _anonymous(api)
+    assert (
+        anon.post("/v1/auth/email/login/request", json={"email": VICTIM_EMAIL})
+        .status_code
+        == 200
+    )
+    confirmed = anon.post(
+        "/v1/auth/email/login/confirm", json={"token": transport.last_token()}
+    )
+
+    assert confirmed.status_code == 200
+    assert confirmed.json()["is_new_user"] is False
+    assert confirmed.json()["user"]["id"] == str(legacy_id)
+    with session_factory() as session:
+        assert len(session.exec(select(User)).all()) == 1
+        identifier = session.exec(
+            select(AccountIdentifier).where(
+                AccountIdentifier.kind == IdentifierKind.EMAIL,
+                AccountIdentifier.value == VICTIM_EMAIL,
+            )
+        ).one()
+        assert identifier.user_id == legacy_id
+        assert identifier.verified_at is not None
+        assert identifier.is_primary is True
+
+
+def test_email_login_request_is_uniform_and_delivers_for_signup_and_login(
+    api, transport, clock
+):
+    anon = _anonymous(api)
+    unknown = anon.post(
+        "/v1/auth/email/login/request", json={"email": UNKNOWN_EMAIL}
+    )
+    unknown_token = transport.last_token()
+    created = anon.post(
+        "/v1/auth/email/login/confirm", json={"token": unknown_token}
+    )
+    assert created.status_code == 200
+
+    clock.advance(seconds=61)
+    known = anon.post(
+        "/v1/auth/email/login/request", json={"email": UNKNOWN_EMAIL}
+    )
+    assert unknown.status_code == known.status_code == 200
+    assert unknown.json() == known.json()
+    assert len(transport.sent) == 2
+
+
+def test_recovery_invalidates_already_issued_access_tokens(api, transport):
+    client, _ = _authenticated(api)
+    old_access = client.headers["Authorization"].removeprefix("Bearer ")
+    client.post("/v1/auth/email/verify/request", json={"email": VICTIM_EMAIL})
+    _anonymous(api).post(
+        "/v1/auth/email/verify/confirm", json={"token": transport.last_token()}
+    )
+    _anonymous(api).post(
+        "/v1/auth/email/recovery/request", json={"email": VICTIM_EMAIL}
+    )
+    recovered = _anonymous(api).post(
+        "/v1/auth/email/recovery/confirm", json={"token": transport.last_token()}
+    )
+    assert recovered.status_code == 200
+
+    assert client.refresh_token is not None
+    stale_refresh = _anonymous(api).post(
+        "/v1/auth/token/refresh",
+        json={"refresh_token": client.refresh_token},
+    )
+    assert stale_refresh.status_code == 401
+
+    request = SimpleNamespace(app=api)
+    with pytest.raises(PINError, match="invalid_access_token"):
+        get_current_user(
+            request,
+            HTTPAuthorizationCredentials(scheme="Bearer", credentials=old_access),
+        )
+    current = get_current_user(
+        request,
+        HTTPAuthorizationCredentials(
+            scheme="Bearer", credentials=recovered.json()["access_token"]
+        ),
+    )
+    assert str(current.id) == recovered.json()["user"]["id"]
+
+
+def test_non_test_app_does_not_retain_raw_identity_tokens(
+    settings, redis_client, providers, scheduler, session_factory, clock
+):
+    staging = create_app(
+        settings=settings.model_copy(update={"app_env": "staging"}),
+        redis_client=redis_client,
+        providers=providers,
+        scheduler=scheduler,
+        session_factory=session_factory,
+        clock=clock,
+    )
+    assert isinstance(staging.state.identity_transport, NullDeliveryTransport)
 
 
 # --- enumeration resistance ------------------------------------------------

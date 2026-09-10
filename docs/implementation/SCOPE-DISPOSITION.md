@@ -33,7 +33,7 @@ at this file.
 | Arrival geofencing (`destination_geofences`) | RETIRED | none | 04 |
 | Verified Nigerian caller ID (`verified_cli`, `caller_id_verifications`) | DEFERRED | Carrier-assigned number as outbound identity | 04 (launch dependency), 15 (number lifecycle) |
 | +234 retention / porting | DEFERRED | New assigned number; **no retention promise** | D2 decision, then 15 |
-| App/WebRTC calling (`voice_credentials`, `voiceGateway.ts`, `callKit.ts`) | RETIRED as the launch mechanism | Native dialer on the carrier eSIM | 04 (dependency removal), 15 (carrier voice) |
+| App/WebRTC calling (`voice_credentials`, `voiceGateway.ts`, `callKit.ts`) | Legacy implementation retired; outbound service newly AUTHORIZED | Fresh app/browser integration alongside carrier calling; inbound remains deferred | V01–V05 under [calling amendment](VOICE-EXPANSION.md); 04 acceptance preserved |
 | HTO operator / licence / manifests | GENERALIZED | Organization, membership, people import, bulk allocation | 07, 22, 23, 24 |
 | Family Contact user type | RETIRED | none | 04, plus `prd.md` §10 user-type replacement |
 | NGN-only money and admin-managed Naira pricing | GENERALIZED | Multi-currency money with explicit ISO currency and tariff versions | 05, 09, 10 |

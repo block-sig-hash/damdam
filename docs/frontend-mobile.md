@@ -877,11 +877,9 @@ that account's id, and every read is checked against the account asking.**
   reads as absent, so it can neither authenticate nor lock out the wrong person.
 - A record with **no** owner predates this amendment and is also treated as
   absent, rather than adopted by whoever is signed in now.
-- `hasSeenEsimWarning` / `markEsimWarningSeen` are keyed per account. A
-  device-wide dismissal meant the first person to dismiss the compatibility
-  warning suppressed it for everyone who signed in later — including someone
-  whose device is genuinely incompatible.
-- `clearAccountScopedState()` clears both, and is called from **every**
+- The eSIM compatibility-warning dismissal remains device-scoped. It describes
+  the handset, not an account, and AC-10.6 requires it once per device.
+- `clearAccountScopedState()` clears the account PIN and is called from **every**
   session-ending path in `useSessionGate`.
 - A session persisted before US-29 has no `userId`, so `App.tsx` does not render
   the PIN gate for it at all; that session falls through to OTP sign-in rather
@@ -898,3 +896,16 @@ from `result.user.id`, so the optional type was simply inaccurate.
 PIN does not verify for B, B sees no stored PIN and no lockout, and ending a
 session clears the store. Any future device-persisted state belongs in
 `clearAccountScopedState()` and should be tested the same way.
+---
+
+## 8.14 Amendment — Outbound Internet Calls (US-47)
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+Add Calls via V04, supporting internet-only service, explicit rate/identity/payer,
+microphone consent at use, audio controls, DTMF and backend cost/history. Native
+carrier actions remain distinct with honest SIM-selection guidance. Handle
+account changes, lock/background/interruption and network loss per supported
+SDK/OS evidence; spending control survives client failure. Incoming push/ringing
+and third-party CLI stay deferred. The old permission removal remains correct
+for the retired build; add only required outbound permissions and native hooks.

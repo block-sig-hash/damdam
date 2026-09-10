@@ -412,6 +412,33 @@ def test_a_second_pending_invitation_to_the_same_address_is_refused(
     assert excinfo.value.code == "invitation_already_pending"
 
 
+def test_an_expired_invitation_can_be_reissued(
+    session, service, memberships, clock
+):
+    organization = _organization(session)
+    owner = _owner(session, memberships, organization)
+    session.commit()
+    first = service.invite(
+        session, actor=owner, email=INVITED, role=OrganizationRole.MEMBER
+    )
+    session.commit()
+
+    clock.advance(days=8)
+    replacement = service.invite(
+        session,
+        actor=owner,
+        email=INVITED,
+        role=OrganizationRole.ADMINISTRATOR,
+    )
+    session.commit()
+
+    session.refresh(first.invitation)
+    assert first.invitation.status is InvitationStatus.REVOKED
+    assert first.invitation.revoked_at == clock.value
+    assert replacement.invitation.id != first.invitation.id
+    assert replacement.invitation.role is OrganizationRole.ADMINISTRATOR
+
+
 def test_the_database_refuses_two_pending_invitations_for_one_address(
     session, service, memberships
 ):

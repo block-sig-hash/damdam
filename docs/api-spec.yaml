@@ -342,6 +342,58 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/email/login/request:
+    post:
+      tags:
+      - authentication
+      summary: Request Email Login
+      description: Send the same response for email signup and returning login.
+      operationId: request_email_login_v1_auth_email_login_request_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailIdentifierRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/email/login/confirm:
+    post:
+      tags:
+      - authentication
+      summary: Confirm Email Login
+      description: Prove mailbox control, then create or authenticate the account.
+      operationId: confirm_email_login_v1_auth_email_login_confirm_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/auth/email/recovery/request:
     post:
       tags:
@@ -1109,7 +1161,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MfaCodeRequest'
+              $ref: '#/components/schemas/StepUpRequest'
         required: true
       responses:
         '204':
@@ -4259,7 +4311,9 @@ components:
           format: uuid
           title: Id
         phone_number:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Phone Number
         first_name:
           type: string
@@ -4284,7 +4338,9 @@ components:
         locale:
           $ref: '#/components/schemas/Locale'
         platform:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Platform
         status:
           type: string

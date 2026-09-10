@@ -297,6 +297,101 @@ def test_the_database_refuses_two_verified_rows_for_one_identifier(session):
         session.commit()
 
 
+def test_the_database_refuses_two_primary_identifiers_for_one_user(session):
+    """Primary identity is a database invariant, including direct writes."""
+    from sqlalchemy.exc import IntegrityError
+
+    user = _user(session)
+    session.add(
+        AccountIdentifier(
+            user_id=user.id,
+            kind=IdentifierKind.PHONE,
+            value=user.phone_number,
+            verified_at=NOW,
+            is_primary=True,
+        )
+    )
+    session.commit()
+    session.add(
+        AccountIdentifier(
+            user_id=user.id,
+            kind=IdentifierKind.EMAIL,
+            value=f"primary{uuid4().hex[:6]}@example.test",
+            verified_at=NOW,
+            is_primary=True,
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_concurrent_email_signup_creates_one_account(engine, service, transport):
+    """Two valid links for one new mailbox converge on one verified owner."""
+    email = f"signup{uuid4().hex[:8]}@example.test"
+    tokens: list[str] = []
+    with Session(engine) as setup:
+        for _ in range(2):
+            service.request_authentication(setup, IdentifierKind.EMAIL, email)
+            setup.commit()
+            tokens.append(transport.last_token())
+
+    barrier = Barrier(2)
+
+    def confirm(raw: str) -> tuple[str, bool]:
+        with Session(engine) as worker:
+            barrier.wait(timeout=10)
+            user, created = service.complete_authentication(worker, raw)
+            worker.commit()
+            return str(user.id), created
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(confirm, tokens))
+
+    assert len({user_id for user_id, _ in outcomes}) == 1
+    assert sorted(created for _, created in outcomes) == [False, True]
+    with Session(engine) as check:
+        owners = check.exec(
+            select(AccountIdentifier).where(
+                AccountIdentifier.kind == IdentifierKind.EMAIL,
+                AccountIdentifier.value == email,
+                col(AccountIdentifier.verified_at).is_not(None),
+            )
+        ).all()
+        assert len(owners) == 1
+
+
+def test_concurrent_claims_return_a_controlled_conflict(
+    engine, session, service, transport
+):
+    """The verified-owner index must not leak a raw database failure."""
+    email = f"claim{uuid4().hex[:8]}@example.test"
+    tokens: list[str] = []
+    for user in (_user(session), _user(session)):
+        service.start_identifier_verification(
+            session, user, IdentifierKind.EMAIL, email
+        )
+        session.commit()
+        tokens.append(transport.last_token())
+
+    barrier = Barrier(2)
+
+    def confirm(raw: str) -> str:
+        with Session(engine) as worker:
+            barrier.wait(timeout=10)
+            try:
+                service.confirm_identifier(worker, raw)
+                worker.commit()
+                return "ok"
+            except IdentityError as exc:
+                worker.rollback()
+                return exc.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(confirm, tokens))
+
+    assert sorted(outcomes) == ["identifier_already_verified", "ok"]
+
+
 # --- recovery --------------------------------------------------------------
 
 

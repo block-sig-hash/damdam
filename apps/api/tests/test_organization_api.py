@@ -212,6 +212,26 @@ def test_an_expired_session_is_reported_as_a_session_problem(
     assert response.json()["error"] == "invalid_access_token"
 
 
+def test_an_auth_version_change_invalidates_organization_routes(
+    api, client, session_factory, clock
+):
+    """Organization guards must enforce the same recovery boundary as auth."""
+    seeded = _seed(api, session_factory, clock)
+    headers = _auth(api, seeded["acme_owner"])
+    with session_factory() as session:
+        user = session.get(User, seeded["acme_owner"])
+        assert user is not None
+        user.auth_version += 1
+        session.add(user)
+        session.commit()
+
+    response = client.get(
+        f"/v1/organizations/{seeded['acme']}/members", headers=headers
+    )
+    assert response.status_code == 401
+    assert response.json()["error"] == "invalid_access_token"
+
+
 def test_the_organization_list_shows_only_the_callers_own(
     api, client, session_factory, clock
 ):
@@ -379,6 +399,66 @@ def test_an_expired_step_up_stops_authorizing(api, client, session_factory, cloc
     )
     assert response.status_code == 403
     assert response.json()["error"] == "mfa_required"
+
+
+def test_wrong_step_up_attempts_are_committed_and_lock_the_http_flow(
+    api, client, session_factory, clock
+):
+    seeded = _seed(api, session_factory, clock)
+    headers = _auth(api, seeded["acme_owner"])
+    enrolled = client.post("/v1/auth/mfa/enroll", headers=headers)
+    assert enrolled.status_code == 200
+
+    import base64
+
+    encoded = enrolled.json()["secret"]
+    secret = base64.b32decode(encoded + "=" * (-len(encoded) % 8))
+    confirmed = client.post(
+        "/v1/auth/mfa/enroll/confirm",
+        headers=headers,
+        json={"code": generate(secret, clock.value)},
+    )
+    assert confirmed.status_code == 200
+    clock.advance(seconds=30)
+
+    for _ in range(api.state.mfa_service.ATTEMPT_LIMIT):
+        rejected = client.post(
+            f"/v1/organizations/{seeded['acme']}/step-up",
+            headers=headers,
+            json={"code": "000000"},
+        )
+        assert rejected.status_code == 400
+
+    locked = client.post(
+        f"/v1/organizations/{seeded['acme']}/step-up",
+        headers=headers,
+        json={"code": generate(secret, clock.value)},
+    )
+    assert locked.status_code == 423
+    assert locked.json()["error"] == "mfa_locked"
+
+
+def test_an_active_second_factor_cannot_be_replaced_by_a_bearer_token(
+    api, client, session_factory, clock
+):
+    seeded = _seed(api, session_factory, clock)
+    headers = _auth(api, seeded["acme_owner"])
+    enrolled = client.post("/v1/auth/mfa/enroll", headers=headers)
+    encoded = enrolled.json()["secret"]
+
+    import base64
+
+    secret = base64.b32decode(encoded + "=" * (-len(encoded) % 8))
+    confirmed = client.post(
+        "/v1/auth/mfa/enroll/confirm",
+        headers=headers,
+        json={"code": generate(secret, clock.value)},
+    )
+    assert confirmed.status_code == 200
+
+    replacement = client.post("/v1/auth/mfa/enroll", headers=headers)
+    assert replacement.status_code == 409
+    assert replacement.json()["error"] == "mfa_already_enrolled"
 
 
 def test_error_messages_are_localized(api, client, session_factory, clock):

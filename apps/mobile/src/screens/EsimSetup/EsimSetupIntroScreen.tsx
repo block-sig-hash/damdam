@@ -8,7 +8,6 @@ import { useEsimSetupIntro } from './useEsimSetupIntro';
 
 interface EsimSetupIntroScreenProps {
   accessToken: string;
-  userId: string;
   packageId: string;
   /**
    * Hands off to whatever the QR/download screen resolves to —
@@ -25,14 +24,12 @@ interface EsimSetupIntroScreenProps {
  */
 export function EsimSetupIntroScreen({
   accessToken,
-  userId,
   packageId,
   onProceed,
 }: EsimSetupIntroScreenProps): React.JSX.Element {
   const {t} = useTranslation('esim');
   const { stage, handleWarningContinue, handleWarningSupport } = useEsimSetupIntro({
     accessToken,
-    userId,
     packageId,
   });
 

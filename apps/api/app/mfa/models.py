@@ -158,6 +158,9 @@ class OrganizationElevation(SQLModel, table=True):
 
     __tablename__ = "organization_elevations"
     __table_args__ = (
+        CheckConstraint(
+            "auth_version >= 0", name="ck_organization_elevations_auth_version"
+        ),
         Index(
             "ix_organization_elevations_live",
             "user_id",
@@ -185,6 +188,12 @@ class OrganizationElevation(SQLModel, table=True):
             nullable=False,
             index=True,
         )
+    )
+    # Bind the proof to the login generation that created it. Account recovery
+    # increments users.auth_version, so a replacement session cannot inherit a
+    # step-up completed by a stolen or superseded session.
+    auth_version: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default="0")
     )
     expires_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False)

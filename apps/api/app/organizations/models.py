@@ -211,6 +211,11 @@ class OrganizationInvitation(SQLModel, table=True):
             "AND accepted_by_user_id IS NULL)",
             name="ck_organization_invitations_accepted",
         ),
+        CheckConstraint(
+            "(status = 'revoked' AND revoked_at IS NOT NULL) "
+            "OR (status <> 'revoked' AND revoked_at IS NULL)",
+            name="ck_organization_invitations_revoked_at",
+        ),
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)

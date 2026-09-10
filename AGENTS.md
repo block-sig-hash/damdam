@@ -14,14 +14,14 @@ the pilot feature freeze are superseded. See
 
 ## The product, in one paragraph
 
-DamDam is a global eSIM and carrier-voice platform for individual consumers and
-for enterprise/government organizations. Customers buy connectivity in DamDam,
-install an eSIM, and then use their phone's **normal dialer and mobile data** —
-the same carrier-enabled profile carries both. Telnyx is the preferred launch
-supplier, subject to verified availability. Family contacts, offline SOS and the
-Hajj-pilgrim framing are retired. External verified caller ID and app/browser
-VoIP are deferred. Every claim about a market, device, number type or roaming
-capability must be explicitly supported before it ships.
+DamDam serves consumers and enterprise/government organizations with eSIM data,
+carrier native-dialer voice where proven, and outbound internet calling from the
+mobile app and customer website. Internet calling can be bought without an eSIM.
+Telnyx remains preferred, subject to separate evidence for each calling mode.
+Read [the approved calling amendment](./docs/implementation/VOICE-EXPANSION.md)
+and PRD §11 before implementing. Incoming app/browser ringing, external verified
+caller ID and porting remain deferred. Family contacts, SOS and pilgrimage
+framing stay retired. Every public service claim requires supporting evidence.
 
 ## Who implements what
 
@@ -56,7 +56,7 @@ any chunk unless separately authorized.
 
 1. Read the chunk file in [`/docs/implementation/chunks/`](./docs/implementation/chunks/)
    in full — it is a complete assignment, including its acceptance criteria.
-2. Find its registered story in [`/docs/prd.md`](./docs/prd.md) §10 via
+2. Find its registered story in [`/docs/prd.md`](./docs/prd.md) §10 and §11 via
    [`/docs/implementation/STORY-MAP.md`](./docs/implementation/STORY-MAP.md),
    and read the acceptance criteria.
 3. Read the accepted dependency reviews in `docs/implementation/reviews/`. Do
@@ -144,7 +144,8 @@ what is only historically reported.
 - **API changes must keep `api-spec.md` in sync** — CI fails on drift between
   the committed spec and FastAPI's generated OpenAPI output.
 - **All third-party vendor integrations go through an internal abstraction
-  layer**, never called directly from route handlers or UI components. Each
+  layer**, never called directly from route handlers or UI components. Client SDK
+  media/signaling uses service wrappers; backend secrets and policy stay server-side. Each
   adapter advertises its capabilities (native voice, supported numbers, top-up,
   reuse, suspension, usage latency, spending enforcement); a data-only adapter
   cannot satisfy a native-voice plan. The boundary limits supplier-specific

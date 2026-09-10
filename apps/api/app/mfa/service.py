@@ -96,7 +96,12 @@ class MfaService:
         return hashlib.sha256(raw.encode()).hexdigest()
 
     def credential(
-        self, session: Session, user_id: UUID, status: MfaStatus | None = None
+        self,
+        session: Session,
+        user_id: UUID,
+        status: MfaStatus | None = None,
+        *,
+        for_update: bool = False,
     ) -> UserMfaCredential | None:
         statement = select(UserMfaCredential).where(
             UserMfaCredential.user_id == user_id,
@@ -104,6 +109,10 @@ class MfaService:
         )
         if status is not None:
             statement = statement.where(UserMfaCredential.status == status)
+        if for_update:
+            statement = statement.with_for_update().execution_options(
+                populate_existing=True
+            )
         return session.exec(statement).first()
 
     def is_active(self, session: Session, user: User) -> bool:
@@ -119,8 +128,19 @@ class MfaService:
         its recovery codes and elevations below.
         """
         now = self.clock()
-        existing = self.credential(session, user.id)
+        # Serialize first enrollment and replacement for one account. The
+        # partial unique index remains the database backstop, while this lock
+        # gives both concurrent requests a controlled result instead of a 500.
+        session.exec(
+            select(User).where(User.id == user.id).with_for_update()
+        ).one()
+        existing = self.credential(session, user.id, for_update=True)
         if existing is not None:
+            if existing.status is MfaStatus.ACTIVE:
+                # A bearer token is only the first factor. Letting it replace
+                # an active authenticator turns session theft into permanent
+                # account takeover. Disable with the existing factor first.
+                raise MfaError("mfa_already_enrolled")
             self._disable(session, existing, now)
 
         secret = secrets.token_bytes(SECRET_BYTES)
@@ -161,7 +181,9 @@ class MfaService:
     def confirm_enrollment(
         self, session: Session, user: User, code: str
     ) -> ConfirmedEnrollment:
-        credential = self.credential(session, user.id, MfaStatus.PENDING)
+        credential = self.credential(
+            session, user.id, MfaStatus.PENDING, for_update=True
+        )
         if credential is None:
             raise MfaError("mfa_not_enrolled")
         now = self.clock()
@@ -201,7 +223,9 @@ class MfaService:
         Otherwise a stolen session removes it, and "administrator MFA is
         required" holds only until somebody with the session says otherwise.
         """
-        credential = self.credential(session, user.id, MfaStatus.ACTIVE)
+        credential = self.credential(
+            session, user.id, MfaStatus.ACTIVE, for_update=True
+        )
         if credential is None:
             raise MfaError("mfa_not_enrolled")
         now = self.clock()
@@ -213,6 +237,34 @@ class MfaService:
         ):
             self._record_failure(session, credential, now)
             raise MfaError("mfa_code_invalid")
+        self._disable(session, credential, now)
+
+    def disable_with_recovery_code(
+        self, session: Session, user: User, code: str
+    ) -> None:
+        """Disable a lost authenticator with one single-use fallback code."""
+        credential = self.credential(
+            session, user.id, MfaStatus.ACTIVE, for_update=True
+        )
+        if credential is None:
+            raise MfaError("mfa_not_enrolled")
+        now = self.clock()
+        self._assert_unlocked(credential, now)
+        row = session.exec(
+            select(MfaRecoveryCode)
+            .where(
+                MfaRecoveryCode.credential_id == credential.id,
+                MfaRecoveryCode.code_hash == self._hash(code),
+                col(MfaRecoveryCode.used_at).is_(None),
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        if row is None:
+            self._record_failure(session, credential, now)
+            raise MfaError("mfa_code_invalid")
+        row.used_at = now
+        session.add(row)
         self._disable(session, credential, now)
 
     def _disable(
@@ -273,10 +325,14 @@ class MfaService:
         self, session: Session, user_id: UUID, organization_id: UUID
     ) -> OrganizationElevation | None:
         now = self.clock()
+        user = session.get(User, user_id)
+        if user is None:
+            return None
         rows = session.exec(
             select(OrganizationElevation).where(
                 OrganizationElevation.user_id == user_id,
                 OrganizationElevation.organization_id == organization_id,
+                OrganizationElevation.auth_version == user.auth_version,
                 col(OrganizationElevation.revoked_at).is_(None),
             )
         ).all()
@@ -299,6 +355,7 @@ class MfaService:
             user_id=user.id,
             organization_id=organization_id,
             credential_id=credential.id,
+            auth_version=user.auth_version,
             expires_at=now + self.ELEVATION_TTL,
             created_at=now,
         )
@@ -314,7 +371,9 @@ class MfaService:
         code: str,
         memberships: "MembershipService | None" = None,
     ) -> OrganizationElevation:
-        credential = self.credential(session, user.id, MfaStatus.ACTIVE)
+        credential = self.credential(
+            session, user.id, MfaStatus.ACTIVE, for_update=True
+        )
         if credential is None:
             raise MfaError("mfa_not_enrolled")
         now = self.clock()
@@ -358,7 +417,9 @@ class MfaService:
         organization_id: UUID,
         code: str,
     ) -> OrganizationElevation:
-        credential = self.credential(session, user.id, MfaStatus.ACTIVE)
+        credential = self.credential(
+            session, user.id, MfaStatus.ACTIVE, for_update=True
+        )
         if credential is None:
             raise MfaError("mfa_not_enrolled")
         now = self.clock()
@@ -368,11 +429,14 @@ class MfaService:
         # code anywhere else -- the hash is unique, but matching it globally
         # would make a leaked list usable against whoever it belongs to.
         row = session.exec(
-            select(MfaRecoveryCode).where(
+            select(MfaRecoveryCode)
+            .where(
                 MfaRecoveryCode.credential_id == credential.id,
                 MfaRecoveryCode.code_hash == self._hash(code),
                 col(MfaRecoveryCode.used_at).is_(None),
             )
+            .with_for_update()
+            .execution_options(populate_existing=True)
         ).first()
         if row is None:
             self._record_failure(session, credential, now)
@@ -425,5 +489,3 @@ class MfaService:
             raise MfaError("mfa_enrollment_required")
         if self.active_elevation(session, user_id, organization_id) is None:
             raise MfaError("mfa_required")
-
-

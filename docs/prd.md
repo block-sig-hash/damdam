@@ -1,5 +1,7 @@
 # Product Requirements Document
 
+> **Scope update — 9 September 2026:** Read [the approved calling amendment](./implementation/VOICE-EXPANSION.md). It supersedes earlier app/browser-calling deferrals and defines capability-specific release dependencies. Historical acceptance records remain valid for their reviewed scope.
+
 > **Current scope:** the September 2026 reset in §10 and
 > [PRD §10](prd.md) governs conflicts with earlier text. Use the
 > [scope disposition](implementation/SCOPE-DISPOSITION.md) and
@@ -1494,3 +1496,79 @@ chose, not whether an account exists — and keeps recovery available immediatel
 after signup.
 
 The same rule applies to the email identity endpoints introduced by chunk 06.
+
+---
+
+## 11. Amendment — Outbound Mobile and Browser Calling Alongside Carrier Voice
+
+Approved by the founder on 9 September 2026. The full product, rollout, financial,
+provider and dependency contract is [VOICE-EXPANSION.md](./implementation/VOICE-EXPANSION.md).
+This supersedes §10's blanket app/browser deferral. Accepted retirement remains
+historical fact; family/SOS/welfare functionality is not restored. Incoming
+app/browser calls, verified third-party caller ID and porting remain deferred.
+
+The consumer journey may now be signup → internet-voice purchase/funding →
+destination/rate/payer/identity preview → app or browser call → reconciled history,
+with no eSIM ownership requirement. Carrier purchase/install/native use remains
+a distinct capability. A shared number across modes requires provider proof.
+
+**US-44** — As the product owner, I need a verified internet-voice contract before
+implementation commits to supplier behavior.
+
+- AC-44.1: Capabilities, markets, number identity and SDK/control contracts carry
+  dated official sources and explicit unknown/account-tested distinctions.
+- AC-44.2: The proposed route prevents unauthorized client-originated billable
+  calls and defines bounded stopping; unresolved controls block live operation.
+- AC-44.3: Nigeria cost modeling accounts for all billable legs/fees/increments;
+  no unsupported price or cross-product number reuse claim is published.
+- AC-44.4: Legacy reuse is mapped to code; unsent questions and named evidence
+  gaps leave preparation distinguishable from production readiness.
+
+**US-45** — As a customer, I can authorize an outbound call against the correct
+service and payer without exposing funds or accounts to unauthorized calls.
+
+- AC-45.1: Server/provider enforce destination, identity, entitlement, payer,
+  grant expiry and atomic reservation; copied SDK access cannot bypass them.
+- AC-45.2: Duplicate requests and unknown supplier outcomes cannot create a
+  second billable leg; restart recovery uses the original durable attempt.
+- AC-45.3: Scoped status/history, verified events and revocation resist tenant,
+  user and delayed-callback confusion, including internet-only accounts.
+- AC-45.4: Additive schema/API contracts preserve existing history and separate
+  customer attempts from provider legs; live activation awaits V03 and gates.
+
+**US-46** — As a payer, I receive correct, bounded internet-call charges across
+mobile and browser sessions.
+
+- AC-46.1: Concurrent reservations respect currency-specific funds and budgets;
+  no client clock/rate/payer determines authoritative charging.
+- AC-46.2: Versioned retail charges and separate supplier costs reconcile once
+  across multi-leg events/CDRs, replay, reordering and compensating corrections.
+- AC-46.3: Provider/server limits bound liability during client/worker/network
+  failure. Unknown outcomes retain adequate reservation until reconciled.
+- AC-46.4: Simultaneous carrier exposure is independently bounded before offering
+  a common spend pool; absent evidence means unavailable, never an implied cap.
+
+**US-47** — As a mobile customer, I can call ordinary phone numbers over internet
+connectivity and understand which identity and payer are used.
+
+- AC-47.1: Production navigation supports internet-only users, rate/identity/payer
+  preview, permission/error states, audio controls, DTMF, hangup and history.
+- AC-47.2: Account changes, interruptions, network changes and app lifecycle
+  cannot leak or redial calls; supported physical iOS/Android behavior is proven.
+- AC-47.3: English/French, accessibility, native builds and screenshot evidence
+  reflect outbound scope; no removed safety or verified-CLI dependency returns.
+
+**US-48** — As a website customer, I can make outbound phone calls without a
+mobile installation, eSIM or enterprise-admin account.
+
+- AC-48.1: A separate consumer area uses the shared calling/ledger backend with
+  authenticated personal/work scope and no provider backend secrets in clients.
+- AC-48.2: Browser permissions, unsupported devices, duplicate tabs, refresh,
+  session expiry and closure cannot bypass authorization or spending controls.
+- AC-48.3: Supported browsers demonstrate audio, DTMF, identity, costs, accessible
+  controls and localization; live proof is separate from simulated test results.
+
+US-42/US-43 release criteria now apply per the amendment's reviewed capability
+manifest. Internet evidence cannot certify carrier service; carrier evidence
+cannot certify mobile/browser behavior. Required commercial, financial, security,
+operational and customer-support gates are not waived by a phased release.

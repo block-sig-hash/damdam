@@ -12,7 +12,9 @@ because both are decided by a row read inside the request's transaction.
 """
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from threading import Barrier
 from uuid import uuid4
 
 import pytest
@@ -166,43 +168,40 @@ def test_confirmation_issues_recovery_codes_stored_only_as_hashes(
         assert plaintext not in hashes
 
 
-def test_re_enrolling_replaces_the_old_secret_and_its_recovery_codes(
+def test_a_session_cannot_replace_an_active_second_factor(
     session, mfa, clock
 ):
-    """A lost authenticator must not leave a working second key behind.
-
-    Asserted by what the old credentials can still *do*, not by whether their
-    rows were deleted: the rows are retained so that "this code was spent" has
-    an answer, and a test that demanded their absence would be testing the
-    storage decision rather than the security property.
-    """
+    """A stolen bearer token must not enroll the attacker's authenticator."""
     user = _user(session, "admin")
-    first, first_confirmed = _enrolled(session, mfa, clock, user)
-    organization = _organization(session)
-    session.commit()
+    first, _ = _enrolled(session, mfa, clock, user)
 
-    second = mfa.begin_enrollment(session, user)
-    session.flush()
-    clock.advance(seconds=60)
-    mfa.confirm_enrollment(session, user, generate(second.secret_bytes, clock.value))
-    session.commit()
-
-    assert second.secret_bytes != first.secret_bytes
-    clock.advance(seconds=30)
     with pytest.raises(MfaError) as excinfo:
-        mfa.elevate(
-            session,
-            user,
-            organization.id,
-            generate(first.secret_bytes, clock.value),
-        )
-    assert excinfo.value.code == "mfa_code_invalid"
+        mfa.begin_enrollment(session, user)
+    assert excinfo.value.code == "mfa_already_enrolled"
+    session.rollback()
+    assert mfa.is_active(session, user) is True
+    assert mfa.credential(session, user.id).secret == first.secret_bytes
+
+
+def test_a_recovery_code_can_disable_mfa_before_re_enrollment(
+    session, mfa, clock
+):
+    user = _user(session, "lost-authenticator")
+    _, confirmed = _enrolled(session, mfa, clock, user)
+
+    mfa.disable_with_recovery_code(session, user, confirmed.recovery_codes[0])
     session.commit()
-    with pytest.raises(MfaError) as recovery:
-        mfa.elevate_with_recovery_code(
-            session, user, organization.id, first_confirmed.recovery_codes[0]
+    assert mfa.is_active(session, user) is False
+
+    replacement = mfa.begin_enrollment(session, user)
+    assert replacement.secret_bytes
+    old_codes = session.exec(
+        select(MfaRecoveryCode).where(
+            MfaRecoveryCode.credential_id == confirmed.credential.id
         )
-    assert recovery.value.code == "mfa_code_invalid"
+    ).all()
+    assert old_codes
+    assert all(row.used_at is not None for row in old_codes)
 
 
 # --- replay and brute force ------------------------------------------------
@@ -222,6 +221,39 @@ def test_the_same_code_cannot_be_used_twice(session, mfa, clock):
     with pytest.raises(MfaError) as excinfo:
         mfa.elevate(session, user, organization.id, code)
     assert excinfo.value.code == "mfa_code_replayed"
+
+
+def test_two_concurrent_uses_of_one_totp_create_one_elevation(
+    engine, session, mfa, memberships, clock
+):
+    user = _user(session, "concurrent-admin")
+    organization = _organization(session)
+    memberships.seed_member(session, organization, user, OrganizationRole.OWNER)
+    enrollment, _ = _enrolled(session, mfa, clock, user)
+    clock.advance(seconds=30)
+    code = generate(enrollment.secret_bytes, clock.value)
+    user_id = user.id
+    organization_id = organization.id
+    session.commit()
+    barrier = Barrier(2)
+
+    def use_code(_: int) -> str:
+        with Session(engine) as scoped:
+            scoped_user = scoped.get(User, user_id)
+            assert scoped_user is not None
+            barrier.wait(timeout=10)
+            try:
+                mfa.elevate(scoped, scoped_user, organization_id, code)
+                scoped.commit()
+                return "ok"
+            except MfaError as exc:
+                scoped.rollback()
+                return exc.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(use_code, range(2)))
+
+    assert sorted(outcomes) == ["mfa_code_replayed", "ok"]
 
 
 def test_repeated_wrong_codes_lock_the_credential(session, mfa, clock):
@@ -281,6 +313,39 @@ def test_a_recovery_code_works_once(session, mfa, clock):
     with pytest.raises(MfaError) as excinfo:
         mfa.elevate_with_recovery_code(session, user, organization.id, code)
     assert excinfo.value.code == "mfa_code_invalid"
+
+
+def test_two_concurrent_uses_of_one_recovery_code_create_one_elevation(
+    engine, session, mfa, clock
+):
+    user = _user(session, "concurrent-recovery")
+    _, confirmed = _enrolled(session, mfa, clock, user)
+    organization = _organization(session)
+    user_id = user.id
+    organization_id = organization.id
+    code = confirmed.recovery_codes[0]
+    session.commit()
+    barrier = Barrier(2)
+
+    def use_code(_: int) -> str:
+        with Session(engine) as scoped:
+            scoped_user = scoped.get(User, user_id)
+            assert scoped_user is not None
+            barrier.wait(timeout=10)
+            try:
+                mfa.elevate_with_recovery_code(
+                    scoped, scoped_user, organization_id, code
+                )
+                scoped.commit()
+                return "ok"
+            except MfaError as exc:
+                scoped.rollback()
+                return exc.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(use_code, range(2)))
+
+    assert sorted(outcomes) == ["mfa_code_invalid", "ok"]
 
 
 def test_a_recovery_code_from_another_account_is_refused(session, mfa, clock):
@@ -439,6 +504,48 @@ def test_a_step_up_does_not_cross_organizations(session, mfa, memberships, clock
     with pytest.raises(MembershipError) as excinfo:
         memberships.require_permission(
             session, other.id, person.id, Permission.MEMBER_INVITE, mfa=mfa
+        )
+    assert excinfo.value.code == "mfa_required"
+
+
+def test_account_recovery_version_invalidates_an_existing_step_up(
+    session, mfa, memberships, clock
+):
+    """A recovery session must not inherit authority proved by an old session."""
+    organization = _organization(session)
+    user = _user(session, "recovering-owner")
+    owner = memberships.seed_member(
+        session, organization, user, OrganizationRole.OWNER
+    )
+    enrollment, _ = _enrolled(session, mfa, clock, user)
+    clock.advance(seconds=30)
+    mfa.elevate(
+        session,
+        user,
+        organization.id,
+        generate(enrollment.secret_bytes, clock.value),
+        memberships=memberships,
+    )
+    session.commit()
+    memberships.require_permission(
+        session,
+        organization.id,
+        user.id,
+        Permission.MEMBER_INVITE,
+        mfa=mfa,
+    )
+
+    user.auth_version += 1
+    session.add(user)
+    session.commit()
+
+    with pytest.raises(MembershipError) as excinfo:
+        memberships.require_permission(
+            session,
+            organization.id,
+            owner.user_id,
+            Permission.MEMBER_INVITE,
+            mfa=mfa,
         )
     assert excinfo.value.code == "mfa_required"
 

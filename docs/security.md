@@ -459,3 +459,72 @@ The quarantined rows retain their original location and timestamp data and are
 therefore still personal data. They are covered by the retention policy and must
 be included in the deletion plan produced in subchunk 04E; chunk 04A does not
 delete them.
+
+---
+
+## 10.17 Amendment — Email Identity and Immediate Recovery Revocation (US-29)
+
+**Recorded 10 September 2026 during independent chunk 06 review.** Account
+identity is proved through a single-use, expiring, purpose-bound email token.
+Only its hash is stored. Login request responses are uniform for existing and
+new addresses, while recovery sends only to a verified identifier. Phone account
+existence is likewise disclosed only after successful OTP verification.
+
+Recovery changes a durable per-user authentication version and revokes all
+persisted refresh tokens in the same transaction before a new pair is issued.
+Every consumer access and refresh token carries that version and is rejected
+when it differs from the user row, so recovery invalidates stateless access JWTs
+without waiting for their normal expiry. Email and legacy phone recovery share
+this rule.
+
+Verified identifiers have one owner and each account has at most one primary
+identifier by PostgreSQL partial unique indexes. Unverified duplicate claims do
+not reserve an address. Email confirmation locks the account before changing
+its primary identity, and concurrent ownership claims return a controlled
+conflict if the verified-owner constraint chooses the other claimant. A proved
+address stored on exactly one pre-identity user is adopted by that existing
+account; ambiguous legacy duplicates fail closed. Non-test deployments use a
+transport that discards tokens until a live email provider is configured,
+preventing a fallback recorder from retaining raw authentication credentials in
+process memory.
+
+---
+
+## 10.18 Amendment — Outbound Calling Authorization and Fraud Boundaries
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+Treat client SDK credentials as untrusted capabilities that must not authorize
+arbitrary PSTN spending. V01 proves the route/control method; V02 enforces call
+grants, tenant/payer/destination/identity, short expiry, replay resistance and
+revocation. Verify signed raw webhooks before durable deduplication. V03 enforces
+bounded spend independently of client/worker survival. Apply rate/destination
+controls, restrictive browser origins, existing CSRF/session policy and masked
+audit metadata. No backend Telnyx key in browser/mobile; no new recording/contact
+collection. Evaluate actual mode/market emergency and privacy obligations before
+sale. Deferred incoming calling is not implicitly restored by SDK installation.
+
+---
+
+## 10.19 Amendment — Organization Authorization and MFA Recovery Boundary (US-29)
+
+**Recorded 10 September 2026 during independent chunk 07 review.** Individual
+membership and a server-side permission matrix govern organization access.
+Organization identifiers from paths, headers and resource ids never supply
+authority; a current active membership does. Missing or invalid authentication
+returns 401, while a valid principal without membership returns a uniform 403
+for both foreign and nonexistent tenants.
+
+Administrator step-up is stored per user and organization and is also bound to
+`users.auth_version`. Account recovery therefore invalidates existing access
+JWTs and existing MFA elevations together. Organization routes enforce the same
+authentication version as consumer routes; they cannot accept a token that
+recovery has superseded.
+
+Active MFA cannot be replaced using a bearer token alone. The existing TOTP or
+a single-use recovery code must disable it first. Credential and recovery-code
+rows are locked while codes are consumed, preventing concurrent reuse. Invalid
+HTTP attempts commit the durable failure counter before returning an error, and
+the lock response carries `Retry-After` as both structured detail and a header.
+The TOTP secret remains plaintext until chunk 26 supplies envelope encryption
+and key rotation; this is a production gate, not an accepted protection claim.

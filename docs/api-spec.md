@@ -1256,16 +1256,17 @@ same date.
 
 ### Withdrawn
 
-`POST /v1/auth/otp/request` no longer returns:
+`POST /v1/auth/otp/request` no longer returns these pre-verification signals:
 
 | Code | Status | Was returned when |
 |---|---|---|
 | `account_exists` | 409 | the number already had an account |
 | `account_not_found` | 404 | PIN recovery was requested for an unknown number |
 
-Both are removed from the error catalogue and from the localized message
-catalogue in English and French. Together they let an unauthenticated caller
-determine whether any given phone number had a DamDam account.
+`account_exists` is removed. `account_not_found` is no longer returned by a
+request endpoint; legacy PIN recovery may return it only after a correct OTP has
+proved control of the phone number. The old request-time behavior let an
+unauthenticated caller determine whether any given phone number had an account.
 
 ### Current contract
 
@@ -1275,6 +1276,8 @@ number is registered, and dispatches a code either way.
 `POST /v1/auth/otp/verify` continues to return `is_new_user`, which is where a
 client learns whether to route to signup or login. That value is only reachable
 by someone who has received and submitted the code, so it is not an oracle.
+`POST /v1/auth/pin/recovery/verify` returns `account_not_found` only after the
+same proof and never creates a new account through a recovery endpoint.
 
 ### Preserved deliberately
 
@@ -1301,16 +1304,19 @@ and **recovery must not require access to a SIM**.
 |---|---|---|
 | `POST /v1/auth/email/verify/request` | Bearer | Claim an email for the signed-in account and send proof-of-ownership |
 | `POST /v1/auth/email/verify/confirm` | none | Confirm ownership with the emailed token |
+| `POST /v1/auth/email/login/request` | none | Send a passwordless email link for signup or login |
+| `POST /v1/auth/email/login/confirm` | none | Prove control, then create or authenticate the email account |
 | `POST /v1/auth/email/recovery/request` | none | Request account recovery for an address |
 | `POST /v1/auth/email/recovery/confirm` | none | Consume the token, revoke prior sessions, issue a new one |
 
 ### Uniform responses
 
-`verify/request` and `recovery/request` return **200** with an identical body
-whether or not the address is known, whether or not it is verified, and whether
-or not it belongs to the caller. A message is dispatched only when the
-identifier exists **and** is verified. A caller cannot use these endpoints to
-test who has an account.
+All request endpoints use a generic **200** response that discloses no account
+state. Authentication delivers to both new and existing addresses because
+mailbox control is the signup proof. Verification delivers to the address the
+authenticated user is attempting to link. Recovery delivers only for an
+existing verified identifier. These distinctions do not change the public response
+and cannot be used to enumerate accounts.
 
 ### Token semantics
 
@@ -1318,6 +1324,11 @@ Tokens are single-use, expiring and **purpose-bound**. A verification token
 cannot complete a recovery and a recovery token cannot verify an identifier;
 both mismatches return the same `identity_token_invalid` as an unknown token, so
 the response does not reveal what the holder possesses.
+
+Recovery increments the account's durable authentication version and revokes
+all refresh rows before issuing the replacement pair. Existing access and
+refresh tokens are rejected immediately. Legacy phone/PIN recovery applies the
+same rule. Email signup may create a user with null phone and platform fields.
 
 | Code | Status |
 |---|---|
@@ -1338,13 +1349,27 @@ stranger repeatedly.
 ### Delivery is not configured
 
 Chunk 06 ships a transport abstraction and a recording test transport. **No
-email provider is configured and nothing is sent.** Live delivery remains
-explicitly gated.
+email provider is configured and nothing is sent.** Non-test environments use a
+discarding transport so raw tokens are not retained in process memory. Live
+delivery remains explicitly gated.
+---
 
-## 7.33 Amendment — Organization Membership, Invitation and MFA Endpoints (US-29)
+## 7.33 Amendment — Outbound calling contract ownership (US-45)
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+V02 introduces newly specified authorization, scoped short-lived grants, call
+status/history and stop contracts; V03 adds reconciliation/charging behavior.
+Retired routes do not become live through this text. Inventory legacy callers,
+old-client compatibility and retained webhook consumers before changing routes.
+Server/provider controls bind payer, destination and identity, and reconcile
+unknown outcomes without duplicate legs. Update prose and generated OpenAPI when
+implementation adds actual routes; do not present planned endpoints as available.
+
+## 7.34 Amendment — Organization Membership, Invitation and MFA Endpoints (US-29)
 
 **Recorded 10 September 2026 by build chunk 07.** Data model:
-[data-model.md §6.45](./data-model.md#645-amendment--organization-memberships-invitations-and-second-factors-us-29).
+[data-model.md §6.47](./data-model.md#647-amendment--organization-memberships-invitations-and-second-factors-us-29).
 
 ### Endpoints
 
@@ -1407,9 +1432,13 @@ get shared, written down or turned off.
 | `mfa_code_replayed` | 409 | A real code, already used — wait for the next one |
 | `mfa_locked` | 423 | Too many wrong codes; `retry_after` in `details` |
 | `mfa_not_enrolled` | 409 | Confirm or disable called with nothing to act on |
+| `mfa_already_enrolled` | 409 | Replacement refused until the active factor is disabled with a TOTP or recovery code |
 
-A step-up proves one tenant. Someone who administers two organizations proves
-themselves for the one they are acting in.
+A step-up proves one tenant and one account authentication generation. Account
+recovery invalidates old access tokens and old elevation rows together. Failed
+codes are committed before the error response so the durable lockout applies to
+HTTP requests, not only direct service calls. Someone who administers two
+organizations proves themselves for the one they are acting in.
 
 ### Membership and invitation codes
 
@@ -1443,7 +1472,6 @@ credential itself belongs to the chunk that retires the dashboard's login.
 ### Invitation tokens are returned, not sent
 
 `POST /v1/organizations/{id}/invitations` returns the raw token in its response.
-Chunk 06 left delivery on a recording transport and no mail provider is
-configured, so the token is handed to the caller to send rather than pretending
-a delivery happened. Wiring it to the delivery transport belongs with the chunk
-that configures a provider.
+No mail provider is configured, so the token is handed to the caller to send
+rather than pretending a delivery happened. Non-test identity delivery is a
+discarding transport until a provider is configured.

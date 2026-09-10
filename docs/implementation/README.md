@@ -1,5 +1,7 @@
 # DamDam — Claude build chunks and Codex review gates
 
+> **Scope update — 9 September 2026:** Read [the approved calling amendment](VOICE-EXPANSION.md). It supersedes earlier app/browser-calling deferrals and defines capability-specific release dependencies. Historical acceptance records remain valid for their reviewed scope.
+
 Prepared 8 September 2026. This packet breaks the consolidated implementation plan into 30 bounded assignments. It does not implement or certify application changes.
 
 ## How to use this pack
@@ -10,7 +12,7 @@ Prepared 8 September 2026. This packet breaks the consolidated implementation pl
 4. Codex inspects the actual diff and surrounding behavior, runs relevant independent checks, and fixes/refactors within scope where needed. Findings cite code and explain impact. The final changed SHA is reviewed and tested.
 5. Start the next dependent chunk only after Codex records acceptance. Carry fixes forward into the next branch. Acceptance does not itself merge or deploy anything.
 
-**Start with chunk 01 only.** These are review units, not day estimates. Keep one active implementation chunk by default. A large chunk may be split into lettered subchunks with explicit dependencies after its initial inspection.
+**Chunks 01–05 have reviewed scope; consult [STATUS.md](STATUS.md).** These are review units, not day estimates. Keep one active implementation chunk by default. A large chunk may be split into lettered subchunks with explicit dependencies after its initial inspection.
 
 This changes the earlier AGENTS.md ownership policy at the user's request: Claude builds, Codex reviews/refactors. Chunk 01 updates the repository instructions so future sessions do not revert to the old division.
 
@@ -20,7 +22,7 @@ This changes the earlier AGENTS.md ownership policy at the user's request: Claud
 - Telnyx is preferred for launch. Confirm same-eSIM data/native voice and saleable markets; documented VoLTE beta status and production support are an external gate.
 - No family/SOS. Associated check-in/welfare removal follows the explicit scope disposition; no hidden enterprise tracking.
 - External verified caller ID is deferred; a carrier-assigned number is the proposed initial identity. Do not promise +234 retention/porting.
-- No WebRTC substitute for native calling, extra launch carriers, or automatic supplier failover after an unknown order outcome.
+- Outbound app/browser calling is an additional service under V01–V05; it never proves native calling. No extra launch carriers or automatic supplier failover after an unknown order outcome.
 - Preserve Paystack conditionally for approved local NGN business. Global processor and legal entity are unresolved. Stripe-specific code requires a recorded selection.
 - Wallet checkout means supported Apple Pay/Google Pay through a processor. Recurring subscriptions and messaging beyond the agreed offer remain separately gated.
 - Retain the existing stack and useful provider boundaries. Modular code does not require a plugin marketplace or microservices.
@@ -29,7 +31,7 @@ This changes the earlier AGENTS.md ownership policy at the user's request: Claud
 
 ## Build sequence
 
-The numbers are a suggested sequence. The dependency column is authoritative. Chunk 03 should start early; missing commercial answers need not block unrelated foundations. Chunk 26 can also be brought forward after its dependencies.
+The numbers are a suggested sequence. The dependency column applies with the explicit amendments and capability-specific release rules in VOICE-EXPANSION.md. Chunk 03 should start early; missing commercial answers need not block unrelated foundations. Chunk 26 can also be brought forward after its dependencies.
 
 | Chunk | Assignment | Requires accepted chunks |
 |---|---|---|
@@ -143,3 +145,11 @@ Start from the latest accepted code, preserve unrelated changes,
 run required checks and return docs/implementation/HANDOFF-TEMPLATE.md.
 Do not mark your own work accepted or start another chunk.
 ```
+
+## Calling expansion — current execution overlay
+
+Read [VOICE-EXPANSION.md](VOICE-EXPANSION.md) before using any numbered assignment.
+It adds V01–V05 without renumbering 01–30, defines amended dependencies and phased
+release gates, and records the approved concurrent work. Start the new track with
+[handoffs/V01-start.md](handoffs/V01-start.md). The chunk 01 copyable message above
+is retained as the original pack bootstrap, not today's next assignment.

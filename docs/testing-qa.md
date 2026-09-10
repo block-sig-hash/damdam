@@ -899,3 +899,54 @@ and carrier proof. The post-chunk-01 staging deployment fails before server
 contact because its four required environment secrets are unset; D6/chunk 26
 owns that setup. Full review and scope limits are in
 [implementation/reviews/02.md](./implementation/reviews/02.md).
+
+---
+
+## 14.15 Amendment — Identity, Recovery and Shared-Device Tests (US-29)
+
+Identity and recovery are strict-TDD scope. PostgreSQL tests exercise atomic
+single-use token consumption, verified-owner and one-primary constraints,
+concurrent email signup convergence, populated migration upgrade/backfill, and
+legacy-only downgrade. API tests cover uniform request responses, purpose and
+expiry boundaries, email-first signup/login, adoption of a single legacy email
+account, phone identifier creation, and
+immediate access/refresh rejection after both email and legacy phone recovery.
+
+Mobile tests use a stateful Keychain double to prove an account's local PIN and
+lockout cannot authenticate or block another account on the same handset.
+Ownerless records from older builds read as absent. The eSIM compatibility
+warning remains device-scoped because it is handset state under AC-10.6.
+
+---
+
+## 14.16 Amendment — Three-Interface Calling Evidence
+
+9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
+
+V01 supplies contract evidence; V02/V03 require failing-first authorization,
+idempotency and PostgreSQL financial/concurrency tests. V04/V05 require rendered
+journeys and supported physical-device/browser evidence. Chunk28 covers copied
+credential bypass, simultaneous mobile/browser calls, multiple provider legs,
+unknown originate, lost terminal CDR, corrections, worker/tab loss, membership
+revocation and cross-mode exposure where enabled. Chunk27 updates validator and
+template together for outbound evidence; do not reinstate retired incoming-push
+or safety gates. Chunk29 records real identity, DTMF/audio, route and billed-cost
+evidence, separately for internet and native carrier calls. Missing live evidence
+is pending, never replaced by a mocked call or a screenshot.
+
+---
+
+## 14.17 Amendment — Organization Authorization and MFA Tests (US-29)
+
+Organization membership, invitation and MFA behavior is strict-TDD scope.
+PostgreSQL tests cover the last-owner lock, concurrent invitation acceptance,
+expired invitation replacement, TOTP replay, concurrent use of one TOTP and one
+recovery code, membership revocation listeners, and account-recovery invalidation
+of an existing step-up. HTTP tests separately prove authentication-version
+enforcement and that failed MFA attempts persist across requests until lockout.
+
+Cross-tenant API cases compare nonexistent and foreign organization responses,
+exercise path and header tenant selection, and keep personal orders unreachable
+from organization assignment. Migration tests populate the preceding identity
+revision before upgrading; a fresh upgrade must also reach
+`0029_organization_memberships` through the full revision chain.

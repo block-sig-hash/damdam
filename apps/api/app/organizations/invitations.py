@@ -25,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, update
+from sqlalchemy import CursorResult, and_, or_, update
 from sqlmodel import Session, col, select
 
 from app.auth.models import Organization, User, utc_now
@@ -96,6 +96,15 @@ class InvitationService:
             raise InvitationError("role_change_forbidden")
 
         value = normalize(IdentifierKind.EMAIL, email)
+        now = self.clock()
+        # Serialize invitations per tenant so two requests for the same
+        # recipient cannot race the partial unique index and leak a database
+        # error as a 500.
+        session.exec(
+            select(Organization)
+            .where(Organization.id == acting.organization_id)
+            .with_for_update()
+        ).one()
         existing = session.exec(
             select(OrganizationInvitation).where(
                 OrganizationInvitation.organization_id == acting.organization_id,
@@ -105,7 +114,15 @@ class InvitationService:
             )
         ).first()
         if existing is not None:
-            raise InvitationError("invitation_already_pending")
+            if not self._is_expired(existing, now):
+                raise InvitationError("invitation_already_pending")
+            # Expiry is computed rather than stored as a fourth status, but an
+            # expired pending row must leave the partial unique index before a
+            # replacement can be issued.
+            existing.status = InvitationStatus.REVOKED
+            existing.revoked_at = now
+            session.add(existing)
+            session.flush()
 
         raw = secrets.token_urlsafe(TOKEN_BYTES)
         invitation = OrganizationInvitation(
@@ -115,8 +132,8 @@ class InvitationService:
             invited_value=value,
             token_hash=self._hash(raw),
             invited_by_user_id=acting.user_id,
-            expires_at=self.clock() + self.ttl,
-            created_at=self.clock(),
+            expires_at=now + self.ttl,
+            created_at=now,
         )
         session.add(invitation)
         session.flush()
@@ -155,12 +172,17 @@ class InvitationService:
     def list_pending(
         self, session: Session, organization_id: UUID
     ) -> list[OrganizationInvitation]:
+        now = self.clock()
         return list(
             session.exec(
                 select(OrganizationInvitation)
                 .where(
                     OrganizationInvitation.organization_id == organization_id,
                     OrganizationInvitation.status == InvitationStatus.PENDING,
+                    or_(
+                        col(OrganizationInvitation.expires_at).is_(None),
+                        col(OrganizationInvitation.expires_at) > now,
+                    ),
                 )
                 .order_by(col(OrganizationInvitation.created_at))
             ).all()
@@ -191,18 +213,27 @@ class InvitationService:
         owned = self._verified_values(session, user)
         if not owned:
             return []
+        recipient_matches = [
+            and_(
+                col(OrganizationInvitation.invited_kind) == kind,
+                col(OrganizationInvitation.invited_value) == value,
+            )
+            for kind, value in owned
+        ]
+        now = self.clock()
         candidates = session.exec(
             select(OrganizationInvitation)
-            .where(OrganizationInvitation.status == InvitationStatus.PENDING)
+            .where(
+                OrganizationInvitation.status == InvitationStatus.PENDING,
+                or_(*recipient_matches),
+                or_(
+                    col(OrganizationInvitation.expires_at).is_(None),
+                    col(OrganizationInvitation.expires_at) > now,
+                ),
+            )
             .order_by(col(OrganizationInvitation.created_at))
         ).all()
-        now = self.clock()
-        return [
-            invitation
-            for invitation in candidates
-            if (invitation.invited_kind, invitation.invited_value) in owned
-            and not self._is_expired(invitation, now)
-        ]
+        return list(candidates)
 
     @staticmethod
     def _is_expired(invitation: OrganizationInvitation, now: datetime) -> bool:

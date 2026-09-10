@@ -1,14 +1,16 @@
 # Implementation status
 
-Chunks 01, 02, 04, 05 and chunk 03's documented/simulated scope are **ACCEPTED
-after independent Codex review and fixes**.
+Chunks 01, 02, 04, 05, 06, 07 and chunk 03's documented/simulated scope are
+**ACCEPTED after independent Codex review and fixes**.
 Chunk 01 merged in [PR #100](https://github.com/block-sig-hash/damdam/pull/100).
 Chunk 02's tested content and native evidence are recorded in
 [reviews/02.md](reviews/02.md); [PR #101](https://github.com/block-sig-hash/damdam/pull/101)
 carries its integration. Chunk 03 merged in
 [PR #102](https://github.com/block-sig-hash/damdam/pull/102), and chunk 04 merged
-in [PR #104](https://github.com/block-sig-hash/damdam/pull/104). Staging is not deployed: its four required secrets are
-missing (D6/chunk 26). No production-readiness claim is made.
+in [PR #104](https://github.com/block-sig-hash/damdam/pull/104). The staging
+bootstrap landed in PR #106 and was observed healthy through its CI deployment
+before this review; each later merge requires its own deployment check. No
+production-readiness claim is made.
 
 **Original baseline:** `develop` @
 `6790c74707a0f3e52cfedb36bc173ec83ca26663`, confirmed current on 2026-09-08 —
@@ -31,8 +33,8 @@ is a dry run that executes nothing.
 | 03 — Prove Telnyx feasibility and document the carrier contract | ACCEPTED (documented/simulated scope); live scope EXTERNAL_BLOCKED | base `178c448` / submitted `fe569e1` / corrected code `6a24c19` | [Independent review](reviews/03.md) | **D1/D2 OPEN** — no Telnyx account, live call, rate deck or cleared market |
 | 04 — Retire family, safety and app-calling features safely | ACCEPTED after fixes (04A–04E), merged in PR #104 as `3fb2385` | base `12582f1` / submitted complete head `55394f5` / corrected app `d53c055` + native `6cf900a`, `e89d725` / CI head `0d4fee4` | [Independent review](reviews/04.md) | Check-in/welfare data disposition remains open; no welfare data deleted |
 | 05 — Introduce core domain models and migration boundaries | ACCEPTED after fixes; integrated on accepted chunk 04 | base `12582f1` / submitted `87baa40` / corrected code `07dc308` / integration `4c82ed9` / final invariant `2109aef` | [Independent review](reviews/05.md) | D3 remains OPEN — `legal_entities` is deliberately unseeded |
-| 06 — Implement global identity and account recovery | **READY_FOR_REVIEW** (complete: backend and mobile) | base `d2f5349` / see [handoff](handoffs/06.md) | Not reviewed | Launch identity method **decided 2026-09-09** (email); live email delivery still gated |
-| 07 — Implement memberships, tenant isolation and administrator MFA | **READY_FOR_REVIEW** | base `c07054e` (chunk 06 submitted head, **not yet accepted**) / see [handoff](handoffs/07.md) | Not reviewed | Built on an **unaccepted** chunk 06; Codex's chunk 06 fixes must be carried forward. Secret-at-rest encryption for `user_mfa_credentials.secret` is chunk 26 |
+| 06 — Implement global identity and account recovery | **ACCEPTED after fixes** (backend, migration and shared-device boundary) | base `d2f5349` / submitted `c07054e` / corrected `1ac8959` / integration `162d711` | [Independent review](reviews/06.md) | Live email delivery and mobile email screens remain gated to provider setup and chunks 18/21 |
+| 07 — Implement memberships, tenant isolation and administrator MFA | **ACCEPTED after fixes** | base `c07054e` / submitted `01e9d93` / integrated with accepted chunk 06 at `a9137e9` | [Independent review](reviews/07.md) | MFA secret-at-rest encryption remains assigned to chunk 26; shared organization login retirement remains assigned to the dashboard migration |
 | 08 — Define the consumer and enterprise design system | NOT_STARTED | — | — | See assignment |
 | 09 — Build supported-market catalog and immutable quotes | NOT_STARTED | — | — | See assignment |
 | 10 — Build the multi-currency ledger and atomic reservations | NOT_STARTED | — | — | See assignment |
@@ -121,3 +123,20 @@ for step-up — converge rather than sit side by side.
 Claude may record IN_PROGRESS, READY_FOR_REVIEW, EXTERNAL_BLOCKED and handoff links. Only an independent Codex review records ACCEPTED or CHANGES_REQUIRED. Acceptance identifies the reviewed/tested code. Explicitly list lettered subchunks and their unaccepted remainder where work was split.
 
 A review record can be carried forward only if the relevant code/configuration has not changed; subsequent changes require appropriate revalidation. Store approval/status text separately from executable runtime configuration.
+
+## Calling expansion approved — 9 September 2026
+
+The founder approved [VOICE-EXPANSION.md](VOICE-EXPANSION.md). This adds work;
+it does not reverse chunk 04 acceptance or imply restored calling code.
+
+| Chunk | Story | Status | Remaining gate |
+|---|---|---|---|
+| V01 — Internet-voice feasibility | US-44 | **ACCEPTED AFTER FIXES** (documented/preparatory scope); live route **EXTERNAL_BLOCKED** | corrected content `90f6a4c` / [review](reviews/V01.md), [handoff](handoffs/V01.md), [evidence](voice/) — Park Outbound Calls is the documented preparation route; emergency bypass, containment, bounds, billing and live client proof remain B1–B5 |
+| V02 — Outbound call control | US-45 | NOT_STARTED | Accepted V01 contract and 06/07/09/10/11; live controls gated |
+| V03 — Internet charging | US-46 | NOT_STARTED | V02/10/14; provider cutoff, rates and D5 |
+| V04 — Mobile outbound | US-47 | NOT_STARTED | V03/08/18; device/SDK and live evidence |
+| V05 — Browser outbound | US-48 | NOT_STARTED | V03/08 and 06/07 browser auth; browser/live evidence |
+
+Staging statements earlier in this file are the recorded chunk05 baseline, not
+a fresh host/deployment assessment. Staging work is occurring separately; this
+calling-plan change does not certify its completion or alter that checkout.
