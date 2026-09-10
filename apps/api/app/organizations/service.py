@@ -18,6 +18,7 @@ rather than a hypothetical:
 
 from collections.abc import Callable
 from datetime import datetime
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlmodel import Session, col, select
@@ -29,7 +30,14 @@ from app.organizations.models import (
     OrganizationRole,
     rank,
 )
-from app.organizations.permissions import Permission, permissions_for
+from app.organizations.permissions import (
+    Permission,
+    permissions_for,
+    requires_step_up,
+)
+
+if TYPE_CHECKING:  # pragma: no cover - only the checker needs the concrete type
+    from app.mfa.service import MfaService
 
 
 class MembershipError(Exception):
@@ -94,10 +102,29 @@ class MembershipService:
         organization_id: UUID,
         user_id: UUID,
         permission: Permission,
+        mfa: "MfaService | None" = None,
     ) -> OrganizationMember:
+        """Membership, then role, then -- for privileged actions -- a second factor.
+
+        The order is deliberate. A caller who is not a member learns
+        `not_a_member` whatever they asked for, so the MFA prompt cannot be
+        used to confirm that an organization exists or that someone belongs
+        to it.
+
+        `mfa` is optional so that the pure membership rules stay testable on
+        their own, but every route passes it: the step-up requirement is
+        declared once in `STEP_UP_PERMISSIONS`, not re-decided per endpoint.
+        """
         membership = self.require_membership(session, organization_id, user_id)
         if permission not in permissions_for(membership.role):
             raise MembershipError("permission_denied")
+        if mfa is not None and requires_step_up(permission):
+            from app.mfa.service import MfaError
+
+            try:
+                mfa.assert_stepped_up(session, user_id, organization_id)
+            except MfaError as exc:
+                raise MembershipError(exc.code) from exc
         return membership
 
     def list_members(
@@ -182,6 +209,26 @@ class MembershipService:
             raise MembershipError("membership_not_found")
         return membership
 
+    def _require(
+        self,
+        session: Session,
+        acting: OrganizationMember,
+        permission: Permission,
+        mfa: "MfaService | None",
+    ) -> None:
+        """One gate for every transition: the role, then the second factor."""
+        if permission not in permissions_for(acting.role):
+            raise MembershipError("permission_denied")
+        if mfa is not None and requires_step_up(permission):
+            from app.mfa.service import MfaError
+
+            try:
+                mfa.assert_stepped_up(
+                    session, acting.user_id, acting.organization_id
+                )
+            except MfaError as exc:
+                raise MembershipError(exc.code) from exc
+
     # --- transitions ------------------------------------------------------
 
     def seed_member(
@@ -220,10 +267,12 @@ class MembershipService:
         actor: OrganizationMember,
         target_user_id: UUID,
         new_role: OrganizationRole,
+        mfa: "MfaService | None" = None,
     ) -> OrganizationMember:
         acting = self.resolve_actor(session, actor)
-        if Permission.MEMBER_ROLE_CHANGE not in permissions_for(acting.role):
-            raise MembershipError("permission_denied")
+        self._require(
+            session, acting, Permission.MEMBER_ROLE_CHANGE, mfa
+        )
         if acting.user_id == target_user_id:
             raise MembershipError("cannot_modify_own_membership")
 
@@ -235,9 +284,17 @@ class MembershipService:
         if new_role is not OrganizationRole.OWNER:
             self._refuse_if_last_owner(session, target)
 
+        now = self.clock()
         target.role = new_role
-        target.updated_at = self.clock()
+        target.updated_at = now
         session.add(target)
+        # New authority, new proof. An elevation earned as an administrator
+        # must not survive a demotion to member, and one earned as a member
+        # must not be reusable as a promotion's second factor.
+        if mfa is not None:
+            mfa.revoke_elevations(
+                session, target.user_id, target.organization_id, now
+            )
         session.flush()
         return target
 
@@ -246,10 +303,10 @@ class MembershipService:
         session: Session,
         actor: OrganizationMember,
         target_user_id: UUID,
+        mfa: "MfaService | None" = None,
     ) -> OrganizationMember:
         acting = self.resolve_actor(session, actor)
-        if Permission.MEMBER_REVOKE not in permissions_for(acting.role):
-            raise MembershipError("permission_denied")
+        self._require(session, acting, Permission.MEMBER_REVOKE, mfa)
         if acting.user_id == target_user_id:
             # Leaving is a separate, deliberate action. Routing it through
             # revoke() would let the last owner remove themselves by accident.
@@ -265,6 +322,13 @@ class MembershipService:
         target.revoked_at = now
         target.updated_at = now
         session.add(target)
+        # AC-29.5: immediately. The revoked member's live second-factor proof
+        # dies in the same transaction, so the next request they make is
+        # refused rather than served until an elevation happens to lapse.
+        if mfa is not None:
+            mfa.revoke_elevations(
+                session, target.user_id, target.organization_id, now
+            )
         session.flush()
         return target
 
@@ -274,6 +338,7 @@ class MembershipService:
         actor: OrganizationMember,
         target_user_id: UUID,
         role: OrganizationRole,
+        mfa: "MfaService | None" = None,
     ) -> OrganizationMember:
         """Reactivate the existing row rather than inserting a second one.
 
@@ -282,8 +347,7 @@ class MembershipService:
         cannot produce two answers to "what may this person do here".
         """
         acting = self.resolve_actor(session, actor)
-        if Permission.MEMBER_INVITE not in permissions_for(acting.role):
-            raise MembershipError("permission_denied")
+        self._require(session, acting, Permission.MEMBER_INVITE, mfa)
         if not may_grant(acting.role, role):
             raise MembershipError("role_change_forbidden")
 
