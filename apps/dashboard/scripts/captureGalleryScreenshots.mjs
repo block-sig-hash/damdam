@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { pathToFileURL } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const matrix = JSON.parse(
@@ -27,8 +28,16 @@ function pngDimensions(file) {
 
 async function main() {
   fs.mkdirSync(outputDir, { recursive: true });
-  const observed = [];
+  const snapshots = new Map();
+  const stylesheetCache = new Map();
+
+  // Materialize every server-rendered variant before starting Chrome. Hosted
+  // runners may reclaim the small Next process while Chrome is rendering a
+  // tall page; later captures must not depend on that process still existing.
   for (const capture of matrix.captures) {
+    const snapshotKey = `${capture.locale}-${capture.textScale}`;
+    if (snapshots.has(snapshotKey)) continue;
+
     const query = capture.textScale === 200 ? "?textScale=200" : "";
     const url = `${baseUrl}/gallery${query}`;
     let response;
@@ -37,17 +46,51 @@ async function main() {
         headers: { "accept-language": capture.locale },
       });
     } catch (error) {
-      throw new Error(`${capture.name} could not reach ${url}`, { cause: error });
+      throw new Error(`${snapshotKey} could not reach ${url}`, { cause: error });
     }
     if (!response.ok) throw new Error(`${url} returned ${response.status}`);
-    const html = await response.text();
+    let html = await response.text();
     const languageMarker =
       capture.locale === "fr" ? "Galerie de composants" : "Component gallery";
     if (!html.includes(languageMarker)) {
-      throw new Error(
-        `${capture.name} did not render the requested ${capture.locale} catalog`,
-      );
+      throw new Error(`${snapshotKey} did not render the requested ${capture.locale} catalog`);
     }
+
+    const stylesheetLinks = (html.match(/<link\b[^>]*>/gi) || []).filter(link =>
+      /\brel=["']stylesheet["']/i.test(link),
+    );
+    const styles = [];
+    for (const link of stylesheetLinks) {
+      const match = link.match(/\bhref=["']([^"']+)["']/i);
+      if (!match) throw new Error(`${snapshotKey} has a stylesheet link without an href`);
+      const stylesheetUrl = new URL(match[1], baseUrl).href;
+      let css = stylesheetCache.get(stylesheetUrl);
+      if (css === undefined) {
+        const stylesheetResponse = await fetch(stylesheetUrl);
+        if (!stylesheetResponse.ok) {
+          throw new Error(`${stylesheetUrl} returned ${stylesheetResponse.status}`);
+        }
+        css = await stylesheetResponse.text();
+        stylesheetCache.set(stylesheetUrl, css);
+      }
+      styles.push(css);
+    }
+    if (styles.length === 0) throw new Error(`${snapshotKey} contains no production stylesheet`);
+
+    html = html
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi, "")
+      .replace("</head>", `<style>${styles.join("\n")}</style></head>`);
+    const snapshot = path.join(outputDir, `${snapshotKey}.html`);
+    fs.writeFileSync(snapshot, html);
+    snapshots.set(snapshotKey, { file: snapshot, sourceUrl: url });
+  }
+
+  const observed = [];
+  for (const capture of matrix.captures) {
+    const snapshotKey = `${capture.locale}-${capture.textScale}`;
+    const snapshot = snapshots.get(snapshotKey);
+    if (!snapshot) throw new Error(`${capture.name} has no rendered source snapshot`);
 
     const file = path.join(outputDir, `${capture.name}.png`);
     const result = spawnSync(
@@ -62,7 +105,7 @@ async function main() {
         `--lang=${capture.locale}`,
         `--accept-lang=${capture.locale}`,
         `--screenshot=${file}`,
-        url,
+        pathToFileURL(snapshot.file).href,
       ],
       { encoding: "utf8" },
     );
@@ -77,7 +120,13 @@ async function main() {
         `${capture.name} is ${dimensions.width}x${dimensions.height}; expected ${capture.width}x${capture.height}`,
       );
     }
-    observed.push({ ...capture, file: `${capture.name}.png`, url, ...dimensions });
+    observed.push({
+      ...capture,
+      file: `${capture.name}.png`,
+      sourceUrl: snapshot.sourceUrl,
+      sourceSnapshot: path.basename(snapshot.file),
+      ...dimensions,
+    });
   }
 
   const version = spawnSync(chrome, ["--version"], { encoding: "utf8" });
