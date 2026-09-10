@@ -1,47 +1,39 @@
 {
   "$comment": "Traduction, pas transposition. Le français est nettement plus long que l'anglais ici — c'est délibéré et c'est ce que la vérification d'expansion mesure : une mise en page qui ne tient qu'en anglais est une mise en page cassée.",
-
   "status": {
     "paymentUnpaid": "Non payé",
     "paymentAuthorized": "Paiement réservé",
     "paymentPaid": "Payé",
     "paymentRefunded": "Remboursé",
     "paymentFailed": "Paiement refusé",
-
     "provisioningNotStarted": "Pas commencé",
     "provisioningRequested": "Configuration en cours",
     "provisioningOutcomeUnknown": "Vérification auprès du réseau",
     "provisioningProvisioned": "Prêt à installer",
     "provisioningFailed": "Échec de la configuration",
     "provisioningCancelled": "Annulé",
-
     "installationNotInstalled": "Non installé",
     "installationInstalled": "Installé",
     "installationRemoved": "Supprimé",
-
     "activationPending": "Pas encore actif",
     "activationActivating": "Activation en cours",
     "activationActive": "Actif",
     "activationSuspended": "Suspendu",
     "activationTerminated": "Terminé",
-
     "networkUnknown": "Pas encore vérifié",
     "networkAttached": "Connecté",
     "networkDetached": "Non connecté"
   },
-
   "pendingProvisioning": {
     "title": "Votre ligne est en cours de configuration",
     "body": "Nous avons bien reçu votre paiement. La configuration d'une ligne auprès du réseau prend généralement quelques minutes. Vous n'avez pas besoin de rester sur cet écran — nous vous préviendrons dès qu'elle sera prête à installer.",
     "reference": "Commande {{reference}}"
   },
-
   "outcomeUnknown": {
     "title": "Nous vérifions auprès du réseau",
     "body": "Nous n'avons pas reçu de réponse claire concernant cette ligne, nous vérifions donc avant d'aller plus loin. Vous n'avez pas été débité deux fois et nous ne commanderons pas une seconde ligne.",
     "reassurance": "Aucune action n'est requise de votre part."
   },
-
   "usage": {
     "dataLabel": "Données",
     "callsLabel": "Appels",
@@ -54,7 +46,6 @@
     "neverUpdatedExplanation": "La consommation s'affichera ici dès que le réseau nous la communiquera.",
     "accessibilityRemaining": "{{label}} : {{remaining}} restants sur {{total}}"
   },
-
   "partialFailure": {
     "title": "{{failed}} lignes sur {{total}} n'ont pas pu être configurées",
     "bodyOne": "{{succeeded}} ligne est prête. Les autres peuvent être relancées sans payer à nouveau.",
@@ -62,7 +53,6 @@
     "retry": "Relancer les {{failed}} en échec",
     "noCharge": "Relancer ne vous débite pas une seconde fois."
   },
-
   "empty": {
     "linesTitle": "Aucune ligne pour le moment",
     "linesBody": "Les lignes que vous achetez apparaîtront ici, avec les données et les appels restants.",
@@ -75,14 +65,12 @@
     "searchTitle": "Aucun résultat pour « {{query}} »",
     "searchBody": "Essayez une recherche plus courte, ou effacez-la pour tout afficher."
   },
-
   "unsupportedDevice": {
     "title": "Ce téléphone ne prend pas en charge l'eSIM",
     "body": "Un forfait eSIM nécessite un téléphone compatible et non verrouillé sur un seul opérateur. Nous avons vérifié cet appareil : ce n'est pas le cas.",
     "action": "Voir les téléphones compatibles",
     "beforePaying": "Nous effectuons cette vérification avant le paiement, pour ne pas vous laisser avec un forfait que vous ne pourriez pas installer."
   },
-
   "error": {
     "title": "Cela n'a pas fonctionné",
     "offlineTitle": "Vous êtes hors ligne",
@@ -93,7 +81,6 @@
     "contactSupport": "Contacter l'assistance",
     "reference": "Si vous nous contactez, indiquez la référence {{reference}}."
   },
-
   "gallery": {
     "title": "Galerie de composants",
     "subtitle": "Tous les états du système de design, sur un seul écran. Changez la langue ou la taille du texte : tout doit continuer à fonctionner.",
@@ -103,5 +90,40 @@
     "sectionStates": "États",
     "sectionBanners": "Bandeaux",
     "sectionCalls": "Appels"
+  },
+  "calls": {
+    "$comment": "Copie pour les appels. VOICE-EXPANSION.md donne à DamDam deux façons de passer un appel, facturées, acheminées et défaillantes différemment : laquelle va se produire est donc indiquée, jamais déduite du contexte.",
+    "modeCarrierTitle": "Appel opérateur",
+    "modeCarrierBody": "Passé avec le clavier de votre téléphone, via la ligne DamDam de votre eSIM. Fonctionne sans internet.",
+    "modeInternetTitle": "Appel internet",
+    "modeInternetBody": "Passé dans DamDam via votre connexion internet. Aucune eSIM nécessaire.",
+    "modeLabel": "Comment cet appel est passé",
+    "identityLabel": "Votre correspondant verra",
+    "identityUnknown": "Nous ne pouvons pas confirmer le numéro qui s'affichera",
+    "identityUnknownDetail": "C'est le réseau qui décide du numéro affiché pour cet acheminement. Nous ne ferons pas de supposition.",
+    "payerLabelPersonal": "À votre charge",
+    "payerLabelWork": "À la charge de {{organization}}",
+    "payerWorkNote": "Cet appel est sur votre compte professionnel. {{organization}} peut voir qu'il a eu lieu, sa durée et son coût — pas son contenu.",
+    "payerPersonalNote": "Cet appel est sur votre propre solde. Votre organisation ne peut pas le voir.",
+    "rateLabel": "Coût estimé",
+    "ratePerMinute": "Environ {{amount}} par minute vers {{destination}}",
+    "rateEstimate": "Une estimation. Le coût final dépend de la durée de l'appel et est facturé en {{currency}}.",
+    "rateUnknown": "Nous n'avons pas de tarif pour cette destination",
+    "rateUnknownDetail": "Nous ne passerons pas un appel que nous ne pouvons pas tarifer.",
+    "callAction": "Appeler",
+    "openDialler": "Ouvrir le clavier de votre téléphone",
+    "keypadLabel": "Clavier",
+    "keypadHelp": "Utilisez le clavier pour saisir des options de menu pendant l'appel.",
+    "keypadAccessibility": "Composer le {{digit}}",
+    "micDeniedTitle": "DamDam ne peut pas accéder à votre micro",
+    "micDeniedBody": "Un appel internet nécessite l'accès au micro. Vous pouvez l'autoriser dans les réglages de votre téléphone pour DamDam.",
+    "micDeniedAction": "Ouvrir les réglages",
+    "micDeniedAlternative": "Un appel opérateur ne nécessite pas l'autorisation micro : il utilise le clavier de votre téléphone.",
+    "lowCreditTitle": "Crédit insuffisant pour cet appel",
+    "lowCreditBody": "Il vous reste {{balance}}, et cet appel nécessite au moins {{required}} pour démarrer.",
+    "lowCreditAction": "Recharger",
+    "lowCreditWorkBody": "Ce compte professionnel dispose de {{balance}}, et cet appel nécessite au moins {{required}} pour démarrer. Demandez à un administrateur de {{organization}} d'ajouter du crédit.",
+    "unavailableTitle": "Les appels ne sont pas encore disponibles ici",
+    "unavailableBody": "Nous ne proposons les appels que là où nous pouvons prouver que l'acheminement fonctionne. Cette destination n'en fait pas encore partie."
   }
 }

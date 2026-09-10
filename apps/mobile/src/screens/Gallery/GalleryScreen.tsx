@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
 import { Banner } from '../../components/Banner/Banner';
+import { CallSetupCard, KeypadPreview } from '../../components/CallSetup/CallSetupCard';
 import { PartialFailureNotice } from '../../components/PartialFailureNotice/PartialFailureNotice';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
 import { SecondaryButton } from '../../components/SecondaryButton/SecondaryButton';
@@ -26,7 +27,7 @@ import { color, space, typography } from '../../theme/tokens';
  * capture them separately rather than as one unreadable full-page image.
  */
 
-const SECTIONS = ['status', 'usage', 'states', 'banners'] as const;
+const SECTIONS = ['status', 'usage', 'states', 'calls', 'banners'] as const;
 export type GallerySection = (typeof SECTIONS)[number];
 
 function Section({
@@ -192,6 +193,58 @@ export function GalleryScreen({ only }: GalleryScreenProps): React.JSX.Element {
             onRetry={() => setRetrying(true)}
             testID="state-partial"
           />
+        </Section>
+      ) : null}
+
+      {shows('calls') ? (
+        <Section id="calls" title={t('gallery.sectionCalls')}>
+          {/* The two modes side by side. They bill, route and fail
+              differently, so which one is about to happen is stated rather
+              than inferred from the screen you are on. */}
+          <CallSetupCard
+            mode="carrier"
+            outboundIdentity="+234 801 234 5678"
+            payer={{ kind: 'personal' }}
+            destination="Nigeria mobile"
+            ratePerMinute="₦12"
+            currency="NGN"
+            onCall={() => undefined}
+            testID="call-carrier"
+          />
+          <CallSetupCard
+            mode="internet"
+            outboundIdentity={null}
+            payer={{ kind: 'work', organization: 'Acme Ltd' }}
+            destination="United Kingdom mobile"
+            ratePerMinute={null}
+            currency="NGN"
+            onCall={() => undefined}
+            testID="call-internet-unpriced"
+          />
+          <StateMessage
+            variant="blocked"
+            title={t('calls.micDeniedTitle')}
+            body={t('calls.micDeniedBody')}
+            footnote={t('calls.micDeniedAlternative')}
+            actionLabel={t('calls.micDeniedAction')}
+            onAction={() => undefined}
+            testID="call-mic-denied"
+          />
+          <StateMessage
+            variant="blocked"
+            title={t('calls.lowCreditTitle')}
+            body={t('calls.lowCreditBody', { balance: '₦40', required: '₦120' })}
+            actionLabel={t('calls.lowCreditAction')}
+            onAction={() => undefined}
+            testID="call-low-credit"
+          />
+          <StateMessage
+            variant="empty"
+            title={t('calls.unavailableTitle')}
+            body={t('calls.unavailableBody')}
+            testID="call-unavailable"
+          />
+          <KeypadPreview testID="call-keypad" />
         </Section>
       ) : null}
 
