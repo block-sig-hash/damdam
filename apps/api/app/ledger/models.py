@@ -37,6 +37,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Integer,
     String,
     UniqueConstraint,
     event,
@@ -126,13 +127,34 @@ class LedgerAccount(SQLModel, table=True):
     __tablename__ = "ledger_accounts"
     __table_args__ = (
         currency_check("ledger_accounts"),
-        UniqueConstraint(
-            "owner_kind",
+        # PostgreSQL UNIQUE constraints treat NULLs as distinct. Separate
+        # owner-shaped indexes are therefore required to make get-or-create
+        # identity real for system, user and organization accounts alike.
+        Index(
+            "uq_ledger_accounts_system_identity",
+            "currency",
+            "kind",
+            unique=True,
+            postgresql_where=text("owner_kind = 'system'"),
+            sqlite_where=text("owner_kind = 'system'"),
+        ),
+        Index(
+            "uq_ledger_accounts_user_identity",
             "owner_user_id",
+            "currency",
+            "kind",
+            unique=True,
+            postgresql_where=text("owner_kind = 'user'"),
+            sqlite_where=text("owner_kind = 'user'"),
+        ),
+        Index(
+            "uq_ledger_accounts_organization_identity",
             "owner_organization_id",
             "currency",
             "kind",
-            name="uq_ledger_accounts_identity",
+            unique=True,
+            postgresql_where=text("owner_kind = 'organization'"),
+            sqlite_where=text("owner_kind = 'organization'"),
         ),
         # Composite target for journal lines, so a line's currency is the
         # account's currency by foreign key rather than by convention.
@@ -208,6 +230,9 @@ class JournalEntry(SQLModel, table=True):
     reference: str | None = Field(
         default=None, sa_column=Column(String(500), nullable=True)
     )
+    # Freezes the complete set of lines. Without an expected count, immutable
+    # rows can still acquire new lines after the original entry commits.
+    line_count: int = Field(sa_column=Column(Integer, nullable=False))
 
 
 class JournalLine(SQLModel, table=True):
@@ -327,24 +352,41 @@ _BALANCE_TRIGGER = DDL(  # type: ignore[no-untyped-call]
     """
     CREATE OR REPLACE FUNCTION damdam_journal_balances() RETURNS trigger AS $$
     DECLARE
+        target_entry_id uuid;
+        expected_line_count integer;
         imbalance numeric;
-        line_count integer;
+        actual_line_count integer;
     BEGIN
+        IF TG_TABLE_NAME = 'journal_entries' THEN
+            target_entry_id := NEW.id;
+        ELSE
+            target_entry_id := NEW.entry_id;
+        END IF;
+
+        SELECT line_count INTO expected_line_count
+        FROM journal_entries
+        WHERE id = target_entry_id;
+
         SELECT
             COALESCE(SUM(CASE WHEN direction = 'debit' THEN amount
                               ELSE -amount END), 0),
             COUNT(*)
-        INTO imbalance, line_count
+        INTO imbalance, actual_line_count
         FROM journal_lines
-        WHERE entry_id = NEW.id;
+        WHERE entry_id = target_entry_id;
 
-        IF line_count = 0 THEN
-            RAISE EXCEPTION 'journal entry %% has no lines', NEW.id;
+        IF actual_line_count = 0 THEN
+            RAISE EXCEPTION 'journal entry %% has no lines', target_entry_id;
+        END IF;
+        IF actual_line_count <> expected_line_count THEN
+            RAISE EXCEPTION
+                'journal entry %% expected %% lines but has %%',
+                target_entry_id, expected_line_count, actual_line_count;
         END IF;
         IF imbalance <> 0 THEN
             RAISE EXCEPTION
                 'journal entry %% does not balance: debits minus credits = %%',
-                NEW.id, imbalance;
+                target_entry_id, imbalance;
         END IF;
         RETURN NEW;
     END;
@@ -374,6 +416,11 @@ _ENTRY_IMMUTABLE_TRIGGER = DDL(  # type: ignore[no-untyped-call]
 
 _LINE_IMMUTABLE_TRIGGER = DDL(  # type: ignore[no-untyped-call]
     """
+    CREATE CONSTRAINT TRIGGER trg_journal_lines_balance
+        AFTER INSERT ON journal_lines
+        DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW EXECUTE FUNCTION damdam_journal_balances();
+
     CREATE TRIGGER trg_journal_lines_immutable
         BEFORE UPDATE OR DELETE ON journal_lines
         FOR EACH ROW EXECUTE FUNCTION damdam_journal_immutable();

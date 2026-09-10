@@ -15,12 +15,14 @@ makes a judgement worth reviewing: it records revenue and creates **no** service
 credit, because the legacy product had no wallet and inventing one would put a
 liability on the books that no event produced.
 
-The three triggers are the substance:
+The four triggers are the substance:
 
 - `trg_journal_entries_balance` is a **deferred constraint** trigger, checked at
   COMMIT. An entry's lines are inserted one at a time, so a per-statement check
   would fail on the first line of every balanced entry. Deferred also means a
   half-written entry cannot survive a crash.
+- `trg_journal_lines_balance` reruns that deferred check for every appended
+  line and compares the actual count with the entry's frozen expected count.
 - `trg_journal_entries_immutable` / `trg_journal_lines_immutable` refuse UPDATE
   and DELETE outright. A correction is a new, opposite entry — never an edit.
 """
@@ -56,23 +58,40 @@ _ENUMS = (
 _BALANCE_TRIGGER = """
 CREATE OR REPLACE FUNCTION damdam_journal_balances() RETURNS trigger AS $$
 DECLARE
+    target_entry_id uuid;
+    expected_line_count integer;
     imbalance numeric;
-    line_count integer;
+    actual_line_count integer;
 BEGIN
+    IF TG_TABLE_NAME = 'journal_entries' THEN
+        target_entry_id := NEW.id;
+    ELSE
+        target_entry_id := NEW.entry_id;
+    END IF;
+
+    SELECT line_count INTO expected_line_count
+    FROM journal_entries
+    WHERE id = target_entry_id;
+
     SELECT
         COALESCE(SUM(CASE WHEN direction = 'debit' THEN amount ELSE -amount END), 0),
         COUNT(*)
-    INTO imbalance, line_count
+    INTO imbalance, actual_line_count
     FROM journal_lines
-    WHERE entry_id = NEW.id;
+    WHERE entry_id = target_entry_id;
 
-    IF line_count = 0 THEN
-        RAISE EXCEPTION 'journal entry % has no lines', NEW.id;
+    IF actual_line_count = 0 THEN
+        RAISE EXCEPTION 'journal entry % has no lines', target_entry_id;
+    END IF;
+    IF actual_line_count <> expected_line_count THEN
+        RAISE EXCEPTION
+            'journal entry % expected % lines but has %',
+            target_entry_id, expected_line_count, actual_line_count;
     END IF;
     IF imbalance <> 0 THEN
         RAISE EXCEPTION
             'journal entry % does not balance: debits minus credits = %',
-            NEW.id, imbalance;
+            target_entry_id, imbalance;
     END IF;
     RETURN NEW;
 END;
@@ -80,6 +99,11 @@ $$ LANGUAGE plpgsql;
 
 CREATE CONSTRAINT TRIGGER trg_journal_entries_balance
     AFTER INSERT ON journal_entries
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION damdam_journal_balances();
+
+CREATE CONSTRAINT TRIGGER trg_journal_lines_balance
+    AFTER INSERT ON journal_lines
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION damdam_journal_balances();
 """
@@ -138,14 +162,6 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.UniqueConstraint(
-            "owner_kind",
-            "owner_user_id",
-            "owner_organization_id",
-            "currency",
-            "kind",
-            name="uq_ledger_accounts_identity",
-        ),
         # The composite target journal lines point at, so a line's currency is
         # its account's by foreign key rather than by convention.
         sa.UniqueConstraint("id", "currency", name="uq_ledger_accounts_id_currency"),
@@ -167,6 +183,27 @@ def upgrade() -> None:
         "ledger_accounts",
         ["owner_kind", "currency", "kind"],
     )
+    op.create_index(
+        "uq_ledger_accounts_system_identity",
+        "ledger_accounts",
+        ["currency", "kind"],
+        unique=True,
+        postgresql_where=sa.text("owner_kind = 'system'"),
+    )
+    op.create_index(
+        "uq_ledger_accounts_user_identity",
+        "ledger_accounts",
+        ["owner_user_id", "currency", "kind"],
+        unique=True,
+        postgresql_where=sa.text("owner_kind = 'user'"),
+    )
+    op.create_index(
+        "uq_ledger_accounts_organization_identity",
+        "ledger_accounts",
+        ["owner_organization_id", "currency", "kind"],
+        unique=True,
+        postgresql_where=sa.text("owner_kind = 'organization'"),
+    )
 
     op.create_table(
         "journal_entries",
@@ -179,6 +216,7 @@ def upgrade() -> None:
         sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("reference", sa.String(500), nullable=True),
+        sa.Column("line_count", sa.Integer(), nullable=False),
         sa.UniqueConstraint("business_event_id", name="uq_journal_entries_event"),
         sa.UniqueConstraint("id", "currency", name="uq_journal_entries_id_currency"),
         sa.CheckConstraint(
@@ -284,6 +322,7 @@ def downgrade() -> None:
     bind = op.get_bind()
     for statement in (
         "DROP TRIGGER IF EXISTS trg_journal_lines_immutable ON journal_lines",
+        "DROP TRIGGER IF EXISTS trg_journal_lines_balance ON journal_lines",
         "DROP TRIGGER IF EXISTS trg_journal_entries_immutable ON journal_entries",
         "DROP TRIGGER IF EXISTS trg_journal_entries_balance ON journal_entries",
         "DROP FUNCTION IF EXISTS damdam_journal_immutable()",

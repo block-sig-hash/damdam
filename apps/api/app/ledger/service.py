@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlmodel import Session, col, select
 
 from app.auth.models import utc_now
@@ -60,6 +60,15 @@ class LedgerService:
 
     # --- accounts ---------------------------------------------------------
 
+    @staticmethod
+    def _lock_key(session: Session, key: str) -> None:
+        """Serialize one logical identity without creating a lock row."""
+        if session.get_bind().dialect.name == "postgresql":
+            session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+                .bindparams(key=key)
+            )
+
     def account(
         self,
         session: Session,
@@ -70,6 +79,11 @@ class LedgerService:
         owner_organization_id: UUID | None = None,
     ) -> LedgerAccount:
         """Get or create. Accounts are identity, not state, so this is safe."""
+        identity = (
+            f"ledger-account:{owner_kind.value}:{owner_user_id}:"
+            f"{owner_organization_id}:{currency}:{kind.value}"
+        )
+        self._lock_key(session, identity)
         existing = session.exec(
             select(LedgerAccount).where(
                 LedgerAccount.owner_kind == owner_kind,
@@ -142,15 +156,26 @@ class LedgerService:
             if posting.amount <= 0:
                 raise LedgerError("non_positive_amount")
 
+        self._lock_key(session, f"journal-event:{business_event_id}")
         existing = session.exec(
             select(JournalEntry).where(
                 JournalEntry.business_event_id == business_event_id
             )
         ).first()
         if existing is not None:
-            # A replay. Returning the original is what makes retries safe; the
-            # unique constraint is the backstop for two concurrent replays.
+            self._assert_entry_matches(session, existing, postings, reference)
             return existing
+
+        # Availability readers lock the same account rows. Locking all posting
+        # participants in deterministic order keeps a concurrent debit from
+        # slipping between a reservation's balance check and its insert.
+        account_ids = sorted({posting.account.id for posting in postings}, key=str)
+        session.exec(
+            select(LedgerAccount)
+            .where(col(LedgerAccount.id).in_(account_ids))
+            .order_by(col(LedgerAccount.id))
+            .with_for_update()
+        ).all()
 
         now = self.clock()
         entry = JournalEntry(
@@ -159,6 +184,7 @@ class LedgerService:
             occurred_at=occurred_at or now,
             recorded_at=now,
             reference=reference,
+            line_count=len(postings),
         )
         session.add(entry)
         session.flush()
@@ -174,6 +200,37 @@ class LedgerService:
             )
         session.flush()
         return entry
+
+    def _assert_entry_matches(
+        self,
+        session: Session,
+        existing: JournalEntry,
+        postings: Sequence[Posting],
+        reference: str | None,
+    ) -> None:
+        expected = sorted(
+            (
+                str(posting.account.id),
+                posting.direction.value,
+                round_money(posting.amount, posting.account.currency),
+            )
+            for posting in postings
+        )
+        actual = sorted(
+            (str(line.account_id), line.direction.value, line.amount)
+            for line in session.exec(
+                select(JournalLine).where(JournalLine.entry_id == existing.id)
+            ).all()
+        )
+        if (
+            existing.currency != postings[0].account.currency
+            or existing.reference != reference
+            or actual != expected
+        ):
+            raise LedgerError(
+                "idempotency_conflict",
+                f"event {existing.business_event_id} was already posted differently",
+            )
 
     # --- balances ---------------------------------------------------------
 
@@ -242,12 +299,24 @@ class LedgerService:
         if amount <= 0:
             raise LedgerError("non_positive_amount")
 
+        rounded = round_money(amount, account.currency)
+        self._lock_key(session, f"reservation-event:{business_event_id}")
         existing = session.exec(
             select(Reservation).where(
                 Reservation.business_event_id == business_event_id
             )
         ).first()
         if existing is not None:
+            if (
+                existing.account_id != account.id
+                or existing.currency != account.currency
+                or existing.amount != rounded
+                or existing.expires_at != expires_at
+            ):
+                raise LedgerError(
+                    "idempotency_conflict",
+                    f"reservation event {business_event_id} already differs",
+                )
             return existing
 
         # Lock the account row first, then compute. Everything that changes
@@ -258,7 +327,6 @@ class LedgerService:
             .with_for_update()
         ).first()
 
-        rounded = round_money(amount, account.currency)
         if self.available(session, account) < rounded:
             raise LedgerError(
                 "insufficient_available_balance",
@@ -280,10 +348,19 @@ class LedgerService:
         session.flush()
         return reservation
 
-    def _open(self, session: Session, reservation: Reservation) -> Reservation:
-        current = session.get(Reservation, reservation.id)
+    def _locked(self, session: Session, reservation: Reservation) -> Reservation:
+        current = session.exec(
+            select(Reservation)
+            .where(Reservation.id == reservation.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
         if current is None:
             raise LedgerError("reservation_not_found")
+        return current
+
+    def _open(self, session: Session, reservation: Reservation) -> Reservation:
+        current = self._locked(session, reservation)
         if current.state is not ReservationState.HELD:
             raise LedgerError("reservation_closed")
         return current
@@ -338,9 +415,34 @@ class LedgerService:
         caller releases it, because deciding on the customer's behalf that they
         are finished is not this function's call to make.
         """
-        current = self._open(session, reservation)
-        outstanding = current.amount - current.settled_amount - current.released_amount
+        current = self._locked(session, reservation)
+        account = session.get(LedgerAccount, current.account_id)
+        if account is None:  # pragma: no cover - FK guarantees this
+            raise LedgerError("account_not_found")
         settle_amount = round_money(amount, current.currency)
+        expected_reference = f"settlement of reservation {current.id}"
+
+        # A retry after commit must not dispose the reservation twice. `post`
+        # validates that the existing event has the same accounting meaning.
+        self._lock_key(session, f"journal-event:{business_event_id}")
+        existing = session.exec(
+            select(JournalEntry).where(
+                JournalEntry.business_event_id == business_event_id
+            )
+        ).first()
+        postings = [
+            Posting(account, Direction.DEBIT, settle_amount),
+            Posting(credit_account, Direction.CREDIT, settle_amount),
+        ]
+        if existing is not None:
+            self._assert_entry_matches(
+                session, existing, postings, expected_reference
+            )
+            return current, existing
+
+        if current.state is not ReservationState.HELD:
+            raise LedgerError("reservation_closed")
+        outstanding = current.amount - current.settled_amount - current.released_amount
         if settle_amount <= 0:
             raise LedgerError("non_positive_amount")
         if settle_amount > outstanding:
@@ -351,19 +453,12 @@ class LedgerService:
         if credit_account.currency != current.currency:
             raise LedgerError("cross_currency_settlement")
 
-        account = session.get(LedgerAccount, current.account_id)
-        if account is None:  # pragma: no cover - FK guarantees this
-            raise LedgerError("account_not_found")
-
         entry = self.post(
             session,
             business_event_id,
-            [
-                Posting(account, Direction.DEBIT, settle_amount),
-                Posting(credit_account, Direction.CREDIT, settle_amount),
-            ],
+            postings,
             occurred_at=occurred_at,
-            reference=f"settlement of reservation {current.id}",
+            reference=expected_reference,
         )
         current.settled_amount = current.settled_amount + settle_amount
         if current.settled_amount + current.released_amount == current.amount:

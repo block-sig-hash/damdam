@@ -31,6 +31,7 @@ from app.ledger.models import (
     JournalLine,
     LedgerAccount,
     OwnerKind,
+    Reservation,
     ReservationState,
 )
 from app.ledger.service import LedgerError, LedgerService, Posting
@@ -158,6 +159,7 @@ class TestBalancedEntries:
             currency="NGN",
             occurred_at=NOW,
             recorded_at=NOW,
+            line_count=1,
         )
         session.add(entry)
         session.flush()
@@ -182,6 +184,7 @@ class TestBalancedEntries:
                 currency="NGN",
                 occurred_at=NOW,
                 recorded_at=NOW,
+                line_count=0,
             )
         )
         with pytest.raises(Exception) as excinfo:
@@ -220,6 +223,7 @@ class TestBalancedEntries:
             currency="NGN",
             occurred_at=NOW,
             recorded_at=NOW,
+            line_count=1,
         )
         session.add(entry)
         session.flush()
@@ -292,11 +296,37 @@ class TestIdempotency:
                 currency="NGN",
                 occurred_at=NOW,
                 recorded_at=NOW,
+                line_count=0,
             )
         )
         with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()
+
+    def test_reusing_an_event_for_different_postings_is_refused(
+        self, session, service
+    ):
+        _, credit, clearing = _funded(session, service)
+        service.post(
+            session,
+            "payment:meaningful-id",
+            [
+                Posting(clearing, Direction.DEBIT, Decimal("10")),
+                Posting(credit, Direction.CREDIT, Decimal("10")),
+            ],
+        )
+        session.commit()
+
+        with pytest.raises(LedgerError) as excinfo:
+            service.post(
+                session,
+                "payment:meaningful-id",
+                [
+                    Posting(clearing, Direction.DEBIT, Decimal("11")),
+                    Posting(credit, Direction.CREDIT, Decimal("11")),
+                ],
+            )
+        assert excinfo.value.code == "idempotency_conflict"
 
     def test_concurrent_replays_credit_once(self, engine, service):
         with Session(engine) as setup:
@@ -412,6 +442,34 @@ class TestImmutability:
         # The original is still there, unchanged, which is the point.
         assert len(session.exec(select(JournalEntry)).all()) == 2
 
+    def test_balanced_lines_cannot_be_appended_to_a_posted_entry(
+        self, session, service
+    ):
+        _, credit, clearing = _funded(session, service)
+        entry = session.exec(select(JournalEntry)).first()
+        session.add_all(
+            [
+                JournalLine(
+                    entry_id=entry.id,
+                    account_id=clearing.id,
+                    currency="NGN",
+                    direction=Direction.DEBIT,
+                    amount=Decimal("1"),
+                ),
+                JournalLine(
+                    entry_id=entry.id,
+                    account_id=credit.id,
+                    currency="NGN",
+                    direction=Direction.CREDIT,
+                    amount=Decimal("1"),
+                ),
+            ]
+        )
+        with pytest.raises(Exception) as excinfo:
+            session.commit()
+        assert "expected 2 lines but has 4" in str(excinfo.value)
+        session.rollback()
+
 
 # --- reservations ------------------------------------------------------------
 
@@ -444,6 +502,16 @@ class TestReservations:
         session.commit()
         assert first.id == second.id
         assert service.held(session, credit) == Decimal("1000.00")
+
+    def test_reservation_event_cannot_change_amount(self, session, service):
+        _, credit, _ = _funded(session, service)
+        service.reserve(session, credit, Decimal("1000"), "order:meaningful:hold")
+        session.commit()
+        with pytest.raises(LedgerError) as excinfo:
+            service.reserve(
+                session, credit, Decimal("1001"), "order:meaningful:hold"
+            )
+        assert excinfo.value.code == "idempotency_conflict"
 
     def test_releasing_returns_the_hold_without_posting_anything(
         self, session, service
@@ -547,6 +615,100 @@ class TestReservations:
                 session, reservation, Decimal("1"), "call:6:settle:again", revenue
             )
         assert excinfo.value.code == "reservation_closed"
+
+    def test_replaying_a_settlement_does_not_dispose_the_hold_twice(
+        self, session, service
+    ):
+        _, credit, _ = _funded(session, service)
+        revenue = service.account(session, "NGN", AccountKind.REVENUE)
+        reservation = service.reserve(
+            session, credit, Decimal("100"), "call:retry:hold"
+        )
+        session.commit()
+
+        _, first = service.settle(
+            session, reservation, Decimal("40"), "call:retry:settle", revenue
+        )
+        session.commit()
+        replayed, second = service.settle(
+            session, reservation, Decimal("40"), "call:retry:settle", revenue
+        )
+        session.commit()
+
+        assert first.id == second.id
+        assert replayed.settled_amount == Decimal("40.000000")
+        assert service.balance(session, credit) == Decimal("9960.00")
+
+    def test_concurrent_settlements_cannot_exceed_the_hold(self, engine, service):
+        with Session(engine) as setup:
+            setup.exec(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+            setup.commit()
+            _, credit, _ = _funded(setup, service, amount="100.00")
+            revenue = service.account(setup, "NGN", AccountKind.REVENUE)
+            reservation = service.reserve(
+                setup, credit, Decimal("100"), "call:concurrent:hold"
+            )
+            setup.commit()
+            reservation_id, revenue_id = reservation.id, revenue.id
+
+        barrier = Barrier(2)
+
+        def settle(index: int) -> str:
+            with Session(engine) as scoped:
+                held = scoped.get(Reservation, reservation_id)
+                revenue_account = scoped.get(LedgerAccount, revenue_id)
+                barrier.wait(timeout=10)
+                try:
+                    service.settle(
+                        scoped,
+                        held,
+                        Decimal("70"),
+                        f"call:concurrent:settle:{index}",
+                        revenue_account,
+                    )
+                    scoped.commit()
+                    return "ok"
+                except LedgerError as exc:
+                    scoped.rollback()
+                    return exc.code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = list(pool.map(settle, range(2)))
+
+        assert outcomes.count("ok") == 1, outcomes
+        assert outcomes.count("settlement_exceeds_hold") == 1, outcomes
+
+    def test_concurrent_system_account_creation_has_one_identity(
+        self, engine, service
+    ):
+        with Session(engine) as setup:
+            setup.exec(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+            setup.commit()
+
+        barrier = Barrier(2)
+
+        def create(_: int) -> str:
+            with Session(engine) as scoped:
+                barrier.wait(timeout=10)
+                account = service.account(
+                    scoped, "NGN", AccountKind.SETTLEMENT_CLEARING
+                )
+                scoped.commit()
+                return str(account.id)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            ids = list(pool.map(create, range(2)))
+
+        assert ids[0] == ids[1]
+        with Session(engine) as check:
+            accounts = check.exec(
+                select(LedgerAccount).where(
+                    LedgerAccount.owner_kind == OwnerKind.SYSTEM,
+                    LedgerAccount.currency == "NGN",
+                    LedgerAccount.kind == AccountKind.SETTLEMENT_CLEARING,
+                )
+            ).all()
+            assert len(accounts) == 1
 
     def test_concurrent_reservations_cannot_overspend(self, engine, service):
         """The test this chunk exists for.
