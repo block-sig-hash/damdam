@@ -1,0 +1,107 @@
+{
+  "$comment": "Copy for the states a connectivity product spends most of its time in. Written as practical sentences rather than labels: 'Pending' tells someone nothing, 'Paid — your line is being set up' tells them the money left and the work has not finished. design-system.md §17 explains the rules these follow.",
+
+  "status": {
+    "paymentUnpaid": "Not paid",
+    "paymentAuthorized": "Payment held",
+    "paymentPaid": "Paid",
+    "paymentRefunded": "Refunded",
+    "paymentFailed": "Payment failed",
+
+    "provisioningNotStarted": "Not started",
+    "provisioningRequested": "Setting up",
+    "provisioningOutcomeUnknown": "Checking with the network",
+    "provisioningProvisioned": "Ready to install",
+    "provisioningFailed": "Setup failed",
+    "provisioningCancelled": "Cancelled",
+
+    "installationNotInstalled": "Not installed",
+    "installationInstalled": "Installed",
+    "installationRemoved": "Removed",
+
+    "activationPending": "Not active yet",
+    "activationActivating": "Activating",
+    "activationActive": "Active",
+    "activationSuspended": "Suspended",
+    "activationTerminated": "Ended",
+
+    "networkUnknown": "Not checked yet",
+    "networkAttached": "Connected",
+    "networkDetached": "Not connected"
+  },
+
+  "pendingProvisioning": {
+    "title": "Your line is being set up",
+    "body": "We have your payment. Setting up a line with the network usually takes a few minutes. You do not need to stay on this screen — we will let you know when it is ready to install.",
+    "reference": "Order {{reference}}"
+  },
+
+  "outcomeUnknown": {
+    "title": "We are checking with the network",
+    "body": "We did not get a clear answer about this line, so we are checking before doing anything else. You have not been charged twice and we will not order a second line.",
+    "reassurance": "Nothing further is needed from you."
+  },
+
+  "usage": {
+    "dataLabel": "Data",
+    "callsLabel": "Calls",
+    "remainingData": "{{remaining}} of {{total}} left",
+    "remainingCalls": "{{remaining}} of {{total}} left",
+    "updated": "Updated {{when}}",
+    "stale": "Last updated {{when}}",
+    "staleExplanation": "Usage can take a little while to reach us, so this may be behind what you have actually used.",
+    "neverUpdated": "No usage reported yet",
+    "neverUpdatedExplanation": "We will show usage here once the network reports it.",
+    "accessibilityRemaining": "{{label}}: {{remaining}} of {{total}} remaining"
+  },
+
+  "partialFailure": {
+    "title": "{{failed}} of {{total}} lines could not be set up",
+    "bodyOne": "{{succeeded}} line is ready. The rest can be retried without paying again.",
+    "bodyOther": "{{succeeded}} lines are ready. The rest can be retried without paying again.",
+    "retry": "Retry the {{failed}} that failed",
+    "noCharge": "Retrying does not charge you again."
+  },
+
+  "empty": {
+    "linesTitle": "No lines yet",
+    "linesBody": "Lines you buy will appear here, with their data and calls remaining.",
+    "linesAction": "Browse plans",
+    "ordersTitle": "No orders yet",
+    "ordersBody": "Your receipts and order history will appear here.",
+    "peopleTitle": "Nobody added yet",
+    "peopleBody": "Add people to assign lines to them and see their usage in one place.",
+    "peopleAction": "Add someone",
+    "searchTitle": "Nothing matches \"{{query}}\"",
+    "searchBody": "Try a shorter search, or clear it to see everything."
+  },
+
+  "unsupportedDevice": {
+    "title": "This phone cannot use an eSIM",
+    "body": "An eSIM plan needs a phone that supports one and is not locked to a single network. We checked this device and it does not.",
+    "action": "See supported phones",
+    "beforePaying": "We check this before you pay so you are not left with a plan you cannot install."
+  },
+
+  "error": {
+    "title": "That did not work",
+    "offlineTitle": "You are offline",
+    "offlineBody": "We will try again when you are back on a network. Anything you have already bought is safe.",
+    "genericBody": "Something went wrong at our end. Nothing was charged.",
+    "retry": "Try again",
+    "retrying": "Trying again…",
+    "contactSupport": "Contact support",
+    "reference": "If you contact us, quote {{reference}}."
+  },
+
+  "gallery": {
+    "title": "Component gallery",
+    "subtitle": "Every state pattern in the design system, on one screen. Change the language or the text size and everything here has to keep working.",
+    "sectionButtons": "Buttons",
+    "sectionStatus": "Status pills",
+    "sectionUsage": "Usage",
+    "sectionStates": "States",
+    "sectionBanners": "Banners",
+    "sectionCalls": "Calls"
+  }
+}

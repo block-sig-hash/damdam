@@ -1,0 +1,107 @@
+{
+  "$comment": "Traduction, pas transposition. Le français est nettement plus long que l'anglais ici — c'est délibéré et c'est ce que la vérification d'expansion mesure : une mise en page qui ne tient qu'en anglais est une mise en page cassée.",
+
+  "status": {
+    "paymentUnpaid": "Non payé",
+    "paymentAuthorized": "Paiement réservé",
+    "paymentPaid": "Payé",
+    "paymentRefunded": "Remboursé",
+    "paymentFailed": "Paiement refusé",
+
+    "provisioningNotStarted": "Pas commencé",
+    "provisioningRequested": "Configuration en cours",
+    "provisioningOutcomeUnknown": "Vérification auprès du réseau",
+    "provisioningProvisioned": "Prêt à installer",
+    "provisioningFailed": "Échec de la configuration",
+    "provisioningCancelled": "Annulé",
+
+    "installationNotInstalled": "Non installé",
+    "installationInstalled": "Installé",
+    "installationRemoved": "Supprimé",
+
+    "activationPending": "Pas encore actif",
+    "activationActivating": "Activation en cours",
+    "activationActive": "Actif",
+    "activationSuspended": "Suspendu",
+    "activationTerminated": "Terminé",
+
+    "networkUnknown": "Pas encore vérifié",
+    "networkAttached": "Connecté",
+    "networkDetached": "Non connecté"
+  },
+
+  "pendingProvisioning": {
+    "title": "Votre ligne est en cours de configuration",
+    "body": "Nous avons bien reçu votre paiement. La configuration d'une ligne auprès du réseau prend généralement quelques minutes. Vous n'avez pas besoin de rester sur cet écran — nous vous préviendrons dès qu'elle sera prête à installer.",
+    "reference": "Commande {{reference}}"
+  },
+
+  "outcomeUnknown": {
+    "title": "Nous vérifions auprès du réseau",
+    "body": "Nous n'avons pas reçu de réponse claire concernant cette ligne, nous vérifions donc avant d'aller plus loin. Vous n'avez pas été débité deux fois et nous ne commanderons pas une seconde ligne.",
+    "reassurance": "Aucune action n'est requise de votre part."
+  },
+
+  "usage": {
+    "dataLabel": "Données",
+    "callsLabel": "Appels",
+    "remainingData": "{{remaining}} restants sur {{total}}",
+    "remainingCalls": "{{remaining}} restantes sur {{total}}",
+    "updated": "Mis à jour {{when}}",
+    "stale": "Dernière mise à jour {{when}}",
+    "staleExplanation": "La consommation met parfois un moment à nous parvenir : ce chiffre peut donc être en retard sur ce que vous avez réellement utilisé.",
+    "neverUpdated": "Aucune consommation signalée",
+    "neverUpdatedExplanation": "La consommation s'affichera ici dès que le réseau nous la communiquera.",
+    "accessibilityRemaining": "{{label}} : {{remaining}} restants sur {{total}}"
+  },
+
+  "partialFailure": {
+    "title": "{{failed}} lignes sur {{total}} n'ont pas pu être configurées",
+    "bodyOne": "{{succeeded}} ligne est prête. Les autres peuvent être relancées sans payer à nouveau.",
+    "bodyOther": "{{succeeded}} lignes sont prêtes. Les autres peuvent être relancées sans payer à nouveau.",
+    "retry": "Relancer les {{failed}} en échec",
+    "noCharge": "Relancer ne vous débite pas une seconde fois."
+  },
+
+  "empty": {
+    "linesTitle": "Aucune ligne pour le moment",
+    "linesBody": "Les lignes que vous achetez apparaîtront ici, avec les données et les appels restants.",
+    "linesAction": "Voir les forfaits",
+    "ordersTitle": "Aucune commande pour le moment",
+    "ordersBody": "Vos reçus et votre historique de commandes apparaîtront ici.",
+    "peopleTitle": "Personne n'a encore été ajouté",
+    "peopleBody": "Ajoutez des personnes pour leur attribuer des lignes et suivre leur consommation au même endroit.",
+    "peopleAction": "Ajouter une personne",
+    "searchTitle": "Aucun résultat pour « {{query}} »",
+    "searchBody": "Essayez une recherche plus courte, ou effacez-la pour tout afficher."
+  },
+
+  "unsupportedDevice": {
+    "title": "Ce téléphone ne prend pas en charge l'eSIM",
+    "body": "Un forfait eSIM nécessite un téléphone compatible et non verrouillé sur un seul opérateur. Nous avons vérifié cet appareil : ce n'est pas le cas.",
+    "action": "Voir les téléphones compatibles",
+    "beforePaying": "Nous effectuons cette vérification avant le paiement, pour ne pas vous laisser avec un forfait que vous ne pourriez pas installer."
+  },
+
+  "error": {
+    "title": "Cela n'a pas fonctionné",
+    "offlineTitle": "Vous êtes hors ligne",
+    "offlineBody": "Nous réessaierons dès que vous serez de nouveau connecté. Tout ce que vous avez déjà acheté est conservé.",
+    "genericBody": "Un problème est survenu de notre côté. Rien n'a été débité.",
+    "retry": "Réessayer",
+    "retrying": "Nouvelle tentative…",
+    "contactSupport": "Contacter l'assistance",
+    "reference": "Si vous nous contactez, indiquez la référence {{reference}}."
+  },
+
+  "gallery": {
+    "title": "Galerie de composants",
+    "subtitle": "Tous les états du système de design, sur un seul écran. Changez la langue ou la taille du texte : tout doit continuer à fonctionner.",
+    "sectionButtons": "Boutons",
+    "sectionStatus": "Pastilles d'état",
+    "sectionUsage": "Consommation",
+    "sectionStates": "États",
+    "sectionBanners": "Bandeaux",
+    "sectionCalls": "Appels"
+  }
+}
