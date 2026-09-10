@@ -21,8 +21,8 @@
       "adminRequired": "Une session administrateur est requise."
     },
     "metadata": {
-      "title": "Tableau de bord opérateur DamDam",
-      "description": "Inscrivez et gérez votre compte d’opérateur de voyages pour le Hajj."
+      "title": "Tableau de bord DamDam",
+      "description": "Gérez la connectivité de votre organisation : personnes, lignes, commandes et facturation."
     }
   },
   "auth": {
@@ -268,5 +268,69 @@
     "duration": "La génération peut prendre jusqu'à 30 secondes pour les grands manifestes.",
     "loadFailed": "Impossible de charger les manifestes.",
     "generateFailed": "Impossible de générer le rapport."
+  },
+  "states": {
+    "status": {
+      "paymentPaid": "Payé",
+      "provisioningRequested": "Configuration en cours",
+      "provisioningOutcomeUnknown": "Vérification auprès du réseau",
+      "installationNotInstalled": "Non installé",
+      "activationActive": "Actif",
+      "activationSuspended": "Suspendu",
+      "networkDetached": "Non connecté",
+      "familyPayment": "Paiement",
+      "familyProvisioning": "Configuration",
+      "familyInstallation": "Installation",
+      "familyActivation": "Ligne",
+      "familyNetwork": "Réseau"
+    },
+    "usage": {
+      "dataLabel": "Données",
+      "callsLabel": "Appels",
+      "updated": "Mis à jour {when}",
+      "stale": "Dernière mise à jour {when}",
+      "staleExplanation": "La consommation met parfois un moment à nous parvenir : ce chiffre peut donc être en retard sur ce qui a réellement été utilisé. Les budgets s'appliquent sur le relevé dont nous disposons.",
+      "neverUpdatedExplanation": "La consommation s'affichera ici dès que le réseau nous la communiquera."
+    },
+    "pending": {
+      "title": "{count} lignes sont en cours de configuration",
+      "body": "Le paiement est terminé. La configuration des lignes auprès du réseau prend généralement quelques minutes. Vous pouvez quitter cette page : la commande se poursuivra.",
+      "footnote": "Commande {reference}"
+    },
+    "partialFailure": {
+      "title": "{failed} lignes sur {total} n'ont pas pu être configurées",
+      "body": "{succeeded} lignes sont prêtes et attribuées. Les autres peuvent être relancées.",
+      "noCharge": "Relancer ne débite pas à nouveau l'organisation.",
+      "retry": "Relancer les {failed} en échec"
+    },
+    "empty": {
+      "peopleTitle": "Personne n'a encore été ajoutée",
+      "peopleBody": "Ajoutez des personnes pour leur attribuer des lignes et suivre consommation et dépenses au même endroit.",
+      "peopleAction": "Ajouter une personne",
+      "ordersTitle": "Aucune commande pour le moment",
+      "ordersBody": "Les commandes groupées et leur avancement ligne par ligne apparaîtront ici."
+    },
+    "blocked": {
+      "title": "Certains téléphones ne prennent pas en charge l'eSIM",
+      "body": "{count} des personnes de cet import utilisent un appareil incompatible avec l'eSIM, ou verrouillé sur un seul opérateur. Ces lignes ne sont pas incluses dans la commande.",
+      "footnote": "Nous effectuons cette vérification avant le paiement, pour qu'une organisation ne soit pas facturée pour des lignes que personne ne peut installer.",
+      "action": "Examiner les {count} concernées"
+    },
+    "error": {
+      "title": "Cela n'a pas fonctionné",
+      "body": "Un problème est survenu de notre côté. Rien n'a été débité.",
+      "footnote": "Si vous nous contactez, indiquez la référence {reference}.",
+      "retry": "Réessayer",
+      "contactSupport": "Contacter l'assistance"
+    },
+    "gallery": {
+      "title": "Galerie de composants",
+      "subtitle": "Tous les états du système de design, sur une seule page. Réduisez la fenêtre ou changez de langue : tout doit continuer à fonctionner.",
+      "sectionStatus": "Pastilles d'état",
+      "sectionUsage": "Consommation",
+      "sectionStates": "États",
+      "internalOnly": "Opérations internes",
+      "internalOnlyNote": "Les outils d'assistance internes forment une zone distincte et visuellement identifiable. Un administrateur d'organisation ne voit jamais ce style, et personne ne doit confondre les deux."
+    }
   }
 }

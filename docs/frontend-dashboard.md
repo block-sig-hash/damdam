@@ -560,3 +560,41 @@ policy/ledger with mobile; require permission at use, show rate/identity/payer,
 and recover one durable attempt across refresh/tabs without redial. Enterprise
 administration controls work service under existing RBAC; it does not grant
 cross-customer call access. Incoming ringing remains deferred.
+
+---
+
+## 9.11 Amendment — The Dashboard Joins the Shared Design System (US-27)
+
+**Recorded 10 September 2026 by build chunk 08.**
+
+§9.9 held the dashboard to the revised design system. It now actually is:
+`app/tokens.css` is generated from
+[`design-tokens/tokens.json`](../design-tokens/tokens.json), the same source the
+mobile app is generated from, and `globals.css` may no longer contain a raw
+colour literal — a test fails on one.
+
+**What changed visually.** The dashboard had its own palette: `#17623e` where
+the app used `primary-500` `#0B6B66`, `#17211b` where it used `gray-900`
+`#14181A`, and around twenty more. The green mattered most:
+[`design-system.md` §1](./design-system.md#1-color-tokens) reserves green for the
+healthy/success semantic so it never competes with the brand colour for meaning,
+and the dashboard had adopted a green *as* its brand.
+
+Its contrast was, on audit, already sound — the problem was not legibility but
+that "the design system" meant two different palettes depending on which app you
+opened, and nothing compared them.
+
+**Added:** the four state patterns from §17.4 as dashboard components, and a
+`/gallery` route rendering all of them. Enterprise copy carries the enterprise
+stakes: a stale usage reading says budgets are applied on the reading we have,
+and a bulk retry says it does not charge the organization again.
+
+**Also corrected:** the browser title and meta description still read "Hajj tour
+operator account", a chunk after `prd.md` §10 reset the product. Scoped to
+`common.metadata` only — the HTO and pilgrim copy still in `auth`, `home`,
+`manifests`, `admin` and `reports` belongs to the screens chunks 22–24 rebuild,
+and rewriting it here would break their tests for no benefit.
+
+**Internal operations must be visibly distinct** from any organization surface —
+its own shell, header and a persistent banner — not the same styling behind a
+different permission. See §17.6 for why. Chunk 25 builds it.

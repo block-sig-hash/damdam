@@ -15,6 +15,7 @@ import { EsimQrCodeScreen } from '../src/screens/EsimSetup/EsimQrCodeScreen';
 import { EsimActivationPromptScreen } from '../src/screens/EsimActivation/EsimActivationPromptScreen';
 import { EsimActivationGuideScreen } from '../src/screens/EsimActivation/EsimActivationGuideScreen';
 import { ActivationSuccessScreen } from '../src/screens/ActivationSuccess/ActivationSuccessScreen';
+import { GALLERY_SECTIONS, GalleryScreen } from '../src/screens/Gallery/GalleryScreen';
 import { savePinLocally } from '../src/utils/pinLocalStore';
 import {
   FIXTURE_ACCESS_TOKEN,
@@ -52,7 +53,27 @@ export interface HarnessTarget {
   render: () => React.JSX.Element;
 }
 
+/**
+ * The design system's own targets (chunk 08).
+ *
+ * One entry per gallery section rather than one for the whole gallery: a
+ * full-page capture of every state at phone width is unreadable, and an
+ * unreadable screenshot is not evidence of anything. Generated from
+ * `GALLERY_SECTIONS` so adding a section to the gallery adds it to the matrix
+ * -- there is no second list to forget.
+ */
+const GALLERY_TARGETS: Record<string, HarnessTarget> = Object.fromEntries(
+  GALLERY_SECTIONS.map(section => [
+    `gallery-${section}`,
+    {
+      label: `Design system — ${section}`,
+      render: () => <GalleryScreen only={section} />,
+    },
+  ]),
+);
+
 export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
+  ...GALLERY_TARGETS,
   'otp-verification': {
     label: 'OTP Verification',
     render: () => (

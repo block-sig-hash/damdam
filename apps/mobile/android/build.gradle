@@ -19,4 +19,17 @@ buildscript {
     }
 }
 
+// Native dependencies can declare their own buildscript classpaths. Add Maven
+// Central before those subprojects are evaluated so a clean runner can resolve
+// transitive Android Gradle Plugin artifacts even when a dependency's
+// build.gradle lists only Google and the Gradle Plugin Portal. Keep this at the
+// root instead of modifying generated node_modules content.
+subprojects {
+    buildscript {
+        repositories {
+            mavenCentral()
+        }
+    }
+}
+
 apply plugin: "com.facebook.react.rootproject"

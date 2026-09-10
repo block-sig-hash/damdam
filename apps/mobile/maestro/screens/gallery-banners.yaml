@@ -1,0 +1,23 @@
+appId: com.damdam.app
+---
+- launchApp
+- tapOn:
+    id: "harness-locale-en"
+- assertVisible:
+    id: "harness-locale-active-en"
+- tapOn:
+    id: "harness-target-gallery-banners"
+- assertVisible:
+    id: "gallery-section-banners"
+- takeScreenshot: gallery-banners-en
+- stopApp
+- launchApp
+- tapOn:
+    id: "harness-locale-fr"
+- assertVisible:
+    id: "harness-locale-active-fr"
+- tapOn:
+    id: "harness-target-gallery-banners"
+- assertVisible:
+    id: "gallery-section-banners"
+- takeScreenshot: gallery-banners-fr

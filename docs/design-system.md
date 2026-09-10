@@ -475,3 +475,261 @@ Two governance changes:
   screen/locale matrix; chunk 27 enforces a complete, nonempty manifest for it as
   a release gate. Neither the historical 0/32 nor the 32 images observed on
   2026-09-08 carries forward — both describe the old screen set.
+
+---
+
+# 17. The reset design system (chunk 08, US-27)
+
+**Recorded 10 September 2026 by build chunk 08.** §15.3 assigned this revision
+here and named what carries forward: the token, typography and spacing
+foundations, the accessibility requirements, and complete English/French
+support. Those are unchanged. This section replaces everything above that
+assumed one Hajj-pilgrim app, and adds what a two-audience product needs.
+
+Machine-readable half: [`design-tokens/tokens.json`](../design-tokens/tokens.json).
+Both apps are generated from it. This section is still the source of truth for
+*why* each value is what it is; that file is the source of truth for what the
+values are.
+
+## 17.1 What is retired, and what replaces it
+
+| Retired above | Why | Replacement |
+|---|---|---|
+| The SOS button and its named styling exception | The feature is gone (chunk 04). The reassurance-under-emergency design problem it solved is not this product's problem. | Nothing. Do not carry the pattern forward looking for a use. |
+| Emergency/safety banner tone | Same | The four state variants in §17.4 |
+| "Family" tier accents | Family grouping is retired | The accent is a single non-alert badge fill (§17.2) |
+| Bottom tab: Home / Call / Safety History / Settings | Two of four are retired features | Home / Plans / My Line / Account (§17.5) |
+| "safety-critical app", "this demographic", pilgrim framing | The product is global consumer plus enterprise/government | §17.5 and §17.6 |
+
+**A rule that survives the retirement and is worth restating:** nothing in this
+system may depend on colour alone (WCAG 1.4.1). Every semantic state carries a
+word, and most carry an icon too. That was written for a safety feature; it
+matters just as much for "your line is suspended".
+
+## 17.2 Colour, after the audit
+
+The palette is unchanged except for two additions and one correction, all of
+which came out of computing the ratios rather than restating them.
+
+**Added:** `warning-700` `#A63C11` (6.41:1) and `info-700` `#2C5F91` (6.66:1).
+The palette previously had no body-safe warning or informational colour, which
+forced *every* semantic message into the tint-background pattern. That pattern
+is right for banners and pills; it is wrong for a single warning word inside a
+dashboard table cell, and its absence is why the dashboard invented `#795400`
+for itself.
+
+**Corrected:** `accent-500` (Desert Gold) is **2.97:1** on white — below even
+the 3:1 non-text threshold. §1 described it as a badge fill and never claimed a
+ratio, but nothing stopped it being used as an icon or a border, and it reads as
+"dark enough" by eye. It is now formally **fill-only**: a badge with `gray-900`
+on top, and nothing else. Never an icon, never a border, never text on white.
+
+**Every ratio in this document is now computed, not recorded.**
+`design-tokens/tokens.json` stores what each colour is *allowed to be used for*;
+the tests compute the ratio from the hex and fail if the classification does not
+hold. A hand-maintained table of ratios goes stale the first time somebody
+nudges a value, and the rule it justifies goes stale with it, silently.
+
+## 17.3 Two audiences, one system
+
+The consumer app and the enterprise dashboard share tokens, semantics and
+accessibility rules. They differ in density and in what a mistake costs.
+
+| | Consumer mobile | Enterprise dashboard |
+|---|---|---|
+| Density | One decision per screen | Tables and batches |
+| Primary unit | A line | A person, a batch, a budget |
+| Cost of an error | One person's connectivity | Forty people's, and a bill |
+| Copy register | Second person, plain | Second person, plus what the organization can see |
+
+Two rules follow from the right-hand column:
+
+- **An enterprise action that affects many people states the count before the
+  verb.** "Retry the 2 that failed", not "Retry failed lines".
+- **Anything an organization can see about a person is said to that person**,
+  on the screen where it happens. §17.7 covers the call case, which is the
+  sharpest one.
+
+## 17.4 The four states, and their copy rules
+
+Every screen in this product spends most of its life in one of four states that
+are not "loaded". They share a shape — what is true, what it means for you, one
+obvious next action — and must not share a tone.
+
+| State | When | Tone | Never |
+|---|---|---|---|
+| **Empty** | Nothing here yet | Neutral (`gray-50`) | Red. An empty list is not a problem. |
+| **Pending** | Work is happening elsewhere | Informational (`info-100`) | A bare spinner. Provisioning is minutes; a four-minute spinner reads as a hang. |
+| **Blocked** | Cannot proceed, and retrying will not help | Caution (`warning-100`) | The same red as a failure — it invites people to keep trying something that will never work. |
+| **Failed** | Something went wrong, retry may help | Error (`error-100`) | Silence about whether money moved. |
+
+Copy rules, in order of how often they are broken:
+
+1. **Say what it means, not what the state is called.** "Pending" tells someone
+   nothing. "Paid — your line is being set up" tells them the money left and the
+   work has not finished.
+2. **Money is addressed explicitly.** Every failure says whether anything was
+   charged; every retry after a payment says whether it charges again. With
+   money already taken, that is the only question anybody has.
+3. **A reference belongs in a footnote**, not the heading. It matters to support
+   and to nobody else until they call.
+4. **One action.** A second one is a link, not a second button.
+
+### Pending provisioning, specifically
+
+Payment, provisioning, installation, activation and network attachment are
+[separate states](./data-model.md#644-amendment--core-domain-identities-and-separated-states-us-28)
+because they genuinely disagree. The UI must not collapse them: a status pill
+declares **which question it answers**, and the component requires that as a
+prop rather than defaulting. Five pills on one card are five answers, not one
+status wearing five hats.
+
+`outcome_unknown` gets its own copy and is reassuring on purpose: *"We did not
+get a clear answer about this line, so we are confirming it before doing
+anything else. You have not been charged twice and we will not order a second
+line."* An unknown supplier outcome is the most expensive failure in this
+product, and the person it happens to needs to know the expensive thing is not
+happening to them.
+
+### Stale usage
+
+A usage reading is never shown without its age, and the age is not optional in
+the component's props. Carrier usage arrives late; a balance with no timestamp
+is a number people plan around, and that is how somebody runs out mid-journey
+while the app still says they had plenty.
+
+"Never reported" is a **different statement** from "zero used" and renders
+differently: an empty grey bar, not a full green one. Painting it full would be
+inventing a reading.
+
+A late reading is styled as ordinary weight, not as an alert. Late is normal;
+colouring it red trains people to ignore red.
+
+### Partial failure
+
+A bulk outcome is not one outcome. Reporting forty lines as a single success
+hides two people with no service; reporting it as a single failure implies
+thirty-eight orders need redoing, and acting on that impression is how a batch
+gets bought twice.
+
+Lead with the count that needs acting on, follow immediately with the count that
+succeeded, and state that retrying does not charge again.
+
+### Unsupported device
+
+Blocked, not failed, and checked **before payment**. The copy says so: *"We
+check this before you pay so you are not left with a plan you cannot install."*
+
+## 17.5 The consumer surfaces
+
+Four, replacing the retired set. Chunks 18–21 build them; this is the contract
+they build against.
+
+| Surface | Answers | Must show | Must not |
+|---|---|---|---|
+| **Home** | "Is my service working, and what is left?" | Line status pills, usage meters with their age, one next action if there is one | Invent a usage figure, or show a balance without its age |
+| **Plans** | "What can I buy, and can I use it?" | Price with explicit currency, what is included, device eligibility **before** checkout | Show a price without a currency, or let someone pay for a plan their phone cannot install |
+| **My Line** | "How do I install and use this?" | Installation guidance for the real device, the assigned number, activation and network state separately | Claim the line is attached because it was activated |
+| **Account** | "Who am I, what have I paid, how do I leave?" | Identity and recovery, receipts, deletion | Bury deletion |
+
+**Navigation:** four bottom tabs, **always icon plus label**, never icon-only.
+Retained from §4 and restated because it is the rule most often lost in a
+redesign. No badge dots.
+
+## 17.6 The enterprise surfaces
+
+Chunks 22–24 build these.
+
+| Surface | Answers | Must show |
+|---|---|---|
+| **People** | "Who is in this organization?" | Membership role, invitation state, whose lines are whose |
+| **Orders** | "What did we buy and did it work?" | Per-line progress, partial failure with a free retry |
+| **Lines** | "What is live and what is it costing?" | Activation and network state separately, usage with its age |
+| **Billing** | "What have we spent and what is left?" | Currency on every amount, budget remaining, receipts |
+
+### Internal operations must look different
+
+Internal support tooling is a **visibly distinct area**: its own shell, its own
+header treatment, and a persistent banner naming it as internal. Not a
+permission difference behind identical styling.
+
+The reason is specific. An internal operator looking at a customer's data and an
+organization administrator looking at their own staff's data are doing different
+things with different authority, and a support engineer who cannot tell at a
+glance which context they are in will eventually act on the wrong one. Chunk 07
+keeps internal privilege separate from organization roles in the API; this keeps
+them separate on screen.
+
+## 17.7 Calls
+
+`VOICE-EXPANSION.md` gives DamDam two ways to place a call. They bill, route and
+fail differently, so **which one is about to happen is stated, never inferred
+from the screen you are on.**
+
+| | Carrier call | Internet call |
+|---|---|---|
+| Placed by | The phone's own dialler | DamDam |
+| Needs | The eSIM, no internet | Internet, the microphone, no eSIM |
+| Bills against | The line's included minutes | The calling balance |
+
+Four things are on the call surface before a call starts, and none of them are
+optional:
+
+1. **Mode** — which of the two.
+2. **Outbound identity** — the number they will see. When we cannot confirm it,
+   the UI **says so** rather than guessing. The network decides for some routes,
+   and a wrong promise here is a wrong promise about who the recipient thinks is
+   calling.
+3. **Payer** — personal or work, and for work: *"your employer can see that it
+   happened, how long it lasted and what it cost — not what was said."* Before
+   they dial.
+4. **Rate** — per-minute, marked as an estimate, with the currency. **A
+   destination we cannot price cannot be called at all**, because placing one
+   anyway is how somebody learns the cost afterwards.
+
+States: microphone denied (which names the carrier alternative, since a denied
+permission otherwise reads as "no calls"), low credit (personal and work
+variants — the work one says to ask an administrator), and destination
+unavailable.
+
+**The keypad is a grid of real buttons with spoken labels**, not glyphs.
+In-call menu navigation is exactly when somebody is listening rather than
+looking.
+
+**The browser consumer area is distinct from the enterprise admin area**, per
+§17.6. Consumer browser calling is V05, not an enterprise privilege.
+
+## 17.8 Accessibility, as checks rather than intentions
+
+| Requirement | How it is enforced |
+|---|---|
+| Contrast | Computed from the hex in `design-tokens/`; classification tested |
+| Touch targets | `min-touch-target` 48dp, `min-input-height` 52dp, asserted in both apps |
+| Focus visibility | 3px `primary-500` outline at full saturation, asserted in the dashboard's CSS test |
+| Not colour alone | Every state carries a word; pills take a `family` label |
+| Screen-reader phrasing | State messages announce as one sentence, not three fragments; pills announce "Network: not connected" |
+| Font scaling | No line height below its font size; body ≥16px, caption ≥14px |
+| French expansion | Both locales in the screenshot matrix; key-parity tested; long state names wrap rather than truncate |
+
+Two specifics worth stating because they are easy to get wrong:
+
+- **A disabled control stays legible.** `gray-300` fill with `gray-700` text, not
+  faded to near-invisible. A disabled button must read as "off for a reason",
+  with the reason next to it.
+- **Sentences are joined without doubling their punctuation.** Building an
+  accessibility label by joining already-punctuated translated copy produces
+  "38 lines are ready.. Retrying…" in every locale at once. Use the shared
+  helper.
+
+## 17.9 What chunk 08 built, and what it deliberately did not
+
+Built: the token source and both generated outputs, the state components in both
+apps, a gallery surface, the Calls states, and the re-cut screenshot matrix.
+
+Not built, on purpose: **the product screens**. Home, Plans, My Line and Account
+are chunks 18–21; People, Orders, Lines and Billing are 22–24. Half-built
+versions here would be a matrix to throw away the moment those chunks land.
+
+Also not built: **any calling capability**. No microphone permission, no call
+client, no SDK. Chunk 08 owns what the Calls states look like and say; V02 owns
+call control and V04/V05 own the channels.

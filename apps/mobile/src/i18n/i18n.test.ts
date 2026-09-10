@@ -9,6 +9,8 @@ import homeEn from './locales/en/home.json';
 import homeFr from './locales/fr/home.json';
 import paymentsEn from './locales/en/payments.json';
 import paymentsFr from './locales/fr/payments.json';
+import statesEn from './locales/en/states.json';
+import statesFr from './locales/fr/states.json';
 
 function keys(value: unknown, prefix = ''): string[] {
   if (!value || typeof value !== 'object') return [prefix];
@@ -32,12 +34,16 @@ describe('mobile locale runtime', () => {
   });
 
   it('keeps every French namespace structurally aligned with English', () => {
+    // Chunk 08 adds `states`. A namespace that exists in one locale and not the
+    // other renders an English string to a French speaker with no error, which
+    // is why this compares key sets rather than merely checking both files load.
     for (const [english, french] of [
       [commonEn, commonFr],
       [authEn, authFr],
       [homeEn, homeFr],
       [esimEn, esimFr],
       [paymentsEn, paymentsFr],
+      [statesEn, statesFr],
     ]) {
       expect(keys(french).sort()).toEqual(keys(english).sort());
     }

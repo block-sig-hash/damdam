@@ -5,9 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "start": "next start",
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "screenshots:gallery": "node scripts/captureGalleryScreenshots.mjs"
   },
   "dependencies": {
     "next": "16.2.10",

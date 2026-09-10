@@ -1,72 +1,102 @@
+/*
+   Dashboard styles, on the shared design tokens.
+
+   Every colour, radius and type size here comes from `tokens.css`, which is
+   generated from `design-tokens/tokens.json` -- the same source the mobile app
+   is generated from. Before chunk 08 this file carried its own palette:
+   `#17623e` where the app used `primary-500` `#0B6B66`, `#17211b` where it used
+   `gray-900` `#14181A`, and a dozen more. Neither palette was wrong on its own;
+   they were simply two different products wearing one name, and nothing
+   compared them.
+
+   The green was the substantive part. `design-system.md` §1 reserves green for
+   the healthy/success semantic precisely so it never competes with the brand
+   colour for meaning -- and the dashboard had adopted a green *as* its brand,
+   which is the confusion that rule exists to prevent.
+
+   `globals.test.ts` fails on any raw hex added below. That is deliberate: a
+   second palette does not reappear all at once, it reappears one "just this
+   once" colour at a time.
+*/
+
+@import "./tokens.css";
+
 :root {
-  color: #17211b;
-  background: #f3f7f4;
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--color-gray-900);
+  background: var(--color-gray-50);
+  font-family: var(--font-family);
 }
 
 * { box-sizing: border-box; }
 body { margin: 0; }
 
-.dashboard-page { max-width: 1100px; margin: 0 auto; padding: 32px; }
-.page-heading, .action-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.filter-row { display: flex; gap: 8px; margin: 24px 0; }
+.dashboard-page { max-width: 1100px; margin: 0 auto; padding: var(--space-8); }
+.page-heading, .action-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-4); }
+.filter-row { display: flex; gap: var(--space-2); margin: var(--space-6) 0; }
 .filter-row button { grid-column: auto; }
-.filter-row button[aria-pressed="true"] { background: #14181a; }
+.filter-row button[aria-pressed="true"] { background: var(--color-gray-900); }
 
 .auth-shell {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 48px 24px;
-  background: linear-gradient(145deg, #edf6ef, #f8f5ed);
+  padding: var(--space-12) var(--space-6);
+  background: var(--color-gray-50);
 }
 
 .auth-card {
   width: min(100%, 680px);
-  background: white;
-  border: 1px solid #dce6df;
-  border-radius: 16px;
-  padding: 40px;
-  box-shadow: 0 16px 48px rgb(23 33 27 / 8%);
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-card);
+  padding: var(--space-10);
 }
 
 .eyebrow {
-  margin: 0 0 8px;
-  color: #1f6b45;
-  font-size: 13px;
+  margin: 0 0 var(--space-2);
+  color: var(--color-primary-500);
+  font-size: var(--type-caption-size);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-h1 { margin: 0 0 12px; font-size: clamp(28px, 4vw, 40px); }
-.intro { margin: 0 0 28px; color: #536058; line-height: 1.55; }
+h1 { margin: 0 0 var(--space-3); font-size: clamp(var(--type-heading-1-size), 4vw, var(--type-display-size)); }
+.intro { margin: 0 0 var(--space-6); color: var(--color-gray-600); line-height: 1.55; }
 
 .registration-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: var(--space-5);
 }
 
-label { display: grid; gap: 8px; font-weight: 700; }
+label { display: grid; gap: var(--space-2); font-weight: 700; }
 input {
   width: 100%;
-  border: 1px solid #aebbb2;
-  border-radius: 8px;
-  padding: 12px 14px;
+  min-height: var(--min-input-height);
+  border: 1px solid var(--color-gray-300);
+  border-radius: var(--radius-button);
+  padding: var(--space-3) var(--space-4);
   font: inherit;
 }
-input:focus { outline: 3px solid #bde4cb; border-color: #1f6b45; }
+/* A focus ring at full brand saturation, not a pale tint: it has to be
+   findable by someone navigating with a keyboard, which is the whole job. */
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+input:focus { border-color: var(--color-primary-500); }
 
-.hint { color: #66736a; font-size: 13px; font-weight: 400; }
-.error { grid-column: 1 / -1; color: #a32222; margin: 0; }
+.hint { color: var(--color-gray-600); font-size: var(--type-caption-size); font-weight: 400; }
+.error { grid-column: 1 / -1; color: var(--color-error-700); margin: 0; }
 button {
   grid-column: 1 / -1;
+  min-height: var(--min-touch-target);
   border: 0;
-  border-radius: 8px;
-  padding: 14px 18px;
-  color: white;
-  background: #17623e;
+  border-radius: var(--radius-button);
+  padding: var(--space-3) var(--space-5);
+  color: var(--color-white);
+  background: var(--color-primary-500);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -74,64 +104,188 @@ button {
 button:disabled { cursor: wait; opacity: 0.65; }
 
 .compact-card { max-width: 480px; }
-.single-column-form { display: grid; gap: 20px; }
-.dashboard-shell { min-height: 100vh; padding: 48px 24px; }
+.single-column-form { display: grid; gap: var(--space-5); }
+.dashboard-shell { min-height: 100vh; padding: var(--space-12) var(--space-6); }
 .manifest-card {
   width: min(100%, 760px);
   margin: 0 auto;
-  padding: 40px;
-  border: 1px solid #dce6df;
-  border-radius: 16px;
-  background: white;
-  box-shadow: 0 16px 48px rgb(23 33 27 / 8%);
+  padding: var(--space-10);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-card);
+  background: var(--color-white);
 }
 .wide-card { width: min(100%, 1040px); }
-.file-zone { padding: 22px; border: 2px dashed #aebbb2; border-radius: 10px; }
-.summary-row, .action-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
-.summary-row { margin: 24px 0; }
-.summary-row > * { padding: 8px 12px; border-radius: 999px; background: #edf6ef; }
-.issues-panel { margin: 24px 0; padding: 20px; border-radius: 10px; background: #faf8f3; }
+.file-zone { padding: var(--space-5); border: 2px dashed var(--color-gray-300); border-radius: var(--radius-button); }
+.summary-row, .action-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+.summary-row { margin: var(--space-6) 0; }
+.summary-row > * { padding: var(--space-2) var(--space-3); border-radius: var(--radius-pill); background: var(--color-primary-100); }
+.issues-panel { margin: var(--space-6) 0; padding: var(--space-5); border-radius: var(--radius-button); background: var(--color-gray-50); }
 .issues-panel h2 { margin-top: 0; }
-.issue-list { display: grid; gap: 10px; padding-left: 22px; }
-.hard-error { color: #a32222; }
-.warning { color: #795400; }
-details { margin: 24px 0; }
+.issue-list { display: grid; gap: var(--space-2); padding-left: var(--space-6); }
+.hard-error { color: var(--color-error-700); }
+.warning { color: var(--color-warning-700); }
+details { margin: var(--space-6) 0; }
 summary { cursor: pointer; font-weight: 700; }
-.table-scroll { overflow-x: auto; margin-top: 14px; }
+.table-scroll { overflow-x: auto; margin-top: var(--space-3); }
 table { width: 100%; border-collapse: collapse; }
-th, td { padding: 10px; border-bottom: 1px solid #dce6df; text-align: left; }
+th, td { padding: var(--space-3); border-bottom: 1px solid var(--color-gray-200); text-align: left; }
 .action-row { justify-content: flex-end; }
 .action-row button { width: auto; }
-.secondary-button { color: #17623e; background: #e5f0e8; }
-a { color: #17623e; font-weight: 700; }
-.primary-link { display: inline-block; margin-top: 12px; }
-.order-section { margin-top: 32px; padding-top: 24px; border-top: 1px solid #dce6df; }
-.check-grid, .tier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 18px 0; }
-.check-row, .tier-card { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid #dce6df; border-radius: 8px; font-weight: 400; }
-.check-row input, .tier-card input { width: auto; margin-top: 3px; }
-.check-row span, .tier-card { display: grid; gap: 4px; }
-.check-row small, .tier-card small { color: #66736a; }
-.family-group, .order-row, .admin-order { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 16px; border: 1px solid #dce6df; border-radius: 8px; }
+.secondary-button { color: var(--color-primary-500); background: var(--color-primary-100); }
+a { color: var(--color-primary-500); font-weight: 700; }
+.primary-link { display: inline-block; margin-top: var(--space-3); }
+.order-section { margin-top: var(--space-8); padding-top: var(--space-6); border-top: 1px solid var(--color-gray-200); }
+.check-grid, .tier-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); margin: var(--space-5) 0; }
+.check-row, .tier-card { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--color-gray-200); border-radius: var(--radius-button); font-weight: 400; }
+.check-row input, .tier-card input { width: auto; min-height: 0; margin-top: 3px; }
+.check-row span, .tier-card { display: grid; gap: var(--space-1); }
+.check-row small, .tier-card small { color: var(--color-gray-600); }
+.family-group, .order-row, .admin-order { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-3); padding: var(--space-4); border: 1px solid var(--color-gray-200); border-radius: var(--radius-button); }
 .family-group > span { flex: 1 1 320px; }
-.link-button { display: inline; width: auto; padding: 6px 10px; color: #17623e; background: transparent; }
-.danger-link { color: #a32222; }
-.price-summary, .success-panel { display: grid; gap: 8px; margin: 18px 0; padding: 18px; border-radius: 8px; background: #edf6ef; }
-.status-badge { padding: 5px 9px; border-radius: 999px; background: #f5e8b8; text-transform: capitalize; }
-.status-provisioned, .status-approved { background: #cdebd7; }
-.status-rejected { background: #f7dcd8; }
-.status-follow-up { background: #fbe0d3; color: #8a3b12; }
-.search-row { display: flex; align-items: end; gap: 12px; margin: 24px 0; }
+.link-button { display: inline; width: auto; min-height: 0; padding: var(--space-2) var(--space-3); color: var(--color-primary-500); background: transparent; }
+.danger-link { color: var(--color-error-700); }
+.price-summary, .success-panel { display: grid; gap: var(--space-2); margin: var(--space-5) 0; padding: var(--space-5); border-radius: var(--radius-button); background: var(--color-primary-100); }
+
+/* Status pills. Tint fill + gray900 text, never a saturated fill with white
+   text: at this size a light tint is the only pairing that holds AA across
+   every semantic colour at once (design-system.md §1). */
+.status-badge { padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); background: var(--color-gray-100); color: var(--color-gray-900); text-transform: capitalize; }
+.status-provisioned, .status-approved { background: var(--color-success-100); }
+.status-rejected { background: var(--color-error-100); }
+.status-follow-up { background: var(--color-warning-100); color: var(--color-warning-700); }
+.search-row { display: flex; align-items: end; gap: var(--space-3); margin: var(--space-6) 0; }
 .search-row label { flex: 1; }
 .search-row button { width: auto; }
-.admin-order-list { display: grid; gap: 14px; }
-.report-controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; margin: 24px 0; }
+.admin-order-list { display: grid; gap: var(--space-3); }
+.report-controls { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: end; margin: var(--space-6) 0; }
 .report-controls label { flex: 1 1 220px; }
-.report-controls select { width: 100%; border: 1px solid #aebbb2; border-radius: 8px; padding: 12px 14px; font: inherit; }
-.admin-order.overdue { border-color: #d68b1e; background: #fffaf0; }
-.admin-order > div { display: grid; gap: 4px; min-width: 200px; }
+.report-controls select { width: 100%; min-height: var(--min-input-height); border: 1px solid var(--color-gray-300); border-radius: var(--radius-button); padding: var(--space-3) var(--space-4); font: inherit; }
+.admin-order.overdue { border-color: var(--color-warning-500); background: var(--color-warning-100); }
+.admin-order > div { display: grid; gap: var(--space-1); min-width: 200px; }
 .admin-order button { width: auto; }
 
 @media (max-width: 640px) {
-  .auth-card { padding: 28px 22px; }
+  .auth-card { padding: var(--space-6) var(--space-5); }
   .registration-form { grid-template-columns: 1fr; }
+  .dashboard-page, .dashboard-shell { padding: var(--space-5) var(--space-4); }
 }
+
+/* --- State patterns (chunk 08) -------------------------------------------
+   The dashboard half of the four states the product spends its time in. Same
+   rules as the mobile app; see components/states/StateComponents.tsx. */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Tint fill + dark text, never a saturated fill with white text: at pill size
+   a light tint is the only pairing that holds AA across every semantic colour
+   at once (design-system.md §1). */
+.status-pill {
+  display: inline-block;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+  font-weight: 600;
+  background: var(--color-gray-100);
+  color: var(--color-gray-900);
+}
+.status-pill-progress { background: var(--color-info-100); }
+.status-pill-positive { background: var(--color-success-100); }
+.status-pill-caution { background: var(--color-warning-100); color: var(--color-warning-700); }
+.status-pill-negative { background: var(--color-error-100); color: var(--color-error-700); }
+
+.usage-meter { display: grid; gap: var(--space-2); }
+.usage-meter-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--space-3); }
+.usage-meter-label { font-size: var(--type-caption-size); font-weight: 600; color: var(--color-gray-700); }
+.usage-meter-remaining { font-size: var(--type-body-size); font-weight: 600; color: var(--color-gray-900); overflow-wrap: anywhere; }
+.usage-meter-track {
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-gray-200);
+  overflow: hidden;
+}
+.usage-meter-fill { height: 100%; border-radius: var(--radius-pill); background: var(--color-success-500); }
+.usage-meter-fill[data-severity="low"] { background: var(--color-warning-500); }
+.usage-meter-fill[data-severity="critical"] { background: var(--color-error-700); }
+/* Never reported is an empty grey bar, not a full green one. Painting it full
+   would be inventing a reading somebody then budgets against. */
+.usage-meter-fill[data-severity="unknown"] { background: var(--color-gray-300); }
+.usage-meter-updated, .usage-meter-explanation {
+  margin: 0;
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-line);
+  color: var(--color-gray-600);
+}
+/* A late reading is normal, not a fault. Colouring it as an alert trains
+   people to ignore alerts. */
+.usage-meter-updated.is-stale { color: var(--color-gray-700); font-weight: 600; }
+
+.state-message {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-card);
+  background: var(--color-gray-50);
+}
+.state-message-title { margin: 0; font-size: var(--type-heading-3-size); line-height: var(--type-heading-3-line); font-weight: var(--type-heading-3-weight); }
+.state-message-body { margin: 0; font-size: var(--type-body-size); line-height: var(--type-body-line); color: var(--color-gray-900); }
+.state-message-footnote { margin: 0; font-size: var(--type-caption-size); line-height: var(--type-caption-line); color: var(--color-gray-700); }
+.state-message-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
+.state-message-actions button { width: auto; grid-column: auto; }
+
+.state-message-pending { background: var(--color-info-100); border-color: var(--color-info-500); }
+.state-message-blocked { background: var(--color-warning-100); border-color: var(--color-warning-500); }
+.state-message-blocked .state-message-title { color: var(--color-warning-700); }
+.state-message-error { background: var(--color-error-100); border-color: var(--color-error-700); }
+.state-message-error .state-message-title { color: var(--color-error-700); }
+.state-message-partial { background: var(--color-warning-100); border-color: var(--color-warning-500); }
+.state-message-partial .state-message-title { color: var(--color-warning-700); }
+
+.gallery-page { display: grid; gap: var(--space-8); }
+.gallery-page[data-text-scale="200"] {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
+  overflow-wrap: anywhere;
+  --type-display-size: 64px;
+  --type-display-line: 80px;
+  --type-heading-1-size: 56px;
+  --type-heading-1-line: 72px;
+  --type-heading-2-size: 44px;
+  --type-heading-2-line: 60px;
+  --type-heading-3-size: 36px;
+  --type-heading-3-line: 52px;
+  --type-body-large-size: 34px;
+  --type-body-large-line: 52px;
+  --type-body-size: 32px;
+  --type-body-line: 48px;
+  --type-caption-size: 28px;
+  --type-caption-line: 40px;
+  --type-numeral-size: 48px;
+  --type-numeral-line: 56px;
+}
+.gallery-page[data-text-scale="200"] * { min-width: 0; }
+.gallery-page[data-text-scale="200"] h1,
+.gallery-page[data-text-scale="200"] h2,
+.gallery-page[data-text-scale="200"] p,
+.gallery-page[data-text-scale="200"] button,
+.gallery-page[data-text-scale="200"] .status-pill {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.gallery-section { display: grid; gap: var(--space-4); }
+.gallery-section > h2 { margin: 0; font-size: var(--type-heading-2-size); line-height: var(--type-heading-2-line); }
+.gallery-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+.gallery-stack { display: grid; gap: var(--space-4); }

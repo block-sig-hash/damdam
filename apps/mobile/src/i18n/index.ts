@@ -6,11 +6,13 @@ import commonEn from './locales/en/common.json';
 import esimEn from './locales/en/esim.json';
 import homeEn from './locales/en/home.json';
 import paymentsEn from './locales/en/payments.json';
+import statesEn from './locales/en/states.json';
 import authFr from './locales/fr/auth.json';
 import commonFr from './locales/fr/common.json';
 import esimFr from './locales/fr/esim.json';
 import homeFr from './locales/fr/home.json';
 import paymentsFr from './locales/fr/payments.json';
+import statesFr from './locales/fr/states.json';
 import {
   AppLocale,
   getDeviceLocale,
@@ -19,7 +21,7 @@ import {
   persistLocale,
 } from './locale';
 
-export const namespaces = ['common', 'auth', 'home', 'esim', 'payments'] as const;
+export const namespaces = ['common', 'auth', 'home', 'esim', 'payments', 'states'] as const;
 
 i18n.use(initReactI18next).init({
   compatibilityJSON: 'v4',
@@ -29,8 +31,22 @@ i18n.use(initReactI18next).init({
   defaultNS: 'common',
   interpolation: {escapeValue: false},
   resources: {
-    en: {common: commonEn, auth: authEn, home: homeEn, esim: esimEn, payments: paymentsEn},
-    fr: {common: commonFr, auth: authFr, home: homeFr, esim: esimFr, payments: paymentsFr},
+    en: {
+      common: commonEn,
+      auth: authEn,
+      home: homeEn,
+      esim: esimEn,
+      payments: paymentsEn,
+      states: statesEn,
+    },
+    fr: {
+      common: commonFr,
+      auth: authFr,
+      home: homeFr,
+      esim: esimFr,
+      payments: paymentsFr,
+      states: statesFr,
+    },
   },
   returnNull: false,
 }).catch(() => undefined);

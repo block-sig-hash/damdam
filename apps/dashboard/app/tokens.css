@@ -1,0 +1,80 @@
+/*
+   GENERATED FILE -- do not edit.
+
+   Source: design-tokens/tokens.json
+   Regenerate: node design-tokens/build.js
+
+   Editing this file by hand fails the token drift test in this app.
+*/
+
+:root {
+  --color-primary-700: #073E45;
+  --color-primary-500: #0B6B66;
+  --color-primary-100: #E3F1F1;
+  --color-accent-500: #C68A2E;
+  --color-success-700: #167A52;
+  --color-success-500: #1E8A5F;
+  --color-success-100: #E4F5EC;
+  --color-warning-700: #A63C11;
+  --color-warning-500: #D9531E;
+  --color-warning-100: #FBEAE0;
+  --color-error-700: #C0392B;
+  --color-error-100: #FBE7E4;
+  --color-info-700: #2C5F91;
+  --color-info-500: #3B7DBF;
+  --color-info-100: #E7F0F9;
+  --color-gray-900: #14181A;
+  --color-gray-700: #445050;
+  --color-gray-600: #5A6666;
+  --color-gray-500: #728080;
+  --color-gray-300: #C4CACA;
+  --color-gray-200: #DDE1E1;
+  --color-gray-100: #EDEFEF;
+  --color-gray-50: #F7F8F8;
+  --color-white: #FFFFFF;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --radius-button: 12px;
+  --radius-card: 16px;
+  --radius-pill: 999px;
+
+  --min-touch-target: 48px;
+  --min-input-height: 52px;
+
+  --type-display-size: 32px;
+  --type-display-line: 40px;
+  --type-display-weight: 700;
+  --type-heading-1-size: 28px;
+  --type-heading-1-line: 36px;
+  --type-heading-1-weight: 700;
+  --type-heading-2-size: 22px;
+  --type-heading-2-line: 30px;
+  --type-heading-2-weight: 600;
+  --type-heading-3-size: 18px;
+  --type-heading-3-line: 26px;
+  --type-heading-3-weight: 600;
+  --type-body-large-size: 17px;
+  --type-body-large-line: 26px;
+  --type-body-large-weight: 400;
+  --type-body-size: 16px;
+  --type-body-line: 24px;
+  --type-body-weight: 400;
+  --type-caption-size: 14px;
+  --type-caption-line: 20px;
+  --type-caption-weight: 500;
+  --type-numeral-size: 24px;
+  --type-numeral-line: 28px;
+  --type-numeral-weight: 700;
+
+  --font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}

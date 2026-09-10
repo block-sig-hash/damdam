@@ -1,0 +1,12 @@
+{
+  "captures": [
+    { "name": "gallery-en-320", "locale": "en", "width": 320, "height": 6000, "textScale": 100 },
+    { "name": "gallery-fr-320", "locale": "fr", "width": 320, "height": 6000, "textScale": 100 },
+    { "name": "gallery-en-768", "locale": "en", "width": 768, "height": 4200, "textScale": 100 },
+    { "name": "gallery-fr-768", "locale": "fr", "width": 768, "height": 4200, "textScale": 100 },
+    { "name": "gallery-en-1280", "locale": "en", "width": 1280, "height": 3600, "textScale": 100 },
+    { "name": "gallery-fr-1280", "locale": "fr", "width": 1280, "height": 3600, "textScale": 100 },
+    { "name": "gallery-en-320-text-200", "locale": "en", "width": 320, "height": 9000, "textScale": 200 },
+    { "name": "gallery-fr-320-text-200", "locale": "fr", "width": 320, "height": 9000, "textScale": 200 }
+  ]
+}
