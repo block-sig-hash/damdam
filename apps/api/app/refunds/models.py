@@ -423,6 +423,18 @@ class ExceptionKind(str, Enum):
     REFUND_UNKNOWN = "refund_unknown"
     DISPUTE_OPENED = "dispute_opened"
     SETTLEMENT_MISMATCH = "settlement_mismatch"
+    # Added by chunk 16 (US-36). Usage failures belong in the same queue for
+    # the reason chunk 14 gave for building one: an operations team watching
+    # two lists watches neither.
+    #: A cumulative counter went down with no documented cycle boundary to
+    #: explain it. Needs checking against supplier billing.
+    USAGE_COUNTER_RESET = "usage_counter_reset"
+    #: The line's two usage sources disagree by more than tolerance. Nothing is
+    #: adjusted automatically: which one is right is a supplier conversation.
+    USAGE_DISCREPANCY = "usage_discrepancy"
+    #: A usage poller has failed enough times to stop. Invisible from outside —
+    #: the customer's balance simply stops moving — so it is raised loudly.
+    USAGE_POLLING_STALLED = "usage_polling_stalled"
 
 
 class ExceptionItem(SQLModel, table=True):

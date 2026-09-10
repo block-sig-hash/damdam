@@ -40,7 +40,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
@@ -68,6 +68,8 @@ from app.connectivity.telnyx_contract import (
     SIM_CARD_ACTION_PATH,
     SIM_CARD_PATH,
     TRANSITIONAL_STATUSES,
+    WDR_REPORT_PATH,
+    WDR_REPORTS_PATH,
     ActivationCode,
     ContractViolation,
     ESimPurchaseRequest,
@@ -78,6 +80,7 @@ from app.connectivity.telnyx_contract import (
     SimCardStatus,
     operation_tag,
 )
+from app.usage.contract import CounterSnapshot, ReportState, UsageReport
 
 
 @dataclass(frozen=True)
@@ -474,6 +477,104 @@ class TelnyxConnectivityAdapter:
             raise ContractViolation("action response has no 'data' object")
         return _provider_action(SimCardAction.from_payload(payload))
 
+    # --- usage (US-36, chunk 16) ------------------------------------------
+
+    def fetch_usage_counter(self, provider_reference: str) -> CounterSnapshot | None:
+        """`current_billing_period_consumed_data`, as bytes.
+
+        Cumulative and cycle-scoped. Telnyx documents no cycle boundary, so
+        `cycle_reference` is `None` and the caller's reset handling cannot rely
+        on one — which is exactly why `UsageService.ingest_counter` treats a
+        decrease conservatively rather than cleverly.
+        """
+        self.capabilities().require(Capability.USAGE_COUNTER)
+        line = self.fetch_line(provider_reference)
+        if line is None or line.consumed_bytes is None:
+            return None
+        return CounterSnapshot(
+            provider_reference=provider_reference,
+            consumed_bytes=line.consumed_bytes,
+            observed_at=line.observed_at or self.clock(),
+            # Undocumented. Saying `None` is the difference between "no cycle
+            # boundary is published" and inventing one.
+            cycle_reference=None,
+            limit_bytes=line.data_limit_bytes,
+        )
+
+    def request_usage_report(self, start: datetime, end: datetime) -> str:
+        """`POST /wireless/detail_records_reports`.
+
+        Requires `USAGE_EVENTS`, which is **withheld by default**: the OpenAPI
+        source documents the report envelope and not the record, so there is no
+        documented unique record id to deduplicate on. Ingesting records without
+        one means composing a key from fields that were never guaranteed unique,
+        and that is a decision somebody has to take with evidence rather than a
+        default this adapter makes quietly.
+        """
+        self.capabilities().require(Capability.USAGE_EVENTS)
+        response = self._call(
+            "POST",
+            WDR_REPORTS_PATH,
+            body={
+                "start_time": _iso(start),
+                "end_time": _iso(end),
+            },
+        )
+        if response.status_code >= 400:
+            raise ConnectivityError(
+                "usage_report_rejected",
+                f"Telnyx returned {response.status_code} for a WDR report "
+                f"request covering {_iso(start)}..{_iso(end)}",
+            )
+        payload = response.payload.get("data")
+        if not isinstance(payload, dict) or not payload.get("id"):
+            raise ContractViolation("WDR report response has no 'data.id'")
+        return str(payload["id"])
+
+    def fetch_usage_report(
+        self, handle: str, cursor: str | None = None
+    ) -> UsageReport:
+        """Poll a requested batch.
+
+        `deleted` is a documented status and it is terminal. A poller that
+        treats an unrecognised status as "keep waiting" waits forever on a
+        report that is never coming.
+
+        A `complete` report carries a `report_url` to a pre-signed file whose
+        **contents have no published schema**. This adapter deliberately does
+        not parse it: it returns the report state and the URL's presence, and
+        leaves the download to code written against a real, observed file.
+        Parsing an unpublished format from a prose field list would be
+        inventing a contract.
+        """
+        self.capabilities().require(Capability.USAGE_EVENTS)
+        del cursor  # Telnyx paginates the downloaded file, not this endpoint
+        response = self._call("GET", WDR_REPORT_PATH.format(id=handle))
+        if response.status_code == 404:
+            return UsageReport(state=ReportState.DELETED)
+        if response.status_code >= 400:
+            raise ConnectivityError(
+                "usage_report_lookup_failed",
+                f"Telnyx returned {response.status_code} for WDR report {handle}",
+            )
+        payload = response.payload.get("data")
+        if not isinstance(payload, dict):
+            raise ContractViolation("WDR report response has no 'data' object")
+        raw_state = payload.get("status")
+        try:
+            state = ReportState(raw_state)
+        except (TypeError, ValueError) as exc:
+            raise ContractViolation(
+                f"undocumented WDR report status {raw_state!r}; the documented "
+                "enum is pending|complete|failed|deleted"
+            ) from exc
+        return UsageReport(
+            state=state,
+            events=(),
+            covers_from=_parse_iso(payload.get("start_time")),
+            covers_to=_parse_iso(payload.get("end_time")),
+        )
+
     # --- internals --------------------------------------------------------
 
     def _action(self, method: str, path: str) -> ProviderAction:
@@ -559,6 +660,26 @@ def _provider_action(action: SimCardAction) -> ProviderAction:
         provider_status=action.status.value,
         reason=action.reason,
     )
+
+
+def _iso(moment: datetime) -> str:
+    """The shape Telnyx's own examples use: UTC, `Z`-suffixed, millisecond."""
+    return (
+        moment.astimezone(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+
+
+def _parse_iso(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ContractViolation(
+            f"WDR report timestamp {value!r} is not ISO 8601"
+        ) from exc
 
 
 def _error_codes(payload: dict[str, Any]) -> list[str]:
