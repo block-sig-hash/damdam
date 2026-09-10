@@ -63,6 +63,16 @@ describe("globals.css uses tokens and nothing else", () => {
     expect(css).toContain('@import "./tokens.css";');
   });
 
+  it("references only custom properties that are actually declared", () => {
+    const declarations = new Set(
+      [...`${read("tokens.css")}\n${css}`.matchAll(/(--[a-z0-9-]+)\s*:/gi)].map(
+        match => match[1],
+      ),
+    );
+    const references = [...css.matchAll(/var\((--[a-z0-9-]+)/gi)].map(match => match[1]);
+    expect([...new Set(references)].filter(name => !declarations.has(name))).toEqual([]);
+  });
+
   it("gives interactive controls a real touch target", () => {
     expect(css).toContain("min-height: var(--min-touch-target)");
     expect(css).toContain("min-height: var(--min-input-height)");

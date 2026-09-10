@@ -37,7 +37,6 @@ export default async function GalleryPage({
     <main
       className="dashboard-page gallery-page"
       data-text-scale={textScale ? "200" : "100"}
-      style={textScale ? { zoom: 2 } : undefined}
     >
       <header>
         <p className="eyebrow">{t("gallery.title")}</p>

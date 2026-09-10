@@ -136,7 +136,7 @@ async function main() {
       {
         generatedAt: new Date().toISOString(),
         browser: version.stdout.trim(),
-        note: "textScale 200 uses CSS zoom on the gallery to exercise layout at browser-equivalent 200% scaling",
+        note: "textScale 200 doubles the gallery typography tokens while preserving the requested viewport width",
         captures: observed,
       },
       null,
