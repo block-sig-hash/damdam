@@ -2494,3 +2494,82 @@ system accounts. Three refusals matter more than the posting:
 
 The report carries both totals and the skipped counts, because a backfill that
 reports only successes is one nobody can check.
+
+---
+
+## 6.48 Amendment — Durable Outbox, Supplier Attempts and Worker Leases (US-32)
+
+**Recorded 10 September 2026 by build chunk 11.** Additive; migration
+`0032_fulfilment_outbox`. The legacy `esim_issuance_jobs` path and its Celery
+scheduling are untouched.
+
+### The failure this exists for
+
+`AGENTS.md` calls the accepted-but-response-lost case the single most expensive
+failure mode in this product. The sequence is short: we ask a supplier to
+provision a line, the supplier accepts and charges us, the response is lost. The
+order still looks unfulfilled, and anything that retries naively buys a second
+line for a customer who already has one.
+
+### `outcome_unknown` is a state, not an error
+
+`supplier_attempts.outcome` has five values, and the distinction between
+`rejected` and `outcome_unknown` is the one that costs money. A definite refusal
+is safe to treat as final. An absence of response never is — collapsing it into
+"failed" makes it look retryable, and the retry buys the second line.
+
+`held_for_review` is the fifth: reconciliation asked and the supplier could not
+say. Guessing costs money one way or leaves a customer without service the
+other, so a human decides.
+
+### The ordering that makes recovery possible
+
+The attempt row is written and **committed before** the supplier is called. A
+crash between commit and call is then indistinguishable from a crash after the
+call, and both reconcile identically. Calling first and recording afterwards
+produces a purchase nobody has any record of.
+
+### Two constraints do the real work
+
+- `ux_supplier_attempts_live_item` — a partial unique index allowing one *live*
+  attempt per order item, where live means `in_flight`, `accepted`,
+  `outcome_unknown` or `held_for_review`. A second concurrent attempt is not a
+  retry; it is a second purchase, refused in the database rather than in a code
+  path somebody can forget to call.
+- `uq_supplier_attempts_key` — `(provider, idempotency_key)`.
+
+The idempotency key names **one request**: `order-item:<id>:attempt:<n>`. The
+first version of this keyed on the order item alone, and writing the tests found
+why that is wrong: a *legitimate* second attempt after a definite rejection
+would reuse the key, and the supplier would de-duplicate the new purchase
+against the old refusal. The order would never be fulfilled and nothing would
+say why. A retry of the same request reuses the key; a new decision to buy gets
+a new one.
+
+### Outbox and inbox
+
+`outbox_messages` is the transactional outbox: work is written in the same
+transaction as the state change that caused it, so the instruction exists if and
+only if the change did. A worker told to act before the database commits may act
+on a state that then rolls back.
+
+Claiming uses `FOR UPDATE SKIP LOCKED` under a **lease**, not a lock. A worker
+that dies holding a lease loses it when the lease expires and the work becomes
+claimable again — without which a crashed worker strands its message forever and
+the order silently never completes, which is worse than failing because nothing
+alerts.
+
+`ck_outbox_messages_lease` ties `leased_until` and `leased_by` together: a lease
+without a holder is a row no recovery logic can reason about.
+
+`inbox_messages` is the same idea inbound. Every supplier and processor
+redelivers; `(source, external_id)` is the identity, because providers number
+their own events and "evt-1" from two of them is two different events.
+
+### Cancellation loses to an outstanding request
+
+Cancelling an item with a live attempt is **refused**. The supplier may be about
+to accept, and marking the item cancelled produces a cancelled order with a
+purchased line behind it. Reconciliation resolves the truth first. Cancelling an
+item with no attempt also completes its queued outbox message, so a worker
+claiming it later does not provision something already cancelled.

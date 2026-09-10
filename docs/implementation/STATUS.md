@@ -38,7 +38,7 @@ is a dry run that executes nothing.
 | 08 — Define the consumer and enterprise design system | **ACCEPTED after fixes** | base `99bee92` / submitted `5e341fb` / corrected design code `6b9ca37` plus the final review-head native repository guard, integrated with chunks 06–07 | [Independent review](reviews/08.md) | iOS remains nightly/manual; product screens remain assigned to chunks 18–24 |
 | 09 — Build supported-market catalog and immutable quotes | **ACCEPTED after fixes** | accepted base `8651aa9` / submitted `8286d5e` / corrected `3427e16` | [Independent review](reviews/09.md) | D2/D3 keep every market unpublishable; nothing is seeded |
 | 10 — Build the multi-currency ledger and atomic reservations | **ACCEPTED after fixes** | submitted `1a19878` / rebased `bef1f67` / corrected `e9b10d8` | [Independent review](reviews/10.md) | Backfill not run against production-shaped data; no reservation-expiry sweeper pending D5 |
-| 11 — Build order orchestration and durable recovery | NOT_STARTED | — | — | See assignment |
+| 11 — Build order orchestration and durable recovery | **READY_FOR_REVIEW** | rebased onto chunk 10 / see [handoff](handoffs/11.md) | Not reviewed | No worker runner wired; no real SupplierClient — a Telnyx adapter needs D1/V01 |
 | 12 — Implement payment routing and modernize Paystack | NOT_STARTED | — | — | See assignment |
 | 13 — Implement the selected global payment adapter and wallet checkout | NOT_STARTED | — | — | See assignment |
 | 14 — Implement refunds, disputes, bank funding and receipts | NOT_STARTED | — | — | See assignment |
