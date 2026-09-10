@@ -1,3 +1,5 @@
+from collections.abc import Callable
+from datetime import datetime
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Request
@@ -5,7 +7,7 @@ from sqlmodel import Session, select
 
 from app.auth.dependencies import get_current_user
 from app.auth.hto import HTOService
-from app.auth.models import User
+from app.auth.models import Locale, User
 from app.auth.pin import PINService
 from app.auth.schemas import (
     AuthResponse,
@@ -26,6 +28,14 @@ from app.auth.schemas import (
 )
 from app.auth.tokens import InvalidRefreshTokenError
 from app.i18n import translate
+from app.identity.models import IdentifierKind
+from app.identity.schemas import (
+    EmailIdentifierRequest,
+    IdentityMessageResponse,
+    IdentityTokenRequest,
+    RecoverySessionResponse,
+)
+from app.identity.service import IdentityError, IdentityService
 from app.otp.service import AuthResult, OTPError, OTPService
 from app.voice.models import VerifiedCallerIdentity, VerifiedCallerIdentityStatus
 
@@ -186,3 +196,112 @@ def login_hto(payload: HTOLoginRequest, request: Request) -> HTOLoginResponse:
             operator=HTOOperatorResponse.model_validate(organization),
         )
     return response
+
+# --- email identity and recovery (US-29) ------------------------------------
+#
+# Email is the launch account identity and primary recovery channel (founder
+# decision, 2026-09-09). Recovery here deliberately requires no OTP and no SIM.
+#
+# Every response below is uniform: a caller cannot tell a registered address
+# from an unregistered one, and throttling is applied per address *before* the
+# lookup so the rate limit cannot answer the question either.
+
+
+def _identity(request: Request) -> IdentityService:
+    return cast(IdentityService, request.app.state.identity_service)
+
+
+@router.post("/email/verify/request", response_model=IdentityMessageResponse)
+def request_email_verification(
+    payload: EmailIdentifierRequest,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+) -> IdentityMessageResponse:
+    """Claim an email for the signed-in account and send proof-of-ownership."""
+    with request.app.state.session_factory() as session:
+        # The dependency establishes *who* is calling; the entity is loaded in
+        # this session so the service works with a mapped instance.
+        account = session.get(User, user.id)
+        if account is None:  # pragma: no cover - a live token implies a row
+            raise IdentityError("identity_token_invalid")
+        _identity(request).start_identifier_verification(
+            session, account, IdentifierKind.EMAIL, payload.email, payload.locale
+        )
+        session.commit()
+    return IdentityMessageResponse(message=translate("identity_sent", payload.locale))
+
+
+@router.post("/email/verify/confirm", response_model=IdentityMessageResponse)
+def confirm_email_verification(
+    payload: IdentityTokenRequest, request: Request
+) -> IdentityMessageResponse:
+    with request.app.state.session_factory() as session:
+        _identity(request).confirm_identifier(session, payload.token)
+        session.commit()
+    return IdentityMessageResponse(message=translate("identity_verified", Locale.EN))
+
+
+@router.post("/email/login/request", response_model=IdentityMessageResponse)
+def request_email_login(
+    payload: EmailIdentifierRequest, request: Request
+) -> IdentityMessageResponse:
+    """Send the same response for email signup and returning login."""
+    with request.app.state.session_factory() as session:
+        _identity(request).request_authentication(
+            session, IdentifierKind.EMAIL, payload.email, payload.locale
+        )
+        session.commit()
+    return IdentityMessageResponse(message=translate("identity_sent", payload.locale))
+
+
+@router.post("/email/login/confirm", response_model=AuthResponse)
+def confirm_email_login(
+    payload: IdentityTokenRequest, request: Request
+) -> AuthResponse:
+    """Prove mailbox control, then create or authenticate the account."""
+    clock = cast(Callable[[], datetime], request.app.state.clock)
+    with request.app.state.session_factory() as session:
+        user, is_new_user = _identity(request).complete_authentication(
+            session, payload.token
+        )
+        pair = _service(request).tokens.issue(session, user, clock())
+        session.commit()
+        session.refresh(user)
+        return _auth_response(
+            session,
+            AuthResult(
+                access_token=pair.access_token,
+                refresh_token=pair.refresh_token,
+                user=user,
+                is_new_user=is_new_user,
+            ),
+        )
+
+
+@router.post("/email/recovery/request", response_model=IdentityMessageResponse)
+def request_email_recovery(
+    payload: EmailIdentifierRequest, request: Request
+) -> IdentityMessageResponse:
+    with request.app.state.session_factory() as session:
+        _identity(request).request_recovery(
+            session, IdentifierKind.EMAIL, payload.email, payload.locale
+        )
+        session.commit()
+    return IdentityMessageResponse(message=translate("identity_sent", payload.locale))
+
+
+@router.post("/email/recovery/confirm", response_model=RecoverySessionResponse)
+def confirm_email_recovery(
+    payload: IdentityTokenRequest, request: Request
+) -> RecoverySessionResponse:
+    """Consume a recovery token, revoke prior sessions and issue a new one."""
+    clock = cast(Callable[[], datetime], request.app.state.clock)
+    with request.app.state.session_factory() as session:
+        user = _identity(request).complete_recovery(session, payload.token)
+        pair = _service(request).tokens.issue(session, user, clock())
+        session.commit()
+        return RecoverySessionResponse(
+            access_token=pair.access_token,
+            refresh_token=pair.refresh_token,
+            user=UserResponse.model_validate(user),
+        )

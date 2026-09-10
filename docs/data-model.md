@@ -2097,7 +2097,48 @@ snapshot is unchanged — then downgrades and asserts it again.
 The nullable → backfill → constrain sequence, and what is deliberately deferred,
 is in [implementation/CORE-MODEL-UPGRADE.md](implementation/CORE-MODEL-UPGRADE.md).
 
-## 6.45 Amendment — Calling domain extension proposal (US-45/US-46)
+---
+
+## 6.45 Amendment — Email-First Account Identity and Session Versioning (US-29)
+
+**Recorded 10 September 2026 during independent chunk 06 review.** Revision
+`0028_account_identity` introduces `account_identifiers` and `identity_tokens`
+and makes `users.phone_number` and `users.platform` nullable. This is required
+for the adopted email-first account path: an account may exist before it has a
+phone number, SIM, or mobile platform.
+
+`account_identifiers` always belongs to a user. A partial unique index permits
+only one verified owner for each normalized `(kind, value)`, while unverified
+claims do not block the real owner. A second partial unique index permits only
+one primary identifier per user. Confirming an email makes it primary, demotes
+the former primary, and synchronizes the legacy `users.email` projection.
+
+`identity_tokens` stores only a SHA-256 token hash. Its purpose is one of
+`verify_identifier`, `recover_account`, or `authenticate`; the target kind and
+normalized value are stored with the requested locale. `user_id` is nullable
+only for an authentication token issued before a new email account exists.
+The token is consumed atomically and expires at the exact `expires_at` boundary.
+
+`users.auth_version` is a nonnegative integer starting at zero. Consumer access
+and refresh JWTs carry that version. Recovery locks the user, increments the
+version, revokes persisted refresh rows, and then issues the replacement pair;
+therefore already-issued stateless access tokens stop working immediately.
+Tokens minted before this column existed are interpreted as version zero so
+existing sessions remain usable until recovery.
+
+The migration backfills every existing non-null `users.phone_number` as a
+verified primary phone identifier without changing the number or account.
+When a passwordless login proves an email already stored on exactly one legacy
+user, that address is adopted by the existing account rather than creating a
+duplicate customer. An address shared by multiple legacy rows is treated as
+ambiguous and requires support-assisted resolution.
+Upgrade and legacy-only downgrade are exercised against a populated revision
+`0027_core_domain_model` database. Once an email-only user exists, downgrade to
+the non-null revision requires an explicit account migration; silently
+inventing a phone or platform would corrupt identity data.
+---
+
+## 6.46 Amendment — Calling domain extension proposal (US-45/US-46)
 
 9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
 

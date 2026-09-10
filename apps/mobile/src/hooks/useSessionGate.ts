@@ -11,6 +11,7 @@ import {
   saveSession,
   touchSession,
 } from '../services/sessionStore';
+import { clearAccountScopedState } from '../utils/pinLocalStore';
 
 export type SessionPhase = 'loading' | 'onboarding' | 'pin-gate' | 'authenticated';
 
@@ -122,6 +123,7 @@ export function useSessionGate(): UseSessionGateResult {
       }
       if (isSessionExpired(persisted.lastActiveAt)) {
         await clearSession();
+        await clearAccountScopedState();
         if (cancelled) {
           return;
         }
@@ -191,6 +193,7 @@ export function useSessionGate(): UseSessionGateResult {
       const result = await attemptRefresh(touched.refreshToken);
       if (result.outcome === 'invalid') {
         await clearSession();
+        await clearAccountScopedState();
         setSession(null);
         setPhase('onboarding');
       } else if (result.session) {
@@ -223,6 +226,7 @@ export function useSessionGate(): UseSessionGateResult {
           const current = await loadSession();
           if (!current || isSessionExpired(current.lastActiveAt)) {
             await clearSession();
+            await clearAccountScopedState();
             setSession(null);
             setPhase('onboarding');
             return;
@@ -259,6 +263,7 @@ export function useSessionGate(): UseSessionGateResult {
         }
         if (isSessionExpired(current.lastActiveAt)) {
           await clearSession();
+          await clearAccountScopedState();
           setSession(null);
           setPhase('onboarding');
           return;
@@ -266,6 +271,7 @@ export function useSessionGate(): UseSessionGateResult {
         const result = await attemptRefresh(current.refreshToken);
         if (result.outcome === 'invalid') {
           await clearSession();
+          await clearAccountScopedState();
           setSession(null);
           setPhase('onboarding');
         } else if (result.session) {

@@ -4,6 +4,8 @@ import { setPin } from '../../api/pinClient';
 import { savePinLocally } from '../../utils/pinLocalStore';
 import { PinSetupScreen } from './PinSetupScreen';
 
+const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
+
 jest.mock('../../api/pinClient', () => {
   const actual = jest.requireActual('../../api/pinClient');
   return { ...actual, setPin: jest.fn() };
@@ -24,7 +26,7 @@ beforeEach(() => {
 
 describe('PinSetupScreen', () => {
   it('auto-advances from entry to confirmation on a strong 4-digit PIN (AC-02.1/02.2)', async () => {
-    await render(<PinSetupScreen accessToken="access-token" onPinSet={jest.fn()} />);
+    await render(<PinSetupScreen userId={TEST_USER_ID} accessToken="access-token" onPinSet={jest.fn()} />);
 
     expect(screen.getByText('Create your PIN')).toBeTruthy();
 
@@ -37,7 +39,7 @@ describe('PinSetupScreen', () => {
   });
 
   it('rejects a sequential PIN inline without ever calling the API (AC-02.1)', async () => {
-    await render(<PinSetupScreen accessToken="access-token" onPinSet={jest.fn()} />);
+    await render(<PinSetupScreen userId={TEST_USER_ID} accessToken="access-token" onPinSet={jest.fn()} />);
 
     await act(async () => {
       fireEvent.changeText(screen.getByTestId('pin-setup-input'), '1234');
@@ -52,7 +54,7 @@ describe('PinSetupScreen', () => {
   it('sets the PIN and calls onPinSet when the confirmation matches (AC-02.2)', async () => {
     mockSetPin.mockResolvedValue({ message: 'PIN set' });
     const onPinSet = jest.fn();
-    await render(<PinSetupScreen accessToken="access-token" onPinSet={onPinSet} />);
+    await render(<PinSetupScreen userId={TEST_USER_ID} accessToken="access-token" onPinSet={onPinSet} />);
 
     await act(async () => {
       fireEvent.changeText(screen.getByTestId('pin-setup-input'), '4682');
@@ -66,7 +68,7 @@ describe('PinSetupScreen', () => {
   });
 
   it('shows a mismatch error and restarts entry when confirmation does not match (AC-02.2)', async () => {
-    await render(<PinSetupScreen accessToken="access-token" onPinSet={jest.fn()} />);
+    await render(<PinSetupScreen userId={TEST_USER_ID} accessToken="access-token" onPinSet={jest.fn()} />);
 
     await act(async () => {
       fireEvent.changeText(screen.getByTestId('pin-setup-input'), '4682');

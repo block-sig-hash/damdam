@@ -9,6 +9,8 @@ import {
 } from '../../utils/pinLocalStore';
 import { usePinUnlock } from './usePinUnlock';
 
+const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
+
 jest.mock('../../utils/pinLocalStore', () => ({
   ...jest.requireActual('../../utils/pinLocalStore'),
   getLocalPinState: jest.fn(),
@@ -54,7 +56,7 @@ afterEach(() => {
 });
 
 async function mount(onUnlocked: jest.Mock) {
-  return renderHook(() => usePinUnlock({ onUnlocked }));
+  return renderHook(() => usePinUnlock({ userId: TEST_USER_ID, onUnlocked }));
 }
 
 describe('usePinUnlock', () => {
@@ -70,7 +72,7 @@ describe('usePinUnlock', () => {
   });
 
   it('starts at entry when a PIN is stored and not locked', async () => {
-    mockGetState.mockResolvedValue({ pin: '4682', failedAttempts: 0, lockedUntil: null });
+    mockGetState.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: 0, lockedUntil: null });
     const { result } = await mount(jest.fn());
 
     await act(async () => {
@@ -81,9 +83,7 @@ describe('usePinUnlock', () => {
   });
 
   it('resumes a still-active lock from a persisted deadline on mount', async () => {
-    mockGetState.mockResolvedValue({
-      pin: '4682',
-      failedAttempts: 5,
+    mockGetState.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: 5,
       lockedUntil: new Date(Date.now() + 120_000).toISOString(),
     });
     const { result } = await mount(jest.fn());
@@ -97,7 +97,7 @@ describe('usePinUnlock', () => {
   });
 
   it('unlocks immediately with no network call on a matching PIN (AC-02.3/AC-23.3)', async () => {
-    mockGetState.mockResolvedValue({ pin: '4682', failedAttempts: 0, lockedUntil: null });
+    mockGetState.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: 0, lockedUntil: null });
     mockVerify.mockResolvedValue(true);
     const onUnlocked = jest.fn();
     const { result } = await mount(onUnlocked);
@@ -112,15 +112,15 @@ describe('usePinUnlock', () => {
       await result.current.submit();
     });
 
-    expect(mockVerify).toHaveBeenCalledWith('4682');
+    expect(mockVerify).toHaveBeenCalledWith(TEST_USER_ID, '4682');
     expect(onUnlocked).toHaveBeenCalledWith();
     expect(mockRecordFailure).not.toHaveBeenCalled();
   });
 
   it('shows the remaining-attempts count on a wrong PIN before lockout', async () => {
-    mockGetState.mockResolvedValue({ pin: '4682', failedAttempts: 0, lockedUntil: null });
+    mockGetState.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: 0, lockedUntil: null });
     mockVerify.mockResolvedValue(false);
-    mockRecordFailure.mockResolvedValue({ pin: '4682', failedAttempts: 2, lockedUntil: null });
+    mockRecordFailure.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: 2, lockedUntil: null });
     const onUnlocked = jest.fn();
     const { result } = await mount(onUnlocked);
     await act(async () => {
@@ -140,15 +140,11 @@ describe('usePinUnlock', () => {
   });
 
   it('locks for 30 minutes after the 5th failed attempt (AC-02.4/AC-23.5)', async () => {
-    mockGetState.mockResolvedValue({
-      pin: '4682',
-      failedAttempts: PIN_UNLOCK_ATTEMPT_LIMIT - 1,
+    mockGetState.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: PIN_UNLOCK_ATTEMPT_LIMIT - 1,
       lockedUntil: null,
     });
     mockVerify.mockResolvedValue(false);
-    mockRecordFailure.mockResolvedValue({
-      pin: '4682',
-      failedAttempts: PIN_UNLOCK_ATTEMPT_LIMIT,
+    mockRecordFailure.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: PIN_UNLOCK_ATTEMPT_LIMIT,
       lockedUntil: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     });
     const { result } = await mount(jest.fn());
@@ -168,9 +164,7 @@ describe('usePinUnlock', () => {
   });
 
   it('counts the lockout down and returns to entry once it expires', async () => {
-    mockGetState.mockResolvedValue({
-      pin: '4682',
-      failedAttempts: PIN_UNLOCK_ATTEMPT_LIMIT,
+    mockGetState.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: PIN_UNLOCK_ATTEMPT_LIMIT,
       lockedUntil: new Date(Date.now() + 5_000).toISOString(),
     });
     const { result } = await mount(jest.fn());
@@ -187,9 +181,7 @@ describe('usePinUnlock', () => {
   });
 
   it('unlocks via OTP recovery, clearing the local lock without changing the PIN', async () => {
-    mockGetState.mockResolvedValue({
-      pin: '4682',
-      failedAttempts: PIN_UNLOCK_ATTEMPT_LIMIT,
+    mockGetState.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: PIN_UNLOCK_ATTEMPT_LIMIT,
       lockedUntil: new Date(Date.now() + 120_000).toISOString(),
     });
     mockClearLock.mockResolvedValue(undefined);
@@ -214,7 +206,7 @@ describe('usePinUnlock', () => {
   });
 
   it('lets the pilgrim cancel out of recovery back to PIN entry', async () => {
-    mockGetState.mockResolvedValue({ pin: '4682', failedAttempts: 0, lockedUntil: null });
+    mockGetState.mockResolvedValue({ userId: TEST_USER_ID, pin: '4682', failedAttempts: 0, lockedUntil: null });
     const { result } = await mount(jest.fn());
     await act(async () => {
       await Promise.resolve();

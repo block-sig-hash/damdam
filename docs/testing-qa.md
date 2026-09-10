@@ -900,7 +900,26 @@ contact because its four required environment secrets are unset; D6/chunk 26
 owns that setup. Full review and scope limits are in
 [implementation/reviews/02.md](./implementation/reviews/02.md).
 
-## 14.15 Amendment — Three-interface calling evidence
+---
+
+## 14.15 Amendment — Identity, Recovery and Shared-Device Tests (US-29)
+
+Identity and recovery are strict-TDD scope. PostgreSQL tests exercise atomic
+single-use token consumption, verified-owner and one-primary constraints,
+concurrent email signup convergence, populated migration upgrade/backfill, and
+legacy-only downgrade. API tests cover uniform request responses, purpose and
+expiry boundaries, email-first signup/login, adoption of a single legacy email
+account, phone identifier creation, and
+immediate access/refresh rejection after both email and legacy phone recovery.
+
+Mobile tests use a stateful Keychain double to prove an account's local PIN and
+lockout cannot authenticate or block another account on the same handset.
+Ownerless records from older builds read as absent. The eSIM compatibility
+warning remains device-scoped because it is handset state under AC-10.6.
+
+---
+
+## 14.16 Amendment — Three-Interface Calling Evidence
 
 9 September 2026. Governed by the [approved calling expansion](./implementation/VOICE-EXPANSION.md).
 

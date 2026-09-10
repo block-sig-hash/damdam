@@ -348,7 +348,9 @@ class PaymentService:
         if user is None or tier is None or transaction.processor_reference is None:
             return
         delivered = True
+        attempted = False
         if user.email:
+            attempted = True
             try:
                 self.notifications.send_receipt_email(
                     user.email,
@@ -359,17 +361,19 @@ class PaymentService:
                 )
             except NotificationError:
                 delivered = False
-        try:
-            self.notifications.send_receipt_whatsapp(
-                user.phone_number,
-                tier.name,
-                transaction.amount_ngn,
-                transaction.processor_reference,
-                user.locale.value,
-            )
-        except NotificationError:
-            delivered = False
-        if delivered:
+        if user.phone_number:
+            attempted = True
+            try:
+                self.notifications.send_receipt_whatsapp(
+                    user.phone_number,
+                    tier.name,
+                    transaction.amount_ngn,
+                    transaction.processor_reference,
+                    user.locale.value,
+                )
+            except NotificationError:
+                delivered = False
+        if attempted and delivered:
             transaction.receipt_sent_at = self.clock()
             session.add(transaction)
             session.commit()

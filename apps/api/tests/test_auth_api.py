@@ -6,10 +6,13 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlmodel import select
 from starlette.requests import Request
 
+from app.auth.dependencies import get_current_user
 from app.auth.models import User
+from app.auth.pin import PINError
 from app.auth.routes import (
     refresh_token,
     request_otp,
@@ -89,6 +92,48 @@ def test_departure_date_flows_through_to_the_auth_response(
     )
 
     assert second_login.user.departure_date == date(2026, 8, 1)
+
+
+def test_phone_recovery_revokes_prior_access_and_refresh_tokens(api: FastAPI) -> None:
+    request = SimpleNamespace(app=api)
+    request_otp(OTPRequest(phone_number=PHONE), request)
+    original = verify_otp(
+        OTPVerifyRequest(phone_number=PHONE, otp="123456", platform="android"),
+        request,
+    )
+
+    request_pin_recovery(PINRecoveryRequest(phone_number=PHONE), request)
+    recovered = verify_pin_recovery(
+        OTPVerifyRequest(phone_number=PHONE, otp="123456", platform="android"),
+        request,
+    )
+    assert recovered.user.id == original.user.id
+
+    with pytest.raises(PINError, match="invalid_access_token"):
+        get_current_user(
+            request,
+            HTTPAuthorizationCredentials(
+                scheme="Bearer", credentials=original.access_token
+            ),
+        )
+    with pytest.raises(OTPError, match="invalid_refresh_token"):
+        refresh_token(RefreshRequest(refresh_token=original.refresh_token), request)
+
+
+def test_unknown_phone_recovery_fails_only_after_otp_control_is_proved(
+    api: FastAPI,
+) -> None:
+    request = SimpleNamespace(app=api)
+    unknown = "08099998888"
+    # Request remains uniform and succeeds for an unknown number.
+    request_pin_recovery(PINRecoveryRequest(phone_number=unknown), request)
+    with pytest.raises(OTPError, match="account_not_found"):
+        verify_pin_recovery(
+            OTPVerifyRequest(
+                phone_number=unknown, otp="123456", platform="android"
+            ),
+            request,
+        )
 
 
 @pytest.mark.anyio

@@ -10,6 +10,12 @@ EN = "en"
 FR = "fr"
 
 _API_EN = {
+    "identity_sent": "If that address can receive it, we have sent a message with the next step.",
+    "identity_verified": "Your email address is confirmed.",
+    "identity_token_invalid": "That link is no longer valid. Please request a new one.",
+    "identity_token_expired": "That link has expired. Please request a new one.",
+    "identifier_already_verified": "That address is already confirmed on another account.",
+    "identity_send_throttled": "Please wait before requesting another message.",
     "feature_retired": "This feature is no longer part of DamDam. Please update the app to the latest version.",
     "checkin_rate_limited": "You can check in once every 15 minutes.",
     "checkin_id_conflict": "This check-in identifier is already in use.",
@@ -23,7 +29,6 @@ _API_EN = {
     "otp_expired": "The verification code has expired.",
     "rate_limited": "Please wait before requesting another code.",
     "locked": "Too many attempts. Please wait before trying again.",
-    "account_exists": "This number already has an account. Please log in.",
     "account_not_found": "No account exists for this phone number.",
     "otp_unavailable": "Verification is temporarily unavailable.",
     "invalid_refresh_token": "The refresh token is invalid or expired.",
@@ -102,6 +107,12 @@ _API_EN = {
 }
 
 _API_FR = {
+    "identity_sent": "Si cette adresse peut le recevoir, nous avons envoyé un message avec la suite.",
+    "identity_verified": "Votre adresse e-mail est confirmée.",
+    "identity_token_invalid": "Ce lien n’est plus valide. Veuillez en demander un nouveau.",
+    "identity_token_expired": "Ce lien a expiré. Veuillez en demander un nouveau.",
+    "identifier_already_verified": "Cette adresse est déjà confirmée sur un autre compte.",
+    "identity_send_throttled": "Veuillez patienter avant de demander un autre message.",
     "feature_retired": "Cette fonctionnalité ne fait plus partie de DamDam. Veuillez mettre à jour l’application vers la dernière version.",
     "checkin_rate_limited": "Vous pouvez signaler votre sécurité une fois toutes les 15 minutes.",
     "checkin_id_conflict": "Cet identifiant de pointage est déjà utilisé.",
@@ -115,7 +126,6 @@ _API_FR = {
     "otp_expired": "Le code de vérification a expiré.",
     "rate_limited": "Veuillez patienter avant de demander un nouveau code.",
     "locked": "Trop de tentatives. Veuillez patienter avant de réessayer.",
-    "account_exists": "Ce numéro possède déjà un compte. Veuillez vous connecter.",
     "account_not_found": "Aucun compte ne correspond à ce numéro de téléphone.",
     "otp_unavailable": "La vérification est temporairement indisponible.",
     "invalid_refresh_token": "Le jeton d’actualisation n’est pas valide ou a expiré.",

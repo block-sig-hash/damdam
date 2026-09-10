@@ -13,18 +13,33 @@ export const PIN_UNLOCK_LOCKOUT_SECONDS = 30 * 60;
 const SERVICE = 'com.damdam.pin-unlock';
 
 export interface LocalPinState {
+  /**
+   * The account this PIN belongs to (US-29).
+   *
+   * Without it the store is device-scoped: A sets a PIN, A's session ends, B
+   * signs in on the same handset, and B's unlock screen validates against A's
+   * PIN while A's failed-attempt lockout applies to B. Every read is now
+   * checked against the account asking, and a mismatch reads as "no PIN".
+   */
+  userId: string;
   pin: string;
   failedAttempts: number;
   lockedUntil: string | null;
 }
 
-async function readState(): Promise<LocalPinState | null> {
+async function readState(userId: string): Promise<LocalPinState | null> {
   const credentials = await Keychain.getGenericPassword({ service: SERVICE });
   if (!credentials) {
     return null;
   }
   try {
-    return JSON.parse(credentials.password) as LocalPinState;
+    const parsed = JSON.parse(credentials.password) as Partial<LocalPinState>;
+    // A record without an owner predates US-29 and cannot be attributed, so it
+    // is treated as absent rather than adopted by whoever is signed in now.
+    if (!parsed.userId || parsed.userId !== userId) {
+      return null;
+    }
+    return parsed as LocalPinState;
   } catch {
     return null;
   }
@@ -41,16 +56,18 @@ async function writeState(state: LocalPinState): Promise<void> {
 }
 
 /** Called once, right after PIN Setup's POST /auth/pin/set succeeds. */
-export async function savePinLocally(pin: string): Promise<void> {
-  await writeState({ pin, failedAttempts: 0, lockedUntil: null });
+export async function savePinLocally(userId: string, pin: string): Promise<void> {
+  await writeState({ userId, pin, failedAttempts: 0, lockedUntil: null });
 }
 
-export async function hasPinStoredLocally(): Promise<boolean> {
-  return (await readState()) !== null;
+export async function hasPinStoredLocally(userId: string): Promise<boolean> {
+  return (await readState(userId)) !== null;
 }
 
-export async function getLocalPinState(): Promise<LocalPinState | null> {
-  return readState();
+export async function getLocalPinState(
+  userId: string,
+): Promise<LocalPinState | null> {
+  return readState(userId);
 }
 
 /**
@@ -58,8 +75,11 @@ export async function getLocalPinState(): Promise<LocalPinState | null> {
  * network call. Resets the failure counter on a match, mirroring the
  * backend's verify_pin success path.
  */
-export async function verifyPinLocally(pin: string): Promise<boolean> {
-  const state = await readState();
+export async function verifyPinLocally(
+  userId: string,
+  pin: string,
+): Promise<boolean> {
+  const state = await readState(userId);
   if (!state || state.pin !== pin) {
     return false;
   }
@@ -72,8 +92,10 @@ export async function verifyPinLocally(pin: string): Promise<boolean> {
  * Returns the updated state so the caller can read the new deadline
  * directly rather than re-fetching.
  */
-export async function recordFailedPinAttempt(): Promise<LocalPinState | null> {
-  const state = await readState();
+export async function recordFailedPinAttempt(
+  userId: string,
+): Promise<LocalPinState | null> {
+  const state = await readState(userId);
   if (!state) {
     return null;
   }
@@ -92,8 +114,8 @@ export async function recordFailedPinAttempt(): Promise<LocalPinState | null> {
  * bypasses the local lock without changing the PIN itself — matching
  * the backend's clear_lock_after_otp, which never touches pin_hash.
  */
-export async function clearLocalPinLock(): Promise<void> {
-  const state = await readState();
+export async function clearLocalPinLock(userId: string): Promise<void> {
+  const state = await readState(userId);
   if (!state) {
     return;
   }
@@ -102,4 +124,21 @@ export async function clearLocalPinLock(): Promise<void> {
 
 export async function clearPinLocally(): Promise<void> {
   await Keychain.resetGenericPassword({ service: SERVICE });
+}
+
+/**
+ * Clears the device-persisted PIN that belongs to the signed-in account.
+ *
+ * Called from each session-ending path in `useSessionGate`. Before US-29 only
+ * the session Keychain entry was cleared, which left a PIN behind for the next
+ * person to sign in on the same device.
+ */
+export async function clearAccountScopedState(): Promise<void> {
+  try {
+    await clearPinLocally();
+  } catch {
+    // Session expiry/revocation must still complete if secure storage is
+    // temporarily unavailable. The userId check keeps any uncleared PIN from
+    // authenticating a different account on the device.
+  }
 }

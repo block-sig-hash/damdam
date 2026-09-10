@@ -289,6 +289,163 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/email/verify/request:
+    post:
+      tags:
+      - authentication
+      summary: Request Email Verification
+      description: Claim an email for the signed-in account and send proof-of-ownership.
+      operationId: request_email_verification_v1_auth_email_verify_request_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailIdentifierRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/auth/email/verify/confirm:
+    post:
+      tags:
+      - authentication
+      summary: Confirm Email Verification
+      operationId: confirm_email_verification_v1_auth_email_verify_confirm_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/email/login/request:
+    post:
+      tags:
+      - authentication
+      summary: Request Email Login
+      description: Send the same response for email signup and returning login.
+      operationId: request_email_login_v1_auth_email_login_request_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailIdentifierRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/email/login/confirm:
+    post:
+      tags:
+      - authentication
+      summary: Confirm Email Login
+      description: Prove mailbox control, then create or authenticate the account.
+      operationId: confirm_email_login_v1_auth_email_login_confirm_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/email/recovery/request:
+    post:
+      tags:
+      - authentication
+      summary: Request Email Recovery
+      operationId: request_email_recovery_v1_auth_email_recovery_request_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailIdentifierRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityMessageResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/auth/email/recovery/confirm:
+    post:
+      tags:
+      - authentication
+      summary: Confirm Email Recovery
+      description: Consume a recovery token, revoke prior sessions and issue a new
+        one.
+      operationId: confirm_email_recovery_v1_auth_email_recovery_confirm_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoverySessionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/admin/sos-notifications/failed:
     get:
       tags:
@@ -2223,6 +2380,20 @@ components:
       - fcm_token
       - platform
       title: DeviceTokenUpsert
+    EmailIdentifierRequest:
+      properties:
+        email:
+          type: string
+          maxLength: 255
+          minLength: 3
+          title: Email
+        locale:
+          $ref: '#/components/schemas/Locale'
+          default: en
+      type: object
+      required:
+      - email
+      title: EmailIdentifierRequest
     EsimDownloadResponse:
       properties:
         status:
@@ -2547,6 +2718,34 @@ components:
       - esim_status
       - activation_status
       title: HtoPilgrimSummary
+    IdentityMessageResponse:
+      properties:
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - message
+      title: IdentityMessageResponse
+      description: 'Deliberately says nothing about whether the address is known.
+
+
+        The same body is returned for a registered address, an unregistered one and
+
+        an unverified claim, so the response cannot be used to test who has an
+
+        account.'
+    IdentityTokenRequest:
+      properties:
+        token:
+          type: string
+          maxLength: 256
+          minLength: 16
+          title: Token
+      type: object
+      required:
+      - token
+      title: IdentityTokenRequest
     LivenessResponse:
       properties:
         status:
@@ -3132,6 +3331,22 @@ components:
       - status
       - checks
       title: ReadinessResponse
+    RecoverySessionResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        refresh_token:
+          type: string
+          title: Refresh Token
+        user:
+          $ref: '#/components/schemas/UserResponse'
+      type: object
+      required:
+      - access_token
+      - refresh_token
+      - user
+      title: RecoverySessionResponse
     RefreshRequest:
       properties:
         refresh_token:
@@ -3284,7 +3499,9 @@ components:
           format: uuid
           title: Id
         phone_number:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Phone Number
         first_name:
           type: string
@@ -3309,7 +3526,9 @@ components:
         locale:
           $ref: '#/components/schemas/Locale'
         platform:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Platform
         status:
           type: string

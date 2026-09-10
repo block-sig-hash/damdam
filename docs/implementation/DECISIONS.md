@@ -241,7 +241,7 @@ public service promises. Record any subsequent session decision here.
 | Proposed default | Source | Owner | Consequence if reversed |
 |---|---|---|---|
 | Remove the remaining check-in / welfare workflow | Plan §1, "recommended scope interpretation" | Founder / product | Chunk 04 retirement scope changes; enterprise dashboard scope changes |
-| Email-based account identity and recovery, independent of SMS | Plan §1 | Founder / product | Chunk 06 identity model changes |
+| ~~Email-based account identity and recovery, independent of SMS~~ **ADOPTED 2026-09-09 — see below** | Plan §1 | Founder / product | — |
 | A new carrier-assigned number, no +234 retention promise | Plan §1, D2 | Founder / product | Chunk 15 number lifecycle and all plan copy change |
 | Prepaid charging; recurring billing separately gated | Plan §1, D5 | Founder / product + finance | Chunks 13, 16, 17, 24 change materially |
 
@@ -251,6 +251,42 @@ invent founder approval for any of them.
 The welfare and identity defaults are product choices, not hidden additions to
 D2's carrier-market gate. The assigned-number policy is under D2 and charging
 is under D5. Each affected chunk must name its remaining choice explicitly.
+
+## Product decisions recorded
+
+#### Decision — 2026-09-09
+
+- Decided by: Founder (Ibrahim Adamu).
+- Decision: **Email is the launch account identity and the primary recovery
+  channel.** Phone numbers remain *optional* verified identifiers, used for
+  service-specific purposes — calling, provisioning and notifications — and not
+  as the account identity. **Account recovery must not require access to a
+  SIM.**
+- Evidence: founder instruction given directly during the chunk 06
+  implementation session on 2026-09-09. Not a supplier or contractual document.
+- Chunks unblocked: **06** may implement email login and recovery rather than
+  only the channel-agnostic core.
+- Chunks still blocked and why: none by this decision. Live email *delivery*
+  remains separately gated — chunk 06 ships a transport abstraction and a test
+  transport, and no email provider is configured or authorised here.
+
+#### Decision — 2026-09-09 (account enumeration and AC-01.7)
+
+- Decided by: Founder (Ibrahim Adamu).
+- Decision: **The pre-verification enumeration signal is removed.**
+  `POST /auth/otp/request` returns the same public response regardless of
+  account existence. Only *after* successful OTP verification may the response
+  indicate whether the verified identifier belongs to an existing account and
+  route the user accordingly. **Equivalent enumeration resistance applies to the
+  email identity endpoints.**
+- Explicit constraint: rate limiting, OTP-send throttling, **per-identifier
+  cooldowns** and abuse controls must be preserved, so that the now-uniform
+  response cannot be used to flood a victim's phone or mailbox.
+- Evidence: founder instruction during the chunk 06 session, 2026-09-09.
+- Chunks unblocked: 06.
+- Consequence: `prd.md` AC-01.7 and `api-spec.md` are amended rather than
+  contradicted; the `account_exists` and `account_not_found` pre-authentication
+  responses are withdrawn.
 
 ## Recording a decision
 
