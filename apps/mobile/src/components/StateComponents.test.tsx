@@ -65,7 +65,7 @@ describe('UsageMeter', () => {
         label="Data"
         remaining="—"
         total="10 GB"
-        fraction={0}
+        fraction={0.75}
         updatedLabel={null}
         testID="meter"
       />,
@@ -73,6 +73,10 @@ describe('UsageMeter', () => {
     const fill = flatten(screen.getByTestId('meter-track').props.children.props.style);
     expect(fill.backgroundColor).toBe(color.gray300);
     expect(fill.width).toBe('0%');
+    expect(screen.getByTestId('meter-track').props.accessibilityValue).toEqual({
+      min: 0,
+      max: 100,
+    });
   });
 
   it('colours the fill by how much is left, on the banner thresholds', async () => {

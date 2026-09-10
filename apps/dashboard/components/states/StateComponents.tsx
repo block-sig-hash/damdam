@@ -70,6 +70,7 @@ export function UsageMeter({
 }) {
   const clamped = Math.min(1, Math.max(0, Number.isFinite(fraction) ? fraction : 0));
   const neverReported = updatedLabel === null;
+  const displayedFraction = neverReported ? 0 : clamped;
   const severity = neverReported
     ? "unknown"
     : clamped < 0.05
@@ -92,13 +93,13 @@ export function UsageMeter({
         aria-label={`${label}: ${remaining} / ${total}`}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-valuenow={Math.round(clamped * 100)}
+        aria-valuenow={neverReported ? undefined : Math.round(clamped * 100)}
         data-testid={testId && `${testId}-track`}
       >
         <div
           className="usage-meter-fill"
           data-severity={severity}
-          style={{ width: `${clamped * 100}%` }}
+          style={{ width: `${displayedFraction * 100}%` }}
         />
       </div>
       <p

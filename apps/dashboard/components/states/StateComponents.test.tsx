@@ -48,7 +48,7 @@ describe("UsageMeter", () => {
         label="Data"
         remaining="—"
         total="1 TB"
-        fraction={0}
+        fraction={0.75}
         updatedLabel={null}
         testId="meter"
       />,
@@ -56,6 +56,7 @@ describe("UsageMeter", () => {
     const fill = screen.getByTestId("meter-track").firstElementChild as HTMLElement;
     expect(fill.dataset.severity).toBe("unknown");
     expect(fill.style.width).toBe("0%");
+    expect(screen.getByTestId("meter-track")).not.toHaveAttribute("aria-valuenow");
   });
 
   it("escalates severity as the balance falls", () => {

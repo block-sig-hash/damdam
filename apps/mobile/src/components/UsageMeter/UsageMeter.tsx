@@ -56,6 +56,7 @@ export function UsageMeter({
 }: UsageMeterProps): React.JSX.Element {
   const clamped = Math.min(1, Math.max(0, Number.isFinite(fraction) ? fraction : 0));
   const neverReported = updatedLabel === null;
+  const displayedFraction = neverReported ? 0 : clamped;
 
   return (
     <View testID={testID} style={styles.container}>
@@ -70,7 +71,9 @@ export function UsageMeter({
         accessible
         accessibilityRole="progressbar"
         accessibilityLabel={accessibilityLabel ?? `${label}: ${remaining} / ${total}`}
-        accessibilityValue={{ min: 0, max: 100, now: Math.round(clamped * 100) }}
+        accessibilityValue={
+          neverReported ? { min: 0, max: 100 } : { min: 0, max: 100, now: Math.round(clamped * 100) }
+        }
         style={styles.track}
         testID={testID ? `${testID}-track` : undefined}
       >
@@ -80,8 +83,8 @@ export function UsageMeter({
             // A never-reported meter renders an empty track in neutral grey.
             // Painting it full green would be inventing a reading.
             {
-              width: `${clamped * 100}%`,
-              backgroundColor: neverReported ? color.gray300 : fillColor(clamped),
+              width: `${displayedFraction * 100}%`,
+              backgroundColor: neverReported ? color.gray300 : fillColor(displayedFraction),
             },
           ]}
         />
