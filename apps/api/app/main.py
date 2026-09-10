@@ -49,8 +49,14 @@ from app.manifests.orders import ManifestOrderService, ProvisioningScheduler
 from app.manifests.routes import pricing_router
 from app.manifests.routes import router as manifest_router
 from app.manifests.service import ManifestError, ManifestService
+from app.mfa.service import MfaError, MfaService
 from app.monitoring import PostHogExceptionMiddleware, build_exception_tracker
 from app.notifications.service import EmailSender, WhatsAppSender
+from app.organizations.invitations import InvitationError, InvitationService
+from app.organizations.routes import invitation_router
+from app.organizations.routes import mfa_router as organization_mfa_router
+from app.organizations.routes import router as organization_router
+from app.organizations.service import MembershipError, MembershipService
 from app.otp.providers.base import OTPProvider
 from app.otp.routes import router as otp_webhook_router
 from app.otp.service import FailoverScheduler, OTPError, RedisClient, utc_now
@@ -191,6 +197,11 @@ def create_app(
         notification_service,
         clock,
     )
+    api.state.membership_service = MembershipService(clock)
+    api.state.invitation_service = InvitationService(
+        memberships=api.state.membership_service, clock=clock
+    )
+    api.state.mfa_service = MfaService(clock)
     api.state.hto_pilgrim_service = HtoPilgrimService()
     api.state.report_service = ProvisioningReportService(clock)
     api.state.voice_service = VoiceService(
@@ -221,6 +232,83 @@ def create_app(
                 "details": {},
             },
             headers=headers,
+        )
+
+    @api.exception_handler(MembershipError)
+    async def membership_error_handler(
+        request: Request, exc: MembershipError
+    ) -> JSONResponse:
+        statuses = {
+            # 403, never 404: the caller authenticated, and telling them an
+            # organization "does not exist" versus "is not yours" is the same
+            # cross-tenant oracle AC-29.4 is about.
+            "not_a_member": 403,
+            "permission_denied": 403,
+            "membership_not_found": 404,
+            "role_change_forbidden": 403,
+            "cannot_modify_own_membership": 409,
+            "last_owner": 409,
+            "already_a_member": 409,
+            "organization_not_selected": 400,
+            "shared_credential_forbidden": 403,
+            "mfa_required": 403,
+            "mfa_enrollment_required": 403,
+            "mfa_locked": 423,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 403),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(InvitationError)
+    async def invitation_error_handler(
+        request: Request, exc: InvitationError
+    ) -> JSONResponse:
+        statuses = {
+            "invitation_invalid": 400,
+            "invitation_expired": 410,
+            "invitation_not_found": 404,
+            "invitation_already_pending": 409,
+            "invitation_recipient_mismatch": 403,
+            "permission_denied": 403,
+            "role_change_forbidden": 403,
+            "already_a_member": 409,
+            "not_a_member": 403,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(MfaError)
+    async def mfa_error_handler(request: Request, exc: MfaError) -> JSONResponse:
+        statuses = {
+            "mfa_not_enrolled": 409,
+            "mfa_code_invalid": 400,
+            "mfa_code_replayed": 409,
+            "mfa_locked": 423,
+            "mfa_required": 403,
+            "mfa_enrollment_required": 403,
+            "not_a_member": 403,
+        }
+        details: dict[str, Any] = {}
+        if exc.retry_after is not None:
+            details["retry_after"] = exc.retry_after
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": details,
+            },
         )
 
     @api.exception_handler(RetiredFeatureError)
@@ -473,6 +561,9 @@ def create_app(
 
     api.include_router(auth_router, prefix="/v1")
     api.include_router(admin_router, prefix="/v1")
+    api.include_router(organization_router, prefix="/v1")
+    api.include_router(invitation_router, prefix="/v1")
+    api.include_router(organization_mfa_router, prefix="/v1")
     api.include_router(manifest_router, prefix="/v1")
     api.include_router(pricing_router, prefix="/v1")
     api.include_router(otp_webhook_router, prefix="/v1")

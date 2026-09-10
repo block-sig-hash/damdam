@@ -3,8 +3,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from app.auth.dependencies import get_current_organization, get_current_user
-from app.auth.models import Organization, User
+from app.auth.dependencies import get_current_user
+from app.auth.models import User
 from app.esim.models import EsimProfile
 from app.esim.schemas import (
     DeviceCompatibilityCreate,
@@ -19,6 +19,8 @@ from app.esim.service import (
     EsimProfileService,
     HtoPilgrimService,
 )
+from app.organizations.dependencies import TenantContext, require_tenant
+from app.organizations.permissions import Permission
 
 router = APIRouter(tags=["esim"])
 
@@ -114,10 +116,10 @@ def log_device_compatibility(
 @router.get("/hto/pilgrims", response_model=HtoPilgrimListResponse)
 def list_hto_pilgrims(
     request: Request,
-    organization: Annotated[Organization, Depends(get_current_organization)],
+    context: Annotated[TenantContext, require_tenant(Permission.PEOPLE_READ)],
     manifest_id: Annotated[UUID | None, Query()] = None,
 ) -> HtoPilgrimListResponse:
     service = cast(HtoPilgrimService, request.app.state.hto_pilgrim_service)
     with request.app.state.session_factory() as session:
-        pilgrims = service.list_pilgrims(session, organization, manifest_id)
+        pilgrims = service.list_pilgrims(session, context.organization, manifest_id)
     return HtoPilgrimListResponse(pilgrims=pilgrims)
