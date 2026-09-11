@@ -253,9 +253,8 @@ jobs:
   # Renders real screens on a real Android emulator via the screenshot
   # harness (apps/mobile/screenshotHarness/README.md) and Maestro flows
   # (apps/mobile/maestro/screens/*.yaml), closing the gap flagged in
-  # docs/testing-qa.md's screenshot-generation-CI amendment and in
-  # claude-review.yml's own header comment: mobile visual review had no
-  # way to see a rendered screen, only diffs. Runs on ubuntu-latest (no
+  # docs/testing-qa.md's screenshot-generation-CI amendment: mobile visual
+  # review needs a rendered screen, not only diffs. Runs on ubuntu-latest (no
   # macOS surcharge) so it's affordable on every mobile PR, unlike the
   # iOS job below.
   screenshot-mobile-android:
@@ -374,9 +373,8 @@ jobs:
           name: mobile-screenshots-android-maestro-output
           path: apps/mobile/maestro-output
           if-no-files-found: warn
-      # Inline preview in the job's own Summary tab -- reviewers (human or
-      # Claude in claude-review.yml) can see every captured screen without
-      # downloading the artifact zip. Thumbnails only (full-resolution
+      # Inline preview in the job's own Summary tab lets reviewers see every
+      # captured screen without downloading the artifact zip. Thumbnails only (full-resolution
       # PNGs are in the artifact above): GITHUB_STEP_SUMMARY has a ~1MiB
       # cap, and full-size phone screenshots would blow past it. Never
       # fall back to embedding the source PNG when thumbnailing fails.

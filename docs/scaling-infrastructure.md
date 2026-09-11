@@ -253,12 +253,11 @@ split above defaults as much work as possible to Codex, reserving
 Claude for the specific areas (mobile UI, safety-critical review)
 where its usage is worth the real API spend.
 
-**Automated review:** a `claude-review.yml` GitHub Action runs
-Claude automatically on PR open and on `@claude` mentions, scoped
-to Sonnet with a turn limit for cost predictability. Codex's own
-automatic PR review feature can run in parallel as a fast P0/P1
-filter but isn't a substitute for Claude's review on anything
-`AGENTS.md`'s table assigns to Claude.
+**Review gate:** model review is not run as a GitHub Action. It was
+quota-sensitive and duplicated the independent review without producing a
+reproducible signal. Chunk acceptance is the recorded Codex review plus the
+deterministic repository checks; mobile visual review uses the screenshots
+uploaded by CI.
 
 ### Practical notes on running a split-tool workflow
 
