@@ -24,6 +24,8 @@ interface SignInScreenProps {
   onUsePhone?: () => void;
   /** Pre-filled when an invitation named the address it was sent to. */
   initialEmail?: string;
+  /** A failed magic-link handoff returns here without losing the explanation. */
+  initialError?: string;
   /**
    * Shown above the form when the customer arrived here from a deep link, so
    * they know why they were asked to sign in and that their link is not lost.
@@ -44,6 +46,7 @@ export function SignInScreen({
   onRecover,
   onUsePhone,
   initialEmail,
+  initialError,
   contextMessage,
 }: SignInScreenProps): React.JSX.Element {
   const { t } = useTranslation('consumer');
@@ -58,7 +61,7 @@ export function SignInScreen({
     requestLink,
     confirm,
     restart,
-  } = useEmailSignIn({ onAuthenticated, initialEmail });
+  } = useEmailSignIn({ onAuthenticated, initialEmail, initialError });
 
   if (stage === 'confirming') {
     return (

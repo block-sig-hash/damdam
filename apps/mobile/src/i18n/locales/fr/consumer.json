@@ -27,6 +27,7 @@
     "recovery": "Je n'arrive pas à accéder à mon compte",
     "linkExpired": "Ce lien a expiré ou a déjà été utilisé. Demandez-en un nouveau.",
     "signingIn": "Connexion en cours…",
+    "linkOpening": "Vérification du lien sécurisé que vous avez ouvert.",
     "usePhone": "Se connecter avec un numéro de téléphone"
   },
   "recovery": {

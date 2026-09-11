@@ -86,7 +86,10 @@ export function ConsumerApp({
     loadPendingLink()
       .then(link => link && setPendingLink(link))
       .catch(() => undefined);
-    return subscribeToDeepLinks(setPendingLink);
+    return subscribeToDeepLinks(
+      setPendingLink,
+      link => link.kind !== 'email-login' && link.kind !== 'email-recovery',
+    );
   }, []);
 
   const dismissLink = useCallback(() => {

@@ -25,6 +25,8 @@ const WEB_PREFIXES = ['https://damdam.app/', 'https://www.damdam.app/'];
 
 export type PendingLink =
   | { kind: 'invitation'; token: string }
+  | { kind: 'email-login'; token: string }
+  | { kind: 'email-recovery'; token: string }
   | { kind: 'esim-activation'; packageId: string }
   | { kind: 'order'; orderId: string };
 
@@ -40,8 +42,9 @@ export function parseDeepLink(url: string): PendingLink | null {
   if (path === null) {
     return null;
   }
-  const [route, query] = path.split('?');
-  const params = new URLSearchParams(query ?? '');
+  const [pathAndQuery, fragment] = path.split('#');
+  const [route, query] = pathAndQuery.split('?');
+  const params = new URLSearchParams(query ?? fragment ?? '');
   const segments = route.split('/').filter(Boolean);
 
   if (segments[0] === 'invite') {
@@ -49,6 +52,18 @@ export function parseDeepLink(url: string): PendingLink | null {
     // segment, and the older WhatsApp message carried it as `?token=`.
     const token = segments[1] ?? params.get('token');
     return token ? { kind: 'invitation', token } : null;
+  }
+  if (segments[0] === 'auth' && segments[1] === 'email') {
+    const token = segments[3] ?? params.get('token');
+    if (!token) {
+      return null;
+    }
+    if (segments[2] === 'login') {
+      return { kind: 'email-login', token };
+    }
+    if (segments[2] === 'recovery') {
+      return { kind: 'email-recovery', token };
+    }
   }
   if (segments[0] === 'esim' && segments[1] === 'activate') {
     const packageId = params.get('packageId') ?? segments[2];
@@ -92,6 +107,12 @@ export async function loadPendingLink(): Promise<PendingLink | null> {
       return parsed;
     }
     if (
+      (parsed.kind === 'email-login' || parsed.kind === 'email-recovery') &&
+      typeof parsed.token === 'string'
+    ) {
+      return parsed;
+    }
+    if (
       parsed.kind === 'esim-activation' &&
       typeof parsed.packageId === 'string'
     ) {
@@ -123,12 +144,21 @@ export async function clearPendingLink(): Promise<void> {
  */
 export function subscribeToDeepLinks(
   onLink: (link: PendingLink) => void,
+  shouldHandle: (link: PendingLink) => boolean = () => true,
 ): () => void {
   let active = true;
 
   const handle = ({ url }: { url: string }) => {
     const link = parseDeepLink(url);
     if (!link) {
+      return;
+    }
+    // The initial URL is visible to every navigator mounted during this app
+    // process. After an email link authenticates the signed-out navigator, the
+    // authenticated navigator mounts and sees the same initial URL; filtering
+    // before persistence prevents it from resurrecting an already-consumed
+    // one-time credential.
+    if (!shouldHandle(link)) {
       return;
     }
     savePendingLink(link)

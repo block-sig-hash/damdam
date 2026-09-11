@@ -98,6 +98,17 @@ describe('parseDeepLink', () => {
     });
   });
 
+  it('keeps email login and recovery links purpose-bound', () => {
+    expect(
+      parseDeepLink('damdam://auth/email/login#token=login-token'),
+    ).toEqual({ kind: 'email-login', token: 'login-token' });
+    expect(
+      parseDeepLink(
+        'https://damdam.app/auth/email/recovery#token=recovery-token',
+      ),
+    ).toEqual({ kind: 'email-recovery', token: 'recovery-token' });
+  });
+
   it('reads an eSIM activation link', () => {
     expect(parseDeepLink('damdam://esim/activate?packageId=pkg-1')).toEqual({
       kind: 'esim-activation',
@@ -174,6 +185,20 @@ describe('subscribeToDeepLinks', () => {
     await flush();
 
     expect(onLink).not.toHaveBeenCalled();
+  });
+
+  it('filters a stale initial identity URL before persisting it again', async () => {
+    noEventsFrom('damdam://auth/email/login#token=already-consumed');
+    const onLink = jest.fn();
+
+    subscribeToDeepLinks(
+      onLink,
+      link => link.kind !== 'email-login' && link.kind !== 'email-recovery',
+    );
+    await flush();
+
+    expect(onLink).not.toHaveBeenCalled();
+    await expect(loadPendingLink()).resolves.toBeNull();
   });
 });
 

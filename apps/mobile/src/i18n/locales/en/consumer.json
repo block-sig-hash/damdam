@@ -27,6 +27,7 @@
     "recovery": "I can't get into my account",
     "linkExpired": "That link has expired or has already been used. Ask for a new one.",
     "signingIn": "Signing you in…",
+    "linkOpening": "Checking the secure link you opened.",
     "usePhone": "Sign in with a phone number"
   },
   "recovery": {

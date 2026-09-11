@@ -1,10 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AuthResponse } from '../api/authClient';
-import type { RecoverySession } from '../api/identityClient';
+import { ApiError } from '../api/http';
+import {
+  confirmEmailLogin,
+  confirmEmailRecovery,
+  type RecoverySession,
+} from '../api/identityClient';
+import { StateMessage } from '../components/StateMessage/StateMessage';
 import { AccountRecoveryScreen } from '../screens/AccountRecovery/AccountRecoveryScreen';
 import { SignInScreen } from '../screens/SignIn/SignInScreen';
-import { loadPendingLink, type PendingLink } from '../services/deepLinks';
+import {
+  clearPendingLink,
+  loadPendingLink,
+  subscribeToDeepLinks,
+  type PendingLink,
+} from '../services/deepLinks';
 import {
   OnboardingNavigator,
   type AuthenticatedMobileSession,
@@ -17,9 +28,14 @@ interface AuthNavigatorProps {
 }
 
 type Step =
-  | { name: 'sign-in' }
+  | { name: 'sign-in'; initialError?: string }
   | { name: 'recovery'; email: string }
-  | { name: 'phone' };
+  | { name: 'phone' }
+  | {
+      name: 'email-link';
+      kind: 'email-login' | 'email-recovery';
+      token: string;
+    };
 
 /**
  * The signed-out stack (AC-37.2).
@@ -45,11 +61,27 @@ export function AuthNavigator({
 
   useEffect(() => {
     let active = true;
+    const route = (link: PendingLink) => {
+      if (!active) {
+        return;
+      }
+      if (link.kind === 'email-login' || link.kind === 'email-recovery') {
+        setStep({ name: 'email-link', kind: link.kind, token: link.token });
+      } else {
+        setPendingLink(link);
+      }
+    };
     loadPendingLink()
-      .then(link => active && setPendingLink(link))
+      .then(link => {
+        if (link) {
+          route(link);
+        }
+      })
       .catch(() => undefined);
+    const unsubscribe = subscribeToDeepLinks(route);
     return () => {
       active = false;
+      unsubscribe();
     };
   }, []);
 
@@ -63,6 +95,18 @@ export function AuthNavigator({
     );
   }
 
+  if (step.name === 'email-link') {
+    return (
+      <EmailLinkHandoff
+        kind={step.kind}
+        token={step.token}
+        onAuthenticated={onAuthenticated}
+        onFailed={message =>
+          setStep({ name: 'sign-in', initialError: message })
+        }
+      />
+    );
+  }
 
   if (step.name === 'phone') {
     return (
@@ -76,6 +120,7 @@ export function AuthNavigator({
   return (
     <SignInScreen
       initialEmail={initialEmail}
+      initialError={step.initialError}
       contextMessage={
         pendingLink?.kind === 'invitation'
           ? t('invitation.signInFirstBody')
@@ -86,6 +131,60 @@ export function AuthNavigator({
       }
       onRecover={email => setStep({ name: 'recovery', email })}
       onUsePhone={() => setStep({ name: 'phone' })}
+    />
+  );
+}
+
+function EmailLinkHandoff({
+  kind,
+  token,
+  onAuthenticated,
+  onFailed,
+}: {
+  kind: 'email-login' | 'email-recovery';
+  token: string;
+  onAuthenticated: (session: AuthenticatedMobileSession) => void | Promise<void>;
+  onFailed: (message: string) => void;
+}): React.JSX.Element {
+  const { t } = useTranslation('consumer');
+
+  useEffect(() => {
+    let active = true;
+    const confirm =
+      kind === 'email-login' ? confirmEmailLogin(token) : confirmEmailRecovery(token);
+    confirm
+      .then(async result => {
+        await clearPendingLink().catch(() => undefined);
+        if (active) {
+          await onAuthenticated(toSession(result));
+        }
+      })
+      .catch(async error => {
+        await clearPendingLink().catch(() => undefined);
+        if (!active) {
+          return;
+        }
+        onFailed(
+          error instanceof ApiError &&
+            (error.code === 'identity_token_expired' ||
+              error.code === 'identity_token_invalid')
+            ? t('signIn.linkExpired')
+            : error instanceof ApiError
+              ? error.message
+              : t('home.unavailableBody'),
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }, [kind, onAuthenticated, onFailed, t, token]);
+
+  return (
+    <StateMessage
+      variant="pending"
+      title={t('signIn.signingIn')}
+      body={t('signIn.linkOpening')}
+      testID="email-link-confirming"
     />
   );
 }

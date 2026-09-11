@@ -49,17 +49,21 @@ export interface UseEmailSignInResult {
 interface UseEmailSignInOptions {
   onAuthenticated: (result: AuthResponse, email: string) => void | Promise<void>;
   initialEmail?: string;
+  initialError?: string;
 }
 
 export function useEmailSignIn({
   onAuthenticated,
   initialEmail = '',
+  initialError,
 }: UseEmailSignInOptions): UseEmailSignInResult {
   const [stage, setStage] = useState<SignInStage>('email');
   const [email, setEmail] = useState(initialEmail);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(
+    initialError ?? null,
+  );
 
   const requestLink = useCallback(async () => {
     const normalized = email.trim().toLowerCase();
