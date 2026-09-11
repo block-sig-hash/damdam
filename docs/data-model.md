@@ -2290,3 +2290,115 @@ permission in `STEP_UP_PERMISSIONS` is refused for a shared-credential session
 (`shared_credential_forbidden`). Retiring the columns themselves is the last
 step of the migration sequence in `implementation/IMPLEMENTATION-PLAN.md` §7 and
 belongs to the chunk that retires the dashboard's login, not to this one.
+
+---
+
+## 6.46 Amendment — Supported-Market Catalog, Versioned Tariffs and Immutable Quotes (US-31)
+
+**Recorded 10 September 2026 by build chunk 09.** Additive; migration
+`0030_catalog_and_quotes`. No existing table is altered, no row is touched, and
+**nothing is seeded**.
+
+### Four countries, four columns
+
+The legacy schema answered "where?" with `destination_country`. The reset needs
+four different answers, and conflating any two of them is a real failure:
+
+| Question | Table | Consequence of getting it from another column |
+|---|---|---|
+| Where may we **sell**? | `sales_markets` | Selling into a market nobody cleared |
+| Where does the data **work**? | `product_coverage` | A plan that will not attach |
+| Which number, from where? | `number_policies` | A number in the wrong country |
+| Can this carry a **call**? | `provider_offerings` | The one `AGENTS.md` names |
+
+That last one is the reason this is a table and not a boolean on `products`.
+**Aggregate supplier data coverage is not native-voice eligibility.** A
+supplier's data footprint across ninety countries says nothing about whether a
+voice-capable profile can be issued in any of them, and selling a voice plan on
+that basis produces a customer holding a line that cannot make calls.
+`_offering_satisfies` in `app/catalog/service.py` is where that is refused, and
+`test_a_data_only_supplier_cannot_satisfy_a_voice_plan` is where it is proved.
+
+Every capability column defaults to **false**. An unverified capability is an
+absent capability; defaulting to true would make each new offering claim
+everything until somebody remembered to say otherwise.
+
+### Publication is where the open decisions bite
+
+`PublicationStatus` has a `VERIFIED` step between draft and published on
+purpose. Recording that a market is real is a different act from deciding to
+sell there, and collapsing them means the moment somebody files evidence the
+product goes on sale.
+
+Two CHECK constraints carry D2 and D3:
+
+- `ck_sales_markets_evidence` — nothing leaves draft without an evidence
+  reference and a verification timestamp.
+- `ck_sales_markets_published_needs_seller` — nothing is published without a
+  legal entity, and `legal_entities` is deliberately unseeded by §6.44.
+
+So the open decisions express themselves as *things that will not sell*, rather
+than as claims that later turn out to be false.
+
+### Tariffs know where a call starts
+
+`tariff_rates.origin_kind` distinguishes an **internet** origin from a **carrier
+visited network**, which `VOICE-EXPANSION.md` requires. A tariff recording only
+"origin: NG" could not tell a customer roaming in Nigeria on a carrier line from
+one sitting in Lagos making an internet call, and those cost us different
+amounts.
+
+`select_rate` prefers an exact origin country over an any-origin wildcard, and
+**never falls back across `origin_kind`**. Using a roaming rate because the
+internet rate is missing prices a call at a number that describes a different
+call.
+
+`ux_tariffs_published` allows one live version per product and currency. Two is
+not a pricing decision; it is a race about which one a quote happened to read.
+
+### Quotes are immutable, and the database says so
+
+A quote is the server's promise of a price, so `total_amount` being editable
+would make it not a promise. `trg_quotes_immutable` refuses any `UPDATE` that
+changes a priced column — only `status` and `redeemed_at` may move — and
+`trg_quote_items_immutable` refuses every update to a line.
+
+Writing the service against that trigger changed the service: `issue_quote`
+originally inserted an empty quote and filled in the totals, which the trigger
+correctly refused. It now builds the whole quote in memory and inserts once. A
+constraint that changes how the code is written is the constraint working.
+
+`quotes.digest` is a SHA-256 over the canonical serialisation of the quote and
+its lines. It is belt to the trigger's braces: the trigger stops an `UPDATE`,
+the digest catches rows reached another way — a restore, a manual `psql`
+session, a migration with a bug in it. It hashes amounts **normalised to the
+currency's exponent**, because the column is `Numeric(20, 6)` and a quote issued
+as `1000.00` reads back as `1000.000000`; hashing the raw value made every quote
+read as tampered after one round trip.
+
+`ck_quotes_total_is_sum` and the digest catch different things, which is worth
+stating because it is easy to think one is redundant. The constraint proves the
+parts add up; the digest proves they are the parts the server issued. A subtotal
+that no longer matches its own lines passes the first and fails the second.
+
+### Rounding
+
+`app/money.py` gains `currency_exponent`, `round_money` and `sum_money`.
+
+- The exponent is the **currency's**, from ISO 4217 — JPY has none, KWD has
+  three. An unknown code **raises** rather than defaulting to two: the default
+  would undercharge by a factor of a hundred in a zero-exponent currency and the
+  result would look like a pricing decision rather than a bug.
+- Rounding is **half-to-even**, not half-up. Across many lines half-up drifts
+  consistently in the seller's favour, and "we round in our own favour, a
+  little, every time" is a question nobody wants to answer.
+- A line is the **rounded** unit times quantity, and an order total is the sum of
+  the rounded lines, so somebody adding up a receipt gets the number at the
+  bottom.
+
+### What is deliberately not here
+
+No tax rate. `quotes.tax_amount` is zero and
+`tax_configuration_reference` is null, because D3 is open and inventing a rate
+would put a number on an invoice that no authority asked for. The column exists
+so the treatment can be recorded by reference when it is decided, never inlined.
