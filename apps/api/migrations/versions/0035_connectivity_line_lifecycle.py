@@ -249,7 +249,10 @@ def upgrade() -> None:
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("redeemed_at", sa.DateTime(timezone=True), nullable=True),
         sa.UniqueConstraint("token_fingerprint", name="uq_credential_grants_token"),
-        sa.CheckConstraint("expires_at > issued_at", name="ck_credential_grants_window"),
+        sa.CheckConstraint(
+            "expires_at > issued_at",
+            name="ck_credential_grants_window",
+        ),
     )
     op.create_index(
         "ix_credential_grants_live",
