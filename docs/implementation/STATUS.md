@@ -39,7 +39,7 @@ is a dry run that executes nothing.
 | 09 — Build supported-market catalog and immutable quotes | **ACCEPTED after fixes** | accepted base `8651aa9` / submitted `8286d5e` / corrected `3427e16` | [Independent review](reviews/09.md) | D2/D3 keep every market unpublishable; nothing is seeded |
 | 10 — Build the multi-currency ledger and atomic reservations | **ACCEPTED after fixes** | submitted `1a19878` / rebased `bef1f67` / corrected `e9b10d8` | [Independent review](reviews/10.md) | Backfill not run against production-shaped data; no reservation-expiry sweeper pending D5 |
 | 11 — Build order orchestration and durable recovery | **ACCEPTED after fixes (durable domain); runtime dispatch EXTERNAL_BLOCKED** | submitted `d232935` / rebased `4b82378` / corrected `8625daa` | [Independent review](reviews/11.md) | No worker runner wired; no real SupplierClient — a Telnyx adapter needs D1/V01 |
-| 12 — Implement payment routing and modernize Paystack | NOT_STARTED | — | — | See assignment |
+| 12 — Implement payment routing and modernize Paystack | **ACCEPTED after fixes (contract/simulated); live EXTERNAL_BLOCKED** | submitted `3a31d5c` / rebased `6cee395` / corrected `624c246` | [Independent review](reviews/12.md) | **D3/D4 OPEN** — `live_enabled` is false and constrained; no live or sandbox Paystack call made |
 | 13 — Implement the selected global payment adapter and wallet checkout | NOT_STARTED | — | — | See assignment |
 | 14 — Implement refunds, disputes, bank funding and receipts | NOT_STARTED | — | — | See assignment |
 | 15 — Implement the Telnyx eSIM, line and number lifecycle | NOT_STARTED | — | — | See assignment |

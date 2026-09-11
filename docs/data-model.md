@@ -2573,3 +2573,101 @@ to accept, and marking the item cancelled produces a cancelled order with a
 purchased line behind it. Reconciliation resolves the truth first. Cancelling an
 item with no attempt also completes its queued outbox message, so a worker
 claiming it later does not provision something already cancelled.
+
+---
+
+## 6.49 Amendment — Provider-Neutral Payment Contract (US-33)
+
+**Recorded 10 September 2026 by build chunk 12.** Additive; migration
+`0033_payment_contract`. `transactions` and the legacy Paystack/Flutterwave path
+are untouched.
+
+### Why a contract rather than a processor
+
+**D4 is open.** No global processor is selected, Stripe is a candidate and not a
+decision, and code naming one would have to be unpicked when the decision goes
+elsewhere. `PaymentProcessorAdapter` is the whole surface a processor must
+present, and nothing above it knows which one it is talking to.
+
+### Intent and attempt are separate
+
+An order has at most one `payment_intent` — the business intention to collect —
+and an intent may have several `payment_attempts`: a card declined, then a bank
+transfer. Separating them is what makes double-capture **detectable**: two
+successful attempts against one intent is a fact the database can see, rather
+than two unrelated payments nobody correlates.
+
+Four fields on an intent never change: seller, merchant account, currency, and
+the order and quote it pays for. PostgreSQL rejects intent updates and binds
+merchant id, seller and currency with one composite foreign key. Service code
+also requires the intent amount to equal the order total. An attempt needing
+different values is a new attempt, not an edit.
+
+### `ux_payment_attempts_one_success`
+
+A partial unique index over `status = 'succeeded'`, one per intent. Two
+successful charges for one order is the failure this chunk exists to prevent,
+and this refuses it rather than reporting it afterwards.
+
+Only one created, pending or unknown attempt may be live for an intent. Attempt
+creation locks the intent, and `(processor, idempotency_key)` is unique. Capture
+also locks the intent, so two different late successes serialize: one pays the
+order and the other is durably recorded as excess.
+
+### Excess payments are recorded, never dropped
+
+A charge that cannot be matched — wrong amount, wrong currency, unknown
+reference, or an order already paid — becomes an `excess_payments` row rather
+than a discarded webhook. The customer's account has already been debited, and
+refusing to write it down would be losing their money. Chunk 14 refunds them.
+
+Dropping the webhook is the alternative, and the alternative is a customer who
+has been charged twice and a system that has never heard of the second charge.
+The stored evidence is an allowlist of reference, status, amount, currency,
+merchant reference and event name. The provider's raw customer and
+authorization objects are not retained.
+
+### A redirect cannot mark an order paid
+
+`payment_state = PaymentState.PAID` is assigned in exactly one place,
+`PaymentRouter.capture`, which takes a `ProcessorCharge` the caller has already
+verified. A browser return URL is a message from the customer's own browser and
+anyone can navigate to a URL; it is a hint to show a spinner, never evidence
+that money moved. There is a test asserting that single assignment exists in
+that one place.
+
+### Live collection is disabled, structurally
+
+`merchant_accounts.live_enabled` defaults to false, and
+`ck_merchant_accounts_live_needs_approval` refuses to let it be true without a
+named `approval_reference`. That constraint is where "keep live collection
+disabled pending D3/D4" stops being a promise. Sandbox work stays possible
+through an explicit `require_live=False`, so it cannot happen by accident.
+
+### Routing inputs
+
+Seller, currency and method — never nationality, never an IP address. Both of
+those are guesses about a person; a merchant account is a fact about who may
+legally take their money in that currency, and routing on a guess is how a
+customer is charged through an entity with no relationship to them.
+`merchant_payment_methods` is the explicit method capability; an account that
+has not enabled a rail cannot be selected for it, and multiple eligible
+accounts are an ambiguity error rather than an arbitrary first row.
+
+### Paystack, conditionally
+
+`app/payments/paystack_adapter.py` implements the contract for **NGN only** and
+refuses any other currency rather than converting — a quiet conversion would be
+a foreign-exchange decision this product has not made.
+
+The amount is sent as a string in the currency's minor unit with the exponent
+**derived** from `app/money.py` rather than hardcoded as 100. A payer email is
+required before transport, metadata is JSON encoded, and locally generated
+references use only Paystack's documented character set. Missing reference,
+amount, currency or status in a response is rejected rather than defaulted.
+
+Vendor behaviour is documented rather than assumed: the endpoints, the
+minor-unit convention and the `x-paystack-signature` HMAC SHA-512 scheme are
+cited to Paystack's public API reference, **checked 10 September 2026**. No live
+or sandbox call has been made, and the adapter tests are not evidence that
+Paystack behaves as documented.
