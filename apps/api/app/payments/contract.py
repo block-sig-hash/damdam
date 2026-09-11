@@ -237,6 +237,12 @@ class PaymentAttempt(SQLModel, table=True):
         UniqueConstraint(
             "processor", "idempotency_key", name="uq_payment_attempts_key"
         ),
+        UniqueConstraint(
+            "id",
+            "processor",
+            "currency",
+            name="uq_payment_attempts_refund_binding",
+        ),
         Index(
             "ux_payment_attempts_processor_reference",
             "processor",

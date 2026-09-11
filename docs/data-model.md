@@ -2671,3 +2671,113 @@ minor-unit convention and the `x-paystack-signature` HMAC SHA-512 scheme are
 cited to Paystack's public API reference, **checked 10 September 2026**. No live
 or sandbox call has been made, and the adapter tests are not evidence that
 Paystack behaves as documented.
+
+---
+
+## 6.50 Amendment — Refunds, Disputes, Bank Funding and Receipts (US-34)
+
+**Recorded 10 September 2026 by build chunk 14.** Additive; migration
+`0034_refunds_and_reconciliation`. Nothing seeded, no existing row touched.
+
+### Money going out is not the mirror of money coming in
+
+| Table | Why it is its own table |
+|---|---|
+| `refunds` | Bounded by a specific captured charge, not by an order total |
+| `disputes` | The bank took the money and told us afterwards — a different event with a different accounting treatment |
+| `bank_transfer_receipts` | Evidence, imported separately from the decision to credit anybody |
+| `financial_documents` | Facts frozen at issue, never regenerated |
+| `processor_settlement_reports` | Immutable processor gross, refund, dispute, fee, tax, FX and payout evidence |
+| `exception_items` | What a human has to look at, with enough context to act |
+
+### The refund ceiling
+
+**Total refunded can never exceed the refundable charge.** Exceeding it is not a
+large refund; it is a payout, and a payout is a different product with a
+different licensing conversation attached.
+
+It spans rows, so it is not one constraint. `request_refund` computes the
+remaining headroom under `SELECT … FOR UPDATE` on the payment attempt, so two
+concurrent partial refunds cannot both see the same room. Chunk 10's balance
+trigger independently proves that each settled refund posting balances; a
+balanced journal entry by itself cannot enforce this cross-row ceiling.
+
+**An in-flight refund counts against the headroom.** A refund whose outcome we
+have not seen may already have paid out, and excluding it is exactly how a
+second refund gets authorized on top of a first.
+
+### A refund posts only when it settles
+
+A refund that has not settled has not moved money. Posting on request would show
+a reversal before the customer's bank saw anything. A successful processor
+capture posts `settlement_clearing → revenue`; when its refund settles, the
+refund posts the opposite `revenue → settlement_clearing` entry under its own
+business event. Neither path edits history, which chunk 10's trigger refuses
+anyway. A customer service-credit account is not used as a stand-in for an
+external cash refund.
+
+### A dispute is not a refund
+
+A chargeback is the bank taking money back and telling us. Recording it as a
+refund would make the books say we chose to give it back. A **lost** dispute
+posts the loss to `adjustment`; a **won** one posts nothing, because the money
+never left and a reversal of a reversal invents two transactions that did not
+happen.
+
+Whether a lost dispute claws back the customer's remaining allowance is a policy
+question — **D5 is open** — so this chunk records the money and does not decide
+the service consequence.
+
+### Bank funding is reconciled evidence, not a screenshot
+
+`uq_bank_transfer_receipts_line` makes re-importing a statement harmless, which
+is the failure a manual funding process produces every time.
+
+Importing and crediting are **separate acts**. An import credits nobody;
+matching names both the account and `matched_by`, because a funding credit with
+no attributable decision is indistinguishable from the unaudited balance edit
+the assignment forbids. An unmatched line stays imported, uncredited, and goes
+to the exception queue — guessing whose payment it is credits one customer with
+another's money.
+
+The database requires a matched row to carry the account, actor and match time,
+and binds the account currency to the receipt currency. Once matched, the row is
+immutable; a correction is new evidence, not a rewrite of bank history.
+
+Funding posts at the bank's **value date**, not the date somebody got round to
+reconciling it.
+
+### Documents are frozen
+
+`financial_documents.snapshot` holds the amounts, currency, seller and tax
+reference the document states, **copied rather than referenced**. A receipt
+regenerated from live data next year would show next year's prices with this
+year's date, and a customer comparing it against their bank statement would be
+right to complain. Numbers are unique per seller and kind: a tax authority
+asking for invoice 47 must get exactly one document.
+
+Issued documents are immutable at the database boundary. Refunds and disputes
+are structurally bound to the processor and currency of their payment attempt,
+and terminal outcomes are immutable as well, so a late callback cannot rewrite
+a settled refund or a lost chargeback.
+
+`processor_settlement_reports` stores each imported report once under its
+processor reference. Reconciliation compares the report's gross captures,
+refunds and lost disputes with local records for the same processor, currency
+and half-open period. It independently verifies their clearing and
+revenue/adjustment ledger postings, then checks the report's fee, tax, FX and
+net-payout arithmetic. Every difference enters `exception_items`. The import
+snapshot and all economic columns are immutable.
+
+This closes the fixture/software contract, not the provider decision. Actual
+report formats, fee schedules, tax policy, FX terms and live evidence remain
+blocked on D3/D4/D5. The older `settlement_report` helper remains an
+expected-net local aggregation and is not presented as processor evidence.
+
+### The exception queue
+
+`exception_items` is the interface chunk 25 builds its operations screens on.
+Every row names its kind, its subject and why — an exception queue whose rows do
+not explain themselves is a list people learn to ignore. `sweep_excess_payments`
+turns chunk 12's recorded excess into something somebody actually sees: an
+excess payment nobody looks at is a customer charged twice and never refunded.
