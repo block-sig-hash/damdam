@@ -2781,3 +2781,128 @@ Every row names its kind, its subject and why — an exception queue whose rows 
 not explain themselves is a list people learn to ignore. `sweep_excess_payments`
 turns chunk 12's recorded excess into something somebody actually sees: an
 excess payment nobody looks at is a customer charged twice and never refunded.
+
+## 6.51 Amendment — Carrier Line Lifecycle, Product Allowances and Sealed Activation Material (US-35)
+
+**Recorded 10 September 2026 by build chunk 15.** Additive; migration
+`0035_connectivity_line_lifecycle`. Nothing seeded, no existing row touched, and
+every added column is nullable or carries a server default.
+
+### The gap chunk 15 found: nothing recorded what a product entitles you to
+
+§6.44 gave `entitlements` exact byte and second columns and §6.46 gave products
+prices, coverage and tariffs. Neither says how much connectivity a product
+carries. Provisioning would have had to invent the number, and a grant invented
+at fulfilment time is a grant nobody agreed to — it only shows up as a customer
+with the wrong balance months later.
+
+`product_allowances` closes it: one row per product, `data_bytes`,
+`voice_seconds`, nullable `validity_days`. Bytes and seconds, matching
+`entitlements`, because a supplier reports usage in bytes and a balance that
+cannot represent the supplier's own number has to round in somebody's favour
+every time. `validity_days` is nullable because "does not expire" is a real
+product and zero would mean the opposite.
+
+The row is immutable once created. `order_items.product_id` is therefore the
+allowance snapshot boundary: delayed fulfilment cannot receive a rewritten
+package after checkout. Changing included data, voice or validity requires a
+new product identity; PostgreSQL rejects updates and deletes to an existing
+allowance row.
+
+### Released is not installed, and neither is attached
+
+The four separated states from §6.44 acquire the columns that keep them apart
+once a real supplier is talking to us:
+
+| Column | Answers | Written by |
+|---|---|---|
+| `esim_installations.profile_released_at` | did the **supplier** release the profile for download | a supplier read |
+| `esim_installations.installed_at` | is it on a **device** | a device report, and nothing else |
+| `carrier_lines.activation_state` | is the line live **with the carrier** | a confirmed action or a supplier read |
+| `carrier_lines.network_state` | is it **attached right now** | a network observation, and nothing else |
+
+Telnyx reports `esim_installation_status: released`, and the documented enum is
+`released|disabled`. It is the field somebody will eventually read as proof of
+installation. No carrier can observe a handset. Adding a separate column, rather
+than reusing `installed_at`, is what makes that misreading impossible rather
+than merely discouraged.
+
+`carrier_lines.provider_status` keeps the supplier's own string verbatim
+alongside our interpretation. An operator asking "but what does the carrier
+actually say" gets an answer instead of a translation of a translation — and
+chunk 17 needs it to tell a carrier-imposed `data_limit_exceeded` from a
+suspension we requested, because only one of those can be resumed.
+
+`carrier_lines.voice_enabled` is separate from activation for the same reason
+§6.46's `provider_offerings.supports_native_voice` is separate from
+`supports_data`: a line can be live for data and carry no voice service at all.
+
+### Every carrier state change is asynchronous, so it needs four states
+
+`carrier_line_actions` records one requested lifecycle change and how far it has
+got. Telnyx documents this outright: *"All state changes return 202 with a SIM
+Card Action — they are not instant."*
+
+| State | What is true |
+|---|---|
+| `requested` | We decided. Nothing has been sent. |
+| `pending` | The carrier accepted it and is working on it. |
+| `confirmed` | The carrier says it is done. |
+| `failed` | The carrier says it did not happen. |
+
+Collapsing `pending` into `confirmed` tells a customer their line is suspended
+while it is still passing traffic and still billing. The line's state moves on
+`confirmed` and on nothing else; a failed action leaves the line exactly where it
+was, because a suspension that did not happen has not happened.
+
+`ux_carrier_line_actions_open` allows **one** open action per line. Two
+simultaneous suspends are not two suspensions, and a suspend racing a resume has
+no defined answer. Telnyx would refuse the second transition anyway — this
+refuses it earlier, and with an error somebody can act on.
+
+`ck_line_actions_settled_at` makes a settled action without a timestamp
+impossible to store, so "when did this line stop working" stays answerable.
+
+A dispatch whose response was lost stays `pending` with **no** provider
+reference. It is not re-sent: re-sending races a request that may already be in
+flight, and the carrier refuses a transition while another is in progress.
+
+### Activation material is sealed, fingerprinted and delivered under a grant
+
+`esim_activation_credentials` is the most sensitive row in the connectivity
+schema, and the reason is a property of the product rather than of the data:
+**an eSIM activation code is one-time use.** Telnyx documents that a lost profile
+cannot be re-downloaded and needs a fresh purchase. So the usual reasoning about
+secrets does not apply — there is nothing to rotate. A leaked code is a paid-for
+profile somebody else can install instead of the customer.
+
+- `ciphertext` is AES-256-GCM, with the installation id as additional
+  authenticated data. A ciphertext moved to another row fails to decrypt, so
+  write access cannot silently swap two customers' profiles.
+- `key_reference` names the key, never holds it. Without it, a rotation makes
+  every profile unreadable with no way to tell which rows are affected.
+- `fingerprint` is a keyed BLAKE2b hash, so support, tests and audit can say
+  "the same code" without anybody handling one. Keyed rather than plain: an
+  unkeyed hash of a structured LPA string is reversible by guessing.
+- `uq_esim_activation_credentials_installation` — one profile, one credential. A
+  second row would mean one of the two profiles is unrecoverable and nobody
+  knows which.
+- `delivery_count` is kept because a profile fetched three times is either a
+  broken installation or somebody else fetching it, and both are worth seeing.
+
+`esim_credential_grants` is a short-lived, single-use authorization bound to one
+person. The alternative — returning the code to anyone holding a session — makes
+the profile as durable as the session, and sessions last a month. Only the
+token's fingerprint is stored, so a database dump cannot mint deliveries of the
+profiles it holds, and redemption takes `SELECT … FOR UPDATE` so two concurrent
+redemptions of one token cannot both succeed.
+
+Revocation expires grants rather than deleting them: who was granted access to a
+profile is worth more than a tidy table.
+
+### What this amendment does not do
+
+**D1 is open.** No carrier is contracted, no account exists and no call has been
+made. `assigned_numbers.provider_number_reference` is nullable because a supplier
+may only ever tell us the number itself, and the Telnyx `mobile_phone_numbers`
+schemas belong to the beta VoLTE contract that is still unpublished.

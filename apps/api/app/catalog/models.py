@@ -11,7 +11,20 @@ from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, String
+from sqlalchemy import (
+    DDL,
+    BigInteger,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Table,
+    UniqueConstraint,
+    event,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlmodel import Field, SQLModel
 
@@ -116,3 +129,74 @@ class ProductPrice(SQLModel, table=True):
     effective_to: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+
+
+class ProductAllowance(SQLModel, table=True):
+    """What one unit of a product entitles its holder to, in exact units.
+
+    **Added by chunk 15**, which found the gap by needing it: an
+    `Entitlement` cannot be granted without knowing what was sold, and
+    `products` records what a thing is and what it costs but never how much
+    connectivity it carries. Provisioning would have had to invent the number,
+    and a grant invented at fulfilment time is a grant nobody agreed to.
+
+    Bytes and seconds, matching `Entitlement`. Not gigabytes and minutes: a
+    supplier reports usage in bytes, and a balance that cannot represent a
+    supplier's own number has to round — in somebody's favour, every time.
+
+    `validity_days` is nullable because "does not expire" is a real product,
+    and zero would mean the opposite.
+    """
+
+    __tablename__ = "product_allowances"
+    __table_args__ = (
+        UniqueConstraint("product_id", name="uq_product_allowances_product"),
+        CheckConstraint(
+            "data_bytes >= 0 AND voice_seconds >= 0",
+            name="ck_product_allowances_not_negative",
+        ),
+        CheckConstraint(
+            "validity_days IS NULL OR validity_days > 0",
+            name="ck_product_allowances_validity",
+        ),
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    product_id: UUID = Field(
+        sa_column=Column(
+            ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True
+        )
+    )
+    # BigInteger: 5 GB is 5,368,709,120 bytes, which overflows a 32-bit column.
+    data_bytes: int = Field(sa_column=Column(BigInteger, nullable=False))
+    voice_seconds: int = Field(sa_column=Column(BigInteger, nullable=False))
+    validity_days: int | None = Field(
+        default=None, sa_column=Column(Integer, nullable=True)
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+_PRODUCT_ALLOWANCE_IMMUTABLE_TRIGGER = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE OR REPLACE FUNCTION reject_product_allowance_mutation()
+    RETURNS trigger AS $$
+    BEGIN
+        RAISE EXCEPTION 'product allowances are immutable; create a new product';
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER trg_product_allowances_immutable
+        BEFORE UPDATE OR DELETE ON product_allowances
+        FOR EACH ROW EXECUTE FUNCTION reject_product_allowance_mutation();
+    """
+)
+
+_PRODUCT_ALLOWANCE_TABLE: Table = ProductAllowance.__table__  # type: ignore[attr-defined]
+event.listen(
+    _PRODUCT_ALLOWANCE_TABLE,
+    "after_create",
+    _PRODUCT_ALLOWANCE_IMMUTABLE_TRIGGER.execute_if(dialect="postgresql"),
+)

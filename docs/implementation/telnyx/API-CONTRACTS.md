@@ -218,3 +218,140 @@ contract. **It proves nothing about Telnyx's actual behaviour.** Every fixture
 is labelled `SIMULATED`, and the probe refuses to run against a live endpoint
 without explicit authorization flags. See
 [`../../../apps/api/tools/telnyx_probe/README.md`](../../../apps/api/tools/telnyx_probe/README.md).
+
+---
+
+## 4. Recheck — 10 September 2026 (chunk 15, US-35)
+
+`AGENTS.md` requires a vendor claim to be checked against current official
+documentation with the date recorded, and chunk 15 implements against these
+shapes, so they were re-verified before a line of the adapter was written.
+
+**Method.** Public documentation only. No account, no API call, no contact with
+Telnyx. **D1 remains OPEN.** Sources:
+
+```bash
+curl -sSL https://developers.telnyx.com/openapi/source/external/wireless/wireless.json
+curl -sSL https://developers.telnyx.com/api-reference/sim-cards/purchase-esims.md
+curl -sSL https://developers.telnyx.com/api-reference/sim-card-actions/list-sim-card-actions.md
+curl -sSL https://developers.telnyx.com/api-reference/sim-cards/get-all-sim-cards.md
+curl -sSL https://developers.telnyx.com/docs/development/llms/wireless-sims-esims-llms-full-txt
+curl -sSL https://developers.telnyx.com/docs/development/llms/wireless-data-llms-full-txt
+curl -sSL https://developers.telnyx.com/docs/development/llms/wireless-volte-llms-full-txt
+curl -sSL https://developers.telnyx.com/docs/iot-sim/api-errors.md
+```
+
+The OpenAPI **source** is the addition. §1 was written from the rendered API
+reference pages; `wireless.json` is the machine-readable export those pages are
+generated from, and it lists all 50 wireless paths in one place. Three things
+§1 got wrong or missed came out of reading it.
+
+### 4.1 Corrections to §1
+
+| §1 said | Actually | Why it matters |
+|---|---|---|
+| No documented way to obtain the eSIM profile | **`GET /sim_cards/{id}/activation_code`** exists, returning `SIMCardActivationCode.activation_code` — "Contents of the eSIM activation QR code" | §1's absence would have made self-installation impossible to build. It is buildable. |
+| WDR reports at `/wireless/detail/records/reports` | **`/wireless/detail_records_reports`** | The §1 path would have returned 404 on the first real call. |
+| `SimpleSIMCard.esim_installation_status` listed as a plain field | Its documented enum is **`released` \| `disabled`** | Neither value means "installed on a device". §1 left room to read it that way. |
+
+### 4.2 Newly recorded, and material
+
+- **`SIMCardAction` is fully specified**, and it is the receipt for every
+  lifecycle change. `action_type` ∈ `enable`, `enable_standby_sim_card`,
+  `disable`, `set_standby`, `enable_voice`, `disable_voice`. `status.value` ∈
+  `in-progress`, `completed`, `failed`, **`interrupted`** — with a `reason`
+  string that is null for self-explanatory statuses. So the *voice* actions are
+  tracked through the same documented resource even though their request bodies
+  are not published.
+- **`interrupted` is in the response enum and absent from `filter[status]`.** An
+  interrupted action cannot be found by filtering for it. Anything that polls by
+  filter and treats "not found" as "still running" leaves that line's open
+  action forever, blocking every later change to it.
+- **The two official sources disagree about SIM statuses.** The OpenAPI
+  `SIMCardStatus` enum has eight values and omits `unauthorized_imei`, `blocked`
+  and `abolished`; the prose lifecycle page documents all three, including how to
+  exit each. `app/connectivity/telnyx_contract.py` accepts the union — parsing
+  only the OpenAPI set would make a real response fail as a contract violation
+  and stop a line's recovery.
+- **`data_limit` is settable per SIM**, not only per group:
+  `PATCH /sim_cards/{id}` with `{amount, unit}`, unit ∈ `MB|GB`. §1 and the
+  capability matrix recorded group-level only.
+- **`current_billing_period_consumed_data` is `{amount: string, unit: MB}`** — a
+  **cumulative** counter that resets each billing cycle, with the amount as a
+  decimal string. It is not an event stream and it is not monotonic across
+  cycles.
+- **`POST /sim_cards/{id}/actions/enable_voice` accepts an optional
+  `connection_id`** and returns `202 { data: SIMCardAction }`. That much *is*
+  published; the mobile-phone-number and mobile-voice-connection schemas are
+  not.
+- **The WDR report envelope is specified and the record schema is not.**
+  `WdrReport` documents `id`, `start_time`, `end_time`, `status` ∈
+  `pending|complete|failed|deleted`, `report_url`. The contents of the file at
+  `report_url` appear only in prose, and the prose field list —
+  `sim_card_id`, `start_time`/`stop_time`, `radio_access_technology`,
+  `mobile_country_code`/`mobile_network_code`, `apn`, `ipv4`/`ipv6`, `cell_id` —
+  **contains no byte count and no record id**, even though the same page says
+  each record captures "bytes transferred". This is the single biggest open
+  question for chunk 16.
+
+### 4.3 Unchanged, re-verified verbatim
+
+- `POST /actions/purchase/esims` still documents **no idempotency mechanism** —
+  no header, no body field. The tag-plus-lookup reconciliation in §2 remains the
+  only documented path, and its post-purchase consistency is still unstated.
+- All nine wireless error codes in §1.7 are unchanged, including `70001`
+  "There aren't enough available SIM cards".
+- **VoLTE is still beta**, verbatim: *"Beta — VoLTE is in beta. API reference and
+  detailed configuration docs coming soon."*
+- **No voice CDR or voice usage endpoint exists.** None appears in `wireless.json`
+  and none in the VoLTE documentation.
+- **No voice spending cap is documented anywhere**, and `data_limit`'s
+  enforcement latency is still unstated.
+- eSIM activation codes are still documented as one-time use: a lost profile
+  needs a new purchase.
+
+### 4.4 What chunk 15 built on this, and what it refused to
+
+`app/connectivity/telnyx.py` implements the documented half and withholds the
+rest, with the reason recorded in the adapter's own `undocumented` map rather
+than left to a reader to infer:
+
+| Capability | Advertised by default | Why |
+|---|---|---|
+| `data` | yes | Documented outright |
+| `activation_credential` | yes | §4.1 — the endpoint exists |
+| `usage_counter` | yes | `current_billing_period_consumed_data` is a documented field |
+| `suspension` | yes | `enable` / `set_standby` are documented, with action tracking |
+| `native_voice` | **no** | Beta; the request/response schemas are unpublished |
+| `number_assignment` | **no** | Same beta contract |
+| `spending_enforcement` | **no** | Enforcement latency undocumented; no voice cap at all |
+| `usage_events` | **no** | No record id, so records cannot be deduplicated from documented fields |
+| `topup` | **no** | No documented endpoint adds allowance; raising a `data_limit` changes a cap, which is a different thing |
+
+Every one of these is a constructor argument. Passing a capability in means
+somebody has evidence for it and named the evidence — which is what D1 will
+eventually produce, and what no amount of reading documentation can.
+
+### 4.5 Open contract questions, updated
+
+§2.3's six questions stand, minus one and plus two:
+
+1. Is any idempotency mechanism available on the purchase, even undocumented?
+   **Still open.**
+2. Are tags on newly purchased eSIMs immediately consistent for `filter[tags]`?
+   **Still open, and still the most dangerous unknown here.**
+3. Rate limits or quotas on eSIM purchase? **Still open.**
+4. Request/response schemas for the voice actions? **Partly answered** —
+   `enable_voice` is published; the number and connection resources are not.
+5. Any voice CDR or usage endpoint at all? **Still open, and now confirmed
+   absent from the OpenAPI source rather than merely unfound.**
+6. Do WDRs carry a stable unique id, and can they be restated? **Still open, and
+   now sharper: the record schema is not published at all.**
+7. *(new)* What is `data_limit`'s enforcement latency, network-side, and what is
+   the maximum overshoot?
+8. *(new)* Is the byte count in a WDR the same measurement as
+   `current_billing_period_consumed_data`, and do the two ever disagree?
+
+Questions 7 and 8 are additions to the D1 evidence list; the enquiry draft in
+[ENQUIRY-DRAFT.md](ENQUIRY-DRAFT.md) has not been sent, and sending it remains
+the founder's decision.
