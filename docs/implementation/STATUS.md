@@ -1,7 +1,8 @@
 # Implementation status
 
-Chunks 01, 02, 04, 05, 06, 07, 08 and chunk 03's documented/simulated scope are
-**ACCEPTED after independent Codex review and fixes**.
+Chunks 01–16 are **ACCEPTED after independent Codex review and fixes** for the
+scope stated in each review record. Live/external subsets remain explicitly
+blocked where their evidence gates are open.
 Chunk 01 merged in [PR #100](https://github.com/block-sig-hash/damdam/pull/100).
 Chunk 02's tested content and native evidence are recorded in
 [reviews/02.md](reviews/02.md); [PR #101](https://github.com/block-sig-hash/damdam/pull/101)
@@ -42,8 +43,8 @@ is a dry run that executes nothing.
 | 12 — Implement payment routing and modernize Paystack | **ACCEPTED after fixes (contract/simulated); live EXTERNAL_BLOCKED** | submitted `3a31d5c` / rebased `6cee395` / corrected `624c246` | [Independent review](reviews/12.md) | **D3/D4 OPEN** — `live_enabled` is false and constrained; no live or sandbox Paystack call made |
 | 13 — Implement the selected global payment adapter and wallet checkout | **ACCEPTED (preparatory conformance/wallet gates); provider scope EXTERNAL_BLOCKED** | submitted `8331291` / rebased `61256d5` / corrected `502aaca` | [Independent review](reviews/13.md) | **D4 OPEN — no processor selected.** Sandbox checkout and wallet/device evidence NOT PROVIDED |
 | 14 — Implement refunds, disputes, bank funding and receipts | **ACCEPTED after fixes (domain/ledger/fixture reconciliation); live provider policy EXTERNAL_BLOCKED** | submitted `566baf5` / rebased `b202bc3` / corrected `94db13b` | [Independent review](reviews/14.md) | **D3/D4/D5 OPEN** — no seller/tax policy seeded, processor refund/report adapter or live evidence; runtime schedule waits for an approved report source |
-| 15 — Implement the Telnyx eSIM, line and number lifecycle | **ACCEPTED after fixes** (documented/fixture scope); live carrier scope EXTERNAL_BLOCKED | submitted `6b4791a`–`8ffc11a` / accepted base `d71364c` / corrected `1921855` | [Independent review](reviews/15.md) | **D1/D2 OPEN** — no Telnyx account, live correlation, call, rate deck or cleared market. Native voice, number assignment, top-up, usage events and hard spending enforcement remain withheld without evidence |
-| 16 — Implement actual usage reconciliation and carrier charging | NOT_STARTED | — | — | See assignment |
+| 15 — Implement the Telnyx eSIM, line and number lifecycle | **ACCEPTED after fixes** (documented/fixture scope); live carrier scope EXTERNAL_BLOCKED; merged in [PR #117](https://github.com/block-sig-hash/damdam/pull/117) | submitted `6b4791a`–`8ffc11a` / accepted base `d71364c` / corrected `5383b42` / merge `b7f5b68` | [Independent review](reviews/15.md) | **D1/D2 OPEN** — no Telnyx account, live correlation, call, rate deck or cleared market. Native voice, number assignment, top-up, usage events and hard spending enforcement remain withheld without evidence |
+| 16 — Implement actual usage reconciliation and carrier charging | **ACCEPTED after fixes** (carrier documented/fixture scope); live evidence EXTERNAL_BLOCKED | accepted base `b7f5b68` / replayed `211c00d` / corrected `7bf87f0` / pipeline `9f26828` | [Independent review](reviews/16.md) | **D1/D5 OPEN** — no supplier usage observed; `usage_events` remains withheld and no WDR file is parsed. Exhaustion enforcement is chunk 17; internet-call metering is V03 |
 | 17 — Implement top-ups, spending controls and suspension | NOT_STARTED | — | — | See assignment |
 | 18 — Connect mobile navigation, onboarding and redemption | NOT_STARTED | — | — | See assignment |
 | 19 — Build the complete consumer purchase journey | NOT_STARTED | — | — | See assignment |

@@ -2906,3 +2906,148 @@ profile is worth more than a tidy table.
 made. `assigned_numbers.provider_number_reference` is nullable because a supplier
 may only ever tell us the number itself, and the Telnyx `mobile_phone_numbers`
 schemas belong to the beta VoLTE contract that is still unpublished.
+
+## 6.52 Amendment — Usage Records, Counter Readings and Polling Cursors (US-36)
+
+**Recorded 10 September 2026 by build chunk 16.** Additive; migration
+`0036_usage_reconciliation`. Nothing seeded, no existing row touched, and the one
+added column is nullable.
+
+### Three tables, because usage arrives in two incompatible shapes
+
+Suppliers report consumption one of two ways, and treating them alike is the
+single most common way a metering integration overcharges:
+
+| Shape | What arrives | How it goes wrong |
+|---|---|---|
+| Cumulative counter | "this line has used 2,049 MB this cycle" | It **resets**. Read as a delta, it charges the whole cycle again on every poll. |
+| Session events | "10:02–10:14, 41 MB" | They arrive **late, out of order and twice**. Summed naively, they double-charge. |
+
+`usage_records` is the normalised, deduplicated fact. `usage_counter_readings`
+keeps the raw cumulative values, because a delta needs a predecessor and a reset
+is only visible as a comparison. `usage_cursors` holds the polling watermark,
+because a cursor kept in memory restarts at zero after a deploy — and a poller
+that restarts at zero either re-ingests a month of usage or skips it.
+
+### Deduplication, and an honest note about its limits
+
+`uq_usage_records_natural_key` is the final guard that makes a redelivered page
+harmless. Ingestion also takes a transaction-scoped lock on the natural key so
+concurrent workers converge on that row instead of making one worker lose a
+unique-constraint race. The key includes the supplier line and usage kind even
+when the supplier provides an event id, because provider ids may be scoped to a
+line or stream rather than globally. That scoped identity is SHA-256 hashed to
+fit the bounded natural-key column even when both supplier identifiers are at
+their documented maximum lengths.
+
+**Telnyx publishes no Wireless Detail Record id.** The OpenAPI source documents
+the report envelope and not the record; the prose field list names no id and no
+byte count (see [telnyx/API-CONTRACTS.md](implementation/telnyx/API-CONTRACTS.md)
+§4.2). So the fallback key is composed from the documented fields — line, start,
+end, quantity — and that composite is imperfect: two genuinely distinct sessions
+with identical boundaries and volume collapse into one.
+
+That under-counts. Under-counting in the customer's favour is the right
+direction to be wrong when a supplier will not give us an id, and it is recorded
+here rather than discovered during a billing dispute.
+
+### One authoritative data source per line
+
+`carrier_lines.authoritative_data_source` is `counter`, `event`, or null. A
+supplier can report the same megabyte twice — once in its cumulative counter,
+once in a session record — and counting both bills a customer twice for one
+download. Records from the other source are stored as `EVIDENCE`: kept,
+compared, never charged.
+
+Kept rather than dropped, because it is the only way a discrepancy against
+supplier billing is ever found. `compare_sources` raises an exception item when
+the two disagree and **adjusts nothing**: which figure is right is a
+conversation with the supplier, not an arithmetic default.
+
+Null means neither source has been chosen. It is set deliberately, not by
+whichever poll happened to run first.
+
+Counter ingestion is serialized per line. A late reading is retained as raw
+evidence but cannot create another delta after a newer cumulative reading was
+already counted. An explicit cycle-reference change counts the new counter in
+full even when its value is higher than the prior cycle's closing value.
+
+### Corrections supersede; they never edit
+
+A supplier restating a session writes a **new** record carrying the corrected
+quantity, with `corrects_id` pointing at the old one, which becomes
+`SUPERSEDED` and keeps its numbers. Allowance sums exclude `SUPERSEDED` and
+`EVIDENCE`, so a balance converges on the corrected figure without ever having
+been the sum of both.
+
+`ck_usage_records_corrections_are_derived` means only a record we wrote may
+claim to correct another: a supplier feed cannot rewrite history by asserting a
+`corrects_id`.
+
+`trg_usage_records_history` rejects direct update and delete. Its only permitted
+mutation is the one-way state change to `SUPERSEDED`; every corrected value is
+appended. The partial unique index on `corrects_id` ensures concurrent workers
+cannot append two replacements for one original.
+
+The money follows the same discipline as §6.47's ledger. A correction posts a
+compensating entry for the **difference** under its own business event, never a
+reversal plus a repost — which would put two transactions in the books where one
+adjustment happened.
+
+### Carrier usage and internet usage are different facts
+
+The approved calling amendment
+([VOICE-EXPANSION.md](implementation/VOICE-EXPANSION.md), 9 September 2026)
+requires that internet calling *"must not require an eSIM installation or
+carrier line foreign key"*, and states that *"WebRTC CDRs cannot prove
+native-carrier usage or spending caps"*.
+
+So `usage_records.channel` is `carrier` or `internet`, `carrier_line_id` is
+**nullable**, and `ck_usage_records_channel_line` binds them: a carrier record
+names its line, an internet record must not. A WebRTC record therefore has no
+line to be summed against — the separation is structural rather than a query
+that remembers to exclude it.
+
+Chunk 16 ingests only the carrier channel. V03 owns internet metering; the
+column exists so V03 does not have to migrate this table to add it.
+
+For carrier records, `fk_usage_records_line_entitlement` requires the stored
+entitlement to be the one owned by the named carrier line. This prevents a
+valid line id and a valid but unrelated tenant entitlement id from being paired
+to redirect usage across accounts.
+
+### A number nobody measured is not a measurement
+
+`prd.md` AC-36.4 forbids presenting a delayed, app-side figure as a guaranteed
+one. `UsageService.allowance` therefore reports **when** the figure was last
+observed and whether it is fresh, stale or **unknown**.
+
+`unknown` is not a degraded `stale`. Stale means we measured and the measurement
+is old; unknown means nobody has ever measured, and the only number available is
+the grant. Returning the granted total for such a line without saying so is
+exactly what the assignment means by "refreshing an initialized database balance
+is not reconciliation".
+
+### Cursors are watermarks, not bookmarks
+
+`position_at` means "we have everything before this". It moves only when a poll
+actually covered the window it claims, and never backwards — nothing ever looks
+behind a watermark again, so a cursor advanced over an uncovered gap loses that
+usage permanently.
+
+A poller that stopped for hours therefore **backfills** rather than restarting
+from now. Restarting from now makes the system look healthy immediately and
+silently loses every byte in the gap. `ck_usage_cursors_backfill_window` makes a
+backfilling cursor with no window impossible to store.
+
+Failures are bounded: five consecutive ones stall the cursor and raise a
+`usage_polling_stalled` exception item, because a silently stalled usage poller
+is invisible from outside — the customer's balance simply stops moving.
+
+### `exception_kind` gains three values
+
+`usage_counter_reset`, `usage_discrepancy` and `usage_polling_stalled` join
+§6.50's queue rather than starting a second one: an operations team watching two
+lists watches neither. Added with `ALTER TYPE … ADD VALUE`, so no
+`exception_items` row is rewritten and no exclusive lock is taken on a table
+chunk 25 will be reading.

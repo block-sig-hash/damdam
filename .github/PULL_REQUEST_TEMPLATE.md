@@ -30,8 +30,8 @@ reviews and may refactor. A separate authorization is needed for promotion. -->
 - Independent Codex review and reviewed SHA:
 - External gates / missing evidence:
 
-An automated Claude review is supplemental; it does not accept a chunk or
-replace the independent review. Do not claim unrun tests or live verification.
+There is no automated model-review gate. Chunk acceptance requires the recorded
+independent Codex review. Do not claim unrun tests or live verification.
 
 ## Platform(s) affected
 

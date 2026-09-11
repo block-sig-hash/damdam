@@ -192,6 +192,9 @@ class CarrierLine(SQLModel, table=True):
 
     __tablename__ = "carrier_lines"
     __table_args__ = (
+        UniqueConstraint(
+            "id", "entitlement_id", name="uq_carrier_lines_id_entitlement"
+        ),
         Index(
             "ux_carrier_lines_carrier_reference",
             "carrier",
@@ -249,6 +252,18 @@ class CarrierLine(SQLModel, table=True):
     )
     voice_enabled_observed_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    #: Which usage source this line's **data** consumption is counted from
+    #: (chunk 16): `counter` or `event`. A supplier can report the same bytes
+    #: twice -- once in a cumulative counter, once in a session record -- and
+    #: counting both charges a customer twice for one megabyte. Everything from
+    #: the other source is kept as evidence and never charged.
+    #:
+    #: Null means nothing has been ingested yet and neither source has been
+    #: chosen. It is set once, deliberately, rather than by whichever poll
+    #: happened to run first.
+    authoritative_data_source: str | None = Field(
+        default=None, sa_column=Column(String(16), nullable=True)
     )
     created_at: datetime = Field(
         default_factory=utc_now,

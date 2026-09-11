@@ -38,4 +38,5 @@ from app.payments import contract as _payments_contract
 from app.profile import models as _profile
 from app.refunds import models as _refunds
 from app.sos import models as _sos
+from app.usage import models as _usage
 from app.voice import models as _voice
