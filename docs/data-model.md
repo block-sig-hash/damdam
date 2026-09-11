@@ -2402,3 +2402,95 @@ No tax rate. `quotes.tax_amount` is zero and
 `tax_configuration_reference` is null, because D3 is open and inventing a rate
 would put a number on an invoice that no authority asked for. The column exists
 so the treatment can be recorded by reference when it is decided, never inlined.
+
+---
+
+## 6.47 Amendment — Multi-Currency Ledger and Atomic Reservations (US-32)
+
+**Recorded 10 September 2026 by build chunk 10.** Additive; migration
+`0031_ledger_and_reservations`. `packages`, `transactions` and their NGN columns
+are untouched.
+
+### Why a ledger instead of a balance column
+
+The legacy accounting was `packages.data_gb_remaining` and
+`transactions.amount_ngn`: numbers that code decremented. That shape cannot
+answer the two questions an accounting system exists for — *why* is the balance
+this number, and does it still add up — and it loses money silently the first
+time two requests decrement it at once.
+
+### The invariants, and what enforces each
+
+| Property | Enforced by |
+|---|---|
+| Every entry balances, per currency | `trg_journal_entries_balance`, a **deferred** constraint trigger |
+| Posted history is never edited | `trg_journal_entries_immutable`, `trg_journal_lines_immutable` (UPDATE *and* DELETE) |
+| One business event posts once | `uq_journal_entries_event` |
+| No cross-currency arithmetic | Two composite foreign keys on `journal_lines` |
+| A reservation cannot overspend | `SELECT … FOR UPDATE` on the account row |
+
+The deferred trigger is the one worth understanding. A balanced entry cannot be
+written by a single statement — the lines are inserted one at a time — so a
+per-statement check would fail on the first line of every legitimate entry.
+`DEFERRABLE INITIALLY DEFERRED` checks at COMMIT instead, which also means a
+half-written entry cannot survive a crash: the whole balanced entry commits or
+none of it does.
+
+`business_event_id` is caller-supplied and meaningful (`order:<id>:capture`),
+not a random UUID per attempt. A random id would make every retry a new event
+and defeat the constraint entirely — the idempotency is in the *naming*.
+
+### Balances are signed in the account's natural direction
+
+`NATURAL_SIDE` records which side increases each account kind, and `balance()`
+reports accordingly. A customer holding 1,000 of credit reads as `1000`, not
+`-1000` because a liability happens to be credit-natured. Anybody reading a
+balance wants the amount, not a lesson in sign conventions.
+
+### Reservations are not postings
+
+A hold does not move money. Nothing has happened to it — it is still the
+customer's and still in their account — so a reservation reduces what is
+*available* without touching the balance, and **releasing one posts nothing**.
+Writing a journal entry for a released hold would invent a transaction that did
+not happen, and the ledger would describe a refund nobody received.
+
+Settlement is the only reservation operation that posts, because settlement is
+where money actually moves. Partial settlement is normal — a call reserves a
+maximum and settles what it cost — and the remainder stays held until the caller
+releases it, because deciding on the customer's behalf that they are finished is
+not the ledger's call to make.
+
+### Closed loop
+
+`SERVICE_CREDIT` is deliberately not called a wallet. There is no transfer
+between customers, no cash-out and no foreign-exchange engine — each of those
+turns a prepaid balance into a money-transmission product with a different
+licensing conversation attached. Structurally: an account is identified by its
+owner, so there is no operation that moves credit from one customer to another.
+
+### The legacy backfill, and what it refuses to do
+
+`app/ledger/backfill.py` is a re-runnable operation with a reconciliation
+report, deliberately **not** a migration step. A backfill inside a migration
+runs once, in a transaction nobody is watching, with no report anyone reads.
+
+Each successful legacy transaction posts `settlement_clearing → revenue`, both
+system accounts. Three refusals matter more than the posting:
+
+- **No `SERVICE_CREDIT` is created.** The legacy product had no wallet: every
+  payment bought one package outright, so no customer ever held a balance.
+  Creating one would put a liability on the books that no event produced.
+- **Leftover gigabytes are not converted to cash.**
+  `packages.data_gb_remaining` is a *unit* balance. Converting it would apply a
+  pricing decision nobody made, retroactively, to customers who never agreed
+  to it. Entitlements belong to §6.44's table.
+- **Entries post at `transactions.created_at`.** That is the only date the
+  legacy table has — there is no payment timestamp, and `receipt_sent_at` is a
+  different event, sometimes days later. Using it would be exactly the
+  unsupported assumption about legacy rows the assignment warns against. What
+  matters is that it is not the migration's own date: stamping everything
+  "today" destroys the only thing a backfill exists to preserve.
+
+The report carries both totals and the skipped counts, because a backfill that
+reports only successes is one nobody can check.
