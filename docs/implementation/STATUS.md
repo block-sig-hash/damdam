@@ -1,6 +1,6 @@
 # Implementation status
 
-Chunks 01–17 are **ACCEPTED after independent Codex review and fixes** for the
+Chunks 01–18 are **ACCEPTED after independent Codex review and fixes** for the
 scope stated in each review record. Live/external subsets remain explicitly
 blocked where their evidence gates are open.
 Chunk 01 merged in [PR #100](https://github.com/block-sig-hash/damdam/pull/100).
@@ -46,7 +46,7 @@ is a dry run that executes nothing.
 | 15 — Implement the Telnyx eSIM, line and number lifecycle | **ACCEPTED after fixes** (documented/fixture scope); live carrier scope EXTERNAL_BLOCKED; merged in [PR #117](https://github.com/block-sig-hash/damdam/pull/117) | submitted `6b4791a`–`8ffc11a` / accepted base `d71364c` / corrected `5383b42` / merge `b7f5b68` | [Independent review](reviews/15.md) | **D1/D2 OPEN** — no Telnyx account, live correlation, call, rate deck or cleared market. Native voice, number assignment, top-up, usage events and hard spending enforcement remain withheld without evidence |
 | 16 — Implement actual usage reconciliation and carrier charging | **ACCEPTED after fixes** (carrier documented/fixture scope); live evidence EXTERNAL_BLOCKED | accepted base `b7f5b68` / replayed `211c00d` / corrected `7bf87f0` / pipeline `9f26828` | [Independent review](reviews/16.md) | **D1/D5 OPEN** — no supplier usage observed; `usage_events` remains withheld and no WDR file is parsed. Exhaustion enforcement is chunk 17; internet-call metering is V03 |
 | 17 — Implement top-ups, spending controls and suspension | **ACCEPTED after fixes** (documented/fixture and preparatory scope); live reuse and hard prepaid guarantee EXTERNAL_BLOCKED | accepted dependency merge `ad7a267` / replayed `ab4fa78` / corrected `eebbdcd`, `c48e58d` | [Independent review](reviews/17.md) | **D1 OPEN** — no live top-up or supplier cap observed; Telnyx advertises neither verified top-up nor spending enforcement. **D5 OPEN** — bounded exposure needs an approval. Shared carrier/internet credit remains refused |
-| 18 — Connect mobile navigation, onboarding and redemption | **READY_FOR_REVIEW** | accepted chunk 17 merge `36448d6` / replayed submission; see [handoff](handoffs/18.md) | Not reviewed | Mail delivery is still a discarding transport (chunk 06), so end-to-end email sign-in is unproven. Plans, My Line and Account are placeholders naming chunks 19–21 |
+| 18 — Connect mobile navigation, onboarding and redemption | **ACCEPTED after fixes** (navigation/authentication/Home/invitation preparatory scope) | accepted base `36448d6` / replayed `902dfd4` / corrected `3c27f00`, `605d4d8`, `b6ef16c`, `45bb23e` / contract `757116f` | [Independent review](reviews/18.md) | Mail delivery remains a discarding transport; production web-link association remains chunk 27. Plans, My Line and Account remain assigned to chunks 19–21; no complete US-37 claim |
 | 19 — Build the complete consumer purchase journey | NOT_STARTED | — | — | See assignment |
 | 20 — Build My Line, eSIM installation and native-call guidance | NOT_STARTED | — | — | See assignment |
 | 21 — Complete account, receipts, support and deletion | NOT_STARTED | — | — | See assignment |
