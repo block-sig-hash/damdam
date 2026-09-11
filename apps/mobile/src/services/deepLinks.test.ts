@@ -172,6 +172,24 @@ describe('subscribeToDeepLinks', () => {
     });
   });
 
+  it('does not let an email login link overwrite the invitation it completes', async () => {
+    await savePendingLink({ kind: 'invitation', token: 'invitation-token' });
+    noEventsFrom('damdam://auth/email/login#token=login-token');
+    const onLink = jest.fn();
+
+    subscribeToDeepLinks(onLink);
+    await flush();
+
+    expect(onLink).toHaveBeenCalledWith({
+      kind: 'email-login',
+      token: 'login-token',
+    });
+    await expect(loadPendingLink()).resolves.toEqual({
+      kind: 'invitation',
+      token: 'invitation-token',
+    });
+  });
+
   it('stops calling back after unsubscribe', async () => {
     noEventsFrom(null);
     const onLink = jest.fn();

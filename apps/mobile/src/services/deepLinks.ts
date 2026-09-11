@@ -8,8 +8,10 @@ import { Linking } from 'react-native';
  * moment when it can be acted on. Someone taps an invitation in their mail on a
  * phone with no session; the app cold-starts into sign-in; they check the same
  * mailbox for the sign-in link, come back — and the intent has to still be
- * there. So a parsed link is **persisted**, not held in memory, and it is
- * cleared only when it has been consumed or explicitly dismissed.
+ * there. So a deferred product link is **persisted**, not held in memory, and
+ * is cleared only when consumed or explicitly dismissed. Email authentication
+ * links are the exception: they are consumed immediately and must not overwrite
+ * the invitation whose sign-in round trip they are completing.
  *
  * The pending intent lives in platform secure storage because an invitation
  * token is a bearer credential. `WHEN_UNLOCKED_THIS_DEVICE_ONLY` still permits
@@ -139,8 +141,10 @@ export async function clearPendingLink(): Promise<void> {
  * needed: subscribing without reading the initial URL loses every link that
  * launched the app, which is most of them.
  *
- * Every link is persisted before the callback runs, so an intent that arrives
- * while the app is signed out is still on disk when it signs in.
+ * Deferred invitation/order/eSIM links are persisted before the callback runs,
+ * so an intent that arrives while the app is signed out is still on disk when
+ * it signs in. A one-time email authentication link is consumed immediately
+ * and deliberately leaves that deferred intent untouched.
  */
 export function subscribeToDeepLinks(
   onLink: (link: PendingLink) => void,
@@ -159,6 +163,12 @@ export function subscribeToDeepLinks(
     // before persistence prevents it from resurrecting an already-consumed
     // one-time credential.
     if (!shouldHandle(link)) {
+      return;
+    }
+    if (link.kind === 'email-login' || link.kind === 'email-recovery') {
+      if (active) {
+        onLink(link);
+      }
       return;
     }
     savePendingLink(link)

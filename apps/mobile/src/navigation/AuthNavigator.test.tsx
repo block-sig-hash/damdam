@@ -20,12 +20,10 @@ jest.mock('../api/authClient', () => ({
 jest.mock('../services/deepLinks', () => ({
   ...jest.requireActual('../services/deepLinks'),
   loadPendingLink: jest.fn(),
-  clearPendingLink: jest.fn(),
   subscribeToDeepLinks: jest.fn(),
 }));
 
 const mockedLoadPending = deepLinks.loadPendingLink as jest.Mock;
-const mockedClearPending = deepLinks.clearPendingLink as jest.Mock;
 const mockedConfirmLogin = identityClient.confirmEmailLogin as jest.Mock;
 const mockedConfirmRecovery = identityClient.confirmEmailRecovery as jest.Mock;
 const mockedSubscribe = deepLinks.subscribeToDeepLinks as jest.Mock;
@@ -51,7 +49,6 @@ const SESSION = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockedLoadPending.mockResolvedValue(null);
-  mockedClearPending.mockResolvedValue(undefined);
   mockedSubscribe.mockReturnValue(() => undefined);
 });
 
@@ -87,7 +84,8 @@ it('consumes a cold email login link and hands off the authenticated session', a
     ),
   );
   expect(mockedConfirmRecovery).not.toHaveBeenCalled();
-  expect(mockedClearPending).toHaveBeenCalled();
+  // The login link must not clear the invitation that caused the sign-in
+  // round trip; ConsumerApp will load and present that deferred intent next.
 });
 
 it('uses the revoking recovery endpoint for a recovery link', async () => {

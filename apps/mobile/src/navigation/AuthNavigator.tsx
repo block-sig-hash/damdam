@@ -11,7 +11,6 @@ import { StateMessage } from '../components/StateMessage/StateMessage';
 import { AccountRecoveryScreen } from '../screens/AccountRecovery/AccountRecoveryScreen';
 import { SignInScreen } from '../screens/SignIn/SignInScreen';
 import {
-  clearPendingLink,
   loadPendingLink,
   subscribeToDeepLinks,
   type PendingLink,
@@ -154,13 +153,11 @@ function EmailLinkHandoff({
       kind === 'email-login' ? confirmEmailLogin(token) : confirmEmailRecovery(token);
     confirm
       .then(async result => {
-        await clearPendingLink().catch(() => undefined);
         if (active) {
           await onAuthenticated(toSession(result));
         }
       })
-      .catch(async error => {
-        await clearPendingLink().catch(() => undefined);
+      .catch(error => {
         if (!active) {
           return;
         }
