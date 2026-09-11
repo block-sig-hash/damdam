@@ -28,7 +28,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app import model_registry  # noqa: F401  -- completes SQLModel.metadata
@@ -259,6 +259,8 @@ def _order_item(
     data_bytes: int = 5_000_000_000,
     voice_seconds: int = 3600,
     validity_days: int | None = 30,
+    *,
+    include_allowance: bool = True,
 ) -> OrderItem:
     entity = LegalEntity(code=f"E{uuid4().hex[:6]}", name="Seller", country="NG")
     product = Product(
@@ -273,15 +275,16 @@ def _order_item(
     )
     session.add_all([entity, product, payer])
     session.flush()
-    session.add(
-        ProductAllowance(
-            product_id=product.id,
-            data_bytes=data_bytes,
-            voice_seconds=voice_seconds,
-            validity_days=validity_days,
-            created_at=NOW,
+    if include_allowance:
+        session.add(
+            ProductAllowance(
+                product_id=product.id,
+                data_bytes=data_bytes,
+                voice_seconds=voice_seconds,
+                validity_days=validity_days,
+                created_at=NOW,
+            )
         )
-    )
     order = Order(
         reference=f"ord-{uuid4().hex[:12]}",
         seller_legal_entity_id=entity.id,
@@ -721,12 +724,56 @@ def test_the_entitlement_comes_from_the_catalog_not_the_caller(
     assert entitlement.expires_at == NOW + timedelta(days=30)
 
 
+def test_a_published_product_allowance_cannot_be_rewritten_or_deleted(
+    session: Session,
+) -> None:
+    """The product id is the order's allowance snapshot boundary.
+
+    Fulfilment may happen long after checkout.  If the one allowance row for a
+    product can change in between, the customer receives today's package rather
+    than the package they bought.
+    """
+    item = _order_item(session, data_bytes=5_000_000_000)
+    session.commit()
+
+    with pytest.raises(DBAPIError, match="product allowances are immutable"):
+        session.exec(
+            text(
+                "UPDATE product_allowances SET data_bytes = 1 "
+                "WHERE product_id = :product_id"
+            ),
+            params={"product_id": item.product_id},
+        )
+        session.commit()
+    session.rollback()
+
+    with pytest.raises(DBAPIError, match="product allowances are immutable"):
+        session.exec(
+            text("DELETE FROM product_allowances WHERE product_id = :product_id"),
+            params={"product_id": item.product_id},
+        )
+        session.commit()
+    session.rollback()
+
+
+def test_one_supplier_line_cannot_fulfil_two_order_items(
+    session: Session, service: ConnectivityService, carrier: FakeCarrier
+) -> None:
+    first = _order_item(session)
+    second = _order_item(session)
+    provider_line = carrier._line("shared-provider-line")
+
+    service.adopt_line(session, first, provider_line, carrier)
+    with pytest.raises(ConnectivityServiceError) as caught:
+        service.adopt_line(session, second, provider_line, carrier)
+
+    assert caught.value.code == "provider_line_already_assigned"
+
+
 def test_a_product_with_no_recorded_allowance_refuses_to_provision(
     session: Session, service: ConnectivityService, carrier: FakeCarrier
 ) -> None:
-    item = _order_item(session)
-    session.exec(text("DELETE FROM product_allowances"))
-    session.flush()
+    item = _order_item(session, include_allowance=False)
     attempt = service.begin_provisioning(session, item, carrier)
     session.commit()
     with pytest.raises(ConnectivityServiceError) as caught:
@@ -959,6 +1006,26 @@ def test_a_lost_lifecycle_dispatch_stays_open_without_a_reference(
     assert action.state is LineActionState.PENDING
 
 
+def test_an_action_cannot_be_dispatched_against_another_line(
+    session: Session, service: ConnectivityService, carrier: FakeCarrier
+) -> None:
+    first = _order_item(session)
+    second = _order_item(session)
+    for item in (first, second):
+        attempt = service.begin_provisioning(session, item, carrier)
+        session.commit()
+        service.dispatch_provisioning(session, attempt, carrier)
+        session.commit()
+    lines = session.exec(select(CarrierLine).order_by(CarrierLine.created_at)).all()
+    assert len(lines) == 2
+
+    action = service.request_action(session, lines[0], LineActionKind.SUSPEND)
+    with pytest.raises(ConnectivityServiceError) as caught:
+        service.dispatch_action(session, action, lines[1], carrier)
+
+    assert caught.value.code == "action_line_mismatch"
+
+
 def test_a_settled_action_must_carry_a_timestamp(session: Session) -> None:
     """`ck_line_actions_settled_at`, at the database.
 
@@ -1022,6 +1089,33 @@ def test_the_activation_code_is_never_stored_in_the_clear(
         text("SELECT ciphertext::text FROM esim_activation_credentials")
     ).one()
     assert "LPA" not in str(row)
+
+
+def test_a_credential_cannot_be_stored_for_another_lines_installation(
+    session: Session, service: ConnectivityService, carrier: FakeCarrier
+) -> None:
+    for _ in range(2):
+        item = _order_item(session)
+        attempt = service.begin_provisioning(session, item, carrier)
+        session.commit()
+        service.dispatch_provisioning(session, attempt, carrier)
+        session.commit()
+    lines = session.exec(select(CarrierLine).order_by(CarrierLine.created_at)).all()
+    installations = session.exec(
+        select(EsimInstallation).order_by(EsimInstallation.id)
+    ).all()
+    first_installation = next(
+        installation
+        for installation in installations
+        if installation.entitlement_id == lines[0].entitlement_id
+    )
+
+    with pytest.raises(ConnectivityServiceError) as caught:
+        service.fetch_and_store_credential(
+            session, first_installation, lines[1], carrier
+        )
+
+    assert caught.value.code == "installation_line_mismatch"
 
 
 def test_a_credential_moved_between_installations_fails_to_decrypt(
@@ -1115,6 +1209,61 @@ def test_a_grant_for_somebody_else_is_refused(
 
     with pytest.raises(CredentialError, match="grant_not_redeemable"):
         vault.redeem(session, "a-token-that-never-existed", holder)
+
+
+def test_a_grant_cannot_be_issued_to_somebody_other_than_the_holder(
+    session: Session, service: ConnectivityService, carrier: FakeCarrier, vault
+) -> None:
+    item = _order_item(session)
+    attempt = service.begin_provisioning(session, item, carrier)
+    session.commit()
+    service.dispatch_provisioning(session, attempt, carrier)
+    installation = session.exec(select(EsimInstallation)).one()
+    line = session.exec(select(CarrierLine)).one()
+    service.fetch_and_store_credential(session, installation, line, carrier)
+    credential = session.exec(select(EsimActivationCredential)).one()
+    intruder = User(
+        phone_number=f"+23488{uuid4().int % 10**8:08d}",
+        first_name="intruder",
+        platform=Platform.ANDROID,
+    )
+    session.add(intruder)
+    session.flush()
+
+    with pytest.raises(CredentialError, match="grant_not_authorized"):
+        vault.issue_grant(session, credential, intruder.id)
+
+
+def test_a_grant_stops_working_if_the_entitlement_changes_holder(
+    session: Session, service: ConnectivityService, carrier: FakeCarrier, vault
+) -> None:
+    item = _order_item(session)
+    attempt = service.begin_provisioning(session, item, carrier)
+    session.commit()
+    service.dispatch_provisioning(session, attempt, carrier)
+    credential = session.exec(select(EsimActivationCredential)).first()
+    if credential is None:
+        installation = session.exec(select(EsimInstallation)).one()
+        line = session.exec(select(CarrierLine)).one()
+        service.fetch_and_store_credential(session, installation, line, carrier)
+        credential = session.exec(select(EsimActivationCredential)).one()
+    holder = item.recipient_user_id
+    assert holder is not None
+    issued = vault.issue_grant(session, credential, holder)
+    entitlement = session.exec(select(Entitlement)).one()
+    replacement = User(
+        phone_number=f"+23488{uuid4().int % 10**8:08d}",
+        first_name="replacement",
+        platform=Platform.ANDROID,
+    )
+    session.add(replacement)
+    session.flush()
+    entitlement.holder_user_id = replacement.id
+    session.add(entitlement)
+    session.commit()
+
+    with pytest.raises(CredentialError, match="grant_not_redeemable"):
+        vault.redeem(session, issued.token, holder)
 
 
 def test_an_expired_grant_is_refused(

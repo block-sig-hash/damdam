@@ -83,6 +83,23 @@ def upgrade() -> None:
             name="ck_product_allowances_validity",
         ),
     )
+    op.execute(
+        """
+        CREATE FUNCTION reject_product_allowance_mutation()
+        RETURNS trigger AS $$
+        BEGIN
+            RAISE EXCEPTION 'product allowances are immutable; create a new product';
+        END;
+        $$ LANGUAGE plpgsql
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER trg_product_allowances_immutable
+        BEFORE UPDATE OR DELETE ON product_allowances
+        FOR EACH ROW EXECUTE FUNCTION reject_product_allowance_mutation()
+        """
+    )
 
     # --- what the supplier says, kept apart from what we conclude ---------
     op.add_column(
@@ -254,5 +271,6 @@ def downgrade() -> None:
     op.drop_column("carrier_lines", "provider_status_observed_at")
     op.drop_column("carrier_lines", "provider_status")
     op.drop_table("product_allowances")
+    op.execute("DROP FUNCTION IF EXISTS reject_product_allowance_mutation()")
     for name, _ in _ENUMS:
         postgresql.ENUM(name=name, create_type=False).drop(bind, checkfirst=True)

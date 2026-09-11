@@ -292,6 +292,15 @@ class ConnectivityService:
             )
         ).first()
         if existing is not None:
+            entitlement = session.get(Entitlement, existing.entitlement_id)
+            if entitlement is None:  # pragma: no cover - FK guarantees this
+                raise ConnectivityServiceError("entitlement_not_found")
+            if entitlement.order_item_id != item.id:
+                raise ConnectivityServiceError(
+                    "provider_line_already_assigned",
+                    f"{adapter.name} line {line.provider_reference} already "
+                    "belongs to another order item",
+                )
             return self.apply_provider_line(session, existing, line)
 
         entitlement = self.grant_entitlement(session, item)
@@ -388,6 +397,11 @@ class ConnectivityService:
         us a line is enabled is telling us about its own records, not about a
         handset. `record_network_observation` is the only writer.
         """
+        if line.provider_reference != carrier_line.carrier_line_reference:
+            raise ConnectivityServiceError(
+                "provider_line_mismatch",
+                "a supplier observation cannot be applied to another line",
+            )
         observed_at = line.observed_at or self.clock()
         carrier_line.provider_status = line.provider_status
         carrier_line.provider_status_observed_at = observed_at
@@ -482,6 +496,12 @@ class ConnectivityService:
         returned, logged or attached to an exception. A caller that wants it
         goes through a grant.
         """
+        if installation.entitlement_id != carrier_line.entitlement_id:
+            raise ConnectivityServiceError(
+                "installation_line_mismatch",
+                "activation material cannot cross entitlement boundaries",
+            )
+        self._require_adapter_for_line(carrier_line, adapter)
         credential = adapter.fetch_activation_credential(
             carrier_line.carrier_line_reference
         )
@@ -540,6 +560,8 @@ class ConnectivityService:
         that marked the line suspended on the 202 would be telling a customer
         their line is off while it is still passing traffic and still billable.
         """
+        self._require_action_line(action, carrier_line)
+        self._require_adapter_for_line(carrier_line, adapter)
         if action.state is not LineActionState.REQUESTED:
             raise ConnectivityServiceError(
                 "action_already_dispatched",
@@ -599,6 +621,8 @@ class ConnectivityService:
         action list for the line, which is an operations decision rather than
         something to guess at here.
         """
+        self._require_action_line(action, carrier_line)
+        self._require_adapter_for_line(carrier_line, adapter)
         if action.state is not LineActionState.PENDING:
             return action
         if action.provider_action_reference is None:
@@ -629,6 +653,7 @@ class ConnectivityService:
         is the honest outcome — a suspension that did not happen has not
         happened.
         """
+        self._require_action_line(action, carrier_line)
         now = self.clock()
         action.state = (
             LineActionState.CONFIRMED if succeeded else LineActionState.FAILED
@@ -687,6 +712,7 @@ class ConnectivityService:
         than editing it, because an old assignment has to survive to explain who
         held the number when a call was billed.
         """
+        self._require_adapter_for_line(carrier_line, adapter)
         e164 = adapter.assigned_number(carrier_line.carrier_line_reference)
         if not e164:
             return None
@@ -727,10 +753,34 @@ class ConnectivityService:
         and a routing mistake look identical — and terminating a customer's
         service on an ambiguous read is not a recoverable mistake.
         """
+        self._require_adapter_for_line(carrier_line, adapter)
         line = adapter.fetch_line(carrier_line.carrier_line_reference)
         if line is None:
             return carrier_line
         return self.apply_provider_line(session, carrier_line, line)
+
+    @staticmethod
+    def _require_action_line(
+        action: CarrierLineAction, carrier_line: CarrierLine
+    ) -> None:
+        if (
+            action.carrier_line_id != carrier_line.id
+            or action.provider != carrier_line.carrier
+        ):
+            raise ConnectivityServiceError(
+                "action_line_mismatch",
+                "a lifecycle action cannot be applied to another carrier line",
+            )
+
+    @staticmethod
+    def _require_adapter_for_line(
+        carrier_line: CarrierLine, adapter: ConnectivityAdapter
+    ) -> None:
+        if carrier_line.carrier != adapter.name:
+            raise ConnectivityServiceError(
+                "line_adapter_mismatch",
+                "a carrier line must be handled by the adapter that created it",
+            )
 
 
 #: Supplier state to our activation state. `TRANSITIONING` is absent on

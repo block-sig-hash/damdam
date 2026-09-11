@@ -2803,6 +2803,12 @@ cannot represent the supplier's own number has to round in somebody's favour
 every time. `validity_days` is nullable because "does not expire" is a real
 product and zero would mean the opposite.
 
+The row is immutable once created. `order_items.product_id` is therefore the
+allowance snapshot boundary: delayed fulfilment cannot receive a rewritten
+package after checkout. Changing included data, voice or validity requires a
+new product identity; PostgreSQL rejects updates and deletes to an existing
+allowance row.
+
 ### Released is not installed, and neither is attached
 
 The four separated states from §6.44 acquire the columns that keep them apart

@@ -50,6 +50,7 @@ from sqlmodel import Session, col, select
 from app.auth.models import utc_now
 from app.connectivity.models import (
     CredentialGrant,
+    Entitlement,
     EsimActivationCredential,
     EsimInstallation,
 )
@@ -235,6 +236,8 @@ class CredentialVault:
         ttl: timedelta | None = None,
     ) -> IssuedGrant:
         """Mint a single-use, time-boxed authorization for one person."""
+        if not self._subject_holds_credential(session, credential, subject_user_id):
+            raise CredentialError("grant_not_authorized")
         token = secrets.token_urlsafe(32)
         now = self.clock()
         grant = CredentialGrant(
@@ -278,6 +281,8 @@ class CredentialVault:
         credential = session.get(EsimActivationCredential, grant.credential_id)
         if credential is None:  # pragma: no cover - FK guarantees this
             raise CredentialError("credential_not_found")
+        if not self._subject_holds_credential(session, credential, subject_user_id):
+            raise CredentialError("grant_not_redeemable")
 
         secret = self.unseal(credential)
         grant.redeemed_at = self.clock()
@@ -319,6 +324,23 @@ class CredentialVault:
         return hashlib.blake2b(
             token.encode("utf-8"), key=self._key, digest_size=32
         ).hexdigest()
+
+    @staticmethod
+    def _subject_holds_credential(
+        session: Session,
+        credential: EsimActivationCredential,
+        subject_user_id: UUID,
+    ) -> bool:
+        installation = session.get(
+            EsimInstallation, credential.esim_installation_id
+        )
+        if installation is None:  # pragma: no cover - FK guarantees this
+            return False
+        entitlement = session.get(Entitlement, installation.entitlement_id)
+        return (
+            entitlement is not None
+            and entitlement.holder_user_id == subject_user_id
+        )
 
 
 def _aad(installation_id: UUID) -> bytes:
