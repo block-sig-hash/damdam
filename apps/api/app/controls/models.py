@@ -457,7 +457,7 @@ _TOP_UP_HISTORY_TRIGGER = DDL(  # type: ignore[no-untyped-call]
                AND NEW.state IN ('paid', 'applied')) THEN
             RETURN NEW;
         END IF;
-        RAISE EXCEPTION 'invalid top-up state transition: % -> %',
+        RAISE EXCEPTION 'invalid top-up state transition: %% -> %%',
             OLD.state, NEW.state;
     END;
     $$ LANGUAGE plpgsql;
