@@ -42,6 +42,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    Uuid,
     event,
     text,
 )
@@ -144,7 +145,9 @@ class OutboxMessage(SQLModel, table=True):
     )
     # Distinguishes successive leases held by the same named worker. The name
     # alone cannot stop a timed-out handler from completing a later lease.
-    lease_token: UUID | None = Field(default=None, sa_column=Column(nullable=True))
+    lease_token: UUID | None = Field(
+        default=None, sa_column=Column(Uuid(), nullable=True)
+    )
     last_error: str | None = Field(
         default=None, sa_column=Column(String(1000), nullable=True)
     )
