@@ -5,7 +5,10 @@ import type { RecoverySession } from '../api/identityClient';
 import { AccountRecoveryScreen } from '../screens/AccountRecovery/AccountRecoveryScreen';
 import { SignInScreen } from '../screens/SignIn/SignInScreen';
 import { loadPendingLink, type PendingLink } from '../services/deepLinks';
-import type { AuthenticatedMobileSession } from './OnboardingNavigator';
+import {
+  OnboardingNavigator,
+  type AuthenticatedMobileSession,
+} from './OnboardingNavigator';
 
 interface AuthNavigatorProps {
   onAuthenticated: (session: AuthenticatedMobileSession) => void | Promise<void>;
@@ -13,7 +16,10 @@ interface AuthNavigatorProps {
   initialEmail?: string;
 }
 
-type Step = { name: 'sign-in' } | { name: 'recovery'; email: string };
+type Step =
+  | { name: 'sign-in' }
+  | { name: 'recovery'; email: string }
+  | { name: 'phone' };
 
 /**
  * The signed-out stack (AC-37.2).
@@ -57,6 +63,16 @@ export function AuthNavigator({
     );
   }
 
+
+  if (step.name === 'phone') {
+    return (
+      <OnboardingNavigator
+        onAuthenticated={onAuthenticated}
+        onCancel={() => setStep({ name: 'sign-in' })}
+      />
+    );
+  }
+
   return (
     <SignInScreen
       initialEmail={initialEmail}
@@ -69,6 +85,7 @@ export function AuthNavigator({
         onAuthenticated(toSession(result, email))
       }
       onRecover={email => setStep({ name: 'recovery', email })}
+      onUsePhone={() => setStep({ name: 'phone' })}
     />
   );
 }

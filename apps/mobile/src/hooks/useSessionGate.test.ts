@@ -131,6 +131,23 @@ describe('useSessionGate boot sequence', () => {
     expect(restarted.current.session?.phoneNumber).toBe('08012345678');
     expect(restarted.current.session?.userId).toBe(BASE_SESSION.userId);
   });
+
+  it('clears the current account and returns to sign-in when switching accounts', async () => {
+    const { result } = await renderHook(() => useSessionGate());
+    await waitFor(() => expect(result.current.phase).toBe('onboarding'));
+    await act(async () => {
+      await result.current.onOnboarded(BASE_SESSION);
+    });
+
+    await act(async () => {
+      await result.current.onSignedOut();
+    });
+
+    expect(result.current.phase).toBe('onboarding');
+    expect(result.current.session).toBeNull();
+    expect(mockReset).toHaveBeenCalledWith({ service: 'com.damdam.session' });
+    expect(mockReset).toHaveBeenCalledWith({ service: 'com.damdam.pin-unlock' });
+  });
 });
 
 describe('30-day inactivity boundary at boot (AC-23.2/AC-23.4)', () => {

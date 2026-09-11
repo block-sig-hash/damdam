@@ -5,7 +5,6 @@ import { ConsumerApp } from './src/navigation/ConsumerApp';
 import { PinUnlockScreen } from './src/screens/PinUnlock/PinUnlockScreen';
 import { useSessionGate } from './src/hooks/useSessionGate';
 import { PostHogMonitoringProvider } from './src/monitoring/PostHogMonitoringProvider';
-import { clearSession } from './src/services/sessionStore';
 import { color } from './src/theme/tokens';
 import { i18n } from './src/i18n';
 
@@ -24,7 +23,8 @@ import { i18n } from './src/i18n';
  * a locked door with no key.
  */
 function App(): React.JSX.Element {
-  const { phase, session, onOnboarded, onPinUnlocked } = useSessionGate();
+  const { phase, session, onOnboarded, onPinUnlocked, onSignedOut } =
+    useSessionGate();
   const [emailHint, setEmailHint] = useState<string | undefined>(undefined);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -40,12 +40,18 @@ function App(): React.JSX.Element {
    * deep link in place: the customer is on their way to sign in *as* the
    * invited address, and that link is the thing they are coming back for.
    */
-  const switchAccount = useCallback(async (hint?: string) => {
-    setSigningOut(true);
-    setEmailHint(hint);
-    await clearSession();
-    setSigningOut(false);
-  }, []);
+  const switchAccount = useCallback(
+    async (hint?: string) => {
+      setSigningOut(true);
+      setEmailHint(hint);
+      try {
+        await onSignedOut();
+      } finally {
+        setSigningOut(false);
+      }
+    },
+    [onSignedOut],
+  );
 
   let content: React.JSX.Element;
   if (phase === 'loading' || signingOut) {

@@ -7,9 +7,10 @@ allowed to treat as "you have service".
 The rule it exists to enforce, from the approved calling amendment: *"Internet
 calling must not require an eSIM installation or carrier line foreign key."* An
 internet-only account that is asked to install a profile has been sent to look
-for something that was never created. So `ServiceDelivery` is derived from
-whether provisioning actually produced a `carrier_lines` row -- an observed fact
--- and not from the product's kind, its name, or what a sales page said.
+for something that was never created. `DeviceEligibilityRule.requires_esim` is
+the catalogue fact that distinguishes that offer before provisioning has made a
+carrier line or installation row; those rows corroborate carrier delivery once
+they exist.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from uuid import UUID
 from sqlmodel import Session, col, select
 
 from app.auth.models import Organization, User
+from app.catalog.market import DeviceEligibilityRule
 from app.catalog.models import Product
 from app.connectivity.models import (
     ActivationState,
@@ -106,8 +108,22 @@ class ConsumerService:
             .where(col(OrderItem.recipient_user_id) == user.id)
             .order_by(col(Order.placed_at).desc())
         ).all()
-        by_item: dict[UUID, tuple[OrderItem, Order, Product]] = {
+        recipient_items: dict[UUID, tuple[OrderItem, Order, Product]] = {
             item.id: (item, order, product) for item, order, product in rows
+        }
+
+        # A paid-but-not-yet-provisioned item has no entitlement and remains
+        # visible to its intended recipient. Once an entitlement exists it is
+        # the authoritative current assignment: a former holder must not keep
+        # seeing another customer's line, activation state, or organization.
+        recipient_entitlements = self._entitlements(session, recipient_items)
+        by_item = {
+            item_id: row
+            for item_id, row in recipient_items.items()
+            if (
+                (entitlement := recipient_entitlements.get(item_id)) is None
+                or entitlement.holder_user_id == user.id
+            )
         }
 
         held = session.exec(
@@ -126,6 +142,7 @@ class ConsumerService:
         entitlements = self._entitlements(session, by_item)
         installations = self._installations(session, entitlements.values())
         carrier_lines = self._carrier_lines(session, entitlements.values())
+        eligibility = self._eligibility(session, by_item.values())
         organizations = self._organizations(
             session,
             {
@@ -147,6 +164,7 @@ class ConsumerService:
                     entitlement=entitlement,
                     installation=installations.get(entitlement_id),
                     carrier_line=carrier_lines.get(entitlement_id),
+                    requires_esim=eligibility.get(product.id, True),
                     organization=organizations.get(order.payer_organization_id),
                     now=now,
                 )
@@ -188,15 +206,18 @@ class ConsumerService:
         entitlement: Entitlement | None,
         installation: EsimInstallation | None,
         carrier_line: CarrierLine | None,
+        requires_esim: bool,
         organization: Organization | None,
         now: datetime,
     ) -> ServiceSummary:
-        # The carrier line is the discriminator, not the product kind. A voice
-        # bundle sold for an eSIM and one sold for internet calling are the same
-        # `ProductKind`; only one of them has a line the customer must install.
+        # Product kind is deliberately not the discriminator. A voice bundle
+        # sold for an eSIM and one sold for internet calling can share a kind;
+        # the catalogue's eligibility rule distinguishes them before carrier
+        # resources exist. Existing carrier resources always win over a stale
+        # or missing rule.
         delivery = (
             ServiceDelivery.CARRIER_ESIM
-            if carrier_line is not None or installation is not None
+            if carrier_line is not None or installation is not None or requires_esim
             else ServiceDelivery.INTERNET
         )
         expires_at = _aware(entitlement.expires_at) if entitlement else None
@@ -259,6 +280,21 @@ class ConsumerService:
             )
         ).all()
         return {row.order_item_id: row for row in rows}
+
+    @staticmethod
+    def _eligibility(
+        session: Session,
+        rows: Iterable[tuple[OrderItem, Order, Product]],
+    ) -> dict[UUID, bool]:
+        product_ids = {product.id for _item, _order, product in rows}
+        if not product_ids:
+            return {}
+        rules = session.exec(
+            select(DeviceEligibilityRule).where(
+                col(DeviceEligibilityRule.product_id).in_(product_ids)
+            )
+        ).all()
+        return {rule.product_id: rule.requires_esim for rule in rules}
 
     @staticmethod
     def _installations(

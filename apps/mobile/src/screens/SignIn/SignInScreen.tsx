@@ -21,6 +21,7 @@ import { useEmailSignIn } from './useEmailSignIn';
 interface SignInScreenProps {
   onAuthenticated: (result: AuthResponse, email: string) => void | Promise<void>;
   onRecover: (email: string) => void;
+  onUsePhone?: () => void;
   /** Pre-filled when an invitation named the address it was sent to. */
   initialEmail?: string;
   /**
@@ -41,6 +42,7 @@ interface SignInScreenProps {
 export function SignInScreen({
   onAuthenticated,
   onRecover,
+  onUsePhone,
   initialEmail,
   contextMessage,
 }: SignInScreenProps): React.JSX.Element {
@@ -128,6 +130,13 @@ export function SignInScreen({
               label={t('signIn.recovery')}
               onPress={() => onRecover(email.trim().toLowerCase())}
             />
+            {onUsePhone ? (
+              <SecondaryButton
+                testID="sign-in-use-phone"
+                label={t('signIn.usePhone')}
+                onPress={onUsePhone}
+              />
+            ) : null}
           </>
         ) : (
           <>

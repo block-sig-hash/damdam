@@ -36,6 +36,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.auth.models import Locale, Organization, OrganizationType, User, UserStatus
+from app.catalog.market import DeviceEligibilityRule
 from app.catalog.models import LegalEntity, Product, ProductKind
 from app.connectivity.models import (
     ActivationState,
@@ -115,9 +116,25 @@ def _seller(session: Session) -> LegalEntity:
     return entity
 
 
-def _product(session: Session, kind: ProductKind, name: str, sku: str) -> Product:
+def _product(
+    session: Session,
+    kind: ProductKind,
+    name: str,
+    sku: str,
+    *,
+    requires_esim: bool = True,
+) -> Product:
     product = Product(sku=sku, name=name, kind=kind)
     session.add(product)
+    session.commit()
+    session.refresh(product)
+    session.add(
+        DeviceEligibilityRule(
+            product_id=product.id,
+            requires_esim=requires_esim,
+            requires_unlocked_device=requires_esim,
+        )
+    )
     session.commit()
     session.refresh(product)
     session.expunge(product)
@@ -244,7 +261,13 @@ def test_an_internet_only_grant_is_active_with_no_esim_and_no_carrier_line(
     with session_factory() as session:
         user = _user(session)
         seller = _seller(session)
-        product = _product(session, ProductKind.VOICE, "Calling 100", "CALL-100")
+        product = _product(
+            session,
+            ProductKind.VOICE,
+            "Calling 100",
+            "CALL-100",
+            requires_esim=False,
+        )
         order = _order(session, seller, reference="ORD-INT-1", payer_user_id=user.id)
         item = _item(session, order, product, user)
         _entitlement(session, item, user)
@@ -369,7 +392,13 @@ def test_an_expired_entitlement_is_not_reported_as_usable(
     with session_factory() as session:
         user = _user(session)
         seller = _seller(session)
-        product = _product(session, ProductKind.VOICE, "Calling 100", "CALL-100")
+        product = _product(
+            session,
+            ProductKind.VOICE,
+            "Calling 100",
+            "CALL-100",
+            requires_esim=False,
+        )
         order = _order(session, seller, reference="ORD-EXP-1", payer_user_id=user.id)
         item = _item(session, order, product, user)
         _entitlement(session, item, user, expires_at=NOW - timedelta(days=1))

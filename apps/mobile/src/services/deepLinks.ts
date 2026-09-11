@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Keychain from 'react-native-keychain';
 import { Linking } from 'react-native';
 
 /**
@@ -11,16 +11,13 @@ import { Linking } from 'react-native';
  * there. So a parsed link is **persisted**, not held in memory, and it is
  * cleared only when it has been consumed or explicitly dismissed.
  *
- * Why AsyncStorage and not the Keychain that holds the session: an invitation
- * token is a bearer credential, but it is one the customer just received in
- * plaintext by mail, it expires, and it grants a membership only to an account
- * that has *proved* the invited address. Keychain access is gated on device
- * unlock, and a pending link that cannot be read until the next unlock is a
- * pending link that gets lost. `clearPendingLink` on sign-out is what keeps it
- * from outliving the person who opened it.
+ * The pending intent lives in platform secure storage because an invitation
+ * token is a bearer credential. `WHEN_UNLOCKED_THIS_DEVICE_ONLY` still permits
+ * the cold/warm handoff after the customer unlocks and opens the app, while
+ * preventing device backups or plaintext app storage from carrying the token.
  */
 
-export const PENDING_LINK_KEY = 'damdam.pendingDeepLink.v1';
+export const PENDING_LINK_SERVICE = 'com.damdam.pending-deep-link';
 
 /** `damdam://` for the app's own scheme; https for the mailed universal links. */
 const APP_SCHEME = 'damdam://';
@@ -73,16 +70,21 @@ function toPath(url: string): string | null {
 }
 
 export async function savePendingLink(link: PendingLink): Promise<void> {
-  await AsyncStorage.setItem(PENDING_LINK_KEY, JSON.stringify(link));
+  await Keychain.setGenericPassword('pending-link', JSON.stringify(link), {
+    service: PENDING_LINK_SERVICE,
+    accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
 }
 
 export async function loadPendingLink(): Promise<PendingLink | null> {
   try {
-    const raw = await AsyncStorage.getItem(PENDING_LINK_KEY);
-    if (!raw) {
+    const credentials = await Keychain.getGenericPassword({
+      service: PENDING_LINK_SERVICE,
+    });
+    if (!credentials) {
       return null;
     }
-    const parsed = JSON.parse(raw) as PendingLink;
+    const parsed = JSON.parse(credentials.password) as PendingLink;
     // Re-validate rather than trusting the shape: a build that changes the
     // union leaves old rows on disk, and a half-understood intent routes
     // somewhere the customer did not ask to go.
@@ -105,7 +107,7 @@ export async function loadPendingLink(): Promise<PendingLink | null> {
 }
 
 export async function clearPendingLink(): Promise<void> {
-  await AsyncStorage.removeItem(PENDING_LINK_KEY);
+  await Keychain.resetGenericPassword({ service: PENDING_LINK_SERVICE });
 }
 
 /**

@@ -33,6 +33,7 @@ from app.auth.models import (
     User,
     UserStatus,
 )
+from app.catalog.market import DeviceEligibilityRule
 from app.catalog.models import LegalEntity, Product, ProductKind
 from app.connectivity.models import (
     ActivationState,
@@ -53,7 +54,7 @@ pytestmark = pytest.mark.skipif(
 NOW = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
 TABLES = (
     "carrier_lines, esim_installations, entitlements, order_items, orders, "
-    "products, legal_entities, organizations, users"
+    "device_eligibility_rules, products, legal_entities, organizations, users"
 )
 
 
@@ -116,6 +117,7 @@ def _sold(
     payer_organization: Organization | None = None,
     reference: str = "ORD-1",
     kind: ProductKind = ProductKind.BUNDLE,
+    requires_esim: bool = True,
     provisioning_state: ProvisioningState = ProvisioningState.PROVISIONED,
 ) -> OrderItem:
     seller = LegalEntity(code=uuid4().hex[:8], name="Seller", country="NG")
@@ -123,6 +125,13 @@ def _sold(
     session.add(seller)
     session.add(product)
     session.flush()
+    session.add(
+        DeviceEligibilityRule(
+            product_id=product.id,
+            requires_esim=requires_esim,
+            requires_unlocked_device=requires_esim,
+        )
+    )
     order = Order(
         reference=reference,
         seller_legal_entity_id=seller.id,
@@ -241,11 +250,11 @@ def test_a_reassigned_line_follows_its_holder_not_its_buyer(
     assert holder_view.services[0].owner is ServiceOwner.ORGANIZATION
     assert holder_view.services[0].organization_name == "Acme Logistics"
 
-    # The buyer keeps the purchase record -- the order item still names them --
-    # which is what makes the receipt and the support conversation possible.
-    assert [summary.order_reference for summary in buyer_view.services] == [
-        "ORD-REASSIGN"
-    ]
+    # Receipts remain available through order history, but `/me/services` is an
+    # operational view. Keeping this line here would expose the new holder's
+    # installation and activation state to the former holder.
+    assert buyer_view.state is ServiceState.NONE
+    assert buyer_view.services == ()
 
 
 def test_an_internet_grant_and_a_carrier_line_on_one_account_stay_separate(
@@ -265,6 +274,7 @@ def test_an_internet_grant_and_a_carrier_line_on_one_account_stay_separate(
         payer_user=user,
         reference="ORD-INTERNET",
         kind=ProductKind.VOICE,
+        requires_esim=False,
     )
     _grant(session, internet_item, user)
 
@@ -297,6 +307,30 @@ def test_an_internet_grant_and_a_carrier_line_on_one_account_stay_separate(
     # Usable service first: the account's own working line should not sort below
     # an order it is still waiting on.
     assert view.services[0].order_reference == "ORD-INTERNET"
+
+
+def test_a_carrier_grant_is_not_ready_before_carrier_resources_exist(
+    session: Session, service: ConsumerService
+) -> None:
+    user = _user(session, "+2348044444444")
+    item = _sold(
+        session,
+        recipient=user,
+        payer_user=user,
+        reference="ORD-CARRIER-PENDING",
+        requires_esim=True,
+    )
+    _grant(session, item, user)
+    session.commit()
+
+    view = service.services(session, user)
+
+    assert view.state is ServiceState.PENDING
+    assert len(view.services) == 1
+    summary = view.services[0]
+    assert summary.delivery is ServiceDelivery.CARRIER_ESIM
+    assert summary.requires_installation is True
+    assert summary.ready_to_use is False
 
 
 def test_an_expired_grant_stops_being_usable_without_being_deleted(

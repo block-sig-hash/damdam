@@ -26,7 +26,8 @@
     "resendIn": "Envoyer un autre lien dans {{seconds}} s",
     "recovery": "Je n'arrive pas à accéder à mon compte",
     "linkExpired": "Ce lien a expiré ou a déjà été utilisé. Demandez-en un nouveau.",
-    "signingIn": "Connexion en cours…"
+    "signingIn": "Connexion en cours…",
+    "usePhone": "Se connecter avec un numéro de téléphone"
   },
   "recovery": {
     "title": "Récupérer votre compte",
@@ -87,6 +88,7 @@
     "suspendedBody": "Elle ne transporte plus de trafic tant qu'elle n'est pas rechargée.",
     "suspendedAction": "Aller à Ma ligne",
     "loadError": "Nous n'avons pas pu charger vos services pour le moment.",
+    "unavailableBody": "Vérifiez votre connexion et réessayez. Votre compte n’a pas été modifié.",
     "retry": "Réessayer",
     "serviceListTitle": "Vos services",
     "personalLabel": "Personnel",

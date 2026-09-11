@@ -36,9 +36,10 @@ class ServiceDelivery(str, Enum):
     The calling amendment requires an internet-only journey that never asks for
     an eSIM installation. That is not a UI preference: an internet-calling grant
     has no carrier line and no profile to install, so asking would be asking for
-    something that does not exist. This field is what the app branches on, and
-    it is derived from whether provisioning actually produced a carrier line --
-    not from the product's name.
+    something that does not exist. This field is what the app branches on.
+    `DeviceEligibilityRule.requires_esim` distinguishes the offer before
+    provisioning; an installation or carrier-line row confirms carrier delivery
+    once either exists. Product kind and product name are never discriminators.
     """
 
     CARRIER_ESIM = "carrier_esim"

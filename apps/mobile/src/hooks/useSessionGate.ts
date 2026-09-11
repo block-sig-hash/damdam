@@ -56,6 +56,8 @@ export interface UseSessionGateResult {
   /** Called by PinUnlockScreen: no argument on a routine correct-PIN unlock,
    * or a fresh AuthResponse when unlocked via OTP recovery instead. */
   onPinUnlocked: (recovered?: AuthResponse) => Promise<void>;
+  /** Ends the current account session and clears device-local state owned by it. */
+  onSignedOut: () => Promise<void>;
 }
 
 /**
@@ -172,6 +174,13 @@ export function useSessionGate(): UseSessionGateResult {
     await saveSession(fresh);
     setSession(fresh);
     setPhase('authenticated');
+  }, []);
+
+  const onSignedOut = useCallback(async () => {
+    await clearSession();
+    await clearAccountScopedState();
+    setSession(null);
+    setPhase('onboarding');
   }, []);
 
   const onPinUnlocked = useCallback(
@@ -312,5 +321,5 @@ export function useSessionGate(): UseSessionGateResult {
     return () => clearInterval(timer);
   }, [phase]);
 
-  return { phase, session, onOnboarded, onPinUnlocked };
+  return { phase, session, onOnboarded, onPinUnlocked, onSignedOut };
 }

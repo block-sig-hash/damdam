@@ -4404,11 +4404,13 @@ components:
 
         has no carrier line and no profile to install, so asking would be asking for
 
-        something that does not exist. This field is what the app branches on, and
+        something that does not exist. This field is what the app branches on.
 
-        it is derived from whether provisioning actually produced a carrier line --
+        `DeviceEligibilityRule.requires_esim` distinguishes the offer before
 
-        not from the product''s name.'
+        provisioning; an installation or carrier-line row confirms carrier delivery
+
+        once either exists. Product kind and product name are never discriminators.'
     ServiceOwner:
       type: string
       enum:

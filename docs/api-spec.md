@@ -1502,13 +1502,16 @@ failed is exactly the dead end AC-37.5 exists to remove. The item stays in
 `services` with its own `provisioning_state`, so the failure remains visible and
 actionable.
 
-### `delivery` is derived from a carrier line, never from the product
+### `delivery` follows the eSIM eligibility rule and observed carrier resources
 
-`carrier_esim` or `internet`. The discriminator is whether provisioning actually
-produced a `carrier_lines` row — an observed fact — not `products.kind`, whose
-`voice` value covers both a native-dialer eSIM plan and an internet-calling
-plan. The approved calling amendment requires that internet calling never
-depend on an eSIM installation or a carrier-line foreign key; an
+`carrier_esim` or `internet`. Before provisioning creates any carrier resource,
+`device_eligibility_rules.requires_esim` is the discriminator. An existing
+installation or carrier line always confirms carrier delivery. The product kind
+is not a discriminator: `voice` covers both a native-dialer eSIM plan and an
+internet-calling plan. A missing eligibility rule defaults safely to carrier
+delivery rather than making an unprovisioned eSIM line look ready. The approved
+calling amendment requires that internet calling never depend on an eSIM
+installation or a carrier-line foreign key; an
 `internet` service therefore reports `requires_installation: false` and returns
 `installation_state: null` and `activation_state: null`, because there is no
 profile and no line, and `"not_installed"` would be a false negative rather than

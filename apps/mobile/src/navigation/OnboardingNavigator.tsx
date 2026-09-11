@@ -62,7 +62,11 @@ interface OnboardingNavigatorProps {
    */
   initialActivationCode?: string;
   /** Hands the authenticated session to the app host without changing onboarding screens. */
-  onAuthenticated?: (session: AuthenticatedMobileSession) => void;
+  onAuthenticated?: (
+    session: AuthenticatedMobileSession,
+  ) => void | Promise<void>;
+  /** Returns to the email-first entry when this navigator is used as a legacy sign-in route. */
+  onCancel?: () => void;
 }
 
 function AuthenticationHandoff({
@@ -92,6 +96,7 @@ function AuthenticationHandoff({
 export function OnboardingNavigator({
   initialActivationCode,
   onAuthenticated,
+  onCancel,
 }: OnboardingNavigatorProps = {}): React.JSX.Element {
   const {t} = useTranslation('common');
   const [step, setStep] = useState<OnboardingStep>(
@@ -109,6 +114,7 @@ export function OnboardingNavigator({
     case 'phone':
       return (
         <PhoneEntryScreen
+          onCancel={onCancel}
           onOtpSent={(phoneNumber) =>
             setStep({ name: 'otp', phoneNumber, activationCode: step.activationCode })
           }

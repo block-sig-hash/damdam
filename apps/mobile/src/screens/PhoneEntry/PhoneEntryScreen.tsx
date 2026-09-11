@@ -3,6 +3,7 @@ import {useTranslation} from 'react-i18next';
 import { KeyboardAvoidingView, Platform as RNPlatform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Banner } from '../../components/Banner/Banner';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
+import { SecondaryButton } from '../../components/SecondaryButton/SecondaryButton';
 import {LocaleSelector} from '../../components/LocaleSelector/LocaleSelector';
 import { color, space, typography } from '../../theme/tokens';
 import { formatNigerianPhoneForDisplay } from '../../utils/phoneNumber';
@@ -11,6 +12,7 @@ import { usePhoneEntry } from './usePhoneEntry';
 interface PhoneEntryScreenProps {
   onOtpSent: (phoneNumber: string) => void;
   onAccountExists: (phoneNumber: string) => void;
+  onCancel?: () => void;
 }
 
 /**
@@ -20,6 +22,7 @@ interface PhoneEntryScreenProps {
 export function PhoneEntryScreen({
   onOtpSent,
   onAccountExists,
+  onCancel,
 }: PhoneEntryScreenProps): React.JSX.Element {
   const {t} = useTranslation('auth');
   const { phoneNumber, setPhoneNumber, isValid, status, errorMessage, submit } = usePhoneEntry({
@@ -69,6 +72,13 @@ export function PhoneEntryScreen({
           disabled={!isValid}
           loading={status === 'submitting'}
         />
+        {onCancel ? (
+          <SecondaryButton
+            testID="phone-entry-cancel"
+            label={t('phone.useEmail')}
+            onPress={onCancel}
+          />
+        ) : null}
       </View>
     </KeyboardAvoidingView>
   );

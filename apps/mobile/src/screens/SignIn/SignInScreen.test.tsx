@@ -165,6 +165,15 @@ it('explains why sign-in was asked for when a deep link brought the customer her
   expect(screen.getByTestId('sign-in-context')).toBeTruthy();
 });
 
+it('offers the retained phone sign-in journey to legacy accounts', async () => {
+  const onUsePhone = jest.fn();
+  await renderScreen({ onUsePhone });
+
+  await press('sign-in-use-phone');
+
+  expect(onUsePhone).toHaveBeenCalledTimes(1);
+});
+
 it('renders in French', async () => {
   await setAppLocale('fr');
   await renderScreen();

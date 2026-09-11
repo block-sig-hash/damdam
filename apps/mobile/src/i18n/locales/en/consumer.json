@@ -26,7 +26,8 @@
     "resendIn": "Send another link in {{seconds}}s",
     "recovery": "I can't get into my account",
     "linkExpired": "That link has expired or has already been used. Ask for a new one.",
-    "signingIn": "Signing you in…"
+    "signingIn": "Signing you in…",
+    "usePhone": "Sign in with a phone number"
   },
   "recovery": {
     "title": "Recover your account",
@@ -87,6 +88,7 @@
     "suspendedBody": "It stops carrying traffic until it's topped up.",
     "suspendedAction": "Go to My Line",
     "loadError": "We couldn't load your services just now.",
+    "unavailableBody": "Check your connection and try again. Your account has not been changed.",
     "retry": "Try again",
     "serviceListTitle": "Your services",
     "personalLabel": "Personal",

@@ -70,12 +70,12 @@ export function ConsumerApp({
       setServices(nextServices.services);
     } catch (error) {
       setErrorMessage(
-        error instanceof ApiError ? error.message : String(error),
+        error instanceof ApiError ? error.message : t('home.unavailableBody'),
       );
     } finally {
       setLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, t]);
 
   useEffect(() => {
     load();

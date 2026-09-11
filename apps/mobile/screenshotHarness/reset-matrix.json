@@ -57,6 +57,19 @@
         "esim-activation-guide-ios"
       ],
       "why": "iOS has no single-tap path, so it gets the manual guide instead. Same reason as above, the other way round."
+    },
+    "consumerNavigation": {
+      "owner": "chunk 18",
+      "screens": [
+        "consumer-sign-in",
+        "consumer-home-no-service",
+        "consumer-home-error"
+      ],
+      "why": "The new signed-out entry and the explicit no-service and load-error Home states required by chunk 18. Each state has a route out and is captured in both supported locales.",
+      "platforms": [
+        "ios",
+        "android"
+      ]
     }
   },
   "pending": {
@@ -64,7 +77,6 @@
     "consumer": {
       "owner": "chunks 18-21",
       "screens": [
-        "home",
         "plans",
         "plan-detail",
         "checkout",
