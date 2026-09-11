@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    DDL,
     BigInteger,
     CheckConstraint,
     Column,
@@ -20,7 +21,9 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Table,
     UniqueConstraint,
+    event,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlmodel import Field, SQLModel
@@ -174,3 +177,26 @@ class ProductAllowance(SQLModel, table=True):
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+
+
+_PRODUCT_ALLOWANCE_IMMUTABLE_TRIGGER = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE OR REPLACE FUNCTION reject_product_allowance_mutation()
+    RETURNS trigger AS $$
+    BEGIN
+        RAISE EXCEPTION 'product allowances are immutable; create a new product';
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER trg_product_allowances_immutable
+        BEFORE UPDATE OR DELETE ON product_allowances
+        FOR EACH ROW EXECUTE FUNCTION reject_product_allowance_mutation();
+    """
+)
+
+_PRODUCT_ALLOWANCE_TABLE: Table = ProductAllowance.__table__  # type: ignore[attr-defined]
+event.listen(
+    _PRODUCT_ALLOWANCE_TABLE,
+    "after_create",
+    _PRODUCT_ALLOWANCE_IMMUTABLE_TRIGGER.execute_if(dialect="postgresql"),
+)
