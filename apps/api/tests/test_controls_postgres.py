@@ -31,7 +31,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app import model_registry  # noqa: F401  -- completes SQLModel.metadata
@@ -121,13 +121,14 @@ class FakeCarrier:
         limit_latency_documented: bool = False,
     ) -> None:
         self.capability_set = capabilities or frozenset(
-            {Capability.DATA, Capability.SUSPENSION}
+            {Capability.DATA, Capability.SUSPENSION, Capability.TOPUP}
         )
         self.limit_latency_documented = limit_latency_documented
         self.limits: dict[str, int] = {}
         self.lose_limit_response = False
         self.refuse_limit: str | None = None
         self.confirm_limit = True
+        self.reported_limit_offset = 0
         self.actions: dict[str, ProviderAction] = {}
         self.action_calls: list[str] = []
 
@@ -181,7 +182,11 @@ class FakeCarrier:
             provider_reference=provider_reference,
             state=ProviderLineState.ACTIVE,
             provider_status="enabled",
-            data_limit_bytes=limit_bytes if self.confirm_limit else None,
+            data_limit_bytes=(
+                limit_bytes + self.reported_limit_offset
+                if self.confirm_limit
+                else None
+            ),
             observed_at=NOW,
         )
 
@@ -332,7 +337,9 @@ def _entitlement(session: Session, line: CarrierLine) -> Entitlement:
     return entitlement
 
 
-def _top_up_item(session: Session, line: CarrierLine) -> OrderItem:
+def _top_up_item(
+    session: Session, line: CarrierLine, amount: str = "1500.00"
+) -> OrderItem:
     """A second purchase against the same order, for the same recipient."""
     entitlement = _entitlement(session, line)
     original = session.get(OrderItem, entitlement.order_item_id)
@@ -342,7 +349,7 @@ def _top_up_item(session: Session, line: CarrierLine) -> OrderItem:
         product_id=original.product_id,
         recipient_user_id=original.recipient_user_id,
         unit_currency="NGN",
-        unit_amount=Decimal("1500.00"),
+        unit_amount=Decimal(amount),
     )
     session.add(item)
     session.flush()
@@ -412,7 +419,12 @@ def test_an_enforceable_limit_with_unquantified_latency_still_cannot_promise(
     """
     carrier = FakeCarrier(
         frozenset(
-            {Capability.DATA, Capability.SUSPENSION, Capability.SPENDING_ENFORCEMENT}
+            {
+                Capability.DATA,
+                Capability.SUSPENSION,
+                Capability.SPENDING_ENFORCEMENT,
+                Capability.TOPUP,
+            }
         )
     )
     line = _line(session)
@@ -431,7 +443,12 @@ def test_a_documented_bound_can_promise(
 ) -> None:
     carrier = FakeCarrier(
         frozenset(
-            {Capability.DATA, Capability.SUSPENSION, Capability.SPENDING_ENFORCEMENT}
+            {
+                Capability.DATA,
+                Capability.SUSPENSION,
+                Capability.SPENDING_ENFORCEMENT,
+                Capability.TOPUP,
+            }
         )
     )
     line = _line(session)
@@ -467,6 +484,39 @@ def test_a_bounded_exposure_policy_must_name_its_approval(
     with pytest.raises(ControlError) as caught:
         service.approve_bounded_exposure(session, line, "", 1)
     assert caught.value.code == "policy_reference_required"
+
+
+def test_an_inactive_bounded_exposure_policy_cannot_promise(
+    service: ControlService, carrier: FakeCarrier
+) -> None:
+    control = SpendingControl(
+        carrier_line_id=uuid4(),
+        enforcement=Enforcement.APPROVED_BOUNDED_EXPOSURE,
+        state=ControlState.FAILED,
+        policy_reference="decision/D5-1",
+        max_overshoot_bytes=1_000,
+        requested_at=NOW,
+    )
+    assert service.prepaid_guarantee(carrier, control).can_promise is False
+
+
+def test_bounded_exposure_must_be_quantified_in_the_database(
+    session: Session,
+) -> None:
+    line = _line(session)
+    session.add(
+        SpendingControl(
+            carrier_line_id=line.id,
+            enforcement=Enforcement.APPROVED_BOUNDED_EXPOSURE,
+            state=ControlState.ACTIVE,
+            policy_reference="decision/D5-1",
+            max_overshoot_bytes=None,
+            requested_at=NOW,
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
 
 
 def test_a_control_cannot_claim_enforcement_without_a_confirmed_limit(
@@ -534,7 +584,12 @@ def test_a_supplier_that_reports_no_limit_after_the_change_is_not_a_confirmation
     """
     carrier = FakeCarrier(
         frozenset(
-            {Capability.DATA, Capability.SUSPENSION, Capability.SPENDING_ENFORCEMENT}
+            {
+                Capability.DATA,
+                Capability.SUSPENSION,
+                Capability.SPENDING_ENFORCEMENT,
+                Capability.TOPUP,
+            }
         )
     )
     carrier.confirm_limit = False
@@ -545,13 +600,43 @@ def test_a_supplier_that_reports_no_limit_after_the_change_is_not_a_confirmation
     assert control.enforcement is Enforcement.NONE
 
 
+def test_a_supplier_that_reports_a_different_limit_is_not_a_confirmation(
+    session: Session, service: ControlService
+) -> None:
+    """A response is an observation, not permission to change the contract."""
+    carrier = FakeCarrier(
+        frozenset(
+            {
+                Capability.DATA,
+                Capability.SUSPENSION,
+                Capability.SPENDING_ENFORCEMENT,
+                Capability.TOPUP,
+            }
+        )
+    )
+    carrier.reported_limit_offset = 1
+    line = _line(session)
+
+    control = service.apply_provider_limit(session, line, carrier, 1_000_000)
+    session.commit()
+
+    assert control.state is ControlState.FAILED
+    assert control.enforcement is Enforcement.NONE
+    assert control.confirmed_limit_bytes is None
+
+
 def test_a_lost_limit_response_is_unknown_and_not_re_sent(
     session: Session, service: ControlService
 ) -> None:
     """Re-sending races a change that may already have applied."""
     carrier = FakeCarrier(
         frozenset(
-            {Capability.DATA, Capability.SUSPENSION, Capability.SPENDING_ENFORCEMENT}
+            {
+                Capability.DATA,
+                Capability.SUSPENSION,
+                Capability.SPENDING_ENFORCEMENT,
+                Capability.TOPUP,
+            }
         )
     )
     carrier.lose_limit_response = True
@@ -577,6 +662,71 @@ def test_a_top_up_is_idempotent_on_its_order_item(
     session.commit()
     assert first.id == second.id
     assert len(session.exec(select(EntitlementTopUp)).all()) == 1
+
+
+def test_concurrent_top_up_replay_converges_on_one_row(
+    engine, session: Session, service: ControlService
+) -> None:
+    line = _line(session)
+    entitlement = _entitlement(session, line)
+    item = _top_up_item(session, line)
+    session.commit()
+    barrier = Barrier(2)
+
+    def request() -> str:
+        with Session(engine) as worker:
+            worker_entitlement = worker.get(Entitlement, entitlement.id)
+            worker_item = worker.get(OrderItem, item.id)
+            assert worker_entitlement is not None and worker_item is not None
+            barrier.wait(timeout=10)
+            top_up = service.request_top_up(
+                worker, worker_entitlement, worker_item, QUOTE
+            )
+            worker.commit()
+            return str(top_up.id)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        ids = [
+            future.result()
+            for future in [pool.submit(request), pool.submit(request)]
+        ]
+
+    assert len(set(ids)) == 1
+
+
+def test_a_top_up_purchase_cannot_be_applied_to_another_customer(
+    session: Session, service: ControlService
+) -> None:
+    line = _line(session)
+    other = _line(session)
+    item = _top_up_item(session, other)
+
+    with pytest.raises(ControlError) as caught:
+        service.request_top_up(session, _entitlement(session, line), item, QUOTE)
+    assert caught.value.code == "top_up_order_mismatch"
+
+
+def test_a_top_up_quote_must_match_the_purchased_price(
+    session: Session, service: ControlService
+) -> None:
+    line = _line(session)
+    item = _top_up_item(session, line)
+    different = TopUpQuote(
+        data_bytes=QUOTE.data_bytes,
+        voice_seconds=0,
+        extends_days=0,
+        currency="NGN",
+        amount=Decimal("1400.00"),
+    )
+
+    with pytest.raises(ControlError) as caught:
+        service.request_top_up(
+            session,
+            _entitlement(session, line),
+            item,
+            different,
+        )
+    assert caught.value.code == "top_up_quote_mismatch"
 
 
 def test_a_second_top_up_row_for_one_purchase_is_refused(
@@ -628,7 +778,7 @@ def test_a_top_up_grants_nothing_until_it_is_applied(
     assert top_up.state is TopUpState.PAID
     assert service.allowance(session, entitlement).data_bytes_total == 1_000_000_000
 
-    service.apply_top_up(session, top_up, line)
+    service.apply_top_up(session, top_up, line, FakeCarrier())
     session.commit()
     assert top_up.state is TopUpState.APPLIED
     assert (
@@ -661,7 +811,7 @@ def test_a_top_up_after_an_overshoot_does_not_give_away_the_overshoot(
     top_up = service.request_top_up(session, entitlement, item, QUOTE)
     reservation = service.reserve_top_up(session, top_up, account)
     service.settle_top_up(session, top_up, reservation, revenue)
-    service.apply_top_up(session, top_up, line)
+    service.apply_top_up(session, top_up, line, FakeCarrier())
     session.commit()
 
     view = service.allowance(session, entitlement)
@@ -691,6 +841,48 @@ def test_a_failed_top_up_returns_the_hold_and_keeps_no_credit(
     assert len(session.exec(select(JournalEntry)).all()) == 1  # only the funding
 
 
+def test_a_top_up_cannot_reserve_another_customers_credit(
+    session: Session, service: ControlService, ledger: LedgerService
+) -> None:
+    line = _line(session)
+    other = _line(session)
+    top_up = service.request_top_up(
+        session,
+        _entitlement(session, line),
+        _top_up_item(session, line),
+        QUOTE,
+    )
+    other_account = _funded_account(session, ledger, other)
+
+    with pytest.raises(ControlError) as caught:
+        service.reserve_top_up(session, top_up, other_account)
+    assert caught.value.code == "top_up_payer_mismatch"
+
+
+def test_a_paid_top_up_cannot_be_failed_without_a_refund(
+    session: Session, service: ControlService, ledger: LedgerService
+) -> None:
+    line = _line(session)
+    entitlement = _entitlement(session, line)
+    top_up = service.request_top_up(
+        session, entitlement, _top_up_item(session, line), QUOTE
+    )
+    reservation = service.reserve_top_up(
+        session, top_up, _funded_account(session, ledger, line)
+    )
+    service.settle_top_up(
+        session,
+        top_up,
+        reservation,
+        ledger.account(session, "NGN", AccountKind.REVENUE),
+    )
+
+    with pytest.raises(ControlError) as caught:
+        service.fail_top_up(session, top_up, "supplier refused")
+    assert caught.value.code == "top_up_refund_required"
+    assert top_up.state is TopUpState.PAID
+
+
 def test_reversing_an_applied_top_up_is_a_refund_decision_not_a_failure(
     session: Session, service: ControlService, ledger: LedgerService
 ) -> None:
@@ -702,7 +894,7 @@ def test_reversing_an_applied_top_up_is_a_refund_decision_not_a_failure(
     top_up = service.request_top_up(session, entitlement, item, QUOTE)
     reservation = service.reserve_top_up(session, top_up, account)
     service.settle_top_up(session, top_up, reservation, revenue)
-    service.apply_top_up(session, top_up, line)
+    service.apply_top_up(session, top_up, line, FakeCarrier())
     with pytest.raises(ControlError) as caught:
         service.fail_top_up(session, top_up, "changed our mind")
     assert caught.value.code == "top_up_already_applied"
@@ -761,7 +953,12 @@ def test_applying_a_top_up_raises_an_enforced_cap_first(
     """Otherwise the app says there is data while the carrier still blocks it."""
     carrier = FakeCarrier(
         frozenset(
-            {Capability.DATA, Capability.SUSPENSION, Capability.SPENDING_ENFORCEMENT}
+            {
+                Capability.DATA,
+                Capability.SUSPENSION,
+                Capability.SPENDING_ENFORCEMENT,
+                Capability.TOPUP,
+            }
         )
     )
     line = _line(session)
@@ -794,7 +991,12 @@ def test_a_top_up_whose_cap_raise_is_unknown_grants_nothing_and_keeps_the_money(
     """
     carrier = FakeCarrier(
         frozenset(
-            {Capability.DATA, Capability.SUSPENSION, Capability.SPENDING_ENFORCEMENT}
+            {
+                Capability.DATA,
+                Capability.SUSPENSION,
+                Capability.SPENDING_ENFORCEMENT,
+                Capability.TOPUP,
+            }
         )
     )
     line = _line(session)
@@ -818,6 +1020,116 @@ def test_a_top_up_whose_cap_raise_is_unknown_grants_nothing_and_keeps_the_money(
     assert service.allowance(session, entitlement).data_bytes_total == 1_000_000_000
 
 
+def test_an_unknown_cap_raise_can_be_reconciled_without_resending(
+    session: Session, service: ControlService, ledger: LedgerService
+) -> None:
+    carrier = FakeCarrier(
+        frozenset(
+            {
+                Capability.DATA,
+                Capability.SUSPENSION,
+                Capability.SPENDING_ENFORCEMENT,
+                Capability.TOPUP,
+            }
+        )
+    )
+    line = _line(session)
+    entitlement = _entitlement(session, line)
+    service.apply_provider_limit(
+        session, line, carrier, 1_000_000_000, max_overshoot_bytes=1_000
+    )
+    top_up = service.request_top_up(
+        session, entitlement, _top_up_item(session, line), QUOTE
+    )
+    reservation = service.reserve_top_up(
+        session, top_up, _funded_account(session, ledger, line)
+    )
+    service.settle_top_up(
+        session,
+        top_up,
+        reservation,
+        ledger.account(session, "NGN", AccountKind.REVENUE),
+    )
+    carrier.lose_limit_response = True
+    service.apply_top_up(session, top_up, line, carrier)
+
+    reconciled = service.reconcile_top_up_limit(
+        session, top_up, line, observed_limit_bytes=1_500_000_000
+    )
+    session.commit()
+
+    assert reconciled.state is TopUpState.APPLIED
+    assert service.allowance(session, entitlement).data_bytes_total == 1_500_000_000
+
+
+def test_a_refused_cap_raise_keeps_the_paid_credit_recoverable(
+    session: Session, service: ControlService, ledger: LedgerService
+) -> None:
+    carrier = FakeCarrier(
+        frozenset(
+            {
+                Capability.DATA,
+                Capability.SUSPENSION,
+                Capability.SPENDING_ENFORCEMENT,
+                Capability.TOPUP,
+            }
+        )
+    )
+    line = _line(session)
+    entitlement = _entitlement(session, line)
+    service.apply_provider_limit(
+        session, line, carrier, 1_000_000_000, max_overshoot_bytes=1_000
+    )
+    top_up = service.request_top_up(
+        session, entitlement, _top_up_item(session, line), QUOTE
+    )
+    reservation = service.reserve_top_up(
+        session, top_up, _funded_account(session, ledger, line)
+    )
+    service.settle_top_up(
+        session,
+        top_up,
+        reservation,
+        ledger.account(session, "NGN", AccountKind.REVENUE),
+    )
+    carrier.refuse_limit = "limit rejected"
+
+    service.apply_top_up(session, top_up, line, carrier)
+    session.commit()
+
+    assert top_up.state is TopUpState.PAID
+    assert service.allowance(session, entitlement).data_bytes_total == 1_000_000_000
+
+
+def test_an_unsupported_profile_cannot_be_reused_for_a_top_up(
+    session: Session, service: ControlService, ledger: LedgerService
+) -> None:
+    line = _line(session)
+    entitlement = _entitlement(session, line)
+    top_up = service.request_top_up(
+        session, entitlement, _top_up_item(session, line), QUOTE
+    )
+    reservation = service.reserve_top_up(
+        session, top_up, _funded_account(session, ledger, line)
+    )
+    service.settle_top_up(
+        session,
+        top_up,
+        reservation,
+        ledger.account(session, "NGN", AccountKind.REVENUE),
+    )
+    unsupported = FakeCarrier(
+        frozenset({Capability.DATA, Capability.SUSPENSION})
+    )
+
+    with pytest.raises(ControlError) as caught:
+        service.apply_top_up(session, top_up, line, unsupported)
+
+    assert caught.value.code == "top_up_not_supported"
+    assert top_up.state is TopUpState.PAID
+    assert service.allowance(session, entitlement).data_bytes_total == 1_000_000_000
+
+
 def test_applying_a_top_up_twice_grants_once(
     session: Session, service: ControlService, ledger: LedgerService
 ) -> None:
@@ -829,10 +1141,34 @@ def test_applying_a_top_up_twice_grants_once(
     top_up = service.request_top_up(session, entitlement, item, QUOTE)
     reservation = service.reserve_top_up(session, top_up, account)
     service.settle_top_up(session, top_up, reservation, revenue)
-    service.apply_top_up(session, top_up, line)
-    service.apply_top_up(session, top_up, line)
+    service.apply_top_up(session, top_up, line, FakeCarrier())
+    service.apply_top_up(session, top_up, line, FakeCarrier())
     session.commit()
     assert service.allowance(session, entitlement).data_bytes_total == 1_500_000_000
+
+
+def test_a_top_up_cannot_be_applied_to_another_line(
+    session: Session, service: ControlService, ledger: LedgerService
+) -> None:
+    line = _line(session)
+    other = _line(session)
+    entitlement = _entitlement(session, line)
+    top_up = service.request_top_up(
+        session, entitlement, _top_up_item(session, line), QUOTE
+    )
+    reservation = service.reserve_top_up(
+        session, top_up, _funded_account(session, ledger, line)
+    )
+    service.settle_top_up(
+        session,
+        top_up,
+        reservation,
+        ledger.account(session, "NGN", AccountKind.REVENUE),
+    )
+
+    with pytest.raises(ControlError) as caught:
+        service.apply_top_up(session, top_up, other, FakeCarrier())
+    assert caught.value.code == "top_up_line_mismatch"
 
 
 def test_settling_a_top_up_twice_posts_once(
@@ -850,6 +1186,60 @@ def test_settling_a_top_up_twice_posts_once(
     session.commit()
     # The funding entry plus exactly one settlement.
     assert len(session.exec(select(JournalEntry)).all()) == 2
+
+
+def test_a_top_up_cannot_settle_another_purchases_reservation(
+    session: Session, service: ControlService, ledger: LedgerService
+) -> None:
+    line = _line(session)
+    entitlement = _entitlement(session, line)
+    account = _funded_account(session, ledger, line, "5000.00")
+    first = service.request_top_up(
+        session, entitlement, _top_up_item(session, line), QUOTE
+    )
+    second = service.request_top_up(
+        session, entitlement, _top_up_item(session, line), QUOTE
+    )
+    service.reserve_top_up(session, first, account)
+    second_reservation = service.reserve_top_up(session, second, account)
+
+    with pytest.raises(ControlError) as caught:
+        service.settle_top_up(
+            session,
+            first,
+            second_reservation,
+            ledger.account(session, "NGN", AccountKind.REVENUE),
+        )
+    assert caught.value.code == "top_up_reservation_mismatch"
+
+
+def test_top_up_purchase_facts_cannot_be_rewritten(
+    session: Session, service: ControlService
+) -> None:
+    line = _line(session)
+    top_up = service.request_top_up(
+        session,
+        _entitlement(session, line),
+        _top_up_item(session, line),
+        QUOTE,
+    )
+    session.commit()
+
+    with pytest.raises(DBAPIError, match="top-up purchase facts are immutable"):
+        session.exec(
+            text("UPDATE entitlement_top_ups SET amount = 1 WHERE id = :id"),
+            params={"id": top_up.id},
+        )
+        session.commit()
+    session.rollback()
+
+    with pytest.raises(DBAPIError, match="top-up history is immutable"):
+        session.exec(
+            text("DELETE FROM entitlement_top_ups WHERE id = :id"),
+            params={"id": top_up.id},
+        )
+        session.commit()
+    session.rollback()
 
 
 def test_an_empty_top_up_is_refused(
@@ -879,7 +1269,7 @@ def test_a_top_up_can_extend_expiry(
     clock.advance(days=31)
     assert service.is_expired(session, entitlement) is True
 
-    item = _top_up_item(session, line)
+    item = _top_up_item(session, line, "500.00")
     account = _funded_account(session, ledger, line)
     revenue = ledger.account(session, "NGN", AccountKind.REVENUE)
     top_up = service.request_top_up(
@@ -890,7 +1280,7 @@ def test_a_top_up_can_extend_expiry(
     )
     reservation = service.reserve_top_up(session, top_up, account)
     service.settle_top_up(session, top_up, reservation, revenue)
-    service.apply_top_up(session, top_up, line)
+    service.apply_top_up(session, top_up, line, FakeCarrier())
     session.commit()
 
     assert service.is_expired(session, entitlement) is False
@@ -989,6 +1379,22 @@ def test_an_unobserved_line_is_never_suspended(
     line = _line(session)
     entitlement = _entitlement(session, line)
     assert service.suspend_for_exhaustion(session, entitlement, line, carrier) is None
+
+
+def test_an_entitlement_cannot_suspend_another_customers_line(
+    session: Session, service: ControlService, carrier: FakeCarrier
+) -> None:
+    line = _line(session)
+    other = _line(session)
+
+    with pytest.raises(ControlError) as caught:
+        service.suspend_for_exhaustion(
+            session,
+            _entitlement(session, line),
+            other,
+            carrier,
+        )
+    assert caught.value.code == "line_entitlement_mismatch"
     assert session.exec(select(CarrierLineAction)).all() == []
 
 
@@ -1041,7 +1447,7 @@ def test_resuming_after_a_top_up_works(
     top_up = service.request_top_up(session, entitlement, item, QUOTE)
     reservation = service.reserve_top_up(session, top_up, account)
     service.settle_top_up(session, top_up, reservation, revenue)
-    service.apply_top_up(session, top_up, line)
+    service.apply_top_up(session, top_up, line, carrier)
     session.commit()
 
     action = service.resume_after_top_up(session, entitlement, line, carrier)
@@ -1134,7 +1540,7 @@ def test_a_suspension_and_a_resume_cannot_both_be_open(
     top_up = service.request_top_up(session, entitlement, item, QUOTE)
     reservation = service.reserve_top_up(session, top_up, account)
     service.settle_top_up(session, top_up, reservation, revenue)
-    service.apply_top_up(session, top_up, line)
+    service.apply_top_up(session, top_up, line, carrier)
     line.activation_state = ActivationState.SUSPENDED
     session.add(line)
     session.flush()

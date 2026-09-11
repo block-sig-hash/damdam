@@ -44,7 +44,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlmodel import Session, col, select
 
 from app.auth.models import utc_now
@@ -72,7 +72,7 @@ from app.controls.models import (
     SpendingControl,
     TopUpState,
 )
-from app.ledger.models import LedgerAccount, Reservation
+from app.ledger.models import AccountKind, LedgerAccount, OwnerKind, Reservation
 from app.ledger.service import LedgerError, LedgerService
 from app.money import round_money
 from app.orders.models import Order, OrderItem
@@ -133,7 +133,9 @@ class ControlService:
         self.connectivity = connectivity
         self.ledger = ledger
         self.clock = clock
-        self.notice_thresholds = tuple(sorted(notice_thresholds))
+        if any(threshold <= 0 or threshold > 100 for threshold in notice_thresholds):
+            raise ValueError("notice thresholds must be between 1 and 100")
+        self.notice_thresholds = tuple(sorted(set(notice_thresholds)))
 
     # --- what may be promised ---------------------------------------------
 
@@ -155,8 +157,12 @@ class ControlService:
         that says so out loud rather than a comment nobody reads at sale time.
         """
         capabilities = adapter.capabilities()
-        if control is not None and control.enforcement is (
-            Enforcement.APPROVED_BOUNDED_EXPOSURE
+        if (
+            control is not None
+            and control.state is ControlState.ACTIVE
+            and control.enforcement is Enforcement.APPROVED_BOUNDED_EXPOSURE
+            and control.policy_reference
+            and control.max_overshoot_bytes is not None
         ):
             return GuaranteeAssessment(
                 can_promise=True,
@@ -239,6 +245,7 @@ class ControlService:
     # --- spending controls -------------------------------------------------
 
     def control_for(self, session: Session, line: CarrierLine) -> SpendingControl:
+        self._lock(session, f"spending-control:{line.id}")
         existing = session.exec(
             select(SpendingControl).where(SpendingControl.carrier_line_id == line.id)
         ).first()
@@ -273,10 +280,17 @@ class ControlService:
         supplier where raising a cap is how a suspended line comes back, sending
         it twice is the difference between one raise and two.
         """
+        self._adapter_for_line(line, adapter)
+        if limit_bytes < 0:
+            raise ControlError("negative_provider_limit")
+        if max_overshoot_bytes is not None and max_overshoot_bytes < 0:
+            raise ControlError("negative_overshoot")
         control = self.control_for(session, line)
         control.requested_limit_bytes = limit_bytes
         control.requested_at = self.clock()
         control.state = ControlState.REQUESTED
+        control.enforcement = Enforcement.NONE
+        control.max_overshoot_bytes = max_overshoot_bytes
         session.add(control)
         session.flush()
 
@@ -316,13 +330,17 @@ class ControlService:
             return control
 
         confirmed = line_view.data_limit_bytes
-        if confirmed is None:
+        if confirmed != limit_bytes:
             # The supplier accepted the call and reported no limit. That is not
-            # a confirmation, and recording it as one would put a cap in the
-            # database that does not exist at the carrier.
+            # a confirmation. Nor is a different limit: accepting a larger one
+            # silently increases exposure, while accepting a smaller one sells
+            # allowance the carrier will not let the customer use.
             control.state = ControlState.FAILED
             control.enforcement = Enforcement.NONE
-            control.detail = "the supplier reported no data limit after the change"
+            control.detail = (
+                "the supplier did not report the exact requested data limit "
+                f"({limit_bytes}); observed {confirmed}"
+            )[:500]
         else:
             control.confirmed_limit_bytes = confirmed
             control.confirmed_at = self.clock()
@@ -441,19 +459,33 @@ class ControlService:
         second one — the unique constraint is the backstop, and returning the
         original is what makes a worker retry harmless rather than an error.
         """
-        existing = session.exec(
-            select(EntitlementTopUp).where(
-                EntitlementTopUp.order_item_id == order_item.id
-            )
-        ).first()
-        if existing is not None:
-            return existing
         if quote.data_bytes < 0 or quote.voice_seconds < 0 or quote.extends_days < 0:
             raise ControlError("negative_grant")
         if not (quote.data_bytes or quote.voice_seconds or quote.extends_days):
             raise ControlError(
                 "empty_top_up", "a top-up that grants nothing is not a purchase"
             )
+        self._validate_top_up_purchase(session, entitlement, order_item, quote)
+        self._lock(session, f"top-up-order-item:{order_item.id}")
+        existing = session.exec(
+            select(EntitlementTopUp).where(
+                EntitlementTopUp.order_item_id == order_item.id
+            )
+        ).first()
+        if existing is not None:
+            if (
+                existing.entitlement_id != entitlement.id
+                or existing.data_bytes != quote.data_bytes
+                or existing.voice_seconds != quote.voice_seconds
+                or existing.extends_days != quote.extends_days
+                or existing.currency != quote.currency
+                or existing.amount != round_money(quote.amount, quote.currency)
+            ):
+                raise ControlError(
+                    "top_up_replay_conflict",
+                    "the order item was already used for a different top-up",
+                )
+            return existing
 
         top_up = EntitlementTopUp(
             entitlement_id=entitlement.id,
@@ -483,6 +515,8 @@ class ControlService:
         """
         if self.ledger is None:
             raise ControlError("no_ledger")
+        top_up = self._locked_top_up(session, top_up)
+        self._validate_top_up_account(session, top_up, account)
         if top_up.state not in (TopUpState.REQUESTED, TopUpState.RESERVED):
             raise ControlError(
                 "top_up_not_reservable", f"top-up is {top_up.state.value}"
@@ -495,6 +529,7 @@ class ControlService:
             top_up.amount,
             business_event_id=f"{top_up.business_event_id}:reserve",
         )
+        top_up.reservation_id = reservation.id
         top_up.state = TopUpState.RESERVED
         session.add(top_up)
         session.flush()
@@ -516,6 +551,14 @@ class ControlService:
         """
         if self.ledger is None:
             raise ControlError("no_ledger")
+        top_up = self._locked_top_up(session, top_up)
+        self._validate_reservation(top_up, reservation)
+        if (
+            revenue_account.kind is not AccountKind.REVENUE
+            or revenue_account.owner_kind is not OwnerKind.SYSTEM
+            or revenue_account.currency != top_up.currency
+        ):
+            raise ControlError("top_up_revenue_account_mismatch")
         if top_up.state is TopUpState.PAID:
             return top_up
         if top_up.state is not TopUpState.RESERVED:
@@ -537,7 +580,7 @@ class ControlService:
         session: Session,
         top_up: EntitlementTopUp,
         line: CarrierLine,
-        adapter: ConnectivityAdapter | None = None,
+        adapter: ConnectivityAdapter,
     ) -> EntitlementTopUp:
         """Grant the allowance, raising the supplier cap first if there is one.
 
@@ -551,24 +594,38 @@ class ControlService:
         right yet — that is what reconciliation is for, and guessing either way
         costs somebody something.
         """
+        top_up = self._locked_top_up(session, top_up)
+        if top_up.entitlement_id != line.entitlement_id:
+            raise ControlError(
+                "top_up_line_mismatch",
+                "the top-up belongs to another carrier line's entitlement",
+            )
+        self._adapter_for_line(line, adapter)
         if top_up.state is TopUpState.APPLIED:
             return top_up
+        try:
+            adapter.capabilities().require(Capability.TOPUP)
+        except ConnectivityError as exc:
+            raise ControlError(
+                "top_up_not_supported",
+                exc.detail or f"{adapter.name} cannot top up this profile",
+            ) from exc
         if top_up.state not in (TopUpState.PAID, TopUpState.PROVISIONING):
             raise ControlError("top_up_not_payable", f"top-up is {top_up.state.value}")
 
+        self._lock(session, f"spending-control:{line.id}")
         control = session.exec(
             select(SpendingControl).where(SpendingControl.carrier_line_id == line.id)
         ).first()
         needs_raise = (
-            adapter is not None
-            and control is not None
+            control is not None
             and control.state is ControlState.ACTIVE
             and control.enforcement is Enforcement.PROVIDER_HARD_LIMIT
             and control.confirmed_limit_bytes is not None
             and top_up.data_bytes > 0
         )
         if needs_raise:
-            assert adapter is not None and control is not None
+            assert control is not None
             assert control.confirmed_limit_bytes is not None
             top_up.state = TopUpState.PROVISIONING
             session.add(top_up)
@@ -590,8 +647,12 @@ class ControlService:
                 session.flush()
                 return top_up
             if raised.state is not ControlState.ACTIVE:
-                top_up.state = TopUpState.FAILED
-                top_up.detail = (raised.detail or "the supplier refused the cap")[:500]
+                # The customer has already paid. Keep that recoverable fact;
+                # FAILED would exclude the purchase while returning no money.
+                top_up.state = TopUpState.PAID
+                top_up.detail = (
+                    raised.detail or "the supplier refused the cap; retry or refund"
+                )[:500]
                 session.add(top_up)
                 session.flush()
                 return top_up
@@ -599,6 +660,54 @@ class ControlService:
         top_up.state = TopUpState.APPLIED
         top_up.applied_at = self.clock()
         session.add(top_up)
+        session.flush()
+        return top_up
+
+    def reconcile_top_up_limit(
+        self,
+        session: Session,
+        top_up: EntitlementTopUp,
+        line: CarrierLine,
+        observed_limit_bytes: int | None,
+    ) -> EntitlementTopUp:
+        """Resolve a lost cap-change response from a later line observation.
+
+        This never sends another supplier request. An observation at or above
+        the requested cap proves the paid allowance can be applied; a lower or
+        absent limit proves it was not and returns the top-up to `PAID` for a
+        deliberate retry or refund.
+        """
+        top_up = self._locked_top_up(session, top_up)
+        if top_up.entitlement_id != line.entitlement_id:
+            raise ControlError("top_up_line_mismatch")
+        if top_up.state is not TopUpState.OUTCOME_UNKNOWN:
+            raise ControlError("top_up_outcome_is_known")
+        self._lock(session, f"spending-control:{line.id}")
+        control = session.exec(
+            select(SpendingControl)
+            .where(SpendingControl.carrier_line_id == line.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        if control is None or control.requested_limit_bytes is None:
+            raise ControlError("top_up_control_not_found")
+
+        if observed_limit_bytes == control.requested_limit_bytes:
+            control.confirmed_limit_bytes = observed_limit_bytes
+            control.confirmed_at = self.clock()
+            control.enforcement = Enforcement.PROVIDER_HARD_LIMIT
+            control.state = ControlState.ACTIVE
+            control.detail = None
+            top_up.state = TopUpState.APPLIED
+            top_up.applied_at = self.clock()
+            top_up.detail = None
+        else:
+            control.enforcement = Enforcement.NONE
+            control.state = ControlState.FAILED
+            control.detail = "later observation did not show the requested limit"
+            top_up.state = TopUpState.PAID
+            top_up.detail = "cap raise not applied; retry or refund"
+        session.add_all([control, top_up])
         session.flush()
         return top_up
 
@@ -616,11 +725,24 @@ class ControlService:
         Conflating them would either invent a transaction or quietly keep a
         customer's payment.
         """
+        top_up = self._locked_top_up(session, top_up)
         if top_up.state is TopUpState.APPLIED:
             raise ControlError(
                 "top_up_already_applied",
                 "reversing granted allowance is a refund decision, not a failure",
             )
+        if top_up.state not in (TopUpState.REQUESTED, TopUpState.RESERVED):
+            raise ControlError(
+                "top_up_refund_required",
+                "paid or granted credit needs an explicit refund decision",
+            )
+        if top_up.state is TopUpState.RESERVED and reservation is None:
+            raise ControlError(
+                "top_up_reservation_required",
+                "release the held reservation before failing this top-up",
+            )
+        if reservation is not None:
+            self._validate_reservation(top_up, reservation)
         if reservation is not None and self.ledger is not None:
             try:
                 self.ledger.release(session, reservation)
@@ -651,6 +773,7 @@ class ControlService:
         Chunk 24 owns real enterprise budgets. This is the part chunk 17 needs
         to refuse a top-up that would exceed a recorded cap.
         """
+        self._lock(session, f"organization-budget:{organization_id}:{currency}")
         policy = session.exec(
             select(OrganizationSpendingPolicy).where(
                 OrganizationSpendingPolicy.organization_id == organization_id,
@@ -730,6 +853,10 @@ class ControlService:
             for threshold in self.notice_thresholds:
                 if percent < threshold:
                     continue
+                self._lock(
+                    session,
+                    f"allowance-notice:{entitlement.id}:{kind}:{threshold}",
+                )
                 existing = session.exec(
                     select(AllowanceNotice).where(
                         AllowanceNotice.entitlement_id == entitlement.id,
@@ -769,6 +896,8 @@ class ControlService:
         The suspension itself goes through chunk 15's four-state machine, so the
         line moves when the carrier confirms and not when we ask.
         """
+        self._line_for_entitlement(line, entitlement)
+        self._adapter_for_line(line, adapter)
         view = self.allowance(session, entitlement)
         if view.freshness is Freshness.UNKNOWN and not self.is_expired(
             session, entitlement
@@ -809,6 +938,8 @@ class ControlService:
         it. Saying so here gives an operator something to act on instead of a
         supplier rejection nobody can read.
         """
+        self._line_for_entitlement(line, entitlement)
+        self._adapter_for_line(line, adapter)
         if line.provider_status in ("data_limit_exceeded", "unauthorized_imei"):
             raise ControlError(
                 "carrier_imposed_restriction",
@@ -831,6 +962,133 @@ class ControlService:
             session, line, LineActionKind.RESUME
         )
         return self.connectivity.dispatch_action(session, action, line, adapter)
+
+    # --- ownership and transaction guards --------------------------------
+
+    def _validate_top_up_purchase(
+        self,
+        session: Session,
+        entitlement: Entitlement,
+        order_item: OrderItem,
+        quote: TopUpQuote,
+    ) -> None:
+        original_item = session.get(OrderItem, entitlement.order_item_id)
+        original_order = (
+            session.get(Order, original_item.order_id)
+            if original_item is not None
+            else None
+        )
+        top_up_order = session.get(Order, order_item.order_id)
+        same_customer = (
+            original_order is not None
+            and top_up_order is not None
+            and original_order.payer_user_id == top_up_order.payer_user_id
+            and original_order.payer_organization_id
+            == top_up_order.payer_organization_id
+            and original_order.seller_legal_entity_id
+            == top_up_order.seller_legal_entity_id
+            and order_item.recipient_user_id == entitlement.holder_user_id
+        )
+        if order_item.id == entitlement.order_item_id or not same_customer:
+            raise ControlError(
+                "top_up_order_mismatch",
+                "the top-up purchase does not belong to this entitlement's customer",
+            )
+        if (
+            order_item.unit_currency != quote.currency
+            or order_item.unit_amount != round_money(quote.amount, quote.currency)
+        ):
+            raise ControlError(
+                "top_up_quote_mismatch",
+                "the top-up quote must match the immutable order-item price",
+            )
+
+    def _validate_top_up_account(
+        self,
+        session: Session,
+        top_up: EntitlementTopUp,
+        account: LedgerAccount,
+    ) -> None:
+        item = session.get(OrderItem, top_up.order_item_id)
+        order = session.get(Order, item.order_id) if item is not None else None
+        if order is None:
+            raise ControlError("top_up_order_not_found")
+        owns_account = (
+            order.payer_user_id is not None
+            and account.owner_kind is OwnerKind.USER
+            and account.owner_user_id == order.payer_user_id
+        ) or (
+            order.payer_organization_id is not None
+            and account.owner_kind is OwnerKind.ORGANIZATION
+            and account.owner_organization_id == order.payer_organization_id
+        )
+        if (
+            account.kind is not AccountKind.SERVICE_CREDIT
+            or account.currency != top_up.currency
+            or not owns_account
+        ):
+            raise ControlError(
+                "top_up_payer_mismatch",
+                "the reservation account must be the order payer's service credit",
+            )
+
+    @staticmethod
+    def _validate_reservation(
+        top_up: EntitlementTopUp, reservation: Reservation
+    ) -> None:
+        if (
+            top_up.reservation_id != reservation.id
+            or reservation.business_event_id
+            != f"{top_up.business_event_id}:reserve"
+            or reservation.currency != top_up.currency
+            or reservation.amount != top_up.amount
+        ):
+            raise ControlError(
+                "top_up_reservation_mismatch",
+                "the reservation belongs to another purchase",
+            )
+
+    def _locked_top_up(
+        self, session: Session, top_up: EntitlementTopUp
+    ) -> EntitlementTopUp:
+        self._lock(session, f"top-up:{top_up.id}")
+        current = session.exec(
+            select(EntitlementTopUp)
+            .where(EntitlementTopUp.id == top_up.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        if current is None:
+            raise ControlError("top_up_not_found")
+        return current
+
+    @staticmethod
+    def _line_for_entitlement(
+        line: CarrierLine, entitlement: Entitlement
+    ) -> None:
+        if line.entitlement_id != entitlement.id:
+            raise ControlError(
+                "line_entitlement_mismatch",
+                "the carrier line belongs to another entitlement",
+            )
+
+    @staticmethod
+    def _adapter_for_line(
+        line: CarrierLine, adapter: ConnectivityAdapter
+    ) -> None:
+        if adapter.name != line.carrier:
+            raise ControlError(
+                "carrier_adapter_mismatch",
+                f"line belongs to {line.carrier}, not {adapter.name}",
+            )
+
+    @staticmethod
+    def _lock(session: Session, key: str) -> None:
+        if session.get_bind().dialect.name == "postgresql":
+            session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+                .bindparams(key=key)
+            )
 
 
 def _aware(moment: datetime) -> datetime:

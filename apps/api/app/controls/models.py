@@ -45,6 +45,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    DDL,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -54,7 +55,9 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Table,
     UniqueConstraint,
+    event,
     text,
 )
 from sqlalchemy import Enum as SAEnum
@@ -127,6 +130,9 @@ class EntitlementTopUp(SQLModel, table=True):
         UniqueConstraint(
             "business_event_id", name="uq_entitlement_top_ups_business_event"
         ),
+        UniqueConstraint(
+            "reservation_id", name="uq_entitlement_top_ups_reservation"
+        ),
         CheckConstraint(
             "data_bytes >= 0 AND voice_seconds >= 0",
             name="ck_entitlement_top_ups_not_negative",
@@ -141,6 +147,11 @@ class EntitlementTopUp(SQLModel, table=True):
             "(state = 'applied' AND applied_at IS NOT NULL) "
             "OR (state <> 'applied' AND applied_at IS NULL)",
             name="ck_entitlement_top_ups_applied_at",
+        ),
+        CheckConstraint(
+            "state NOT IN ('reserved', 'paid', 'provisioning', "
+            "'outcome_unknown', 'applied') OR reservation_id IS NOT NULL",
+            name="ck_entitlement_top_ups_paid_needs_reservation",
         ),
         Index("ix_entitlement_top_ups_entitlement", "entitlement_id", "state"),
     )
@@ -161,6 +172,13 @@ class EntitlementTopUp(SQLModel, table=True):
     )
     #: Names the event for the ledger, so a replayed settlement posts once.
     business_event_id: str = Field(sa_column=Column(String(200), nullable=False))
+    reservation_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            ForeignKey("ledger_reservations.id", ondelete="RESTRICT"),
+            nullable=True,
+        ),
+    )
     data_bytes: int = Field(
         sa_column=Column(BigInteger, nullable=False, server_default="0")
     )
@@ -249,14 +267,19 @@ class SpendingControl(SQLModel, table=True):
         # overstatement this table exists to prevent.
         CheckConstraint(
             "enforcement <> 'provider_hard_limit' "
-            "OR confirmed_limit_bytes IS NOT NULL",
+            "OR (confirmed_limit_bytes IS NOT NULL AND state = 'active')",
             name="ck_spending_controls_hard_limit_needs_confirmation",
         ),
         # And an approved bounded-exposure policy has to name the approval.
         CheckConstraint(
             "enforcement <> 'approved_bounded_exposure' "
-            "OR policy_reference IS NOT NULL",
+            "OR (policy_reference IS NOT NULL AND max_overshoot_bytes IS NOT NULL "
+            "AND state = 'active')",
             name="ck_spending_controls_policy_needs_reference",
+        ),
+        CheckConstraint(
+            "max_overshoot_bytes IS NULL OR max_overshoot_bytes >= 0",
+            name="ck_spending_controls_overshoot_not_negative",
         ),
         Index(
             "ix_spending_controls_open",
@@ -391,3 +414,63 @@ class AllowanceNotice(SQLModel, table=True):
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+
+
+_TOP_UP_HISTORY_TRIGGER = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE OR REPLACE FUNCTION protect_top_up_history()
+    RETURNS trigger AS $$
+    BEGIN
+        IF TG_OP = 'DELETE' THEN
+            RAISE EXCEPTION 'top-up history is immutable';
+        END IF;
+        IF (NEW.entitlement_id, NEW.order_item_id, NEW.business_event_id,
+            NEW.data_bytes, NEW.voice_seconds, NEW.extends_days, NEW.currency,
+            NEW.amount, NEW.requested_at)
+           IS DISTINCT FROM
+           (OLD.entitlement_id, OLD.order_item_id, OLD.business_event_id,
+            OLD.data_bytes, OLD.voice_seconds, OLD.extends_days, OLD.currency,
+            OLD.amount, OLD.requested_at) THEN
+            RAISE EXCEPTION 'top-up purchase facts are immutable';
+        END IF;
+        IF NEW.reservation_id IS DISTINCT FROM OLD.reservation_id
+           AND NOT (OLD.state = 'requested' AND NEW.state = 'reserved'
+                    AND OLD.reservation_id IS NULL
+                    AND NEW.reservation_id IS NOT NULL) THEN
+            RAISE EXCEPTION 'top-up reservation binding is immutable';
+        END IF;
+        IF NEW.applied_at IS DISTINCT FROM OLD.applied_at
+           AND NOT (NEW.state = 'applied' AND OLD.state <> 'applied'
+                    AND OLD.applied_at IS NULL
+                    AND NEW.applied_at IS NOT NULL) THEN
+            RAISE EXCEPTION 'top-up application time is immutable';
+        END IF;
+        IF NEW.state = OLD.state THEN
+            RETURN NEW;
+        END IF;
+        IF (OLD.state = 'requested' AND NEW.state IN ('reserved', 'failed'))
+           OR (OLD.state = 'reserved' AND NEW.state IN ('paid', 'failed'))
+           OR (OLD.state = 'paid' AND NEW.state IN ('provisioning', 'applied'))
+           OR (OLD.state = 'provisioning'
+               AND NEW.state IN ('paid', 'outcome_unknown', 'applied'))
+           OR (OLD.state = 'outcome_unknown'
+               AND NEW.state IN ('paid', 'applied')) THEN
+            RETURN NEW;
+        END IF;
+        RAISE EXCEPTION 'invalid top-up state transition: % -> %',
+            OLD.state, NEW.state;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER trg_entitlement_top_ups_history
+        BEFORE UPDATE OR DELETE ON entitlement_top_ups
+        FOR EACH ROW EXECUTE FUNCTION protect_top_up_history();
+    """
+)
+
+_TOP_UP_TABLE: Table = EntitlementTopUp.__table__  # type: ignore[attr-defined]
+event.listen(
+    _TOP_UP_TABLE,
+    "after_create",
+    _TOP_UP_HISTORY_TRIGGER.execute_if(dialect="postgresql"),
+)

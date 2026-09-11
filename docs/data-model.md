@@ -3080,6 +3080,13 @@ honestly recorded as absent. Three columns carry that distinction:
 duration of a change. A UI showing the requested figure while the change is in
 flight tells a customer their cap has moved when it has not.
 
+A synchronous supplier response is confirmation only when it reports the exact
+requested limit. A missing or different figure leaves the control failed: a
+smaller limit blocks allowance already sold, while a larger one silently raises
+the customer's possible exposure. A lost response remains `outcome_unknown`
+until a later observation reports that exact value; reconciliation never
+blindly resends the change.
+
 `ck_spending_controls_hard_limit_needs_confirmation` makes a control claiming
 supplier enforcement with no confirmed number impossible to store. That claim is
 exactly the overstatement AC-36.4 forbids, and it is the one somebody would make
@@ -3114,6 +3121,11 @@ applies to money and §6.52 applies to usage.
 
 `uq_entitlement_top_ups_order_item` is the idempotency guarantee in table form:
 one purchase, one top-up, however many times a worker replays the request.
+`reservation_id` binds that purchase to exactly one ledger reservation, and the
+database requires the binding before any reserved-or-later state. The purchase
+facts and reservation binding cannot be rewritten or deleted: a PostgreSQL
+trigger permits only the documented forward state transitions (including a
+return from provisioning/unknown to paid for an explicit retry or refund).
 
 Seven states, because a partial state is only recoverable if it has a name:
 `requested`, `reserved`, `paid`, `provisioning`, `outcome_unknown`, `applied`,
@@ -3130,6 +3142,12 @@ money for a cap that may well have been raised.
 Expiry extension is a separate column from allowance because the two are
 separately saleable and separately refusable: a supplier may let us add data to
 a profile it will not let us keep alive longer.
+
+Applying the grant also requires the line's adapter to advertise the separately
+verified `topup` capability. Raising a data cap is not evidence that the
+supplier can add allowance to an existing profile. Telnyx does not advertise
+that capability in the current fixture/documented configuration, so live reuse
+stays gated by D1 rather than being inferred from a successful PATCH.
 
 ### What a top-up never does
 

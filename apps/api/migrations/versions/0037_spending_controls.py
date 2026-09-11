@@ -91,6 +91,12 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("business_event_id", sa.String(200), nullable=False),
+        sa.Column(
+            "reservation_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ledger_reservations.id", ondelete="RESTRICT"),
+            nullable=True,
+        ),
         sa.Column("data_bytes", sa.BigInteger(), nullable=False, server_default="0"),
         sa.Column(
             "voice_seconds", sa.BigInteger(), nullable=False, server_default="0"
@@ -110,6 +116,9 @@ def upgrade() -> None:
         sa.UniqueConstraint("order_item_id", name="uq_entitlement_top_ups_order_item"),
         sa.UniqueConstraint(
             "business_event_id", name="uq_entitlement_top_ups_business_event"
+        ),
+        sa.UniqueConstraint(
+            "reservation_id", name="uq_entitlement_top_ups_reservation"
         ),
         sa.CheckConstraint(
             "currency ~ '^[A-Z]{3}$'", name="ck_entitlement_top_ups_currency_iso4217"
@@ -131,11 +140,70 @@ def upgrade() -> None:
             "OR (state <> 'applied' AND applied_at IS NULL)",
             name="ck_entitlement_top_ups_applied_at",
         ),
+        sa.CheckConstraint(
+            "state NOT IN ('reserved', 'paid', 'provisioning', "
+            "'outcome_unknown', 'applied') OR reservation_id IS NOT NULL",
+            name="ck_entitlement_top_ups_paid_needs_reservation",
+        ),
     )
     op.create_index(
         "ix_entitlement_top_ups_entitlement",
         "entitlement_top_ups",
         ["entitlement_id", "state"],
+    )
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION protect_top_up_history()
+        RETURNS trigger AS $$
+        BEGIN
+            IF TG_OP = 'DELETE' THEN
+                RAISE EXCEPTION 'top-up history is immutable';
+            END IF;
+            IF (NEW.entitlement_id, NEW.order_item_id, NEW.business_event_id,
+                NEW.data_bytes, NEW.voice_seconds, NEW.extends_days, NEW.currency,
+                NEW.amount, NEW.requested_at)
+               IS DISTINCT FROM
+               (OLD.entitlement_id, OLD.order_item_id, OLD.business_event_id,
+                OLD.data_bytes, OLD.voice_seconds, OLD.extends_days, OLD.currency,
+                OLD.amount, OLD.requested_at) THEN
+                RAISE EXCEPTION 'top-up purchase facts are immutable';
+            END IF;
+            IF NEW.reservation_id IS DISTINCT FROM OLD.reservation_id
+               AND NOT (OLD.state = 'requested' AND NEW.state = 'reserved'
+                        AND OLD.reservation_id IS NULL
+                        AND NEW.reservation_id IS NOT NULL) THEN
+                RAISE EXCEPTION 'top-up reservation binding is immutable';
+            END IF;
+            IF NEW.applied_at IS DISTINCT FROM OLD.applied_at
+               AND NOT (NEW.state = 'applied' AND OLD.state <> 'applied'
+                        AND OLD.applied_at IS NULL
+                        AND NEW.applied_at IS NOT NULL) THEN
+                RAISE EXCEPTION 'top-up application time is immutable';
+            END IF;
+            IF NEW.state = OLD.state THEN
+                RETURN NEW;
+            END IF;
+            IF (OLD.state = 'requested'
+                AND NEW.state IN ('reserved', 'failed'))
+               OR (OLD.state = 'reserved'
+                   AND NEW.state IN ('paid', 'failed'))
+               OR (OLD.state = 'paid'
+                   AND NEW.state IN ('provisioning', 'applied'))
+               OR (OLD.state = 'provisioning'
+                   AND NEW.state IN ('paid', 'outcome_unknown', 'applied'))
+               OR (OLD.state = 'outcome_unknown'
+                   AND NEW.state IN ('paid', 'applied')) THEN
+                RETURN NEW;
+            END IF;
+            RAISE EXCEPTION 'invalid top-up state transition: % -> %',
+                OLD.state, NEW.state;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE TRIGGER trg_entitlement_top_ups_history
+            BEFORE UPDATE OR DELETE ON entitlement_top_ups
+            FOR EACH ROW EXECUTE FUNCTION protect_top_up_history();
+        """
     )
 
     op.create_table(
@@ -182,13 +250,18 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "enforcement <> 'provider_hard_limit' "
-            "OR confirmed_limit_bytes IS NOT NULL",
+            "OR (confirmed_limit_bytes IS NOT NULL AND state = 'active')",
             name="ck_spending_controls_hard_limit_needs_confirmation",
         ),
         sa.CheckConstraint(
             "enforcement <> 'approved_bounded_exposure' "
-            "OR policy_reference IS NOT NULL",
+            "OR (policy_reference IS NOT NULL AND max_overshoot_bytes IS NOT NULL "
+            "AND state = 'active')",
             name="ck_spending_controls_policy_needs_reference",
+        ),
+        sa.CheckConstraint(
+            "max_overshoot_bytes IS NULL OR max_overshoot_bytes >= 0",
+            name="ck_spending_controls_overshoot_not_negative",
         ),
     )
     op.create_index(
@@ -258,5 +331,6 @@ def downgrade() -> None:
         "entitlement_top_ups",
     ):
         op.drop_table(table)
+    op.execute("DROP FUNCTION IF EXISTS protect_top_up_history()")
     for name, _ in _ENUMS:
         postgresql.ENUM(name=name, create_type=False).drop(bind, checkfirst=True)
