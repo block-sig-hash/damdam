@@ -1182,6 +1182,312 @@ paths:
                 $ref: '#/components/schemas/ServicesResponse'
       security:
       - HTTPBearer: []
+  /v1/catalog/markets:
+    get:
+      tags:
+      - Checkout
+      summary: List Markets
+      description: 'Unauthenticated: which markets are on sale.
+
+
+        Empty in any real deployment today. That is D2''s answer, not an outage.'
+      operationId: list_markets_v1_catalog_markets_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketListResponse'
+  /v1/catalog/products:
+    get:
+      tags:
+      - Checkout
+      summary: List Products
+      description: 'What can be bought here, and for anything that cannot, why not.
+
+
+        The device facts are **optional and tri-state**. Omitting `supports_esim`
+
+        means "not checked", which is not the same as "checked and incapable": the
+
+        first still lists eSIM plans with a reason to check the device, and the
+
+        second does not pretend the plan will work. The chunk forbids implying
+
+        guaranteed detection, and this is the shape that keeps the promise.'
+      operationId: list_products_v1_catalog_products_get
+      parameters:
+      - name: country
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 2
+          maxLength: 2
+          title: Country
+      - name: currency
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 3
+          title: Currency
+      - name: supports_esim
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Supports Esim
+      - name: is_unlocked
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Unlocked
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/quotes:
+    post:
+      tags:
+      - Checkout
+      summary: Create Quote
+      description: 'Price a basket on the server, from published versions only.
+
+
+        Authenticated, even though browsing is not: a quote is an immutable,
+
+        redeemable price with an expiry, and issuing them to anonymous callers is
+
+        issuing a claim on a price to nobody in particular.'
+      operationId: create_quote_v1_quotes_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/quotes/{quote_id}:
+    get:
+      tags:
+      - Checkout
+      summary: Read Quote
+      description: 'Re-read a quote for the review screen, and for the app after a
+        restart.
+
+
+        Deliberately **does not** re-run redemption''s checks. An expired quote is
+
+        returned with its status and its `expires_at`, so the review screen can say
+
+        "this price expired, here is a fresh one" instead of failing blank.'
+      operationId: read_quote_v1_quotes__quote_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: quote_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Quote Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/checkout/methods:
+    get:
+      tags:
+      - Checkout
+      summary: Payment Methods
+      description: 'What the customer may pay with here, with a reason for each refusal.
+
+
+        Wallet availability is four separate conditions, and the reason matters: a
+
+        checkout that says "Apple Pay unavailable" when the truth is "no processor
+
+        has been selected" sends whoever is debugging to the wrong place, and the
+
+        customer to a support conversation nobody can resolve.'
+      operationId: payment_methods_v1_checkout_methods_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: country
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 2
+          maxLength: 2
+          title: Country
+      - name: currency
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 3
+          title: Currency
+      - name: device_offers_apple_pay
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Device Offers Apple Pay
+      - name: device_offers_google_pay
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Device Offers Google Pay
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentMethodsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/checkout:
+    post:
+      tags:
+      - Checkout
+      summary: Place Checkout
+      description: 'Buy the basket this quote priced. Twice means once.
+
+
+        **201** when an order was created, **200** when an existing one was
+
+        returned. The distinction is the whole recovery story: a retry, a double
+
+        tap, and an app cold-started on the way back from the processor all get 200
+
+        and their own order.'
+      operationId: place_checkout_v1_checkout_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/me/orders:
+    get:
+      tags:
+      - Checkout
+      summary: List Orders
+      operationId: list_orders_v1_me_orders_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderListResponse'
+      security:
+      - HTTPBearer: []
+  /v1/me/orders/{order_id}:
+    get:
+      tags:
+      - Checkout
+      summary: Read Order
+      description: 'The recovery destination, and the app''s source of truth after
+        a restart.
+
+
+        Scoped to the payer. `order_not_found` for somebody else''s order rather than
+
+        a 403: the difference between "does not exist" and "is not yours" is an
+
+        oracle for whether a reference is real.'
+      operationId: read_order_v1_me_orders__order_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/auth/mfa/enroll:
     post:
       tags:
@@ -2806,6 +3112,39 @@ components:
       required:
       - file
       title: Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post
+    CallDestination:
+      properties:
+        country:
+          type: string
+          title: Country
+        destination_kind:
+          type: string
+          title: Destination Kind
+        per_minute_amount:
+          type: string
+          title: Per Minute Amount
+        setup_amount:
+          type: string
+          title: Setup Amount
+        increment_seconds:
+          type: integer
+          title: Increment Seconds
+      type: object
+      required:
+      - country
+      - destination_kind
+      - per_minute_amount
+      - setup_amount
+      - increment_seconds
+      title: CallDestination
+      description: 'One destination this plan''s tariff actually prices.
+
+
+        The chunk requires "supported call destinations" before payment. A
+
+        destination absent from the tariff is a destination the plan cannot price,
+
+        and therefore one it must not imply it covers.'
     CallHistoryResponse:
       properties:
         calls:
@@ -2855,6 +3194,59 @@ components:
       - pstn
       - app_to_app
       title: CallType
+    CheckoutOutcome:
+      type: string
+      enum:
+      - pay
+      - already_paid
+      - awaiting_processor
+      title: CheckoutOutcome
+      description: 'What the app should do next, decided by the server.
+
+
+        Not inferred client-side from a combination of fields: the whole point of
+
+        AC-37.5 is that a paid-but-pending order leads to status rather than to
+
+        another purchase, and that decision belongs where the money is.'
+    CheckoutRequest:
+      properties:
+        quote_id:
+          type: string
+          format: uuid
+          title: Quote Id
+        method:
+          $ref: '#/components/schemas/PaymentMethodKind'
+          default: card
+      type: object
+      required:
+      - quote_id
+      title: CheckoutRequest
+    CheckoutResponse:
+      properties:
+        outcome:
+          $ref: '#/components/schemas/CheckoutOutcome'
+        order:
+          $ref: '#/components/schemas/OrderResponse'
+        redirect_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Redirect Url
+        processor_reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Processor Reference
+        resumed:
+          type: boolean
+          title: Resumed
+      type: object
+      required:
+      - outcome
+      - order
+      - resumed
+      title: CheckoutResponse
     DependencyChecks:
       properties:
         postgres:
@@ -2952,6 +3344,26 @@ components:
           default: true
       type: object
       title: DeviceCompatibilityResponse
+    DeviceFactsRequest:
+      properties:
+        supports_esim:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Supports Esim
+        is_unlocked:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Is Unlocked
+      type: object
+      title: DeviceFactsRequest
+      description: "What the app could actually determine about the handset.\n\nBoth\
+        \ fields are optional and `None` means *not checked* \u2014 deliberately\n\
+        distinct from \"checked and incapable\". The chunk requires practical guidance\n\
+        \"where automatic device/carrier-lock detection is unavailable\" and forbids\n\
+        implying guaranteed detection, so the app reports what it observed and the\n\
+        server refuses to guess the rest."
     DeviceTokenResponse:
       properties:
         registered:
@@ -3832,6 +4244,34 @@ components:
       - invalid_rows
       - preview
       title: ManifestUploadResponse
+    MarketListResponse:
+      properties:
+        markets:
+          items:
+            $ref: '#/components/schemas/MarketSummary'
+          type: array
+          title: Markets
+      type: object
+      required:
+      - markets
+      title: MarketListResponse
+    MarketSummary:
+      properties:
+        country:
+          type: string
+          title: Country
+        currency:
+          type: string
+          title: Currency
+        seller_name:
+          type: string
+          title: Seller Name
+      type: object
+      required:
+      - country
+      - currency
+      - seller_name
+      title: MarketSummary
     MemberListResponse:
       properties:
         members:
@@ -3973,6 +4413,96 @@ components:
       - otp
       - platform
       title: OTPVerifyRequest
+    OrderItemResponse:
+      properties:
+        order_item_id:
+          type: string
+          format: uuid
+          title: Order Item Id
+        product_id:
+          type: string
+          format: uuid
+          title: Product Id
+        product_name:
+          type: string
+          title: Product Name
+        unit_currency:
+          type: string
+          title: Unit Currency
+        unit_amount:
+          type: string
+          title: Unit Amount
+        provisioning_state:
+          type: string
+          title: Provisioning State
+        recipient_user_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Recipient User Id
+      type: object
+      required:
+      - order_item_id
+      - product_id
+      - product_name
+      - unit_currency
+      - unit_amount
+      - provisioning_state
+      - recipient_user_id
+      title: OrderItemResponse
+    OrderListResponse:
+      properties:
+        orders:
+          items:
+            $ref: '#/components/schemas/OrderResponse'
+          type: array
+          title: Orders
+      type: object
+      required:
+      - orders
+      title: OrderListResponse
+    OrderResponse:
+      properties:
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        reference:
+          type: string
+          title: Reference
+        currency:
+          type: string
+          title: Currency
+        total_amount:
+          type: string
+          title: Total Amount
+        payment_state:
+          type: string
+          title: Payment State
+        placed_at:
+          type: string
+          format: date-time
+          title: Placed At
+        items:
+          items:
+            $ref: '#/components/schemas/OrderItemResponse'
+          type: array
+          title: Items
+        fulfilment_state:
+          type: string
+          title: Fulfilment State
+      type: object
+      required:
+      - order_id
+      - reference
+      - currency
+      - total_amount
+      - payment_state
+      - placed_at
+      - items
+      - fulfilment_state
+      title: OrderResponse
     OrganizationListResponse:
       properties:
         organizations:
@@ -4114,6 +4644,53 @@ components:
       required:
       - status
       title: PaymentConfirmationResponse
+    PaymentMethodKind:
+      type: string
+      enum:
+      - card
+      - bank_transfer
+      - ussd
+      - wallet
+      title: PaymentMethodKind
+    PaymentMethodsResponse:
+      properties:
+        methods:
+          items:
+            type: string
+          type: array
+          title: Methods
+        wallets:
+          items:
+            $ref: '#/components/schemas/WalletOption'
+          type: array
+          title: Wallets
+        card_fallback_required:
+          type: boolean
+          title: Card Fallback Required
+        collection_enabled:
+          type: boolean
+          title: Collection Enabled
+        collection_blocked_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Collection Blocked Reason
+      type: object
+      required:
+      - methods
+      - wallets
+      - card_fallback_required
+      - collection_enabled
+      - collection_blocked_reason
+      title: PaymentMethodsResponse
+      description: 'What the customer may actually pay with, and why not otherwise.
+
+
+        `card_fallback_required` is always true today and says so from the
+
+        configuration rather than from a constant: a checkout that offers only a
+
+        wallet on a device without one is a checkout nobody can complete.'
     Platform:
       type: string
       enum:
@@ -4214,6 +4791,125 @@ components:
       - percent_change
       - changed_at
       title: PricingTierUpdateResponse
+    ProductListResponse:
+      properties:
+        country:
+          type: string
+          title: Country
+        currency:
+          type: string
+          title: Currency
+        products:
+          items:
+            $ref: '#/components/schemas/ProductSummary'
+          type: array
+          title: Products
+      type: object
+      required:
+      - country
+      - currency
+      - products
+      title: ProductListResponse
+    ProductSummary:
+      properties:
+        product_id:
+          type: string
+          format: uuid
+          title: Product Id
+        sku:
+          type: string
+          title: Sku
+        name:
+          type: string
+          title: Name
+        kind:
+          type: string
+          title: Kind
+        currency:
+          type: string
+          title: Currency
+        amount:
+          type: string
+          title: Amount
+        data_bytes:
+          type: integer
+          title: Data Bytes
+        voice_seconds:
+          type: integer
+          title: Voice Seconds
+        validity_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Validity Days
+        requires_esim:
+          type: boolean
+          title: Requires Esim
+        requires_unlocked_device:
+          type: boolean
+          title: Requires Unlocked Device
+        device_notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Device Notes
+        number_type:
+          type: string
+          title: Number Type
+        number_country:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Number Country
+        number_assignment:
+          type: string
+          title: Number Assignment
+        coverage_countries:
+          items:
+            type: string
+          type: array
+          title: Coverage Countries
+        call_destinations:
+          items:
+            $ref: '#/components/schemas/CallDestination'
+          type: array
+          title: Call Destinations
+        tariff_version:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Tariff Version
+        purchasable:
+          type: boolean
+          title: Purchasable
+        unavailable_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unavailable Reason
+      type: object
+      required:
+      - product_id
+      - sku
+      - name
+      - kind
+      - currency
+      - amount
+      - data_bytes
+      - voice_seconds
+      - validity_days
+      - requires_esim
+      - requires_unlocked_device
+      - device_notes
+      - number_type
+      - number_country
+      - number_assignment
+      - coverage_countries
+      - call_destinations
+      - tariff_version
+      - purchasable
+      - unavailable_reason
+      title: ProductSummary
     PurchaseRequest:
       properties:
         pricing_tier_id:
@@ -4254,6 +4950,153 @@ components:
       - processor_reference
       - checkout_url
       title: PurchaseResponse
+    QuoteItemResponse:
+      properties:
+        product_id:
+          type: string
+          format: uuid
+          title: Product Id
+        product_name:
+          type: string
+          title: Product Name
+        quantity:
+          type: integer
+          title: Quantity
+        unit_amount:
+          type: string
+          title: Unit Amount
+        line_amount:
+          type: string
+          title: Line Amount
+        recipient_user_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Recipient User Id
+      type: object
+      required:
+      - product_id
+      - product_name
+      - quantity
+      - unit_amount
+      - line_amount
+      - recipient_user_id
+      title: QuoteItemResponse
+    QuoteLineRequest:
+      properties:
+        product_id:
+          type: string
+          format: uuid
+          title: Product Id
+        quantity:
+          type: integer
+          maximum: 50.0
+          minimum: 1.0
+          title: Quantity
+          default: 1
+        recipient_user_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Recipient User Id
+      type: object
+      required:
+      - product_id
+      title: QuoteLineRequest
+    QuoteRequest:
+      properties:
+        country:
+          type: string
+          maxLength: 2
+          minLength: 2
+          title: Country
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+          title: Currency
+        lines:
+          items:
+            $ref: '#/components/schemas/QuoteLineRequest'
+          type: array
+          maxItems: 50
+          minItems: 1
+          title: Lines
+        device:
+          $ref: '#/components/schemas/DeviceFactsRequest'
+          default: {}
+      type: object
+      required:
+      - country
+      - currency
+      - lines
+      title: QuoteRequest
+    QuoteResponse:
+      properties:
+        quote_id:
+          type: string
+          format: uuid
+          title: Quote Id
+        reference:
+          type: string
+          title: Reference
+        status:
+          type: string
+          title: Status
+        currency:
+          type: string
+          title: Currency
+        subtotal_amount:
+          type: string
+          title: Subtotal Amount
+        tax_amount:
+          type: string
+          title: Tax Amount
+        fee_amount:
+          type: string
+          title: Fee Amount
+        total_amount:
+          type: string
+          title: Total Amount
+        tax_configuration_reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tax Configuration Reference
+        seller_name:
+          type: string
+          title: Seller Name
+        issued_at:
+          type: string
+          format: date-time
+          title: Issued At
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+        items:
+          items:
+            $ref: '#/components/schemas/QuoteItemResponse'
+          type: array
+          title: Items
+      type: object
+      required:
+      - quote_id
+      - reference
+      - status
+      - currency
+      - subtotal_amount
+      - tax_amount
+      - fee_amount
+      - total_amount
+      - tax_configuration_reference
+      - seller_name
+      - issued_at
+      - expires_at
+      - items
+      title: QuoteResponse
     ReadinessResponse:
       properties:
         status:
@@ -4761,6 +5604,25 @@ components:
       - call_type
       - pstn_minutes_remaining
       title: VoiceEligibilityResponse
+    WalletOption:
+      properties:
+        wallet:
+          type: string
+          title: Wallet
+        available:
+          type: boolean
+          title: Available
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+      type: object
+      required:
+      - wallet
+      - available
+      - reason
+      title: WalletOption
     WebhookResponse:
       properties:
         processed:

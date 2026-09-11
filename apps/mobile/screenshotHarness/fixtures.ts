@@ -6,6 +6,14 @@
 import type { PricingTier } from '../src/api/pricingClient';
 import type { EsimProfile } from '../src/api/esimClient';
 import type { ActivationRedemption } from '../src/api/activationClient';
+import type {
+  MarketSummary,
+  OrderResponse,
+  PaymentMethodsResponse,
+  ProductSummary,
+  QuoteResponse,
+} from '../src/api/checkoutClient';
+import type { DeviceCheck } from '../src/screens/Purchase/deviceFacts';
 
 // 1x1 transparent PNG -- stands in for a real QR code image URL so
 // <Image> has something to decode without a network round-trip.
@@ -50,3 +58,152 @@ export const FIXTURE_ACTIVATION_REDEMPTION: ActivationRedemption = {
   status: 'active',
 };
 
+
+/**
+ * Chunk 19's purchase journey (US-37).
+ *
+ * The amounts are strings because the API sends strings — see
+ * `src/api/checkoutClient.ts`. A fixture that used numbers here would render a
+ * screen the real one cannot produce, and the whole point of a screenshot is
+ * that it is the real screen.
+ */
+export const FIXTURE_MARKET: MarketSummary = {
+  country: 'NG',
+  currency: 'NGN',
+  seller_name: 'DamDam Ltd',
+};
+
+export const FIXTURE_PRODUCT: ProductSummary = {
+  product_id: 'harness-product-bundle',
+  sku: 'NG-BUNDLE-5GB',
+  name: 'Nigeria 5GB + calls',
+  kind: 'bundle',
+  currency: 'NGN',
+  amount: '12000.00',
+  data_bytes: 5 * 1024 * 1024 * 1024,
+  voice_seconds: 3600,
+  validity_days: 30,
+  requires_esim: true,
+  requires_unlocked_device: true,
+  device_notes: null,
+  number_type: 'mobile',
+  number_country: 'NG',
+  number_assignment: 'new_assigned',
+  coverage_countries: ['NG', 'GH'],
+  call_destinations: [
+    {
+      country: 'NG',
+      destination_kind: 'mobile',
+      per_minute_amount: '15.5000',
+      setup_amount: '0.00',
+      increment_seconds: 60,
+    },
+  ],
+  tariff_version: 1,
+  purchasable: true,
+  unavailable_reason: null,
+};
+
+/** The same plan on a handset the eSIM check could not confirm. */
+export const FIXTURE_PRODUCT_DEVICE_BLOCKED: ProductSummary = {
+  ...FIXTURE_PRODUCT,
+  purchasable: false,
+  unavailable_reason: 'device_not_esim_capable',
+};
+
+export const FIXTURE_DEVICE_CHECKED: DeviceCheck = {
+  facts: { supports_esim: true, is_unlocked: null },
+  source: 'device',
+  model: 'Pixel 8',
+  reportedIncapable: false,
+};
+
+export const FIXTURE_DEVICE_INCAPABLE: DeviceCheck = {
+  facts: { supports_esim: false, is_unlocked: null },
+  source: 'device',
+  model: 'iPhone 8',
+  reportedIncapable: true,
+};
+
+export const FIXTURE_QUOTE: QuoteResponse = {
+  quote_id: 'harness-quote',
+  reference: 'QT-HARNESS',
+  status: 'issued',
+  currency: 'NGN',
+  subtotal_amount: '12000.00',
+  tax_amount: '0.00',
+  fee_amount: '0.00',
+  total_amount: '12000.00',
+  // Null, not "0.00": D3 has not recorded an entity or a tax treatment, and the
+  // review screen says so in words rather than showing zero tax.
+  tax_configuration_reference: null,
+  seller_name: 'DamDam Ltd',
+  issued_at: '2026-09-11T10:00:00Z',
+  expires_at: '2026-09-11T10:15:00Z',
+  items: [
+    {
+      product_id: FIXTURE_PRODUCT.product_id,
+      product_name: FIXTURE_PRODUCT.name,
+      quantity: 1,
+      unit_amount: '12000.00',
+      line_amount: '12000.00',
+      recipient_user_id: null,
+    },
+  ],
+};
+
+export const FIXTURE_PAYMENT_METHODS: PaymentMethodsResponse = {
+  methods: ['card', 'bank_transfer'],
+  wallets: [
+    { wallet: 'apple_pay', available: false, reason: 'no_processor_selected' },
+    { wallet: 'google_pay', available: false, reason: 'no_processor_selected' },
+  ],
+  card_fallback_required: true,
+  collection_enabled: true,
+  collection_blocked_reason: null,
+};
+
+/** The state every real deployment is in today: D3/D4 open, no live account. */
+export const FIXTURE_PAYMENT_METHODS_BLOCKED: PaymentMethodsResponse = {
+  ...FIXTURE_PAYMENT_METHODS,
+  collection_enabled: false,
+  collection_blocked_reason:
+    'no live merchant account for this seller and currency (DECISIONS.md D3/D4)',
+};
+
+export const FIXTURE_ORDER: OrderResponse = {
+  order_id: 'harness-order',
+  reference: 'OR-HARNESS1',
+  currency: 'NGN',
+  total_amount: '12000.00',
+  payment_state: 'paid',
+  placed_at: '2026-09-11T10:05:00Z',
+  items: [
+    {
+      order_item_id: 'harness-order-item',
+      product_id: FIXTURE_PRODUCT.product_id,
+      product_name: FIXTURE_PRODUCT.name,
+      unit_currency: 'NGN',
+      unit_amount: '12000.00',
+      provisioning_state: 'requested',
+      recipient_user_id: null,
+    },
+  ],
+  fulfilment_state: 'requested',
+};
+
+export const FIXTURE_ORDER_DECLINED: OrderResponse = {
+  ...FIXTURE_ORDER,
+  payment_state: 'failed',
+  items: FIXTURE_ORDER.items.map(item => ({
+    ...item,
+    provisioning_state: 'not_started',
+  })),
+  fulfilment_state: 'not_started',
+};
+
+/** Paid at the processor; the webhook has not landed. */
+export const FIXTURE_ORDER_AWAITING_WEBHOOK: OrderResponse = {
+  ...FIXTURE_ORDER_DECLINED,
+  payment_state: 'unpaid',
+};

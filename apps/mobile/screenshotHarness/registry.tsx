@@ -19,11 +19,25 @@ import { ActivationSuccessScreen } from '../src/screens/ActivationSuccess/Activa
 import { ConsumerHomeScreen } from '../src/screens/ConsumerHome/ConsumerHomeScreen';
 import { SignInScreen } from '../src/screens/SignIn/SignInScreen';
 import { GALLERY_SECTIONS, GalleryScreen } from '../src/screens/Gallery/GalleryScreen';
+import { PlanListScreen } from '../src/screens/Purchase/PlanListScreen';
+import { QuoteReviewScreen } from '../src/screens/Purchase/QuoteReviewScreen';
+import { OrderStatusScreen } from '../src/screens/Purchase/OrderStatusScreen';
 import { savePinLocally } from '../src/utils/pinLocalStore';
 import {
   FIXTURE_ACCESS_TOKEN,
+  FIXTURE_DEVICE_CHECKED,
+  FIXTURE_DEVICE_INCAPABLE,
+  FIXTURE_MARKET,
+  FIXTURE_ORDER,
+  FIXTURE_ORDER_AWAITING_WEBHOOK,
+  FIXTURE_ORDER_DECLINED,
   FIXTURE_PACKAGE_ID,
+  FIXTURE_PAYMENT_METHODS,
+  FIXTURE_PAYMENT_METHODS_BLOCKED,
   FIXTURE_PHONE_NUMBER,
+  FIXTURE_PRODUCT,
+  FIXTURE_PRODUCT_DEVICE_BLOCKED,
+  FIXTURE_QUOTE,
 } from './fixtures';
 
 const noop = () => undefined;
@@ -186,5 +200,148 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
   'consumer-home-error': {
     label: 'Consumer Home — load error',
     render: () => <ConsumerHomeErrorTarget />,
+  },
+
+  /*
+   * Chunk 19 (US-37). The three screens take their data as props and make no
+   * calls of their own, so each target is the production component rendered
+   * against a fixture — not a copy of it. The error states are registered
+   * alongside the happy path deliberately: the chunk asks for checkout *and*
+   * error-state evidence, and a payment screen is mostly its failures.
+   */
+  plans: {
+    label: 'Plans — browse',
+    render: () => (
+      <PlanListScreen
+        markets={[FIXTURE_MARKET]}
+        market={FIXTURE_MARKET}
+        products={[FIXTURE_PRODUCT]}
+        device={FIXTURE_DEVICE_CHECKED}
+        loading={false}
+        errorMessage={null}
+        busyProductId={null}
+        onSelectMarket={noop}
+        onChoose={noop}
+        onConfirmEsimCapable={noop}
+        onRetry={noop}
+      />
+    ),
+  },
+  'plans-device-unsupported': {
+    label: 'Plans — device eSIM check failed',
+    render: () => (
+      <PlanListScreen
+        markets={[FIXTURE_MARKET]}
+        market={FIXTURE_MARKET}
+        products={[FIXTURE_PRODUCT_DEVICE_BLOCKED]}
+        device={FIXTURE_DEVICE_INCAPABLE}
+        loading={false}
+        errorMessage={null}
+        busyProductId={null}
+        onSelectMarket={noop}
+        onChoose={noop}
+        onConfirmEsimCapable={noop}
+        onRetry={noop}
+      />
+    ),
+  },
+  'checkout-review': {
+    label: 'Checkout — quote review',
+    render: () => (
+      <QuoteReviewScreen
+        quote={FIXTURE_QUOTE}
+        methods={FIXTURE_PAYMENT_METHODS}
+        paying={false}
+        errorMessage={null}
+        quoteRejected={false}
+        onPay={noop}
+        onRequote={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  'checkout-collection-blocked': {
+    label: 'Checkout — no live merchant account (D3/D4)',
+    render: () => (
+      <QuoteReviewScreen
+        quote={FIXTURE_QUOTE}
+        methods={FIXTURE_PAYMENT_METHODS_BLOCKED}
+        paying={false}
+        errorMessage={null}
+        quoteRejected={false}
+        onPay={noop}
+        onRequote={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  'checkout-quote-expired': {
+    label: 'Checkout — expired price',
+    render: () => (
+      <QuoteReviewScreen
+        quote={FIXTURE_QUOTE}
+        methods={FIXTURE_PAYMENT_METHODS}
+        paying={false}
+        errorMessage={null}
+        quoteRejected
+        onPay={noop}
+        onRequote={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  'order-provisioning': {
+    label: 'Order — paid, still being set up',
+    render: () => (
+      <OrderStatusScreen
+        order={FIXTURE_ORDER}
+        reference={FIXTURE_ORDER.reference}
+        paymentStarted
+        loading={false}
+        busy={false}
+        errorMessage={null}
+        onRefresh={noop}
+        onResumePayment={noop}
+        onOpenMyLine={noop}
+        onBrowsePlans={noop}
+        onDismiss={noop}
+      />
+    ),
+  },
+  'order-confirming-payment': {
+    label: 'Order — confirming payment (webhook late)',
+    render: () => (
+      <OrderStatusScreen
+        order={FIXTURE_ORDER_AWAITING_WEBHOOK}
+        reference={FIXTURE_ORDER_AWAITING_WEBHOOK.reference}
+        paymentStarted
+        loading={false}
+        busy={false}
+        errorMessage={null}
+        onRefresh={noop}
+        onResumePayment={noop}
+        onOpenMyLine={noop}
+        onBrowsePlans={noop}
+        onDismiss={noop}
+      />
+    ),
+  },
+  'order-payment-declined': {
+    label: 'Order — payment declined',
+    render: () => (
+      <OrderStatusScreen
+        order={FIXTURE_ORDER_DECLINED}
+        reference={FIXTURE_ORDER_DECLINED.reference}
+        paymentStarted
+        loading={false}
+        busy={false}
+        errorMessage={null}
+        onRefresh={noop}
+        onResumePayment={noop}
+        onOpenMyLine={noop}
+        onBrowsePlans={noop}
+        onDismiss={noop}
+      />
+    ),
   },
 };

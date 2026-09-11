@@ -70,6 +70,24 @@
         "ios",
         "android"
       ]
+    },
+    "consumerPurchase": {
+      "owner": "chunk 19",
+      "screens": [
+        "plans",
+        "plans-device-unsupported",
+        "checkout",
+        "checkout-collection-blocked",
+        "checkout-quote-expired",
+        "order-provisioning",
+        "order-confirming-payment",
+        "order-payment-declined"
+      ],
+      "why": "The purchase journey and, deliberately, its failures. A payment screen is mostly its error states, and the ones captured here are the states every deployment is actually in today: no live merchant account (D3/D4 open), an expired price, a declined payment, and a payment the processor has taken but not yet confirmed. Capturing only the happy path would evidence the one screen a customer is least likely to be stuck on.",
+      "platforms": [
+        "ios",
+        "android"
+      ]
     }
   },
   "pending": {
@@ -77,14 +95,13 @@
     "consumer": {
       "owner": "chunks 18-21",
       "screens": [
-        "plans",
-        "plan-detail",
-        "checkout",
+        "home",
         "my-line",
         "my-line-installation",
         "account",
         "receipts"
-      ]
+      ],
+      "why": "Chunk 19 moved `plans` and `checkout` to `implemented`. `plan-detail` is removed rather than left owed: the reset has no separate detail screen — price, contents, number policy and priced call destinations are all on the plan card, so the customer sees them before choosing rather than after a tap. Chunk 18 built Home but captured no screenshots, so `home` stays owed."
     },
     "enterprise": {
       "owner": "chunks 22-24",
