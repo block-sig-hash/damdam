@@ -62,11 +62,11 @@ concrete test types, not inventing new requirements.
 | Mobile (React Native) | Jest + React Native Testing Library | 70% on business logic (hooks, state management, offline queue); UI component snapshot tests opportunistic, not mandated | The offline queue (`prd.md` §5.6) specifically needs deterministic unit tests independent of any device |
 | Dashboard (Next.js) | Jest + React Testing Library | 70% on data-fetching/state logic; UI components opportunistic | Role-based route guards (`security.md` §10.5) have explicit tests proving cross-tenant isolation |
 | API contract | Schemathesis or equivalent property-based API testing against the OpenAPI spec | All endpoints | Catches cases where the implementation technically passes unit tests but doesn't match what `api-spec.md` promises — this is the automated version of the drift check already in `infrastructure.md` §11.4 |
-| Mobile visual/design-system compliance | Manual + Claude review via `claude-review.yml` (see note below) | Every `apps/mobile` screen PR, excluding the Claude-implemented exception screens | **Not a code-coverage metric** — a screen can pass 100% of its unit tests and still not match `design-system.md`. This layer specifically requires a rendered screenshot, not code inspection; see the dependency note below |
+| Mobile visual/design-system compliance | Independent Codex review of rendered CI screenshots | Every `apps/mobile` screen PR | **Not a code-coverage metric** — a screen can pass 100% of its unit tests and still not match `design-system.md`. This layer specifically requires a rendered screenshot, not code inspection; see the dependency note below |
 
-**Dependency note on the visual-compliance row:** `claude-review.yml`
-is written to check a PR's rendered screenshot against
-`design-system.md`. That prerequisite is now built — see
+**Dependency note on the visual-compliance row:** CI produces rendered
+screenshots for comparison with `design-system.md`. That prerequisite is now
+built — see
 "Amendment — Screenshot-Generation CI" at the end of this document
 for what's actually covered and what's still out of scope. Until
 that amendment's coverage gaps close (most of the screen inventory
@@ -330,7 +330,7 @@ there):
 | Milestone | Timing | What must be tested |
 |---|---|---|
 | `design-system.md` produced (dedicated design session) | Start of Phase 1, before any mobile screen work | See `design-system.md`'s own status note — this blocks Codex starting on `apps/mobile` screens per `AGENTS.md` |
-| Screenshot-generation CI step built (Detox/Maestro or Expo preview) | Start of Phase 1, alongside the design session, before the first mobile screen PR merges | Without this, §14.2's visual-compliance coverage row is unsatisfied regardless of what `claude-review.yml`'s prompt asks for — see that row's dependency note |
+| Screenshot-generation CI step built (Detox/Maestro or Expo preview) | Start of Phase 1, alongside the design session, before the first mobile screen PR merges | Without this, §14.2's visual-compliance coverage row is unsatisfied regardless of the review instructions — see that row's dependency note |
 | Core auth + purchase flow test-complete | End of Phase 1 (per the original build sequencing) | US-01 through US-09 fully covered per §14.2's targets |
 | Check-in/SOS offline-chaos suite passing | End of Phase 3 | All scenarios in §14.4.1 passing on at least one real device per platform |
 | Device matrix testing complete | Before Phase 4 (HTO pilot onboarding) | Full device list in §14.3 covered |
@@ -491,8 +491,8 @@ cancel confirmation and `DeviceCompatibilityWarningModal`, never a
 native `Alert`). Dial Pad's `cli_not_verified` banner and its "Verify
 now" action are covered in `DialPadScreen.test.tsx`. All four screens
 are registered in `screenshotHarness/registry.tsx` *and* have a
-corresponding `maestro/screens/cli-*.yaml` flow, so `claude-review.yml`'s
-rendered-screenshot check actually captures them (a registry entry
+corresponding `maestro/screens/cli-*.yaml` flow, so CI's rendered-screenshot
+artifact actually captures them (a registry entry
 alone isn't enough for CI to reach the screen); the Manage screen
 (22d) makes a real `getCliStatus` request the harness doesn't mock,
 so its flow asserts on the localized title test ID and captures the
@@ -520,10 +520,8 @@ percentage formula to both resources:
 
 ## 14.11 Amendment — Screenshot-Generation CI
 
-Closes the gap flagged in §14.2's visual-compliance row and in
-`claude-review.yml`'s own header comment: Claude's mobile review
-workflow could only read code/diffs, never see an actual rendered
-screen. `apps/mobile/screenshotHarness/` and
+Closes the gap flagged in §14.2's visual-compliance row: code and diffs alone
+do not show the actual rendered screen. `apps/mobile/screenshotHarness/` and
 `.github/workflows/ci.yml`'s `screenshot-mobile-android` /
 `screenshot-mobile-ios` jobs now generate real device/simulator
 screenshots — see `apps/mobile/screenshotHarness/README.md` for the
@@ -800,14 +798,13 @@ files, review records, the story map and the specs; a broken link there drops an
 assignment or an acceptance criterion silently. The checker covers relative file
 links only — anchors and external URLs are out of its scope.
 
-### 14.14.5 Automated Claude review is supplemental
+### 14.14.5 Independent review is the model-review gate
 
-`.github/workflows/claude-review.yml` is an advisory first-pass filter, not
-chunk acceptance. Since the working split changed (`AGENTS.md`), Claude is the
-implementer, so that workflow reviewing a Claude-authored PR is Claude reviewing
-its own work. Acceptance requires the independent Codex review recorded in
-`docs/implementation/reviews/NN.md`. The workflow's prompt now says so in its
-posted comment and is forbidden from declaring a PR accepted or ready to merge.
+The quota-sensitive automated Claude workflow was removed on 11 September
+2026. Claude is the implementer in the working split, so an unattended Claude
+review duplicated authorship and could fail solely because an account reached
+its usage limit. Acceptance requires the independent Codex review recorded in
+`docs/implementation/reviews/NN.md`, together with the deterministic CI jobs.
 
 ### 14.14.6 Reproducible local toolchain, and what cannot be reproduced locally
 

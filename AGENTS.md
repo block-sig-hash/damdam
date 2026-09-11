@@ -200,9 +200,9 @@ sessions deliberately:
 - If a chunk needs multiple independent migrations or features, propose lettered
   subchunks rather than delivering an unreviewable diff.
 
-The output-token compression note for `.github/workflows/claude-review.yml`
-is retained there. Chunk 02 makes that workflow supplemental: its automated
-findings inform review, but only independent Codex review records acceptance.
+There is no automated model-review gate. It was quota-sensitive and duplicated
+the independent Codex review without adding deterministic evidence. Only the
+review record in `docs/implementation/reviews/NN.md` records acceptance.
 
 ## What NOT to do
 
