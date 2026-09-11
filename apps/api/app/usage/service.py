@@ -50,9 +50,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
+from hashlib import sha256
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlmodel import Session, col, select
 
 from app.auth.models import utc_now
@@ -66,7 +67,7 @@ from app.catalog.tariffs import (
 )
 from app.connectivity.contract import AdapterChannel
 from app.connectivity.models import CarrierLine, Entitlement
-from app.ledger.models import Direction, LedgerAccount
+from app.ledger.models import AccountKind, Direction, LedgerAccount, OwnerKind
 from app.ledger.service import LedgerService, Posting
 from app.money import round_money
 from app.orders.models import Order, OrderItem
@@ -207,6 +208,10 @@ class UsageService:
         scope_reference: str = "",
     ) -> UsageCursor:
         """Get or create the durable watermark for one stream."""
+        self._lock(
+            session,
+            f"usage-cursor:{provider}:{stream}:{scope_reference}",
+        )
         existing = session.exec(
             select(UsageCursor).where(
                 UsageCursor.provider == provider,
@@ -243,6 +248,7 @@ class UsageService:
         over an uncovered gap makes that false permanently, because nothing ever
         looks behind a watermark again.
         """
+        cursor = self._locked_cursor(session, cursor)
         now = self.clock()
         cursor.last_polled_at = now
         cursor.last_success_at = now
@@ -279,6 +285,7 @@ class UsageService:
         an exception item, because a stalled usage poller is invisible from the
         outside — the balance simply stops moving.
         """
+        cursor = self._locked_cursor(session, cursor)
         now = self.clock()
         cursor.last_polled_at = now
         cursor.consecutive_failures += 1
@@ -303,6 +310,7 @@ class UsageService:
         window_from: datetime,
         window_to: datetime,
     ) -> UsageCursor:
+        cursor = self._locked_cursor(session, cursor)
         if _aware(window_to) <= _aware(window_from):
             raise UsageError("empty_backfill_window")
         cursor.state = CursorState.BACKFILLING
@@ -318,6 +326,7 @@ class UsageService:
         The watermark moves to the end of the backfilled window rather than to
         "now": time after the window still has not been covered by anything.
         """
+        cursor = self._locked_cursor(session, cursor)
         if cursor.state is not CursorState.BACKFILLING:
             raise UsageError("cursor_not_backfilling")
         window_to = cursor.backfill_to
@@ -338,6 +347,7 @@ class UsageService:
         The tempting alternative — start polling from now — makes the system
         look healthy immediately and silently loses every byte in the gap.
         """
+        cursor = self._locked_cursor(session, cursor)
         moment = now or self.clock()
         if cursor.state is CursorState.BACKFILLING:
             return cursor
@@ -358,6 +368,12 @@ class UsageService:
         adds nothing — a poll that finds the counter unchanged is a normal, very
         common event and must not write a zero-quantity record every minute.
         """
+        if snapshot.provider_reference != line.carrier_line_reference:
+            raise UsageError(
+                "provider_line_mismatch",
+                "the counter snapshot belongs to a different carrier line",
+            )
+        self._lock(session, f"usage-counter:{line.carrier}:{line.id}")
         entitlement = self._entitlement(session, line)
         existing_reading = session.exec(
             select(CounterReading).where(
@@ -366,14 +382,19 @@ class UsageService:
             )
         ).first()
         if existing_reading is not None:
+            if (
+                existing_reading.value_bytes != snapshot.consumed_bytes
+                or existing_reading.cycle_reference != snapshot.cycle_reference
+            ):
+                raise UsageError(
+                    "counter_reading_conflict",
+                    "the provider restated an existing observation timestamp",
+                )
             return None
 
-        previous = session.exec(
+        latest = session.exec(
             select(CounterReading)
-            .where(
-                CounterReading.carrier_line_id == line.id,
-                col(CounterReading.observed_at) < snapshot.observed_at,
-            )
+            .where(CounterReading.carrier_line_id == line.id)
             .order_by(col(CounterReading.observed_at).desc())
         ).first()
 
@@ -387,6 +408,16 @@ class UsageService:
         session.add(reading)
         session.flush()
 
+        # Retain late evidence, but never derive a new delta from a point that
+        # predates the watermark already counted. Doing so would count part of
+        # the same cumulative total twice.
+        if latest is not None and _aware(snapshot.observed_at) < _aware(
+            latest.observed_at
+        ):
+            return None
+
+        previous = latest
+
         window_from = _aware(
             previous.observed_at if previous is not None else line.created_at
         )
@@ -395,6 +426,17 @@ class UsageService:
 
         if previous is None:
             delta = snapshot.consumed_bytes
+        elif (
+            snapshot.cycle_reference is not None
+            and previous.cycle_reference is not None
+            and snapshot.cycle_reference != previous.cycle_reference
+        ):
+            delta = snapshot.consumed_bytes
+            source = UsageSource.DERIVED
+            note = (
+                f"billing cycle changed: {previous.cycle_reference} -> "
+                f"{snapshot.cycle_reference}; the new counter is counted in full"
+            )
         elif snapshot.consumed_bytes >= previous.value_bytes:
             delta = snapshot.consumed_bytes - previous.value_bytes
         else:
@@ -461,8 +503,14 @@ class UsageService:
         about whether a record is welcome — rejecting a late CDR is how usage
         goes missing.
         """
+        if event.provider_reference != line.carrier_line_reference:
+            raise UsageError(
+                "provider_line_mismatch",
+                "the usage event belongs to a different carrier line",
+            )
         entitlement = self._entitlement(session, line)
         natural_key = self.natural_key(event)
+        self._lock(session, f"usage-event:{line.carrier}:{natural_key}")
         existing = session.exec(
             select(UsageRecord).where(
                 UsageRecord.provider == line.carrier,
@@ -517,7 +565,11 @@ class UsageService:
         is recorded here rather than discovered later.
         """
         if event.provider_event_id:
-            return f"event:{event.provider_event_id}"
+            scope = (
+                f"{event.provider_reference}:{event.kind.value}:"
+                f"{event.provider_event_id}"
+            )
+            return f"event:{sha256(scope.encode()).hexdigest()}"
         return (
             f"derived:{event.provider_reference}:{event.kind.value}:"
             f"{event.started_at.isoformat()}:{event.ended_at.isoformat()}:"
@@ -579,6 +631,15 @@ class UsageService:
         converges on the corrected figure without ever having double-counted —
         which is what the assignment means by "converges without double debit".
         """
+        self._lock(session, f"usage-correction:{original.id}")
+        current = session.exec(
+            select(UsageRecord)
+            .where(UsageRecord.id == original.id)
+            .with_for_update()
+        ).first()
+        if current is None:
+            raise UsageError("usage_record_not_found")
+        original = current
         if original.state is UsageState.SUPERSEDED:
             raise UsageError(
                 "already_superseded",
@@ -586,6 +647,19 @@ class UsageService:
             )
         if corrected_quantity < 0:
             raise UsageError("negative_correction")
+        reason = reason.strip()
+        if not reason:
+            raise UsageError("correction_reason_required")
+        if original.charged_amount is not None and corrected_amount is None:
+            raise UsageError(
+                "correction_charge_required",
+                "a charged record must be corrected with its revised charge",
+            )
+        if original.charged_amount is None and corrected_amount is not None:
+            raise UsageError(
+                "correction_charge_unexpected",
+                "an uncharged record cannot acquire a charge through correction",
+            )
 
         now = self.clock()
         original.state = UsageState.SUPERSEDED
@@ -641,6 +715,46 @@ class UsageService:
                 "evidence_is_not_charged",
                 "this record came from the line's non-authoritative source; "
                 "charging it would bill the same usage twice",
+            )
+        if (
+            debit_account.currency != record.charged_currency
+            or credit_account.currency != record.charged_currency
+        ):
+            raise UsageError(
+                "charge_currency_mismatch",
+                "the usage charge and both ledger accounts must share a currency",
+            )
+        if (
+            debit_account.kind is not AccountKind.SERVICE_CREDIT
+            or credit_account.kind is not AccountKind.REVENUE
+            or credit_account.owner_kind is not OwnerKind.SYSTEM
+        ):
+            raise UsageError(
+                "charge_account_mismatch",
+                "usage charges move from service credit to revenue",
+            )
+        entitlement = session.get(Entitlement, record.entitlement_id)
+        item = (
+            session.get(OrderItem, entitlement.order_item_id)
+            if entitlement is not None
+            else None
+        )
+        order = session.get(Order, item.order_id) if item is not None else None
+        if order is None:
+            raise UsageError("charge_payer_not_found")
+        owns_debit = (
+            order.payer_user_id is not None
+            and debit_account.owner_kind is OwnerKind.USER
+            and debit_account.owner_user_id == order.payer_user_id
+        ) or (
+            order.payer_organization_id is not None
+            and debit_account.owner_kind is OwnerKind.ORGANIZATION
+            and debit_account.owner_organization_id == order.payer_organization_id
+        )
+        if not owns_debit:
+            raise UsageError(
+                "charge_payer_mismatch",
+                "the service-credit account must belong to the order payer",
             )
 
         amount = record.charged_amount
@@ -827,6 +941,8 @@ class UsageService:
         team watching two lists watches neither, and chunk 25 builds its screens
         on this table.
         """
+        subject_reference = subject_reference[:200]
+        self._lock(session, f"exception:{kind.value}:{subject_reference}")
         existing = session.exec(
             select(ExceptionItem).where(
                 ExceptionItem.kind == kind,
@@ -837,7 +953,7 @@ class UsageService:
             return existing
         item = ExceptionItem(
             kind=kind,
-            subject_reference=subject_reference[:200],
+            subject_reference=subject_reference,
             detail=detail[:1000],
             raised_at=self.clock(),
         )
@@ -850,6 +966,34 @@ class UsageService:
         if entitlement is None:  # pragma: no cover - FK guarantees this
             raise UsageError("entitlement_not_found")
         return entitlement
+
+    def _locked_cursor(
+        self, session: Session, cursor: UsageCursor
+    ) -> UsageCursor:
+        self._lock(session, f"usage-cursor-id:{cursor.id}")
+        current = session.exec(
+            select(UsageCursor)
+            .where(UsageCursor.id == cursor.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        if current is None:
+            raise UsageError("usage_cursor_not_found")
+        return current
+
+    @staticmethod
+    def _lock(session: Session, key: str) -> None:
+        """Serialize one logical ingest operation for the transaction.
+
+        The unique constraints remain the final guard. The advisory lock makes
+        concurrent redeliveries converge on the existing row instead of making
+        one worker fail after both observed the key as absent.
+        """
+        if session.get_bind().dialect.name == "postgresql":
+            session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))")
+                .bindparams(key=key)
+            )
 
     def _store(
         self,
@@ -912,9 +1056,13 @@ class UsageService:
         authoritative = line.authoritative_data_source
         if authoritative is None:
             return state
-        if source is UsageSource.DERIVED:
-            return state
-        if source.value != authoritative:
+        # A derived record produced here is a counter reset/cycle boundary. It
+        # still has counter provenance for authoritative-source purposes; only
+        # corrections are source-independent, and they bypass `_store`.
+        provenance = (
+            UsageSource.COUNTER if source is UsageSource.DERIVED else source
+        )
+        if provenance.value != authoritative:
             return UsageState.EVIDENCE
         return state
 

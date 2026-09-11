@@ -2931,8 +2931,14 @@ that restarts at zero either re-ingests a month of usage or skips it.
 
 ### Deduplication, and an honest note about its limits
 
-`uq_usage_records_natural_key` is what makes a redelivered page harmless. The
-key is the supplier's own record id when there is one.
+`uq_usage_records_natural_key` is the final guard that makes a redelivered page
+harmless. Ingestion also takes a transaction-scoped lock on the natural key so
+concurrent workers converge on that row instead of making one worker lose a
+unique-constraint race. The key includes the supplier line and usage kind even
+when the supplier provides an event id, because provider ids may be scoped to a
+line or stream rather than globally. That scoped identity is SHA-256 hashed to
+fit the bounded natural-key column even when both supplier identifiers are at
+their documented maximum lengths.
 
 **Telnyx publishes no Wireless Detail Record id.** The OpenAPI source documents
 the report envelope and not the record; the prose field list names no id and no
@@ -2961,6 +2967,11 @@ conversation with the supplier, not an arithmetic default.
 Null means neither source has been chosen. It is set deliberately, not by
 whichever poll happened to run first.
 
+Counter ingestion is serialized per line. A late reading is retained as raw
+evidence but cannot create another delta after a newer cumulative reading was
+already counted. An explicit cycle-reference change counts the new counter in
+full even when its value is higher than the prior cycle's closing value.
+
 ### Corrections supersede; they never edit
 
 A supplier restating a session writes a **new** record carrying the corrected
@@ -2972,6 +2983,11 @@ been the sum of both.
 `ck_usage_records_corrections_are_derived` means only a record we wrote may
 claim to correct another: a supplier feed cannot rewrite history by asserting a
 `corrects_id`.
+
+`trg_usage_records_history` rejects direct update and delete. Its only permitted
+mutation is the one-way state change to `SUPERSEDED`; every corrected value is
+appended. The partial unique index on `corrects_id` ensures concurrent workers
+cannot append two replacements for one original.
 
 The money follows the same discipline as §6.47's ledger. A correction posts a
 compensating entry for the **difference** under its own business event, never a
@@ -2994,6 +3010,11 @@ that remembers to exclude it.
 
 Chunk 16 ingests only the carrier channel. V03 owns internet metering; the
 column exists so V03 does not have to migrate this table to add it.
+
+For carrier records, `fk_usage_records_line_entitlement` requires the stored
+entitlement to be the one owned by the named carrier line. This prevents a
+valid line id and a valid but unrelated tenant entitlement id from being paired
+to redirect usage across accounts.
 
 ### A number nobody measured is not a measurement
 

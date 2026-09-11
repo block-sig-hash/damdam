@@ -18,13 +18,15 @@ compensating entry from being written wrong.
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from threading import Barrier
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app import model_registry  # noqa: F401  -- completes SQLModel.metadata
@@ -313,6 +315,70 @@ def test_a_replayed_counter_poll_produces_no_second_delta(
     assert len(session.exec(select(UsageRecord)).all()) == 1
 
 
+def test_an_out_of_order_counter_reading_cannot_add_usage_twice(
+    session: Session, service: UsageService
+) -> None:
+    line = _line(session)
+    service.ingest_counter(
+        session,
+        line,
+        CounterSnapshot(
+            line.carrier_line_reference, 150, NOW + timedelta(minutes=5)
+        ),
+    )
+
+    stale = service.ingest_counter(
+        session,
+        line,
+        CounterSnapshot(line.carrier_line_reference, 100, NOW),
+    )
+    session.commit()
+
+    assert stale is None
+    balance = service.allowance(session, _entitlement(session, line))
+    assert balance.data_bytes_used == 150
+
+
+def test_a_changed_cycle_counts_the_new_counter_in_full_even_when_it_is_higher(
+    session: Session, service: UsageService
+) -> None:
+    line = _line(session)
+    service.ingest_counter(
+        session,
+        line,
+        CounterSnapshot(
+            line.carrier_line_reference, 100, NOW, cycle_reference="cycle-1"
+        ),
+    )
+    service.ingest_counter(
+        session,
+        line,
+        CounterSnapshot(
+            line.carrier_line_reference,
+            200,
+            NOW + timedelta(days=30),
+            cycle_reference="cycle-2",
+        ),
+    )
+    session.commit()
+
+    balance = service.allowance(session, _entitlement(session, line))
+    assert balance.data_bytes_used == 300
+
+
+def test_a_counter_snapshot_cannot_be_attributed_to_another_line(
+    session: Session, service: UsageService
+) -> None:
+    line = _line(session)
+    with pytest.raises(UsageError) as caught:
+        service.ingest_counter(
+            session,
+            line,
+            CounterSnapshot("another-line", 100, NOW),
+        )
+    assert caught.value.code == "provider_line_mismatch"
+
+
 def test_a_counter_reset_does_not_credit_the_customer(
     session: Session, service: UsageService
 ) -> None:
@@ -399,6 +465,60 @@ def test_a_redelivered_event_is_counted_once(
 
     assert first.id == second.id
     assert len(session.exec(select(UsageRecord)).all()) == 1
+
+
+def test_concurrent_event_redelivery_converges_on_one_record(
+    engine, session: Session, service: UsageService
+) -> None:
+    line = _line(session)
+    session.commit()
+    barrier = Barrier(2)
+
+    def ingest() -> str:
+        with Session(engine) as worker:
+            worker_line = worker.get(CarrierLine, line.id)
+            assert worker_line is not None
+            event = UsageEvent(
+                provider_reference=worker_line.carrier_line_reference,
+                kind=UsageKind.DATA,
+                quantity=41,
+                started_at=NOW,
+                ended_at=NOW + timedelta(minutes=1),
+                received_at=NOW + timedelta(minutes=2),
+                provider_event_id="wdr-concurrent",
+            )
+            barrier.wait(timeout=10)
+            record = service.ingest_event(worker, worker_line, event)
+            worker.commit()
+            return str(record.id)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        ids = [future.result() for future in [pool.submit(ingest), pool.submit(ingest)]]
+
+    assert len(set(ids)) == 1
+    session.rollback()
+    assert len(session.exec(select(UsageRecord)).all()) == 1
+
+
+def test_an_event_cannot_be_attributed_to_another_line(
+    session: Session, service: UsageService
+) -> None:
+    line = _line(session)
+    with pytest.raises(UsageError) as caught:
+        service.ingest_event(
+            session,
+            line,
+            UsageEvent(
+                provider_reference="another-line",
+                kind=UsageKind.DATA,
+                quantity=1,
+                started_at=NOW,
+                ended_at=NOW,
+                received_at=NOW,
+                provider_event_id="wrong-line",
+            ),
+        )
+    assert caught.value.code == "provider_line_mismatch"
 
 
 def test_an_event_with_no_supplier_id_deduplicates_on_its_documented_fields(
@@ -534,6 +654,31 @@ def test_the_same_bytes_from_two_sources_are_counted_once(
     assert evidence.state is UsageState.EVIDENCE
     allowance = service.allowance(session, _entitlement(session, line))
     assert allowance.data_bytes_used == 100_000_000
+
+
+def test_a_counter_reset_stays_evidence_when_events_are_authoritative(
+    session: Session, service: UsageService
+) -> None:
+    line = _line(session, authoritative="event")
+    service.ingest_counter(
+        session,
+        line,
+        CounterSnapshot(line.carrier_line_reference, 100, NOW),
+    )
+    reset = service.ingest_counter(
+        session,
+        line,
+        CounterSnapshot(
+            line.carrier_line_reference,
+            10,
+            NOW + timedelta(minutes=1),
+        ),
+    )
+
+    assert reset is not None
+    assert reset.source is UsageSource.DERIVED
+    assert reset.state is UsageState.EVIDENCE
+    assert service.allowance(session, _entitlement(session, line)).data_bytes_used == 0
 
 
 def test_evidence_from_the_other_source_is_kept_and_compared(
@@ -916,6 +1061,81 @@ def test_only_a_derived_record_may_claim_to_correct_another(
     session.rollback()
 
 
+def test_usage_history_rejects_direct_rewrite_and_delete(
+    session: Session, service: UsageService
+) -> None:
+    line = _line(session)
+    record = service.ingest_event(
+        session,
+        line,
+        UsageEvent(
+            provider_reference=line.carrier_line_reference,
+            kind=UsageKind.DATA,
+            quantity=10,
+            started_at=NOW,
+            ended_at=NOW,
+            received_at=NOW,
+            provider_event_id="immutable",
+        ),
+    )
+    session.commit()
+
+    with pytest.raises(DBAPIError, match="usage history is immutable"):
+        session.exec(
+            text("UPDATE usage_records SET quantity = 1 WHERE id = :id"),
+            params={"id": record.id},
+        )
+        session.commit()
+    session.rollback()
+
+    with pytest.raises(DBAPIError, match="usage history is immutable"):
+        session.exec(
+            text("DELETE FROM usage_records WHERE id = :id"),
+            params={"id": record.id},
+        )
+        session.commit()
+    session.rollback()
+
+
+def test_a_carrier_record_cannot_name_another_lines_entitlement(
+    session: Session,
+) -> None:
+    first = _line(session)
+    second = _line(session)
+    session.add(
+        UsageRecord(
+            channel=AdapterChannel.CARRIER,
+            carrier_line_id=first.id,
+            entitlement_id=second.entitlement_id,
+            provider=first.carrier,
+            kind=UsageKind.DATA,
+            source=UsageSource.EVENT,
+            state=UsageState.FINAL,
+            natural_key=f"cross-entitlement:{uuid4()}",
+            quantity=1,
+            occurred_from=NOW,
+            occurred_to=NOW,
+            received_at=NOW,
+            created_at=NOW,
+        )
+    )
+    with pytest.raises(IntegrityError):
+        session.flush()
+    session.rollback()
+
+
+def test_a_charged_correction_must_carry_its_revised_amount(
+    session: Session, service: UsageService
+) -> None:
+    line = _line(session)
+    tariff = _tariff(session, line)
+    original = service.ingest_event(session, line, _call(line, 60), tariff=tariff)
+
+    with pytest.raises(UsageError) as caught:
+        service.apply_correction(session, original, 30, "restated")
+    assert caught.value.code == "correction_charge_required"
+
+
 def test_a_correction_posts_only_the_difference(
     session: Session, service: UsageService, ledger: LedgerService
 ) -> None:
@@ -982,6 +1202,43 @@ def test_settling_the_same_record_twice_posts_once(
     assert len(session.exec(select(JournalEntry)).all()) == 1
 
 
+def test_a_charge_cannot_post_to_accounts_in_another_currency(
+    session: Session, service: UsageService, ledger: LedgerService
+) -> None:
+    line = _line(session)
+    tariff = _tariff(session, line)
+    record = service.ingest_event(session, line, _call(line, 60), tariff=tariff)
+    debit = ledger.account(session, "USD", AccountKind.SERVICE_CREDIT)
+    credit = ledger.account(session, "USD", AccountKind.REVENUE)
+
+    with pytest.raises(UsageError) as caught:
+        service.settle_charge(session, record, debit, credit)
+    assert caught.value.code == "charge_currency_mismatch"
+
+
+def test_a_charge_cannot_debit_another_customers_account(
+    session: Session, service: UsageService, ledger: LedgerService
+) -> None:
+    line = _line(session)
+    other = _line(session)
+    tariff = _tariff(session, line)
+    record = service.ingest_event(session, line, _call(line, 60), tariff=tariff)
+    other_holder = _entitlement(session, other).holder_user_id
+    assert other_holder is not None
+    debit = ledger.account(
+        session,
+        "NGN",
+        AccountKind.SERVICE_CREDIT,
+        OwnerKind.USER,
+        owner_user_id=other_holder,
+    )
+    revenue = ledger.account(session, "NGN", AccountKind.REVENUE)
+
+    with pytest.raises(UsageError) as caught:
+        service.settle_charge(session, record, debit, revenue)
+    assert caught.value.code == "charge_payer_mismatch"
+
+
 def test_evidence_is_never_charged(
     session: Session, service: UsageService, ledger: LedgerService
 ) -> None:
@@ -993,21 +1250,26 @@ def test_evidence_is_never_charged(
         session, "NGN", AccountKind.SERVICE_CREDIT, OwnerKind.USER, owner_user_id=holder
     )
     revenue = ledger.account(session, "NGN", AccountKind.REVENUE)
-    record = service.ingest_event(
-        session,
-        line,
-        UsageEvent(
-            provider_reference=line.carrier_line_reference,
-            kind=UsageKind.DATA,
-            quantity=10,
-            started_at=NOW,
-            ended_at=NOW,
-            received_at=NOW,
-            provider_event_id="wdr-evidence",
-        ),
+    # Insert the already-bad external state in one append. History protection
+    # correctly prevents manufacturing it by mutating a stored record.
+    record = UsageRecord(
+        channel=AdapterChannel.CARRIER,
+        carrier_line_id=line.id,
+        entitlement_id=entitlement.id,
+        provider=line.carrier,
+        kind=UsageKind.DATA,
+        source=UsageSource.EVENT,
+        state=UsageState.EVIDENCE,
+        natural_key="wdr-evidence",
+        quantity=10,
+        occurred_from=NOW,
+        occurred_to=NOW,
+        received_at=NOW,
+        charged_amount=Decimal("5.00"),
+        charged_currency="NGN",
+        created_at=NOW,
     )
-    record.charged_amount = Decimal("5.00")
-    record.charged_currency = "NGN"
+    session.add(record)
     session.flush()
     with pytest.raises(UsageError) as caught:
         service.settle_charge(session, record, credit_account, revenue)
@@ -1128,6 +1390,48 @@ def test_one_cursor_per_provider_stream_and_scope(session: Session) -> None:
     with pytest.raises(IntegrityError):
         session.flush()
     session.rollback()
+
+
+def test_concurrent_cursor_creation_converges_on_one_row(
+    engine, service: UsageService
+) -> None:
+    barrier = Barrier(2)
+
+    def create() -> str:
+        with Session(engine) as worker:
+            barrier.wait(timeout=10)
+            cursor = service.cursor(worker, "telnyx", "voice_events", NOW)
+            worker.commit()
+            return str(cursor.id)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        ids = [future.result() for future in [pool.submit(create), pool.submit(create)]]
+
+    assert len(set(ids)) == 1
+
+
+def test_concurrent_cursor_failures_do_not_lose_an_increment(
+    engine, session: Session, service: UsageService
+) -> None:
+    cursor = service.cursor(session, "telnyx", "voice_events", NOW)
+    session.commit()
+    barrier = Barrier(2)
+
+    def fail() -> None:
+        with Session(engine) as worker:
+            stale = worker.get(type(cursor), cursor.id)
+            assert stale is not None
+            barrier.wait(timeout=10)
+            service.record_failure(worker, stale, "down")
+            worker.commit()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        [future.result() for future in [pool.submit(fail), pool.submit(fail)]]
+
+    session.expire_all()
+    current = session.get(type(cursor), cursor.id)
+    assert current is not None
+    assert current.consecutive_failures == 2
 
 
 # --- what a balance is worth -------------------------------------------------

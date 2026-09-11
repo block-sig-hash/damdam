@@ -6,7 +6,7 @@ Revises: 0035_connectivity_line_lifecycle
 Additive. Nothing is seeded, no existing row is touched, and the one added
 column is nullable.
 
-Four constraints carry the chunk's guarantees:
+The constraints and history trigger carry the chunk's guarantees:
 
 - `uq_usage_records_natural_key` — the same supplier record cannot be counted
   twice, however many times it is redelivered or replayed. Suppliers redeliver;
@@ -23,6 +23,11 @@ Four constraints carry the chunk's guarantees:
 - `uq_counter_readings_observation` — one reading per line per observation
   timestamp, so a replayed poll cannot manufacture a second delta out of the
   same cumulative number.
+- `fk_usage_records_line_entitlement` — a carrier usage row can only name the
+  entitlement owned by that same line; a copied tenant id cannot redirect it.
+- `ix_usage_records_corrects` — at most one correction may replace a record.
+- `trg_usage_records_history` — rows are immutable except for the one-way
+  transition to `superseded` that accompanies an appended correction.
 - `ck_usage_cursors_backfill_window` — a cursor claiming to be backfilling must
   name the window. A backfill with no window is a cursor that has stopped
   advancing and cannot say what it is catching up on.
@@ -78,6 +83,11 @@ def upgrade() -> None:
     op.add_column(
         "carrier_lines",
         sa.Column("authoritative_data_source", sa.String(16), nullable=True),
+    )
+    op.create_unique_constraint(
+        "uq_carrier_lines_id_entitlement",
+        "carrier_lines",
+        ["id", "entitlement_id"],
     )
 
     op.create_table(
@@ -246,6 +256,12 @@ def upgrade() -> None:
             "(source = 'derived') OR corrects_id IS NULL",
             name="ck_usage_records_corrections_are_derived",
         ),
+        sa.ForeignKeyConstraint(
+            ["carrier_line_id", "entitlement_id"],
+            ["carrier_lines.id", "carrier_lines.entitlement_id"],
+            name="fk_usage_records_line_entitlement",
+            ondelete="RESTRICT",
+        ),
     )
     op.create_index(
         "ix_usage_records_line_state",
@@ -262,15 +278,48 @@ def upgrade() -> None:
         "ix_usage_records_corrects",
         "usage_records",
         ["corrects_id"],
+        unique=True,
         postgresql_where=sa.text("corrects_id IS NOT NULL"),
+    )
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION protect_usage_history()
+        RETURNS trigger AS $$
+        BEGIN
+            IF TG_OP = 'DELETE' THEN
+                RAISE EXCEPTION 'usage history is immutable';
+            END IF;
+            IF NEW.state = 'superseded'
+               AND OLD.state <> 'superseded'
+               AND (to_jsonb(NEW) - 'state') = (to_jsonb(OLD) - 'state') THEN
+                RETURN NEW;
+            END IF;
+            IF NEW IS DISTINCT FROM OLD THEN
+                RAISE EXCEPTION
+                    'usage history is immutable; append a correction';
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE TRIGGER trg_usage_records_history
+            BEFORE UPDATE OR DELETE ON usage_records
+            FOR EACH ROW EXECUTE FUNCTION protect_usage_history();
+        """
     )
 
 
 def downgrade() -> None:
     bind = op.get_bind()
     op.drop_table("usage_records")
+    op.execute("DROP FUNCTION IF EXISTS protect_usage_history()")
     op.drop_table("usage_counter_readings")
     op.drop_table("usage_cursors")
+    op.drop_constraint(
+        "uq_carrier_lines_id_entitlement",
+        "carrier_lines",
+        type_="unique",
+    )
     op.drop_column("carrier_lines", "authoritative_data_source")
     for name, _ in _ENUMS:
         postgresql.ENUM(name=name, create_type=False).drop(bind, checkfirst=True)

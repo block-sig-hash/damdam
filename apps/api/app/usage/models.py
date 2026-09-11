@@ -56,15 +56,19 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    DDL,
     BigInteger,
     CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
+    Table,
     UniqueConstraint,
+    event,
     text,
 )
 from sqlalchemy import Enum as SAEnum
@@ -303,6 +307,12 @@ class UsageRecord(SQLModel, table=True):
             "(source = 'derived') OR corrects_id IS NULL",
             name="ck_usage_records_corrections_are_derived",
         ),
+        ForeignKeyConstraint(
+            ["carrier_line_id", "entitlement_id"],
+            ["carrier_lines.id", "carrier_lines.entitlement_id"],
+            name="fk_usage_records_line_entitlement",
+            ondelete="RESTRICT",
+        ),
         Index(
             "ix_usage_records_line_state", "carrier_line_id", "state", "occurred_from"
         ),
@@ -312,6 +322,7 @@ class UsageRecord(SQLModel, table=True):
         Index(
             "ix_usage_records_corrects",
             "corrects_id",
+            unique=True,
             postgresql_where=text("corrects_id IS NOT NULL"),
             sqlite_where=text("corrects_id IS NOT NULL"),
         ),
@@ -396,3 +407,37 @@ class UsageRecord(SQLModel, table=True):
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+
+
+_USAGE_HISTORY_TRIGGER = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE OR REPLACE FUNCTION protect_usage_history()
+    RETURNS trigger AS $$
+    BEGIN
+        IF TG_OP = 'DELETE' THEN
+            RAISE EXCEPTION 'usage history is immutable';
+        END IF;
+        IF NEW.state = 'superseded'
+           AND OLD.state <> 'superseded'
+           AND (to_jsonb(NEW) - 'state') = (to_jsonb(OLD) - 'state') THEN
+            RETURN NEW;
+        END IF;
+        IF NEW IS DISTINCT FROM OLD THEN
+            RAISE EXCEPTION 'usage history is immutable; append a correction';
+        END IF;
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER trg_usage_records_history
+        BEFORE UPDATE OR DELETE ON usage_records
+        FOR EACH ROW EXECUTE FUNCTION protect_usage_history();
+    """
+)
+
+_USAGE_RECORD_TABLE: Table = UsageRecord.__table__  # type: ignore[attr-defined]
+event.listen(
+    _USAGE_RECORD_TABLE,
+    "after_create",
+    _USAGE_HISTORY_TRIGGER.execute_if(dialect="postgresql"),
+)

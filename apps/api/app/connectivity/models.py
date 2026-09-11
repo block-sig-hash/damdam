@@ -192,6 +192,9 @@ class CarrierLine(SQLModel, table=True):
 
     __tablename__ = "carrier_lines"
     __table_args__ = (
+        UniqueConstraint(
+            "id", "entitlement_id", name="uq_carrier_lines_id_entitlement"
+        ),
         Index(
             "ux_carrier_lines_carrier_reference",
             "carrier",
