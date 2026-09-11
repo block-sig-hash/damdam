@@ -3,6 +3,8 @@ import authEn from './locales/en/auth.json';
 import authFr from './locales/fr/auth.json';
 import commonEn from './locales/en/common.json';
 import commonFr from './locales/fr/common.json';
+import consumerEn from './locales/en/consumer.json';
+import consumerFr from './locales/fr/consumer.json';
 import esimEn from './locales/en/esim.json';
 import esimFr from './locales/fr/esim.json';
 import homeEn from './locales/en/home.json';
@@ -40,6 +42,7 @@ describe('mobile locale runtime', () => {
     for (const [english, french] of [
       [commonEn, commonFr],
       [authEn, authFr],
+      [consumerEn, consumerFr],
       [homeEn, homeFr],
       [esimEn, esimFr],
       [paymentsEn, paymentsFr],

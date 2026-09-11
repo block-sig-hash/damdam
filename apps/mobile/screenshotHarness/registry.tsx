@@ -5,6 +5,7 @@
  * props/data -- see screenshotHarness/README.md for how to add one.
  */
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { View } from 'react-native';
 import { OTPVerificationScreen } from '../src/screens/OTPVerification/OTPVerificationScreen';
 import { PinUnlockScreen } from '../src/screens/PinUnlock/PinUnlockScreen';
@@ -15,6 +16,8 @@ import { EsimQrCodeScreen } from '../src/screens/EsimSetup/EsimQrCodeScreen';
 import { EsimActivationPromptScreen } from '../src/screens/EsimActivation/EsimActivationPromptScreen';
 import { EsimActivationGuideScreen } from '../src/screens/EsimActivation/EsimActivationGuideScreen';
 import { ActivationSuccessScreen } from '../src/screens/ActivationSuccess/ActivationSuccessScreen';
+import { ConsumerHomeScreen } from '../src/screens/ConsumerHome/ConsumerHomeScreen';
+import { SignInScreen } from '../src/screens/SignIn/SignInScreen';
 import { GALLERY_SECTIONS, GalleryScreen } from '../src/screens/Gallery/GalleryScreen';
 import { savePinLocally } from '../src/utils/pinLocalStore';
 import {
@@ -46,6 +49,22 @@ function PinUnlockTarget(): React.JSX.Element {
       userId={FIXTURE_USER_ID}
       onUnlocked={noop}
     />;
+}
+
+function ConsumerHomeErrorTarget(): React.JSX.Element {
+  const { t } = useTranslation('consumer');
+  return (
+    <ConsumerHomeScreen
+      serviceState="none"
+      services={[]}
+      loading={false}
+      errorMessage={t('home.unavailableBody')}
+      onRetry={noop}
+      onBrowsePlans={noop}
+      onOpenMyLine={noop}
+      onOpenOrder={noop}
+    />
+  );
 }
 
 export interface HarnessTarget {
@@ -138,5 +157,34 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
         onContinue={noop}
       />
     ),
+  },
+  'consumer-sign-in': {
+    label: 'Consumer sign in',
+    render: () => (
+      <SignInScreen
+        onAuthenticated={noop}
+        onRecover={noop}
+        onUsePhone={noop}
+      />
+    ),
+  },
+  'consumer-home-no-service': {
+    label: 'Consumer Home — no service',
+    render: () => (
+      <ConsumerHomeScreen
+        serviceState="none"
+        services={[]}
+        loading={false}
+        errorMessage={null}
+        onRetry={noop}
+        onBrowsePlans={noop}
+        onOpenMyLine={noop}
+        onOpenOrder={noop}
+      />
+    ),
+  },
+  'consumer-home-error': {
+    label: 'Consumer Home — load error',
+    render: () => <ConsumerHomeErrorTarget />,
   },
 };

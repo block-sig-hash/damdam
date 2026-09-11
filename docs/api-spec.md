@@ -1475,3 +1475,77 @@ credential itself belongs to the chunk that retires the dashboard's login.
 No mail provider is configured, so the token is handed to the caller to send
 rather than pretending a delivery happened. Non-test identity delivery is a
 discarding transport until a provider is configured.
+
+## 7.35 Amendment — Consumer Session, Services and Invitation Preview (US-37)
+
+**Recorded 10 September 2026 by build chunk 18.** No data-model change: every
+field is read from tables chunks 05–17 already created.
+
+### Endpoints
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /v1/me/session` | member session | Everything the app needs before its first authenticated frame: verified identifiers, locale, service state, memberships, pending-invitation count |
+| `GET /v1/me/services` | member session | Every service this account holds, personal and organization-provided |
+| `POST /v1/invitations/preview` | member session | Read an invitation link **without** accepting it |
+
+### `service_state` is three values, and `pending` is not a spinner
+
+`none`, `pending`, `active`. `pending` means a real service exists and is not
+usable yet — paid but unprovisioned, provisioned but uninstalled, installed but
+not activated, or suspended. The app branches on it, and the route out of each
+is different: `none` offers a purchase, `pending` shows where the order got to.
+
+A **failed or cancelled** item does not make the account `pending`. The customer
+is not waiting for it, and telling them to wait for something that already
+failed is exactly the dead end AC-37.5 exists to remove. The item stays in
+`services` with its own `provisioning_state`, so the failure remains visible and
+actionable.
+
+### `delivery` follows the eSIM eligibility rule and observed carrier resources
+
+`carrier_esim` or `internet`. Before provisioning creates any carrier resource,
+`device_eligibility_rules.requires_esim` is the discriminator. An existing
+installation or carrier line always confirms carrier delivery. The product kind
+is not a discriminator: `voice` covers both a native-dialer eSIM plan and an
+internet-calling plan. A missing eligibility rule defaults safely to carrier
+delivery rather than making an unprovisioned eSIM line look ready. The approved
+calling amendment requires that internet calling never depend on an eSIM
+installation or a carrier-line foreign key; an
+`internet` service therefore reports `requires_installation: false` and returns
+`installation_state: null` and `activation_state: null`, because there is no
+profile and no line, and `"not_installed"` would be a false negative rather than
+a fact.
+
+`ready_to_use` is the one derived boolean:
+
+| Delivery | Ready when |
+|---|---|
+| `internet` | an entitlement exists and has not expired |
+| `carrier_esim` | the **device** reported the profile installed **and** the **carrier** reported the line active, and the entitlement has not expired |
+
+Installation is reported by the device and activation by the carrier. Neither is
+inferred from the other, and neither is inferred from payment.
+
+### Invitation preview: POST, and the token is in the body
+
+`POST /v1/invitations/preview` with `{"token": "..."}`. Not `GET
+/v1/invitations/{token}`: an invitation token is a bearer credential for a
+membership, and a path segment reaches access logs, proxy logs and crash
+reports.
+
+It returns `state` (`pending` | `expired` | `accepted` | `revoked`),
+`organization_name`, `role`, `expires_at`, `recipient_matches` and
+`already_a_member`. An **expired or already-accepted** link previews with a
+`200` and that state rather than a 4xx, because AC-37.3 requires those cases to
+*behave correctly*, and an error toast cannot explain which link expired or who
+to ask for a new one.
+
+`invited_value_masked` is `i•••d@acme.test`, never the address. The preview must
+let the invited person recognize their own address without becoming a way for
+whoever holds a forwarded link to learn it. `recipient_matches` answers "is this
+mine" against the caller's **verified** identifiers only — the same rule
+`POST /v1/invitations/accept` enforces, so a preview can never say yes where an
+acceptance would say `invitation_recipient_mismatch`.
+
+Unknown tokens answer `invitation_invalid` (**400**) with no further detail.

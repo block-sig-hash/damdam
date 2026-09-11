@@ -15,6 +15,23 @@ beforeEach(() => {
 });
 
 describe('PhoneEntryScreen', () => {
+  it('can return to email sign-in when mounted from the signed-out navigator', async () => {
+    const onCancel = jest.fn();
+    await render(
+      <PhoneEntryScreen
+        onOtpSent={jest.fn()}
+        onAccountExists={jest.fn()}
+        onCancel={onCancel}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('phone-entry-cancel'));
+    });
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   it('disables Send code until a valid Nigerian number is entered (AC-01.1)', async () => {
     const onOtpSent = jest.fn();
     await render(<PhoneEntryScreen onOtpSent={onOtpSent} onAccountExists={jest.fn()} />);

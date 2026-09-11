@@ -3,12 +3,14 @@ import {initReactI18next} from 'react-i18next';
 
 import authEn from './locales/en/auth.json';
 import commonEn from './locales/en/common.json';
+import consumerEn from './locales/en/consumer.json';
 import esimEn from './locales/en/esim.json';
 import homeEn from './locales/en/home.json';
 import paymentsEn from './locales/en/payments.json';
 import statesEn from './locales/en/states.json';
 import authFr from './locales/fr/auth.json';
 import commonFr from './locales/fr/common.json';
+import consumerFr from './locales/fr/consumer.json';
 import esimFr from './locales/fr/esim.json';
 import homeFr from './locales/fr/home.json';
 import paymentsFr from './locales/fr/payments.json';
@@ -21,7 +23,7 @@ import {
   persistLocale,
 } from './locale';
 
-export const namespaces = ['common', 'auth', 'home', 'esim', 'payments', 'states'] as const;
+export const namespaces = ['common', 'auth', 'consumer', 'home', 'esim', 'payments', 'states'] as const;
 
 i18n.use(initReactI18next).init({
   compatibilityJSON: 'v4',
@@ -34,6 +36,7 @@ i18n.use(initReactI18next).init({
     en: {
       common: commonEn,
       auth: authEn,
+      consumer: consumerEn,
       home: homeEn,
       esim: esimEn,
       payments: paymentsEn,
@@ -42,6 +45,7 @@ i18n.use(initReactI18next).init({
     fr: {
       common: commonFr,
       auth: authFr,
+      consumer: consumerFr,
       home: homeFr,
       esim: esimFr,
       payments: paymentsFr,

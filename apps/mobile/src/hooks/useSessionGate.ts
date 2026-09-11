@@ -11,7 +11,24 @@ import {
   saveSession,
   touchSession,
 } from '../services/sessionStore';
-import { clearAccountScopedState } from '../utils/pinLocalStore';
+import {
+  clearAccountScopedState,
+  hasPinStoredLocally,
+} from '../utils/pinLocalStore';
+
+/**
+ * Whether this session has a PIN on this device to unlock against.
+ *
+ * A session persisted before US-29 carries no `userId`, so its PIN cannot be
+ * attributed to an account; those fall through to full sign-in rather than
+ * unlocking against whatever PIN happens to be on the device.
+ */
+async function hasLocalPin(session: PersistedSession): Promise<boolean> {
+  if (!session.userId) {
+    return false;
+  }
+  return hasPinStoredLocally(session.userId).catch(() => false);
+}
 
 export type SessionPhase = 'loading' | 'onboarding' | 'pin-gate' | 'authenticated';
 
@@ -20,7 +37,9 @@ export interface ActiveSession {
   userId?: string;
   accessToken: string;
   refreshToken: string;
-  phoneNumber: string;
+  /** Null for an account created through the email identity flow (US-29). */
+  phoneNumber?: string | null;
+  email?: string | null;
   departureDate: string | null;
   packageId?: string;
   locale: 'en' | 'fr';
@@ -37,6 +56,8 @@ export interface UseSessionGateResult {
   /** Called by PinUnlockScreen: no argument on a routine correct-PIN unlock,
    * or a fresh AuthResponse when unlocked via OTP recovery instead. */
   onPinUnlocked: (recovered?: AuthResponse) => Promise<void>;
+  /** Ends the current account session and clears device-local state owned by it. */
+  onSignedOut: () => Promise<void>;
 }
 
 /**
@@ -57,7 +78,8 @@ function toActiveSession(persisted: PersistedSession): ActiveSession {
     userId: persisted.userId,
     accessToken: persisted.accessToken,
     refreshToken: persisted.refreshToken,
-    phoneNumber: persisted.phoneNumber,
+    phoneNumber: persisted.phoneNumber ?? null,
+    email: persisted.email ?? null,
     departureDate: persisted.departureDate,
     packageId: persisted.packageId,
     locale: persisted.locale,
@@ -133,8 +155,15 @@ export function useSessionGate(): UseSessionGateResult {
       setSession(toActiveSession(persisted));
       // A cold start is, from the user's perspective, exactly what
       // PinUnlockScreen's own doc comment calls "re-entering the PIN
-      // after the app has been backgrounded" -- so it always gates here.
-      setPhase('pin-gate');
+      // after the app has been backgrounded" -- so it gates here.
+      //
+      // Only where there is a PIN to check, though (chunk 18). The PIN is a
+      // *local* unlock gate (AC-23.5), never a network credential, and an
+      // account created through the email identity flow never set one. Sending
+      // it to a PIN screen would show a keypad no entry can satisfy and a
+      // "forgot your PIN" path that needs a phone number the account does not
+      // have.
+      setPhase((await hasLocalPin(persisted)) ? 'pin-gate' : 'authenticated');
     })();
     return () => {
       cancelled = true;
@@ -145,6 +174,13 @@ export function useSessionGate(): UseSessionGateResult {
     await saveSession(fresh);
     setSession(fresh);
     setPhase('authenticated');
+  }, []);
+
+  const onSignedOut = useCallback(async () => {
+    await clearSession();
+    await clearAccountScopedState();
+    setSession(null);
+    setPhase('onboarding');
   }, []);
 
   const onPinUnlocked = useCallback(
@@ -231,7 +267,10 @@ export function useSessionGate(): UseSessionGateResult {
             setPhase('onboarding');
             return;
           }
-          if (shouldRequirePinAfterBackground(elapsed)) {
+          if (
+            shouldRequirePinAfterBackground(elapsed) &&
+            (await hasLocalPin(current))
+          ) {
             setPhase('pin-gate');
             return;
           }
@@ -282,5 +321,5 @@ export function useSessionGate(): UseSessionGateResult {
     return () => clearInterval(timer);
   }, [phase]);
 
-  return { phase, session, onOnboarded, onPinUnlocked };
+  return { phase, session, onOnboarded, onPinUnlocked, onSignedOut };
 }

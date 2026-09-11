@@ -18,6 +18,9 @@ from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
 from app.checkins.routes import router as checkin_router
 from app.config import Settings, get_settings
+from app.consumer.routes import invitation_preview_router
+from app.consumer.routes import router as consumer_router
+from app.consumer.service import ConsumerService
 from app.container import (
     CeleryEsimIssuanceScheduler,
     CeleryProvisioningScheduler,
@@ -206,6 +209,7 @@ def create_app(
     api.state.invitation_service = InvitationService(
         memberships=api.state.membership_service, clock=clock
     )
+    api.state.consumer_service = ConsumerService(clock=clock)
     api.state.mfa_service = MfaService(clock)
     api.state.hto_pilgrim_service = HtoPilgrimService()
     api.state.report_service = ProvisioningReportService(clock)
@@ -575,6 +579,8 @@ def create_app(
     api.include_router(admin_router, prefix="/v1")
     api.include_router(organization_router, prefix="/v1")
     api.include_router(invitation_router, prefix="/v1")
+    api.include_router(invitation_preview_router, prefix="/v1")
+    api.include_router(consumer_router, prefix="/v1")
     api.include_router(organization_mfa_router, prefix="/v1")
     api.include_router(manifest_router, prefix="/v1")
     api.include_router(pricing_router, prefix="/v1")

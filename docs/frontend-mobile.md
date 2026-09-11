@@ -944,3 +944,29 @@ ships the capability. Chunk 04's retirement guard asserts `RECORD_AUDIO` is
 absent from the Android manifest, and this chunk keeps it that way — a design
 chunk requesting a permission the product does not use is exactly the drift that
 guard exists to catch.
+
+---
+
+## 8.15 Amendment — Consumer Authentication and Deferred Links (US-37)
+
+Chunk 18 makes email the default signed-out entry while retaining an explicit
+phone/OTP route for legacy phone-only accounts. Android and iOS register both
+the `damdam` scheme and the `damdam.app` / `www.damdam.app` web domains on the
+app side. Production universal/app links additionally require the external
+Android Asset Links and Apple App Site Association files owned by the signed
+build/domain work in chunk 27.
+
+The mobile link contract is purpose-bound:
+
+- `damdam://auth/email/login#token=…` and
+  `https://damdam.app/auth/email/login#token=…` authenticate with a login token;
+- the equivalent `/auth/email/recovery#token=…` route uses only the recovery
+  endpoint, which revokes the account's previous sessions;
+- `/invite/<token>` preserves the invitation through either authentication
+  route, and `/esim/activate` and `/orders/<id>` remain deferred product intents.
+
+The fragment form keeps identity credentials out of ordinary web-server request
+logs. Invitation and product intents survive authentication in platform secure
+storage. The one-time login/recovery link is consumed directly and never
+overwrites that deferred intent; otherwise opening the sign-in email would erase
+the invitation that caused the user to sign in.

@@ -245,14 +245,25 @@ class InvitationService:
         # Exclusive at the boundary: dead *at* expires_at, not after it.
         return now >= expires_at
 
-    def accept_by_token(
-        self, session: Session, user: User, token: str
-    ) -> OrganizationMember:
-        invitation = session.exec(
+    def find_by_token(
+        self, session: Session, token: str
+    ) -> OrganizationInvitation | None:
+        """The one place a raw invitation token is turned into a row.
+
+        Public because chunk 18's preview needs the same lookup without
+        accepting anything, and a second copy of "hash it, then select on the
+        hash" is a second place for the hashing to drift.
+        """
+        return session.exec(
             select(OrganizationInvitation).where(
                 OrganizationInvitation.token_hash == self._hash(token)
             )
         ).first()
+
+    def accept_by_token(
+        self, session: Session, user: User, token: str
+    ) -> OrganizationMember:
+        invitation = self.find_by_token(session, token)
         if invitation is None:
             raise InvitationError("invitation_invalid")
         return self._accept(session, user, invitation)

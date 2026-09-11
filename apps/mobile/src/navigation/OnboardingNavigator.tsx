@@ -40,8 +40,15 @@ export interface AuthenticatedMobileSession {
   /** AC-23.1/AC-23.2: needed by the session-persistence layer (useSessionGate)
    * to exchange for a fresh access token without forcing re-authentication. */
   refreshToken: string;
-  /** AC-23.3: PinUnlockScreen's "forgot your PIN" OTP-recovery path needs this. */
-  phoneNumber: string;
+  /**
+   * AC-23.3: PinUnlockScreen's "forgot your PIN" OTP-recovery path needs this.
+   * Nullable from chunk 18: an account created through the email identity flow
+   * (US-29) has no phone number, and such an account never sets a local PIN, so
+   * there is no recovery path here for it to be missing from.
+   */
+  phoneNumber?: string | null;
+  /** The verified email an email-first account signed in with, when there is one. */
+  email?: string | null;
   departureDate: string | null;
   packageId?: string;
   locale: 'en' | 'fr';
@@ -55,7 +62,11 @@ interface OnboardingNavigatorProps {
    */
   initialActivationCode?: string;
   /** Hands the authenticated session to the app host without changing onboarding screens. */
-  onAuthenticated?: (session: AuthenticatedMobileSession) => void;
+  onAuthenticated?: (
+    session: AuthenticatedMobileSession,
+  ) => void | Promise<void>;
+  /** Returns to the email-first entry when this navigator is used as a legacy sign-in route. */
+  onCancel?: () => void;
 }
 
 function AuthenticationHandoff({
@@ -85,6 +96,7 @@ function AuthenticationHandoff({
 export function OnboardingNavigator({
   initialActivationCode,
   onAuthenticated,
+  onCancel,
 }: OnboardingNavigatorProps = {}): React.JSX.Element {
   const {t} = useTranslation('common');
   const [step, setStep] = useState<OnboardingStep>(
@@ -102,6 +114,7 @@ export function OnboardingNavigator({
     case 'phone':
       return (
         <PhoneEntryScreen
+          onCancel={onCancel}
           onOtpSent={(phoneNumber) =>
             setStep({ name: 'otp', phoneNumber, activationCode: step.activationCode })
           }
