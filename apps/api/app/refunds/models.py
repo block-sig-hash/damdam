@@ -29,22 +29,26 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    DDL,
     JSON,
     CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     String,
     UniqueConstraint,
+    event,
     text,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.schema import Table
 from sqlmodel import Field, SQLModel
 
 from app.auth.models import utc_now
-from app.money import currency_check, currency_column, money_column
+from app.money import currency_check, currency_column, money_column, rate_column
 
 
 def _enum(
@@ -99,17 +103,28 @@ class Refund(SQLModel, table=True):
             sqlite_where=text("processor_reference IS NOT NULL"),
         ),
         CheckConstraint("amount > 0", name="ck_refunds_amount"),
+        CheckConstraint(
+            "(status = 'succeeded' AND settled_at IS NOT NULL "
+            "AND processor_reference IS NOT NULL) OR "
+            "(status <> 'succeeded' AND settled_at IS NULL)",
+            name="ck_refunds_settlement",
+        ),
+        ForeignKeyConstraint(
+            ["payment_attempt_id", "processor", "currency"],
+            [
+                "payment_attempts.id",
+                "payment_attempts.processor",
+                "payment_attempts.currency",
+            ],
+            name="fk_refunds_attempt_binding",
+        ),
         Index("ix_refunds_attempt", "payment_attempt_id", "status"),
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     #: Ours, and stable across retries of the *same* refund decision.
     business_event_id: str = Field(sa_column=Column(String(200), nullable=False))
-    payment_attempt_id: UUID = Field(
-        sa_column=Column(
-            ForeignKey("payment_attempts.id"), nullable=False, index=True
-        )
-    )
+    payment_attempt_id: UUID = Field(sa_column=Column(nullable=False, index=True))
     processor: str = Field(sa_column=Column(String(32), nullable=False))
     processor_reference: str | None = Field(
         default=None, sa_column=Column(String(200), nullable=True)
@@ -171,14 +186,19 @@ class Dispute(SQLModel, table=True):
             "OR (state NOT IN ('won', 'lost') AND resolved_at IS NULL)",
             name="ck_disputes_resolved_at",
         ),
+        ForeignKeyConstraint(
+            ["payment_attempt_id", "processor", "currency"],
+            [
+                "payment_attempts.id",
+                "payment_attempts.processor",
+                "payment_attempts.currency",
+            ],
+            name="fk_disputes_attempt_binding",
+        ),
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    payment_attempt_id: UUID = Field(
-        sa_column=Column(
-            ForeignKey("payment_attempts.id"), nullable=False, index=True
-        )
-    )
+    payment_attempt_id: UUID = Field(sa_column=Column(nullable=False, index=True))
     processor: str = Field(sa_column=Column(String(32), nullable=False))
     processor_reference: str = Field(sa_column=Column(String(200), nullable=False))
     currency: str = Field(sa_column=currency_column())
@@ -229,17 +249,22 @@ class BankTransferReceipt(SQLModel, table=True):
         ),
         CheckConstraint("amount > 0", name="ck_bank_transfer_receipts_amount"),
         CheckConstraint(
-            "(status = 'matched' AND matched_ledger_account_id IS NOT NULL) "
-            "OR (status <> 'matched' AND matched_ledger_account_id IS NULL)",
+            "(status = 'matched' AND matched_ledger_account_id IS NOT NULL "
+            "AND matched_by IS NOT NULL AND matched_at IS NOT NULL) OR "
+            "(status <> 'matched' AND matched_ledger_account_id IS NULL "
+            "AND matched_by IS NULL AND matched_at IS NULL)",
             name="ck_bank_transfer_receipts_matched",
+        ),
+        ForeignKeyConstraint(
+            ["matched_ledger_account_id", "currency"],
+            ["ledger_accounts.id", "ledger_accounts.currency"],
+            name="fk_bank_transfer_receipts_account_currency",
         ),
         Index("ix_bank_transfer_receipts_status", "status", "value_date"),
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    bank_account_reference: str = Field(
-        sa_column=Column(String(100), nullable=False)
-    )
+    bank_account_reference: str = Field(sa_column=Column(String(100), nullable=False))
     #: The bank's own line identifier. What makes re-import idempotent.
     statement_reference: str = Field(sa_column=Column(String(200), nullable=False))
     currency: str = Field(sa_column=currency_column())
@@ -260,7 +285,7 @@ class BankTransferReceipt(SQLModel, table=True):
     )
     matched_ledger_account_id: UUID | None = Field(
         default=None,
-        sa_column=Column(ForeignKey("ledger_accounts.id"), nullable=True),
+        sa_column=Column(nullable=True),
     )
     matched_by: str | None = Field(
         default=None, sa_column=Column(String(200), nullable=True)
@@ -301,6 +326,7 @@ class FinancialDocument(SQLModel, table=True):
             "number",
             name="uq_financial_documents_number",
         ),
+        CheckConstraint("total_amount >= 0", name="ck_financial_documents_total"),
         Index("ix_financial_documents_order", "order_id"),
     )
 
@@ -324,6 +350,68 @@ class FinancialDocument(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), nullable=False)
     )
     created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class ProcessorSettlementReport(SQLModel, table=True):
+    """Immutable economic facts imported from a processor settlement report."""
+
+    __tablename__ = "processor_settlement_reports"
+    __table_args__ = (
+        currency_check("processor_settlement_reports", "charge_currency"),
+        currency_check("processor_settlement_reports", "settlement_currency"),
+        UniqueConstraint(
+            "processor", "report_reference", name="uq_processor_settlement_reports"
+        ),
+        CheckConstraint("period_end > period_start", name="ck_settlement_period"),
+        CheckConstraint(
+            "gross_amount >= 0 AND refund_amount >= 0 "
+            "AND dispute_amount >= 0 AND fee_amount >= 0 AND tax_amount >= 0 "
+            "AND net_amount >= 0",
+            name="ck_settlement_amounts",
+        ),
+        CheckConstraint("fx_rate > 0", name="ck_settlement_fx_rate"),
+        CheckConstraint(
+            "charge_currency <> settlement_currency OR fx_rate = 1",
+            name="ck_settlement_same_currency_fx",
+        ),
+        Index(
+            "ix_processor_settlement_period",
+            "processor",
+            "charge_currency",
+            "period_start",
+            "period_end",
+        ),
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    processor: str = Field(sa_column=Column(String(32), nullable=False))
+    report_reference: str = Field(sa_column=Column(String(200), nullable=False))
+    period_start: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    period_end: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False)
+    )
+    charge_currency: str = Field(sa_column=currency_column())
+    settlement_currency: str = Field(sa_column=currency_column())
+    gross_amount: Decimal = Field(sa_column=money_column())
+    refund_amount: Decimal = Field(sa_column=money_column())
+    dispute_amount: Decimal = Field(sa_column=money_column())
+    fee_amount: Decimal = Field(sa_column=money_column())
+    tax_amount: Decimal = Field(sa_column=money_column())
+    fx_rate: Decimal = Field(sa_column=rate_column())
+    net_amount: Decimal = Field(sa_column=money_column())
+    tax_policy_reference: str | None = Field(
+        default=None, sa_column=Column(String(200), nullable=True)
+    )
+    snapshot: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON().with_variant(JSONB, "postgresql"), nullable=False),
+    )
+    imported_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
@@ -372,3 +460,117 @@ class ExceptionItem(SQLModel, table=True):
     resolution: str | None = Field(
         default=None, sa_column=Column(String(1000), nullable=True)
     )
+
+
+# --- database-enforced history ------------------------------------------------
+
+_REFUND_HISTORY_FUNCTION = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE OR REPLACE FUNCTION damdam_refund_history() RETURNS trigger AS $$
+    BEGIN
+        IF TG_OP = 'DELETE' THEN
+            RAISE EXCEPTION 'financial history is immutable';
+        END IF;
+        IF TG_TABLE_NAME = 'financial_documents' THEN
+            RAISE EXCEPTION 'issued financial document is immutable';
+        END IF;
+        IF TG_TABLE_NAME = 'processor_settlement_reports' THEN
+            RAISE EXCEPTION 'processor settlement evidence is immutable';
+        END IF;
+        IF TG_TABLE_NAME = 'refunds'
+           AND to_jsonb(OLD)->>'status' IN ('succeeded', 'failed')
+           AND NEW IS DISTINCT FROM OLD THEN
+            RAISE EXCEPTION 'resolved refund is immutable';
+        END IF;
+        IF TG_TABLE_NAME = 'disputes'
+           AND to_jsonb(OLD)->>'state' IN ('won', 'lost')
+           AND NEW IS DISTINCT FROM OLD THEN
+            RAISE EXCEPTION 'resolved dispute is immutable';
+        END IF;
+        IF TG_TABLE_NAME = 'bank_transfer_receipts'
+           AND to_jsonb(OLD)->>'status' = 'matched'
+           AND NEW IS DISTINCT FROM OLD THEN
+            RAISE EXCEPTION 'matched bank receipt is immutable';
+        END IF;
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    """
+)
+
+_REFUND_HISTORY_TRIGGER = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE TRIGGER trg_refunds_history
+        BEFORE UPDATE OR DELETE ON refunds
+        FOR EACH ROW EXECUTE FUNCTION damdam_refund_history();
+    """
+)
+
+_DISPUTE_HISTORY_TRIGGER = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE TRIGGER trg_disputes_history
+        BEFORE UPDATE OR DELETE ON disputes
+        FOR EACH ROW EXECUTE FUNCTION damdam_refund_history();
+    """
+)
+
+_BANK_HISTORY_TRIGGER = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE TRIGGER trg_bank_transfer_receipts_history
+        BEFORE UPDATE OR DELETE ON bank_transfer_receipts
+        FOR EACH ROW EXECUTE FUNCTION damdam_refund_history();
+    """
+)
+
+_DOCUMENT_HISTORY_TRIGGER = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE TRIGGER trg_financial_documents_history
+        BEFORE UPDATE OR DELETE ON financial_documents
+        FOR EACH ROW EXECUTE FUNCTION damdam_refund_history();
+    """
+)
+
+_SETTLEMENT_HISTORY_TRIGGER = DDL(  # type: ignore[no-untyped-call]
+    """
+    CREATE TRIGGER trg_processor_settlement_reports_history
+        BEFORE UPDATE OR DELETE ON processor_settlement_reports
+        FOR EACH ROW EXECUTE FUNCTION damdam_refund_history();
+    """
+)
+
+_REFUND_TABLE: Table = Refund.__table__  # type: ignore[attr-defined]
+_DISPUTE_TABLE: Table = Dispute.__table__  # type: ignore[attr-defined]
+_BANK_TABLE: Table = BankTransferReceipt.__table__  # type: ignore[attr-defined]
+_DOCUMENT_TABLE: Table = FinancialDocument.__table__  # type: ignore[attr-defined]
+_SETTLEMENT_TABLE: Table = ProcessorSettlementReport.__table__  # type: ignore[attr-defined]
+
+event.listen(
+    SQLModel.metadata,
+    "before_create",
+    _REFUND_HISTORY_FUNCTION.execute_if(dialect="postgresql"),
+)
+event.listen(
+    _REFUND_TABLE,
+    "after_create",
+    _REFUND_HISTORY_TRIGGER.execute_if(dialect="postgresql"),
+)
+event.listen(
+    _DISPUTE_TABLE,
+    "after_create",
+    _DISPUTE_HISTORY_TRIGGER.execute_if(dialect="postgresql"),
+)
+event.listen(
+    _BANK_TABLE,
+    "after_create",
+    _BANK_HISTORY_TRIGGER.execute_if(dialect="postgresql"),
+)
+event.listen(
+    _DOCUMENT_TABLE,
+    "after_create",
+    _DOCUMENT_HISTORY_TRIGGER.execute_if(dialect="postgresql"),
+)
+event.listen(
+    _SETTLEMENT_TABLE,
+    "after_create",
+    _SETTLEMENT_HISTORY_TRIGGER.execute_if(dialect="postgresql"),
+)

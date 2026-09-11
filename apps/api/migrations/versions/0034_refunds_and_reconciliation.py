@@ -18,8 +18,8 @@ Three constraints carry the chunk's guarantees:
 
 The refund ceiling — total refunded never exceeding the refundable charge — is
 not a single constraint because it spans rows. It is enforced by the service
-under a row lock on the payment attempt, and by chunk 10's balance trigger,
-which would refuse the posting even if the service were wrong.
+under a row lock on the payment attempt. The ledger separately guarantees that
+each resulting posting balances; balance alone cannot enforce the ceiling.
 """
 
 from collections.abc import Sequence
@@ -58,6 +58,12 @@ def upgrade() -> None:
             bind, checkfirst=True
         )
 
+    op.create_unique_constraint(
+        "uq_payment_attempts_refund_binding",
+        "payment_attempts",
+        ["id", "processor", "currency"],
+    )
+
     op.create_table(
         "refunds",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -65,7 +71,6 @@ def upgrade() -> None:
         sa.Column(
             "payment_attempt_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("payment_attempts.id"),
             nullable=False,
             index=True,
         ),
@@ -89,6 +94,21 @@ def upgrade() -> None:
             "currency ~ '^[A-Z]{3}$'", name="ck_refunds_currency_iso4217"
         ),
         sa.CheckConstraint("amount > 0", name="ck_refunds_amount"),
+        sa.CheckConstraint(
+            "(status = 'succeeded' AND settled_at IS NOT NULL "
+            "AND processor_reference IS NOT NULL) OR "
+            "(status <> 'succeeded' AND settled_at IS NULL)",
+            name="ck_refunds_settlement",
+        ),
+        sa.ForeignKeyConstraint(
+            ["payment_attempt_id", "processor", "currency"],
+            [
+                "payment_attempts.id",
+                "payment_attempts.processor",
+                "payment_attempts.currency",
+            ],
+            name="fk_refunds_attempt_binding",
+        ),
     )
     op.create_index(
         "ux_refunds_processor_reference",
@@ -105,7 +125,6 @@ def upgrade() -> None:
         sa.Column(
             "payment_attempt_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("payment_attempts.id"),
             nullable=False,
             index=True,
         ),
@@ -130,6 +149,15 @@ def upgrade() -> None:
             "(state IN ('won', 'lost') AND resolved_at IS NOT NULL) "
             "OR (state NOT IN ('won', 'lost') AND resolved_at IS NULL)",
             name="ck_disputes_resolved_at",
+        ),
+        sa.ForeignKeyConstraint(
+            ["payment_attempt_id", "processor", "currency"],
+            [
+                "payment_attempts.id",
+                "payment_attempts.processor",
+                "payment_attempts.currency",
+            ],
+            name="fk_disputes_attempt_binding",
         ),
     )
     op.create_index(
@@ -157,7 +185,6 @@ def upgrade() -> None:
         sa.Column(
             "matched_ledger_account_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("ledger_accounts.id"),
             nullable=True,
         ),
         sa.Column("matched_by", sa.String(200), nullable=True),
@@ -174,9 +201,16 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("amount > 0", name="ck_bank_transfer_receipts_amount"),
         sa.CheckConstraint(
-            "(status = 'matched' AND matched_ledger_account_id IS NOT NULL) "
-            "OR (status <> 'matched' AND matched_ledger_account_id IS NULL)",
+            "(status = 'matched' AND matched_ledger_account_id IS NOT NULL "
+            "AND matched_by IS NOT NULL AND matched_at IS NOT NULL) OR "
+            "(status <> 'matched' AND matched_ledger_account_id IS NULL "
+            "AND matched_by IS NULL AND matched_at IS NULL)",
             name="ck_bank_transfer_receipts_matched",
+        ),
+        sa.ForeignKeyConstraint(
+            ["matched_ledger_account_id", "currency"],
+            ["ledger_accounts.id", "ledger_accounts.currency"],
+            name="fk_bank_transfer_receipts_account_currency",
         ),
     )
     op.create_index(
@@ -224,8 +258,58 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "currency ~ '^[A-Z]{3}$'", name="ck_financial_documents_currency_iso4217"
         ),
+        sa.CheckConstraint("total_amount >= 0", name="ck_financial_documents_total"),
     )
     op.create_index("ix_financial_documents_order", "financial_documents", ["order_id"])
+
+    op.create_table(
+        "processor_settlement_reports",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column("processor", sa.String(32), nullable=False),
+        sa.Column("report_reference", sa.String(200), nullable=False),
+        sa.Column("period_start", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("period_end", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("charge_currency", sa.String(3), nullable=False),
+        sa.Column("settlement_currency", sa.String(3), nullable=False),
+        sa.Column("gross_amount", sa.Numeric(20, 6), nullable=False),
+        sa.Column("refund_amount", sa.Numeric(20, 6), nullable=False),
+        sa.Column("dispute_amount", sa.Numeric(20, 6), nullable=False),
+        sa.Column("fee_amount", sa.Numeric(20, 6), nullable=False),
+        sa.Column("tax_amount", sa.Numeric(20, 6), nullable=False),
+        sa.Column("fx_rate", sa.Numeric(20, 10), nullable=False),
+        sa.Column("net_amount", sa.Numeric(20, 6), nullable=False),
+        sa.Column("tax_policy_reference", sa.String(200), nullable=True),
+        sa.Column("snapshot", postgresql.JSONB(), nullable=False),
+        sa.Column("imported_at", sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint(
+            "processor", "report_reference", name="uq_processor_settlement_reports"
+        ),
+        sa.CheckConstraint(
+            "charge_currency ~ '^[A-Z]{3}$'",
+            name="ck_processor_settlement_reports_charge_currency_iso4217",
+        ),
+        sa.CheckConstraint(
+            "settlement_currency ~ '^[A-Z]{3}$'",
+            name="ck_processor_settlement_reports_settlement_currency_iso4217",
+        ),
+        sa.CheckConstraint("period_end > period_start", name="ck_settlement_period"),
+        sa.CheckConstraint(
+            "gross_amount >= 0 AND refund_amount >= 0 "
+            "AND dispute_amount >= 0 AND fee_amount >= 0 AND tax_amount >= 0 "
+            "AND net_amount >= 0",
+            name="ck_settlement_amounts",
+        ),
+        sa.CheckConstraint("fx_rate > 0", name="ck_settlement_fx_rate"),
+        sa.CheckConstraint(
+            "charge_currency <> settlement_currency OR fx_rate = 1",
+            name="ck_settlement_same_currency_fx",
+        ),
+    )
+    op.create_index(
+        "ix_processor_settlement_period",
+        "processor_settlement_reports",
+        ["processor", "charge_currency", "period_start", "period_end"],
+    )
 
     op.create_table(
         "exception_items",
@@ -249,16 +333,71 @@ def upgrade() -> None:
         postgresql_where=sa.text("resolved_at IS NULL"),
     )
 
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION damdam_refund_history() RETURNS trigger AS $$
+        BEGIN
+            IF TG_OP = 'DELETE' THEN
+                RAISE EXCEPTION 'financial history is immutable';
+            END IF;
+            IF TG_TABLE_NAME = 'financial_documents' THEN
+                RAISE EXCEPTION 'issued financial document is immutable';
+            END IF;
+            IF TG_TABLE_NAME = 'processor_settlement_reports' THEN
+                RAISE EXCEPTION 'processor settlement evidence is immutable';
+            END IF;
+            IF TG_TABLE_NAME = 'refunds'
+               AND to_jsonb(OLD)->>'status' IN ('succeeded', 'failed')
+               AND NEW IS DISTINCT FROM OLD THEN
+                RAISE EXCEPTION 'resolved refund is immutable';
+            END IF;
+            IF TG_TABLE_NAME = 'disputes'
+               AND to_jsonb(OLD)->>'state' IN ('won', 'lost')
+               AND NEW IS DISTINCT FROM OLD THEN
+                RAISE EXCEPTION 'resolved dispute is immutable';
+            END IF;
+            IF TG_TABLE_NAME = 'bank_transfer_receipts'
+               AND to_jsonb(OLD)->>'status' = 'matched'
+               AND NEW IS DISTINCT FROM OLD THEN
+                RAISE EXCEPTION 'matched bank receipt is immutable';
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE TRIGGER trg_refunds_history
+            BEFORE UPDATE OR DELETE ON refunds
+            FOR EACH ROW EXECUTE FUNCTION damdam_refund_history();
+        CREATE TRIGGER trg_disputes_history
+            BEFORE UPDATE OR DELETE ON disputes
+            FOR EACH ROW EXECUTE FUNCTION damdam_refund_history();
+        CREATE TRIGGER trg_bank_transfer_receipts_history
+            BEFORE UPDATE OR DELETE ON bank_transfer_receipts
+            FOR EACH ROW EXECUTE FUNCTION damdam_refund_history();
+        CREATE TRIGGER trg_financial_documents_history
+            BEFORE UPDATE OR DELETE ON financial_documents
+            FOR EACH ROW EXECUTE FUNCTION damdam_refund_history();
+        CREATE TRIGGER trg_processor_settlement_reports_history
+            BEFORE UPDATE OR DELETE ON processor_settlement_reports
+            FOR EACH ROW EXECUTE FUNCTION damdam_refund_history();
+        """
+    )
+
 
 def downgrade() -> None:
     bind = op.get_bind()
     for table in (
         "exception_items",
+        "processor_settlement_reports",
         "financial_documents",
         "bank_transfer_receipts",
         "disputes",
         "refunds",
     ):
         op.drop_table(table)
+    op.execute("DROP FUNCTION IF EXISTS damdam_refund_history()")
+    op.drop_constraint(
+        "uq_payment_attempts_refund_binding", "payment_attempts", type_="unique"
+    )
     for name, _ in _ENUMS:
         postgresql.ENUM(name=name, create_type=False).drop(bind, checkfirst=True)

@@ -26,6 +26,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from app import model_registry  # noqa: F401  -- completes SQLModel.metadata
 from app.auth.models import Platform, User
 from app.catalog.models import LegalEntity
+from app.ledger.models import JournalEntry
 from app.orders.models import Order, PaymentState
 from app.payments.contract import (
     AttemptStatus,
@@ -49,7 +50,8 @@ pytestmark = pytest.mark.skipif(
 
 NOW = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
 TABLES = (
-    "excess_payments, payment_attempts, payment_intents, merchant_payment_methods, "
+    "excess_payments, journal_lines, journal_entries, ledger_accounts, "
+    "payment_attempts, payment_intents, merchant_payment_methods, "
     "merchant_accounts, "
     "order_items, orders, legal_entities, users"
 )
@@ -380,6 +382,14 @@ class TestCapture:
         assert isinstance(first, PaymentAttempt)
         assert isinstance(second, PaymentAttempt)
         assert first.id == second.id
+        assert len(
+            session.exec(
+                select(JournalEntry).where(
+                    JournalEntry.business_event_id
+                    == f"payment:{attempt.id}:captured"
+                )
+            ).all()
+        ) == 1
         assert (
             len(
                 session.exec(

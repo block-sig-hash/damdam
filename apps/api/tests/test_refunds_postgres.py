@@ -18,14 +18,14 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app import model_registry  # noqa: F401  -- completes SQLModel.metadata
 from app.auth.models import Platform, User
 from app.catalog.models import LegalEntity
-from app.ledger.models import AccountKind, JournalEntry, OwnerKind
-from app.ledger.service import LedgerService
+from app.ledger.models import AccountKind, Direction, JournalEntry, OwnerKind
+from app.ledger.service import LedgerService, Posting
 from app.orders.models import Order
 from app.payments.contract import (
     AttemptStatus,
@@ -42,6 +42,7 @@ from app.refunds.models import (
     ExceptionItem,
     ExceptionKind,
     FinancialDocument,
+    ProcessorSettlementReport,
     Refund,
     RefundStatus,
 )
@@ -54,7 +55,8 @@ pytestmark = pytest.mark.skipif(
 
 NOW = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
 TABLES = (
-    "exception_items, financial_documents, bank_transfer_receipts, disputes, "
+    "exception_items, processor_settlement_reports, financial_documents, "
+    "bank_transfer_receipts, disputes, "
     "refunds, excess_payments, payment_attempts, payment_intents, "
     "merchant_accounts, journal_lines, journal_entries, ledger_accounts, "
     "orders, legal_entities, users"
@@ -95,7 +97,13 @@ def service(ledger):
     return RefundService(ledger, clock=Clock())
 
 
-def _captured(session: Session, ledger: LedgerService, amount: str = "5000.00"):
+def _captured(
+    session: Session,
+    ledger: LedgerService,
+    amount: str = "5000.00",
+    *,
+    captured: bool = True,
+):
     """A customer, a captured charge, and the credit account behind it."""
     entity = LegalEntity(code=f"E{uuid4().hex[:6]}", name="Seller", country="NG")
     session.add(entity)
@@ -140,17 +148,30 @@ def _captured(session: Session, ledger: LedgerService, amount: str = "5000.00"):
         processor="paystack",
         method=PaymentMethodKind.CARD,
         idempotency_key=f"intent:{intent.id}:attempt:1",
-        processor_reference=f"chg-{uuid4().hex[:10]}",
+        processor_reference=f"chg-{uuid4().hex[:10]}" if captured else None,
         currency="NGN",
         amount=Decimal(amount),
-        status=AttemptStatus.SUCCEEDED,
-        captured_at=NOW,
+        status=AttemptStatus.SUCCEEDED if captured else AttemptStatus.FAILED,
+        captured_at=NOW if captured else None,
         created_at=NOW,
     )
     session.add(attempt)
+    session.flush()
     credit = ledger.account(
         session, "NGN", AccountKind.SERVICE_CREDIT, OwnerKind.USER, payer.id
     )
+    if captured:
+        clearing = ledger.account(session, "NGN", AccountKind.SETTLEMENT_CLEARING)
+        revenue = ledger.account(session, "NGN", AccountKind.REVENUE)
+        ledger.post(
+            session,
+            f"payment:{attempt.id}:captured",
+            [
+                Posting(clearing, Direction.DEBIT, Decimal(amount)),
+                Posting(revenue, Direction.CREDIT, Decimal(amount)),
+            ],
+            occurred_at=NOW,
+        )
     session.commit()
     return attempt, credit, entity
 
@@ -177,7 +198,7 @@ class TestRefundCeiling:
         refund = service.request_refund(
             session, attempt, Decimal("5000.00"), "customer asked", "refund:1"
         )
-        service.record_refund_outcome(session, refund, _success(), credit)
+        service.record_refund_outcome(session, refund, _success())
         session.commit()
 
         session.refresh(refund)
@@ -201,7 +222,7 @@ class TestRefundCeiling:
             refund = service.request_refund(
                 session, attempt, Decimal(amount), "partial", f"refund:{index}"
             )
-            service.record_refund_outcome(session, refund, _success(), credit)
+            service.record_refund_outcome(session, refund, _success())
             session.commit()
 
         assert service.refundable_remaining(session, attempt) == Decimal("1000.00")
@@ -251,17 +272,12 @@ class TestRefundCeiling:
         refund = service.request_refund(
             session, attempt, Decimal("5000.00"), "x", "refund:1"
         )
-        service.record_refund_outcome(
-            session, refund, RefundOutcome(succeeded=False), credit
-        )
+        service.record_refund_outcome(session, refund, RefundOutcome(succeeded=False))
         session.commit()
         assert service.refundable_remaining(session, attempt) == Decimal("5000.00")
 
     def test_an_uncaptured_charge_cannot_be_refunded(self, session, service, ledger):
-        attempt, _, _ = _captured(session, ledger)
-        attempt.status = AttemptStatus.FAILED
-        session.add(attempt)
-        session.commit()
+        attempt, _, _ = _captured(session, ledger, captured=False)
         with pytest.raises(RefundError) as excinfo:
             service.request_refund(session, attempt, Decimal("1.00"), "x", "refund:1")
         assert excinfo.value.code == "charge_not_refundable"
@@ -326,6 +342,21 @@ class TestRefundCeiling:
         session.commit()
         assert first.id == second.id
 
+    def test_a_refund_key_cannot_be_reused_for_different_work(
+        self, session, service, ledger
+    ):
+        attempt, _, _ = _captured(session, ledger)
+        service.request_refund(
+            session, attempt, Decimal("100.00"), "first", "refund:same"
+        )
+        session.commit()
+
+        with pytest.raises(RefundError) as excinfo:
+            service.request_refund(
+                session, attempt, Decimal("101.00"), "first", "refund:same"
+            )
+        assert excinfo.value.code == "idempotency_conflict"
+
 
 # --- history is never rewritten ----------------------------------------------
 
@@ -337,7 +368,7 @@ class TestLedgerHistory:
         refund = service.request_refund(
             session, attempt, Decimal("1000.00"), "x", "refund:1"
         )
-        service.record_refund_outcome(session, refund, _success(), credit)
+        service.record_refund_outcome(session, refund, _success())
         session.commit()
 
         entries = session.exec(select(JournalEntry)).all()
@@ -359,14 +390,32 @@ class TestLedgerHistory:
             session, attempt, Decimal("1000.00"), "x", "refund:1"
         )
         settled = _success()
-        service.record_refund_outcome(session, refund, settled, credit)
+        service.record_refund_outcome(session, refund, settled)
         session.commit()
         count = len(session.exec(select(JournalEntry)).all())
 
         # The same outcome delivered twice: same reference, same event.
-        service.record_refund_outcome(session, refund, settled, credit)
+        service.record_refund_outcome(session, refund, settled)
         session.commit()
         assert len(session.exec(select(JournalEntry)).all()) == count
+
+    def test_a_late_failure_cannot_downgrade_a_settled_refund(
+        self, session, service, ledger
+    ):
+        attempt, credit, _ = _captured(session, ledger)
+        refund = service.request_refund(
+            session, attempt, Decimal("1000.00"), "x", "refund:1"
+        )
+        service.record_refund_outcome(session, refund, _success("rfnd-1"))
+        session.commit()
+
+        with pytest.raises(RefundError) as excinfo:
+            service.record_refund_outcome(
+                session, refund, RefundOutcome(succeeded=False)
+            )
+        assert excinfo.value.code == "refund_already_resolved"
+        session.refresh(refund)
+        assert refund.status is RefundStatus.SUCCEEDED
 
 
 # --- disputes ----------------------------------------------------------------
@@ -415,7 +464,7 @@ class TestDisputes:
         attempt, credit, _ = _captured(session, ledger)
         before = len(session.exec(select(JournalEntry)).all())
         dispute = service.open_dispute(session, attempt, "dsp-1", Decimal("5000.00"))
-        service.resolve_dispute(session, dispute, won=False, customer_account=credit)
+        service.resolve_dispute(session, dispute, won=False)
         session.commit()
 
         session.refresh(dispute)
@@ -429,7 +478,7 @@ class TestDisputes:
         attempt, credit, _ = _captured(session, ledger)
         before = len(session.exec(select(JournalEntry)).all())
         dispute = service.open_dispute(session, attempt, "dsp-1", Decimal("5000.00"))
-        service.resolve_dispute(session, dispute, won=True, customer_account=credit)
+        service.resolve_dispute(session, dispute, won=True)
         session.commit()
         assert len(session.exec(select(JournalEntry)).all()) == before
 
@@ -444,6 +493,22 @@ class TestDisputes:
         with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()
+
+    def test_disputes_cannot_exceed_the_captured_charge(self, session, service, ledger):
+        attempt, _, _ = _captured(session, ledger)
+        service.open_dispute(session, attempt, "dsp-1", Decimal("3000.00"))
+        with pytest.raises(RefundError) as excinfo:
+            service.open_dispute(session, attempt, "dsp-2", Decimal("2000.01"))
+        assert excinfo.value.code == "exceeds_disputable"
+
+    def test_a_lost_dispute_cannot_later_become_won(self, session, service, ledger):
+        attempt, credit, _ = _captured(session, ledger)
+        dispute = service.open_dispute(session, attempt, "dsp-1", Decimal("100.00"))
+        service.resolve_dispute(session, dispute, won=False)
+        session.commit()
+        with pytest.raises(RefundError) as excinfo:
+            service.resolve_dispute(session, dispute, won=True)
+        assert excinfo.value.code == "dispute_already_resolved"
 
 
 # --- bank funding ------------------------------------------------------------
@@ -574,6 +639,32 @@ class TestBankFunding:
             service.match_bank_line(session, receipt, credit, "ops:alex")
         assert excinfo.value.code == "currency_mismatch"
 
+    def test_a_statement_identity_cannot_replay_different_facts(
+        self, session, service, ledger
+    ):
+        service.import_bank_line(
+            session, "acct-1", "stmt-1", "NGN", Decimal("20.00"), NOW
+        )
+        session.commit()
+        with pytest.raises(RefundError) as excinfo:
+            service.import_bank_line(
+                session, "acct-1", "stmt-1", "NGN", Decimal("21.00"), NOW
+            )
+        assert excinfo.value.code == "idempotency_conflict"
+
+    def test_a_matched_line_cannot_be_reclassified_unmatched(
+        self, session, service, ledger
+    ):
+        _, credit, _ = _captured(session, ledger)
+        receipt = service.import_bank_line(
+            session, "acct-1", "stmt-1", "NGN", Decimal("20.00"), NOW
+        )
+        service.match_bank_line(session, receipt, credit, "ops:alex")
+        session.commit()
+        with pytest.raises(RefundError) as excinfo:
+            service.flag_unmatched(session, receipt, "changed our mind")
+        assert excinfo.value.code == "already_matched"
+
 
 # --- documents ---------------------------------------------------------------
 
@@ -651,6 +742,24 @@ class TestDocuments:
         # The document still names who actually sold it.
         assert document.snapshot["seller_name"] == "Seller"
 
+    def test_an_issued_document_cannot_be_rewritten(self, session, service, ledger):
+        _, _, entity = _captured(session, ledger)
+        document = service.issue_document(
+            session,
+            DocumentKind.RECEIPT,
+            "R-1",
+            entity.id,
+            "NGN",
+            Decimal("100.00"),
+            {},
+        )
+        session.commit()
+        document.total_amount = Decimal("1.00")
+        session.add(document)
+        with pytest.raises(DBAPIError):
+            session.commit()
+        session.rollback()
+
 
 # --- reconciliation and the exception queue ----------------------------------
 
@@ -710,7 +819,7 @@ class TestReconciliation:
         refund = service.request_refund(
             session, attempt, Decimal("1000.00"), "partial", "refund:1"
         )
-        service.record_refund_outcome(session, refund, _success(), credit)
+        service.record_refund_outcome(session, refund, _success())
         session.commit()
 
         report = service.settlement_report(session, "NGN")
@@ -722,7 +831,7 @@ class TestReconciliation:
     def test_a_lost_dispute_reduces_the_net_expected(self, session, service, ledger):
         attempt, credit, _ = _captured(session, ledger)
         dispute = service.open_dispute(session, attempt, "dsp-1", Decimal("2000.00"))
-        service.resolve_dispute(session, dispute, won=False, customer_account=credit)
+        service.resolve_dispute(session, dispute, won=False)
         session.commit()
 
         report = service.settlement_report(session, "NGN")
@@ -735,9 +844,107 @@ class TestReconciliation:
         """The service is gone and the money went back. Both facts survive."""
         attempt, credit, _ = _captured(session, ledger)
         dispute = service.open_dispute(session, attempt, "dsp-1", Decimal("5000.00"))
-        service.resolve_dispute(session, dispute, won=False, customer_account=credit)
+        service.resolve_dispute(session, dispute, won=False)
         session.commit()
 
         assert ledger.trial_balance(session, "NGN")["difference"] == Decimal("0.00")
         report = service.settlement_report(session, "NGN")
         assert report["net_expected"] == Decimal("0.00")
+
+    def test_a_fixture_settlement_reconciles_each_economic_component(
+        self, session, service, ledger
+    ):
+        attempt, credit, _ = _captured(session, ledger)
+        refund = service.request_refund(
+            session, attempt, Decimal("1000.00"), "partial", "refund:1"
+        )
+        service.record_refund_outcome(session, refund, _success())
+        report = service.import_settlement_report(
+            session,
+            processor="paystack",
+            report_reference="batch-1",
+            period_start=NOW - timedelta(days=1),
+            period_end=NOW + timedelta(days=1),
+            charge_currency="NGN",
+            settlement_currency="NGN",
+            gross_amount=Decimal("5000.00"),
+            refund_amount=Decimal("1000.00"),
+            dispute_amount=Decimal("0.00"),
+            fee_amount=Decimal("100.00"),
+            tax_amount=Decimal("50.00"),
+            fx_rate=Decimal("1"),
+            net_amount=Decimal("3850.00"),
+            tax_policy_reference="processor-tax-line",
+        )
+        result = service.reconcile_settlement_report(session, report)
+        session.commit()
+
+        assert result["matches"] is True
+        assert result["formula_net"] == Decimal("3850.00")
+        assert (
+            session.exec(
+                select(ExceptionItem).where(
+                    ExceptionItem.kind == ExceptionKind.SETTLEMENT_MISMATCH
+                )
+            ).all()
+            == []
+        )
+
+    def test_a_settlement_difference_enters_the_exception_queue(
+        self, session, service, ledger
+    ):
+        _captured(session, ledger)
+        report = service.import_settlement_report(
+            session,
+            processor="paystack",
+            report_reference="batch-1",
+            period_start=NOW - timedelta(days=1),
+            period_end=NOW + timedelta(days=1),
+            charge_currency="NGN",
+            settlement_currency="USD",
+            gross_amount=Decimal("4999.00"),
+            refund_amount=Decimal("0.00"),
+            dispute_amount=Decimal("0.00"),
+            fee_amount=Decimal("99.00"),
+            tax_amount=Decimal("0.00"),
+            fx_rate=Decimal("0.001000"),
+            net_amount=Decimal("4.90"),
+            snapshot={"source": "fixture.csv"},
+        )
+        result = service.reconcile_settlement_report(session, report)
+        session.commit()
+
+        assert result["matches"] is False
+        assert result["gross_difference"] == Decimal("-1.00")
+        item = session.exec(
+            select(ExceptionItem).where(
+                ExceptionItem.kind == ExceptionKind.SETTLEMENT_MISMATCH
+            )
+        ).one()
+        assert "gross=-1.00" in item.detail
+
+    def test_processor_settlement_evidence_is_immutable(self, session, service, ledger):
+        report = service.import_settlement_report(
+            session,
+            processor="paystack",
+            report_reference="batch-1",
+            period_start=NOW - timedelta(days=1),
+            period_end=NOW + timedelta(days=1),
+            charge_currency="NGN",
+            settlement_currency="NGN",
+            gross_amount=Decimal("0"),
+            refund_amount=Decimal("0"),
+            dispute_amount=Decimal("0"),
+            fee_amount=Decimal("0"),
+            tax_amount=Decimal("0"),
+            fx_rate=Decimal("1"),
+            net_amount=Decimal("0"),
+        )
+        session.commit()
+        stored = session.get(ProcessorSettlementReport, report.id)
+        assert stored is not None
+        stored.gross_amount = Decimal("1.00")
+        session.add(stored)
+        with pytest.raises(DBAPIError):
+            session.commit()
+        session.rollback()

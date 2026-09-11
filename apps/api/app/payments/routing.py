@@ -16,6 +16,10 @@ A browser redirect can never mark an order paid. It is a message from the
 customer's own browser, and anyone can navigate to a URL — the redirect is a
 hint to show a spinner, not evidence that money moved.
 
+An accepted capture and its `settlement_clearing → revenue` ledger entry are
+written in the same transaction. A paid order therefore cannot survive without
+the posting that settlement reconciliation expects.
+
 **Live collection is disabled.** `MerchantAccount.live_enabled` defaults to
 false and cannot be set true without an approval reference, because D3 and D4
 are open. A passing sandbox call is not merchant approval.
@@ -34,6 +38,8 @@ from sqlmodel import Session, col, select
 
 from app.auth.models import utc_now
 from app.catalog.quotes import Quote, QuoteStatus
+from app.ledger.models import AccountKind, Direction
+from app.ledger.service import LedgerService, Posting
 from app.money import round_money
 from app.orders.models import Order, PaymentState
 from app.payments.contract import (
@@ -118,8 +124,13 @@ def verify_hmac_sha512(secret: str, raw_body: bytes, signature: str) -> bool:
 
 
 class PaymentRouter:
-    def __init__(self, clock: Callable[[], datetime] = utc_now) -> None:
+    def __init__(
+        self,
+        clock: Callable[[], datetime] = utc_now,
+        ledger: LedgerService | None = None,
+    ) -> None:
         self.clock = clock
+        self.ledger = ledger or LedgerService(clock=clock)
 
     # --- routing ----------------------------------------------------------
 
@@ -441,6 +452,23 @@ class PaymentRouter:
         attempt.processor_status = charge.status
         attempt.captured_at = now
         session.add(attempt)
+
+        clearing = self.ledger.account(
+            session, attempt.currency, AccountKind.SETTLEMENT_CLEARING
+        )
+        revenue = self.ledger.account(
+            session, attempt.currency, AccountKind.REVENUE
+        )
+        self.ledger.post(
+            session,
+            f"payment:{attempt.id}:captured",
+            [
+                Posting(clearing, Direction.DEBIT, attempt.amount),
+                Posting(revenue, Direction.CREDIT, attempt.amount),
+            ],
+            occurred_at=now,
+            reference=f"capture {charge.processor_reference}",
+        )
 
         order = session.get(Order, intent.order_id)
         if order is not None:

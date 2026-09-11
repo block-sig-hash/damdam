@@ -2687,6 +2687,7 @@ Paystack behaves as documented.
 | `disputes` | The bank took the money and told us afterwards — a different event with a different accounting treatment |
 | `bank_transfer_receipts` | Evidence, imported separately from the decision to credit anybody |
 | `financial_documents` | Facts frozen at issue, never regenerated |
+| `processor_settlement_reports` | Immutable processor gross, refund, dispute, fee, tax, FX and payout evidence |
 | `exception_items` | What a human has to look at, with enough context to act |
 
 ### The refund ceiling
@@ -2695,11 +2696,11 @@ Paystack behaves as documented.
 large refund; it is a payout, and a payout is a different product with a
 different licensing conversation attached.
 
-It spans rows, so it is not one constraint. It is held in two places:
-`request_refund` computes the remaining headroom under `SELECT … FOR UPDATE` on
-the payment attempt, so two concurrent partial refunds cannot both see the same
-room; and chunk 10's balance trigger would refuse the posting even if the
-service were wrong.
+It spans rows, so it is not one constraint. `request_refund` computes the
+remaining headroom under `SELECT … FOR UPDATE` on the payment attempt, so two
+concurrent partial refunds cannot both see the same room. Chunk 10's balance
+trigger independently proves that each settled refund posting balances; a
+balanced journal entry by itself cannot enforce this cross-row ceiling.
 
 **An in-flight refund counts against the headroom.** A refund whose outcome we
 have not seen may already have paid out, and excluding it is exactly how a
@@ -2708,9 +2709,12 @@ second refund gets authorized on top of a first.
 ### A refund posts only when it settles
 
 A refund that has not settled has not moved money. Posting on request would show
-a customer credited before their bank saw anything. When it does settle it posts
-a **new, opposite entry** with its own business event — never an edit, which
-chunk 10's trigger refuses anyway.
+a reversal before the customer's bank saw anything. A successful processor
+capture posts `settlement_clearing → revenue`; when its refund settles, the
+refund posts the opposite `revenue → settlement_clearing` entry under its own
+business event. Neither path edits history, which chunk 10's trigger refuses
+anyway. A customer service-credit account is not used as a stand-in for an
+external cash refund.
 
 ### A dispute is not a refund
 
@@ -2736,6 +2740,10 @@ the assignment forbids. An unmatched line stays imported, uncredited, and goes
 to the exception queue — guessing whose payment it is credits one customer with
 another's money.
 
+The database requires a matched row to carry the account, actor and match time,
+and binds the account currency to the receipt currency. Once matched, the row is
+immutable; a correction is new evidence, not a rewrite of bank history.
+
 Funding posts at the bank's **value date**, not the date somebody got round to
 reconciling it.
 
@@ -2747,6 +2755,24 @@ regenerated from live data next year would show next year's prices with this
 year's date, and a customer comparing it against their bank statement would be
 right to complain. Numbers are unique per seller and kind: a tax authority
 asking for invoice 47 must get exactly one document.
+
+Issued documents are immutable at the database boundary. Refunds and disputes
+are structurally bound to the processor and currency of their payment attempt,
+and terminal outcomes are immutable as well, so a late callback cannot rewrite
+a settled refund or a lost chargeback.
+
+`processor_settlement_reports` stores each imported report once under its
+processor reference. Reconciliation compares the report's gross captures,
+refunds and lost disputes with local records for the same processor, currency
+and half-open period. It independently verifies their clearing and
+revenue/adjustment ledger postings, then checks the report's fee, tax, FX and
+net-payout arithmetic. Every difference enters `exception_items`. The import
+snapshot and all economic columns are immutable.
+
+This closes the fixture/software contract, not the provider decision. Actual
+report formats, fee schedules, tax policy, FX terms and live evidence remain
+blocked on D3/D4/D5. The older `settlement_report` helper remains an
+expected-net local aggregation and is not presented as processor evidence.
 
 ### The exception queue
 
