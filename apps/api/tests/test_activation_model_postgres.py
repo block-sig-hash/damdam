@@ -70,7 +70,9 @@ def test_package_is_owned_by_and_cascades_with_user() -> None:
         session.execute(delete(User).where(col(User.id) == user.id))
         session.commit()
 
-        assert session.exec(select(Package)).all() == []
+        assert session.exec(
+            select(Package).where(Package.user_id == user.id)
+        ).all() == []
 
 
 class _RecordingEsimScheduler:

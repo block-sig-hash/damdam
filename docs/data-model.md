@@ -3051,3 +3051,151 @@ is invisible from outside — the customer's balance simply stops moving.
 lists watches neither. Added with `ALTER TYPE … ADD VALUE`, so no
 `exception_items` row is rewritten and no exclusive lock is taken on a table
 chunk 25 will be reading.
+
+## 6.53 Amendment — Top-Ups, Spending Bounds and Organization Caps (US-36)
+
+**Recorded 10 September 2026 by build chunk 17.** Additive; migration
+`0037_spending_controls`. Nothing seeded, no existing row touched, and no column
+added to an existing table.
+
+### A prepaid promise is only as good as the thing that enforces it
+
+`prd.md` AC-36.4 forbids presenting a delayed, app-side figure as a guaranteed
+cap. The Telnyx capability record
+([telnyx/CAPABILITY-MATRIX.md](implementation/telnyx/CAPABILITY-MATRIX.md) §2 and
+[API-CONTRACTS.md](implementation/telnyx/API-CONTRACTS.md) §4) says why that
+bites: the data limit's network-side enforcement latency is undocumented, and
+**no voice spending cap is documented at all.**
+
+`spending_controls` is where a bound is either enforced by the supplier or
+honestly recorded as absent. Three columns carry that distinction:
+
+| Column | Meaning |
+|---|---|
+| `enforcement` | `provider_hard_limit`, `approved_bounded_exposure`, or `none` |
+| `confirmed_limit_bytes` | What the supplier said is in force — not what we asked for |
+| `max_overshoot_bytes` | The documented worst case. **Null means unquantified**, which is different from zero |
+
+`requested_limit_bytes` and `confirmed_limit_bytes` are separate for the whole
+duration of a change. A UI showing the requested figure while the change is in
+flight tells a customer their cap has moved when it has not.
+
+A synchronous supplier response is confirmation only when it reports the exact
+requested limit. A missing or different figure leaves the control failed: a
+smaller limit blocks allowance already sold, while a larger one silently raises
+the customer's possible exposure. A lost response remains `outcome_unknown`
+until a later observation reports that exact value; reconciliation never
+blindly resends the change.
+
+`ck_spending_controls_hard_limit_needs_confirmation` makes a control claiming
+supplier enforcement with no confirmed number impossible to store. That claim is
+exactly the overstatement AC-36.4 forbids, and it is the one somebody would make
+by accident.
+
+`ck_spending_controls_policy_needs_reference` does the same for the honest
+alternative: a bounded-exposure policy accepts a **quantified** maximum
+overshoot, and it has to name the approval behind it. An approval nobody can
+find is not an approval.
+
+**Nothing is seeded and no line gets a control row.** `enforcement` defaults to
+`none`, which is the true state for Telnyx today. An offer that depends on a
+hard prepaid cap stays gated until D1 answers the latency question or somebody
+approves a bounded-exposure policy.
+
+The approved calling amendment applies the same test to shared credit: *"Carrier
+spend has its own reservation/control mechanism while the app is closed. A
+unified displayed balance is insufficient."* A shared carrier/internet pool is
+allowed only when the carrier half is independently bounded — the same question,
+so deliberately the same answer.
+
+### A top-up is a new grant, not a bigger number
+
+`entitlements.data_bytes_total` is what the customer was granted when they
+bought the plan. Adding to it in place would make the original unreadable, and
+"how much did I actually buy, and when" is the first question in any billing
+dispute.
+
+So `entitlement_top_ups` is append-only, one row per purchase, and the available
+allowance is the grant **plus** the applied top-ups — the same discipline §6.47
+applies to money and §6.52 applies to usage.
+
+`uq_entitlement_top_ups_order_item` is the idempotency guarantee in table form:
+one purchase, one top-up, however many times a worker replays the request.
+`reservation_id` binds that purchase to exactly one ledger reservation, and the
+database requires the binding before any reserved-or-later state. The purchase
+facts and reservation binding cannot be rewritten or deleted: a PostgreSQL
+trigger permits only the documented forward state transitions (including a
+return from provisioning/unknown to paid for an explicit retry or refund).
+
+Seven states, because a partial state is only recoverable if it has a name:
+`requested`, `reserved`, `paid`, `provisioning`, `outcome_unknown`, `applied`,
+`failed`. **Only `applied` counts toward a balance.** A customer who has paid but
+whose supplier cap has not been raised does not yet have the data, and telling
+them they do produces a session that fails while the app insists it should work.
+
+`outcome_unknown` is there for the same reason it is in §6.48: a supplier
+request whose response was lost is not a failure, and retrying it raises a cap
+twice. Neither the allowance nor the money moves until it is reconciled —
+granting would give away data the carrier still blocks, refunding would return
+money for a cap that may well have been raised.
+
+Expiry extension is a separate column from allowance because the two are
+separately saleable and separately refusable: a supplier may let us add data to
+a profile it will not let us keep alive longer.
+
+Applying the grant also requires the line's adapter to advertise the separately
+verified `topup` capability. Raising a data cap is not evidence that the
+supplier can add allowance to an existing profile. Telnyx does not advertise
+that capability in the current fixture/documented configuration, so live reuse
+stays gated by D1 rather than being inferred from a successful PATCH.
+
+### What a top-up never does
+
+**It never gives away allowance.** Usage already recorded stays recorded, so a
+customer who overshot by 200 MB and buys 500 MB has 300 MB — the top-up adds to
+a deficit rather than resetting it.
+
+**It never loses paid credit.** A failed top-up releases its *reservation*,
+which moves no money because nothing was ever spent. Money already settled is a
+refund, which is §6.50's, and conflating the two would either invent a
+transaction or quietly keep a customer's payment.
+
+### Organization caps, deliberately small
+
+`organization_spending_policies` is per currency, because a cap is money and a
+single number covering NGN and USD would be adding unrelated balances that
+`app/money.py` exists to make impossible.
+
+Committed spend counts against the cap, not just applied spend: excluding
+in-flight top-ups lets two purchases both fit under one cap. `enforced` is
+explicit because an advisory cap that silently blocks, or an enforced one that
+silently does not, are both worse than saying which it is. No recorded policy
+means **nobody decided** — not zero, and not unlimited.
+
+Chunk 24 owns enterprise budgets, reports and offboarding. This is only the part
+chunk 17 needs to refuse a top-up that would exceed a recorded cap.
+
+### Low-balance notices announce once
+
+`uq_allowance_notices` is the whole mechanism. Without it, every poll
+re-announces the same threshold and a customer is notified every five minutes
+until they learn to turn notifications off — including the one that matters.
+
+An **unobserved** balance announces nothing. A "you have used 80%" notice
+derived from a grant and no measurement is an invention, and §6.52's freshness
+is what makes that checkable.
+
+### Suspension policy sits on top of §6.51's four states
+
+Chunk 17 decides *when* to suspend; chunk 15's `carrier_line_actions` decides
+*whether it happened*. The line moves on `confirmed` and on nothing else.
+
+Two refusals are worth recording:
+
+- **An unobserved balance suspends nobody.** Cutting a customer off because a
+  poller has never run is worse than the overshoot it would prevent, and the
+  balance would be an invention anyway.
+- **A carrier-imposed restriction is not ours to resume.** A line in
+  `data_limit_exceeded` was not suspended by us; only raising the limit clears
+  it, and a resume request would be refused by the carrier later and less
+  clearly.

@@ -501,6 +501,58 @@ class TelnyxConnectivityAdapter:
             limit_bytes=line.data_limit_bytes,
         )
 
+    def set_data_limit(
+        self, provider_reference: str, limit_bytes: int
+    ) -> ProviderLine:
+        """`PATCH /sim_cards/{id}` with `{data_limit: {amount, unit}}`.
+
+        The one lifecycle-adjacent Telnyx call that is **not** asynchronous: the
+        PATCH returns `200` with the updated SIM card rather than a 202 and an
+        action. So this returns the line, not a `ProviderAction`, and pretending
+        otherwise would invent a settlement step that does not exist.
+
+        Requires `SPENDING_ENFORCEMENT`, which Telnyx does **not** get by
+        default: the limit is documented but its network-side enforcement
+        latency is not, and a cap with an unquantified overshoot window is not a
+        hard cap. Chunk 17 reads that capability to decide whether a prepaid
+        guarantee can be promised at all.
+
+        The amount is sent in MB, as a string, because that is the documented
+        shape. Byte counts are converted by exact division and refused if they
+        do not divide evenly — silently rounding a customer's cap is how a limit
+        ends up being a different number from the one somebody set.
+        """
+        self.capabilities().require(Capability.SPENDING_ENFORCEMENT)
+        if limit_bytes < 0:
+            raise ConnectivityError("negative_data_limit")
+        if limit_bytes % 1_000_000:
+            raise ConnectivityError(
+                "data_limit_not_expressible",
+                f"{limit_bytes} bytes is not a whole number of MB, and MB|GB is "
+                "the documented unit; rounding it would set a cap nobody chose",
+            )
+        response = self._call(
+            "PATCH",
+            SIM_CARD_PATH.format(id=provider_reference),
+            body={
+                "data_limit": {
+                    "amount": str(limit_bytes // 1_000_000),
+                    "unit": "MB",
+                }
+            },
+        )
+        if response.status_code >= 400:
+            raise ConnectivityError(
+                "data_limit_rejected",
+                f"Telnyx returned {response.status_code} setting a data limit "
+                f"on SIM {provider_reference}: "
+                f"{', '.join(_error_codes(response.payload)) or 'no error code'}",
+            )
+        payload = response.payload.get("data")
+        if not isinstance(payload, dict):
+            raise ContractViolation("SIM card update response has no 'data' object")
+        return self._line(SimCard.from_payload(payload))
+
     def request_usage_report(self, start: datetime, end: datetime) -> str:
         """`POST /wireless/detail_records_reports`.
 
