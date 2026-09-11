@@ -302,7 +302,9 @@ def upgrade() -> None:
         sa.UniqueConstraint(
             "product_id", "currency", "version", name="uq_tariffs_version"
         ),
-        sa.CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ck_tariffs_currency_iso4217"),
+        sa.CheckConstraint(
+            "currency ~ '^[A-Z]{3}$'", name="ck_tariffs_currency_iso4217"
+        ),
         sa.CheckConstraint("version >= 1", name="ck_tariffs_version"),
         sa.CheckConstraint(
             "effective_to IS NULL OR effective_to > effective_from",
@@ -412,7 +414,9 @@ def upgrade() -> None:
         sa.Column("redeemed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("digest", sa.String(64), nullable=False),
         sa.UniqueConstraint("id", "currency", name="uq_quotes_id_currency"),
-        sa.CheckConstraint("currency ~ '^[A-Z]{3}$'", name="ck_quotes_currency_iso4217"),
+        sa.CheckConstraint(
+            "currency ~ '^[A-Z]{3}$'", name="ck_quotes_currency_iso4217"
+        ),
         sa.CheckConstraint("expires_at > issued_at", name="ck_quotes_window"),
         sa.CheckConstraint(
             "subtotal_amount >= 0 AND tax_amount >= 0 AND fee_amount >= 0 "
@@ -492,7 +496,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
-    op.execute(sa.text("DROP TRIGGER IF EXISTS trg_quote_items_immutable ON quote_items"))
+    op.execute(
+        sa.text("DROP TRIGGER IF EXISTS trg_quote_items_immutable ON quote_items")
+    )
     op.execute(sa.text("DROP TRIGGER IF EXISTS trg_quotes_immutable ON quotes"))
     op.execute(sa.text("DROP FUNCTION IF EXISTS damdam_quote_items_immutable()"))
     op.execute(sa.text("DROP FUNCTION IF EXISTS damdam_quotes_immutable()"))
