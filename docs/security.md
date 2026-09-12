@@ -528,3 +528,86 @@ HTTP attempts commit the durable failure counter before returning an error, and
 the lock response carries `Retry-After` as both structured detail and a header.
 The TOTP secret remains plaintext until chunk 26 supplies envelope encryption
 and key rotation; this is a production gate, not an accepted protection claim.
+
+---
+
+## 10.20 Amendment — The Call Grant and What It Does Not Cover (US-45)
+
+**Recorded 12 September 2026 by build chunk V02.** This implements §10.18's
+requirements and records, precisely, which of them are now enforced and which
+remain open. The distinction matters more than usual here: the threat is a
+copied credential that spends somebody else's money, and a control that is
+believed to exist and does not is worse than none.
+
+### The threat this chunk answers
+
+V01 established that a Telnyx WebRTC credential authenticates an **endpoint**.
+No per-destination scope, claim or allowed-list is documented inside the token,
+so a token must be assumed able to do whatever its connection permits. If the
+client handed a destination to the SDK and the backend simply billed what came
+back, a copied token would be a funded dialler pointed at any number in the
+world.
+
+### What is enforced
+
+- **The client never decides anything.** A destination is normalized, priced and
+  written to `call_attempts` at authorization. Every later step — start, webhook,
+  provider command — reads it from that row. No code path accepts a destination
+  from a provider event or a client call and substitutes it.
+- **Grants are single-use, short-lived and owner-scoped.** Consumption is a
+  conditional `UPDATE` whose predicate includes unconsumed, authorized and
+  unexpired, so two concurrent webhooks cannot both spend one grant.
+- **Money is held before the grant exists.** The reservation commits first; a
+  crash between the two leaves a hold with no grant, never a grant with no hold.
+- **Credentials are per device and individually revocable.** Signing out one
+  installation leaves the customer's other devices working, which is what makes
+  revocation something people actually do.
+- **Events are authenticated over the raw body, then stored, then applied.**
+  Ed25519 with a timestamp tolerance proves origin; the unique provider event id
+  in `call_events` proves novelty. The signature alone accepts a replay inside
+  the window, and that gap is what the inbox closes.
+- **Emergency and short service numbers are refused before the SDK is invoked**,
+  because Telnyx routes country-matched emergency calls without parking them —
+  the backend's decision point does not exist for that class of number.
+- **Tenant boundaries hold in both directions.** A work call requires an active
+  membership; personal and organization histories are separate queries; a foreign
+  attempt is `not found` rather than `forbidden`, so ids cannot be enumerated.
+- **Rate limits are durable.** Session issuance is counted on the credential row,
+  not in a process or a cache that a restart clears.
+- **Termination is never gated on the route flag.** Stop, hangup and revocation
+  work with calling disabled. Disabling new calls must not strand connected ones.
+- **Credentials never reach logs.** The account API key stays server-side, no
+  token is stored, and provider payloads are redacted before logging.
+
+### What is *not* enforced, and must not be claimed
+
+- **Credential containment is unproven (B1).** Nothing in this chunk can stop a
+  copied token from reaching the provider's emergency flow, because that flow
+  bypasses the parking hook this design depends on. The refusal implemented here
+  is ours, at authorization time, and a client that never calls our API is not
+  subject to it. `CallingCapability.EMERGENCY_CONTAINMENT` is deliberately not
+  advertised by the Telnyx adapter, and `calling_live_routes_enabled` refuses to
+  start without a named account-test artifact.
+- **The parked client leg has no documented duration bound (B3).**
+  `time_limit_secs` bounds the destination leg we create and is the only control
+  that survives this process dying. The client leg and the provider's termination
+  delay are unbounded by documented evidence, so **no hard prepaid guarantee is
+  made**, and the daily spend limit is a backstop with no documented reaction
+  time rather than a cap.
+- **Reconciliation cannot always answer.** Telnyx documents no lookup by
+  `command_id`, so `reconcile_operation` returns `None` and the operation is held
+  for review. That is a deliberate dead end: a human deciding beats a worker
+  dialling a second billable leg.
+- **The bridge request field is unsettled (F2).** Official material disagrees
+  between `call_control_id` and `call_control_id_to_bridge_with`; the adapter
+  sends both and the contract probe must resolve it before live traffic.
+- **No emergency-calling claim is made for the internet product**, in any market,
+  and §10.18's requirement to evaluate per-mode and per-market obligations before
+  sale is untouched by this chunk.
+
+### Browser origin policy is chunk 25/26, not this chunk
+
+§10.18 asks for restrictive browser origins and secret rotation. V05 introduces
+the browser client and chunks 25–26 own the CORS and rotation configuration; this
+chunk adds no browser surface and changes no CORS policy, so nothing here should
+be read as having settled them.

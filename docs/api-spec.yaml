@@ -2953,6 +2953,351 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/calls/eligibility:
+    get:
+      tags:
+      - calling
+      summary: Eligibility
+      description: "Price a call and say whether it could start. Holds nothing.\n\n\
+        A preview that reserved money would make a customer's balance flicker as\n\
+        they scrolled a contact list, so this deliberately commits nothing \u2014\
+        \ the\nledger is not touched and no attempt row is written."
+      operationId: eligibility_v1_calls_eligibility_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: destination
+        in: query
+        required: true
+        schema:
+          type: string
+          maxLength: 32
+          title: Destination
+      - name: currency
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 3
+          title: Currency
+      - name: organization_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Organization Id
+      - name: requested_seconds
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            maximum: 14400
+            minimum: 1
+          - type: 'null'
+          title: Requested Seconds
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EligibilityResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/calls/client-session:
+    post:
+      tags:
+      - calling
+      summary: Issue Client Session
+      description: 'Issue this device a short provider session. The account key never
+        leaves.
+
+
+        One credential per device, so signing out one installation later does not
+
+        take out the customer''s other devices.'
+      operationId: issue_client_session_v1_calls_client_session_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientSessionRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientSessionResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - calling
+      summary: Revoke Client Session
+      description: 'Revoke this device''s credential, or every device''s.
+
+
+        Not gated on the route being enabled: withdrawing a credential is a
+
+        containment action, and a deployment that has just switched calling off is
+
+        exactly when outstanding credentials most need withdrawing.'
+      operationId: revoke_client_session_v1_calls_client_session_delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: device_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Device Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/calls/authorize:
+    post:
+      tags:
+      - calling
+      summary: Authorize Call
+      description: 'Create one durable grant with the money already held.
+
+
+        The response carries no provider material. Authorization and dialling are
+
+        separate steps precisely so that holding a grant is not the same as holding
+
+        the means to place a call.'
+      operationId: authorize_call_v1_calls_authorize_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizeRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttemptResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/calls/{attempt_id}/start:
+    post:
+      tags:
+      - calling
+      summary: Start Call
+      description: Hand the client its instruction for one attempt. Converges on repetition.
+      operationId: start_call_v1_calls__attempt_id__start_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: attempt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Attempt Id
+      - name: device_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Device Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/calls/{attempt_id}/stop:
+    post:
+      tags:
+      - calling
+      summary: Stop Call
+      description: 'End a call. Works whether or not new calling is enabled.
+
+
+        Termination is never gated on the route flag: disabling new calling must not
+
+        disable termination or financial recovery.'
+      operationId: stop_call_v1_calls__attempt_id__stop_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: attempt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Attempt Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StopRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttemptResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/calls/{attempt_id}:
+    get:
+      tags:
+      - calling
+      summary: Get Call
+      operationId: get_call_v1_calls__attempt_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: attempt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Attempt Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttemptResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/calls:
+    get:
+      tags:
+      - calling
+      summary: List Calls
+      description: 'This caller''s calls in one scope.
+
+
+        Personal and work histories are separate queries, not one query with a
+
+        label. The payer differs and so does who may read them, and a combined list
+
+        would put a member''s personal calls in front of whoever can see the
+
+        organization''s.'
+      operationId: list_calls_v1_calls_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Organization Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttemptListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/webhooks/calling/events:
+    post:
+      tags:
+      - calling
+      summary: Receive Call Event
+      description: 'Ingest a signed provider event, exactly once.
+
+
+        The **raw** body is read and handed to the adapter unparsed. A signature
+
+        checked against re-serialized JSON verifies what our parser produced rather
+
+        than what was sent, and those differ the moment key order or number
+
+        formatting does.'
+      operationId: receive_call_event_v1_webhooks_calling_events_post
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CallEventAckResponse'
   /v1/checkins:
     post:
       tags:
@@ -3274,6 +3619,90 @@ components:
       - country
       - assigned_at
       title: AssignedNumberView
+    AttemptListResponse:
+      properties:
+        attempts:
+          items:
+            $ref: '#/components/schemas/AttemptResponse'
+          type: array
+          title: Attempts
+      type: object
+      required:
+      - attempts
+      title: AttemptListResponse
+    AttemptResponse:
+      properties:
+        attempt_id:
+          type: string
+          format: uuid
+          title: Attempt Id
+        state:
+          type: string
+          title: State
+        destination_e164:
+          type: string
+          title: Destination E164
+        destination_country:
+          type: string
+          title: Destination Country
+        identity_e164:
+          type: string
+          title: Identity E164
+        currency:
+          type: string
+          title: Currency
+        max_seconds:
+          type: integer
+          title: Max Seconds
+        max_charge_amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Max Charge Amount
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        answered_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Answered At
+        ended_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Ended At
+        end_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: End Reason
+        organization_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Organization Id
+      type: object
+      required:
+      - attempt_id
+      - state
+      - destination_e164
+      - destination_country
+      - identity_e164
+      - currency
+      - max_seconds
+      - max_charge_amount
+      - expires_at
+      - created_at
+      title: AttemptResponse
+      description: One call attempt, as its owner may see it.
     AuthResponse:
       properties:
         access_token:
@@ -3294,6 +3723,48 @@ components:
       - user
       - is_new_user
       title: AuthResponse
+    AuthorizeRequest:
+      properties:
+        destination:
+          type: string
+          maxLength: 32
+          minLength: 1
+          title: Destination
+        idempotency_key:
+          type: string
+          maxLength: 200
+          minLength: 8
+          title: Idempotency Key
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+          title: Currency
+        organization_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Organization Id
+        device_id:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Device Id
+        requested_seconds:
+          anyOf:
+          - type: integer
+            maximum: 14400.0
+            minimum: 1.0
+          - type: 'null'
+          title: Requested Seconds
+      type: object
+      required:
+      - destination
+      - idempotency_key
+      - currency
+      title: AuthorizeRequest
     Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post:
       properties:
         file:
@@ -3371,6 +3842,36 @@ components:
       - increment_seconds
       - minimum_seconds
       title: CallDestinationView
+    CallEventAckResponse:
+      properties:
+        received:
+          type: boolean
+          title: Received
+      type: object
+      required:
+      - received
+      title: CallEventAckResponse
+      description: 'What the provider is told. Deliberately uninformative.
+
+
+        `received` is true for an event we stored, including a duplicate we did not
+
+        apply. A provider that learned which of its deliveries were novel would be
+
+        told something about our state that it has no need for, and an attacker
+
+        probing the endpoint would learn the same thing.
+
+
+        Named distinctly rather than `WebhookResponse`, which `app/payments` and
+
+        `app/voice` already share. Those two are structurally identical so FastAPI
+
+        emits one schema for both; a third with a different shape would split all
+
+        three into module-qualified names and rename two existing client-visible
+
+        schemas as a side effect of this chunk.'
     CallHistoryResponse:
       properties:
         calls:
@@ -3514,6 +4015,50 @@ components:
       - order
       - resumed
       title: CheckoutResponse
+    ClientSessionRequest:
+      properties:
+        device_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Device Id
+        device_label:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Device Label
+      type: object
+      required:
+      - device_id
+      title: ClientSessionRequest
+    ClientSessionResponse:
+      properties:
+        token:
+          type: string
+          title: Token
+        sip_identity:
+          type: string
+          title: Sip Identity
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      type: object
+      required:
+      - token
+      - sip_identity
+      - expires_at
+      title: ClientSessionResponse
+      description: 'A short-lived provider token for one device. The only secret we
+        return.
+
+
+        `expires_at` is the earlier of the token''s own expiry and its parent
+
+        credential''s, so a client is never told it has a working session after the
+
+        credential behind it has gone.'
     DependencyChecks:
       properties:
         postgres:
@@ -3653,6 +4198,68 @@ components:
       - fcm_token
       - platform
       title: DeviceTokenUpsert
+    EligibilityResponse:
+      properties:
+        destination_e164:
+          type: string
+          title: Destination E164
+        destination_country:
+          type: string
+          title: Destination Country
+        destination_kind:
+          type: string
+          title: Destination Kind
+        currency:
+          type: string
+          title: Currency
+        max_seconds:
+          type: integer
+          title: Max Seconds
+        max_charge_amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Max Charge Amount
+        rate_per_minute_amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Rate Per Minute Amount
+        setup_amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Setup Amount
+        available_amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Available Amount
+        fundable:
+          type: boolean
+          title: Fundable
+        route_enabled:
+          type: boolean
+          title: Route Enabled
+      type: object
+      required:
+      - destination_e164
+      - destination_country
+      - destination_kind
+      - currency
+      - max_seconds
+      - max_charge_amount
+      - rate_per_minute_amount
+      - setup_amount
+      - available_amount
+      - fundable
+      - route_enabled
+      title: EligibilityResponse
+      description: 'What a call would cost, before anybody commits to it.
+
+
+        `route_enabled` is reported rather than implied. A price with no route is
+        a
+
+        quote for something that cannot be bought, and a client that cannot tell the
+
+        difference will show a working call button.'
     EmailIdentifierRequest:
       properties:
         email:
@@ -6093,6 +6700,42 @@ components:
         re-renders once the service call lands, which is the flicker every "no
 
         service" screen in the old app had.'
+    StartResponse:
+      properties:
+        attempt_id:
+          type: string
+          format: uuid
+          title: Attempt Id
+        destination_e164:
+          type: string
+          title: Destination E164
+        correlation:
+          type: string
+          title: Correlation
+        max_seconds:
+          type: integer
+          title: Max Seconds
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      type: object
+      required:
+      - attempt_id
+      - destination_e164
+      - correlation
+      - max_seconds
+      - expires_at
+      title: StartResponse
+      description: 'Everything the client needs for one attempt, and nothing else.
+
+
+        `correlation` is echoed back to us by the provider. It points at an attempt;
+
+        it does not authorize one, and the event path re-validates ownership from
+        the
+
+        database before acting on anything it names.'
     StepUpRequest:
       properties:
         code:
@@ -6121,6 +6764,16 @@ components:
       required:
       - expires_at
       title: StepUpResponse
+    StopRequest:
+      properties:
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Reason
+      type: object
+      title: StopRequest
     TariffView:
       properties:
         version:
