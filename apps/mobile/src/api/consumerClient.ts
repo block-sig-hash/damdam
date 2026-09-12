@@ -16,6 +16,13 @@ export type ServiceOwner = 'personal' | 'organization';
 
 export interface ServiceSummary {
   order_item_id: string;
+  /**
+   * The address My Line is keyed by (chunk 20). Null until provisioning grants
+   * an entitlement, so a paid-but-unprovisioned item has nothing to open — and
+   * the caller must branch on that rather than route to a line that does not
+   * exist yet.
+   */
+  entitlement_id: string | null;
   order_id: string;
   order_reference: string;
   product_name: string;

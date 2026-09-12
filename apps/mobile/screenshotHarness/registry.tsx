@@ -22,10 +22,19 @@ import { GALLERY_SECTIONS, GalleryScreen } from '../src/screens/Gallery/GalleryS
 import { PlanListScreen } from '../src/screens/Purchase/PlanListScreen';
 import { QuoteReviewScreen } from '../src/screens/Purchase/QuoteReviewScreen';
 import { OrderStatusScreen } from '../src/screens/Purchase/OrderStatusScreen';
+import { MyLineScreen } from '../src/screens/MyLine/MyLineScreen';
+import { InstallProfileScreen } from '../src/screens/MyLine/InstallProfileScreen';
+import { CallingGuideScreen } from '../src/screens/MyLine/CallingGuideScreen';
+import { activationGuideFor } from '../src/screens/EsimActivation/activationGuides';
 import { savePinLocally } from '../src/utils/pinLocalStore';
 import {
   FIXTURE_ACCESS_TOKEN,
   FIXTURE_DEVICE_CHECKED,
+  FIXTURE_INSTALLATION_CREDENTIAL,
+  FIXTURE_LINE,
+  FIXTURE_LINE_AWAITING_ACTIVATION,
+  FIXTURE_LINE_SUSPENDED,
+  FIXTURE_LINE_UNMEASURED,
   FIXTURE_DEVICE_INCAPABLE,
   FIXTURE_MARKET,
   FIXTURE_ORDER,
@@ -347,5 +356,92 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
         onDismiss={noop}
       />
     ),
+  },
+
+  /*
+   * Chunk 20 (US-38). The installation target is captured with its screen
+   * protection reported as *unavailable*, which is the honest worst case and the
+   * one whose copy matters most — on iOS there is no way to block a screenshot,
+   * and the warning is the whole mitigation. The activation code in the fixture
+   * is deliberately unusable (`harness.invalid`).
+   */
+  'my-line': {
+    label: 'My Line — working',
+    render: () => (
+      <MyLineScreen
+        line={FIXTURE_LINE}
+        loading={false}
+        errorMessage={null}
+        onRefresh={noop}
+        onInstall={noop}
+        onOpenCallingGuide={noop}
+        onBrowsePlans={noop}
+      />
+    ),
+  },
+  'my-line-awaiting-activation': {
+    label: 'My Line — installed, waiting for the network',
+    render: () => (
+      <MyLineScreen
+        line={FIXTURE_LINE_AWAITING_ACTIVATION}
+        loading={false}
+        errorMessage={null}
+        onRefresh={noop}
+        onInstall={noop}
+        onOpenCallingGuide={noop}
+        onBrowsePlans={noop}
+      />
+    ),
+  },
+  'my-line-suspended': {
+    label: 'My Line — suspended',
+    render: () => (
+      <MyLineScreen
+        line={FIXTURE_LINE_SUSPENDED}
+        loading={false}
+        errorMessage={null}
+        onRefresh={noop}
+        onInstall={noop}
+        onOpenCallingGuide={noop}
+        onBrowsePlans={noop}
+      />
+    ),
+  },
+  'my-line-usage-unmeasured': {
+    label: 'My Line — no usage ever reported',
+    render: () => (
+      <MyLineScreen
+        line={FIXTURE_LINE_UNMEASURED}
+        loading={false}
+        errorMessage={null}
+        onRefresh={noop}
+        onInstall={noop}
+        onOpenCallingGuide={noop}
+        onBrowsePlans={noop}
+      />
+    ),
+  },
+  'my-line-installation': {
+    label: 'My Line — activation code (screenshots unprotected)',
+    render: () => (
+      <InstallProfileScreen
+        credential={FIXTURE_INSTALLATION_CREDENTIAL}
+        guide={activationGuideFor('android', 'Tecno Camon 20')}
+        privacy="unsupported"
+        loading={false}
+        busy={false}
+        errorMessage={null}
+        directInstallInvoked={false}
+        onReveal={noop}
+        onDirectInstall={noop}
+        onConfirmInstalled={noop}
+        onReportFailed={noop}
+        onBack={noop}
+      />
+    ),
+  },
+  'my-line-calling-guide': {
+    label: 'My Line — choosing this line for calls',
+    render: () => <CallingGuideScreen line={FIXTURE_LINE} onBack={noop} />,
   },
 };

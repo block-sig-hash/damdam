@@ -12,6 +12,7 @@ class EsimDownloadPackage : ReactPackage {
       EsimDownloadModule(reactContext),
       EsimActivationModule(reactContext),
       ArrivalPromptModule(reactContext),
+      ScreenPrivacyModule(reactContext),
     )
 
   override fun createViewManagers(

@@ -1488,6 +1488,180 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/lines:
+    get:
+      tags:
+      - My Line
+      summary: List Lines
+      description: 'Every line this account **holds**, not every line it paid for.
+
+
+        An organization buying for its staff is the payer; the holder is the person
+
+        whose phone the profile goes on. My Line is the holder''s screen.'
+      operationId: list_lines_v1_me_lines_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LineListResponse'
+      security:
+      - HTTPBearer: []
+  /v1/me/lines/{entitlement_id}:
+    get:
+      tags:
+      - My Line
+      summary: Read Line
+      operationId: read_line_v1_me_lines__entitlement_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: entitlement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Entitlement Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LineDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/lines/{entitlement_id}/installation/grant:
+    post:
+      tags:
+      - My Line
+      summary: Issue Installation Grant
+      description: 'Authorize one delivery of this line''s profile. Returns no profile.
+
+
+        Two calls rather than one because this half is safe to retry and the next
+
+        half is not. A customer who taps "show my eSIM" twice gets two grants and
+
+        spends one; a single endpoint that returned the code would have spent the
+
+        profile on the first tap, and on a one-time-use profile that is the whole
+
+        purchase.'
+      operationId: issue_installation_grant_v1_me_lines__entitlement_id__installation_grant_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: entitlement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Entitlement Id
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallationGrantResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/lines/{entitlement_id}/installation/redeem:
+    post:
+      tags:
+      - My Line
+      summary: Redeem Installation Grant
+      description: "Spend a grant and return the profile, once.\n\nThe path names\
+        \ the line and the token authorizes the delivery; both are\nchecked, and they\
+        \ are not two ways of saying the same thing. The vault\nre-derives the holder\
+        \ from the credential itself, so a token cannot be\nreplayed against a line\
+        \ it was not issued for even if the path says\notherwise \u2014 the mismatch\
+        \ surfaces as the same unredeemable answer as an\nexpired or already-spent\
+        \ grant."
+      operationId: redeem_installation_grant_v1_me_lines__entitlement_id__installation_redeem_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: entitlement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Entitlement Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstallationRedeemRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallationCredentialResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/lines/{entitlement_id}/installation/confirm:
+    post:
+      tags:
+      - My Line
+      summary: Confirm Installation
+      description: "The device reporting what it did \u2014 the only thing that may\
+        \ say so.\n\nDelivering a QR code is not an installation, and neither is the\
+        \ supplier\nreleasing the profile for download. Returning the refreshed line\
+        \ detail\nrather than an empty 204 is deliberate: the screen that reports\
+        \ an install\nis the screen that must then show activation is a *separate*\
+        \ thing still\npending."
+      operationId: confirm_installation_v1_me_lines__entitlement_id__installation_confirm_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: entitlement_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Entitlement Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstallationConfirmRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LineDetailResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/auth/mfa/enroll:
     post:
       tags:
@@ -3082,6 +3256,24 @@ components:
       - ngn_price
       - is_group_tier
       title: AdminPricingTierResponse
+    AssignedNumberView:
+      properties:
+        e164:
+          type: string
+          title: E164
+        country:
+          type: string
+          title: Country
+        assigned_at:
+          type: string
+          format: date-time
+          title: Assigned At
+      type: object
+      required:
+      - e164
+      - country
+      - assigned_at
+      title: AssignedNumberView
     AuthResponse:
       properties:
         access_token:
@@ -3145,6 +3337,35 @@ components:
         destination absent from the tariff is a destination the plan cannot price,
 
         and therefore one it must not imply it covers.'
+    CallDestinationView:
+      properties:
+        country:
+          type: string
+          title: Country
+        destination_kind:
+          type: string
+          title: Destination Kind
+        per_minute_amount:
+          type: string
+          title: Per Minute Amount
+        setup_amount:
+          type: string
+          title: Setup Amount
+        increment_seconds:
+          type: integer
+          title: Increment Seconds
+        minimum_seconds:
+          type: integer
+          title: Minimum Seconds
+      type: object
+      required:
+      - country
+      - destination_kind
+      - per_minute_amount
+      - setup_amount
+      - increment_seconds
+      - minimum_seconds
+      title: CallDestinationView
     CallHistoryResponse:
       properties:
         calls:
@@ -3194,6 +3415,47 @@ components:
       - pstn
       - app_to_app
       title: CallType
+    CallingView:
+      properties:
+        native_available:
+          type: boolean
+          title: Native Available
+        native_unavailable_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Native Unavailable Reason
+        internet_dialer_enabled:
+          type: boolean
+          title: Internet Dialer Enabled
+        internet_dialer_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Internet Dialer Reason
+        requires_line_selection:
+          type: boolean
+          title: Requires Line Selection
+      type: object
+      required:
+      - native_available
+      - native_unavailable_reason
+      - internet_dialer_enabled
+      - internet_dialer_reason
+      - requires_line_selection
+      title: CallingView
+      description: 'Native calling and internet calling, deliberately kept apart.
+
+
+        The approved calling amendment is explicit that these are distinct
+
+        capabilities, and that launching the phone dialer proves nothing about which
+
+        SIM was chosen, whether the line was attached, or whether a call happened.
+
+        So this reports only what is *known* about each, and the app is built so
+
+        that opening the dialer is guidance rather than an outcome.'
     CheckoutOutcome:
       type: string
       enum:
@@ -3752,6 +4014,141 @@ components:
       required:
       - token
       title: IdentityTokenRequest
+    InstallationConfirmRequest:
+      properties:
+        installed:
+          type: boolean
+          title: Installed
+      type: object
+      required:
+      - installed
+      title: InstallationConfirmRequest
+      description: "The device reporting what it did.\n\n`installed: false` is accepted\
+        \ and recorded as *not* installed rather than\nignored \u2014 a failed install\
+        \ that leaves the record saying \"installed\" is how\na customer ends up being\
+        \ told their line is ready when nothing is on the\nphone."
+    InstallationCredentialResponse:
+      properties:
+        entitlement_id:
+          type: string
+          format: uuid
+          title: Entitlement Id
+        lpa:
+          type: string
+          title: Lpa
+        one_time_use:
+          type: boolean
+          title: One Time Use
+        delivery_count:
+          type: integer
+          title: Delivery Count
+        reinstall_available:
+          type: boolean
+          title: Reinstall Available
+      type: object
+      required:
+      - entitlement_id
+      - lpa
+      - one_time_use
+      - delivery_count
+      - reinstall_available
+      title: InstallationCredentialResponse
+      description: 'The profile, once.
+
+
+        Served with `Cache-Control: no-store`. The `lpa` is the whole secret: anyone
+
+        holding it can install the profile instead of the customer, and a Telnyx
+
+        profile cannot be re-downloaded, so there is nothing to rotate afterwards.'
+    InstallationGrantResponse:
+      properties:
+        grant_token:
+          type: string
+          title: Grant Token
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+        one_time_use:
+          type: boolean
+          title: One Time Use
+        delivery_count:
+          type: integer
+          title: Delivery Count
+      type: object
+      required:
+      - grant_token
+      - expires_at
+      - one_time_use
+      - delivery_count
+      title: InstallationGrantResponse
+      description: "Authorization to fetch the profile once \u2014 never the profile\
+        \ itself.\n\nThe token is returned here and is not stored server-side in a\
+        \ usable form;\nthe row keeps a keyed fingerprint. A response that carried\
+        \ the activation\ncode would put installation material into every log, proxy\
+        \ and crash report\nbetween here and the phone."
+    InstallationRedeemRequest:
+      properties:
+        grant_token:
+          type: string
+          title: Grant Token
+      type: object
+      required:
+      - grant_token
+      title: InstallationRedeemRequest
+    InstallationView:
+      properties:
+        state:
+          type: string
+          title: State
+        installed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Installed At
+        profile_released_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Profile Released At
+        credential_available:
+          type: boolean
+          title: Credential Available
+        credential_unavailable_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Credential Unavailable Reason
+        delivery_count:
+          type: integer
+          title: Delivery Count
+        one_time_use:
+          type: boolean
+          title: One Time Use
+        reinstall_available:
+          type: boolean
+          title: Reinstall Available
+        reinstall_blocked_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reinstall Blocked Reason
+      type: object
+      required:
+      - state
+      - installed_at
+      - profile_released_at
+      - credential_available
+      - credential_unavailable_reason
+      - delivery_count
+      - one_time_use
+      - reinstall_available
+      - reinstall_blocked_reason
+      title: InstallationView
+      description: The device's half of the story, and only the device's.
     InvitationAcceptRequest:
       properties:
         token:
@@ -3935,6 +4332,210 @@ components:
       - status
       - created_at
       title: InvitationSummary
+    LineDelivery:
+      type: string
+      enum:
+      - carrier_esim
+      - internet
+      title: LineDelivery
+    LineDetailResponse:
+      properties:
+        entitlement_id:
+          type: string
+          format: uuid
+          title: Entitlement Id
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        order_reference:
+          type: string
+          title: Order Reference
+        order_item_id:
+          type: string
+          format: uuid
+          title: Order Item Id
+        product_id:
+          type: string
+          format: uuid
+          title: Product Id
+        product_name:
+          type: string
+          title: Product Name
+        delivery:
+          $ref: '#/components/schemas/LineDelivery'
+        ready_to_use:
+          type: boolean
+          title: Ready To Use
+        number_status:
+          $ref: '#/components/schemas/NumberStatus'
+        assigned_number:
+          anyOf:
+          - $ref: '#/components/schemas/AssignedNumberView'
+          - type: 'null'
+        installation:
+          anyOf:
+          - $ref: '#/components/schemas/InstallationView'
+          - type: 'null'
+        line:
+          anyOf:
+          - $ref: '#/components/schemas/LineStateView'
+          - type: 'null'
+        usage:
+          $ref: '#/components/schemas/UsageView'
+        restriction:
+          anyOf:
+          - $ref: '#/components/schemas/RestrictionView'
+          - type: 'null'
+        top_ups:
+          $ref: '#/components/schemas/TopUpView'
+        tariff:
+          anyOf:
+          - $ref: '#/components/schemas/TariffView'
+          - type: 'null'
+        calling:
+          $ref: '#/components/schemas/CallingView'
+      type: object
+      required:
+      - entitlement_id
+      - order_id
+      - order_reference
+      - order_item_id
+      - product_id
+      - product_name
+      - delivery
+      - ready_to_use
+      - number_status
+      - assigned_number
+      - installation
+      - line
+      - usage
+      - restriction
+      - top_ups
+      - tariff
+      - calling
+      title: LineDetailResponse
+    LineListResponse:
+      properties:
+        lines:
+          items:
+            $ref: '#/components/schemas/LineSummary'
+          type: array
+          title: Lines
+      type: object
+      required:
+      - lines
+      title: LineListResponse
+    LineStateView:
+      properties:
+        carrier:
+          type: string
+          title: Carrier
+        activation_state:
+          type: string
+          title: Activation State
+        network_state:
+          type: string
+          title: Network State
+        network_state_observed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Network State Observed At
+        provider_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Provider Status
+        provider_status_observed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Provider Status Observed At
+        voice_enabled:
+          type: boolean
+          title: Voice Enabled
+        voice_enabled_observed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Voice Enabled Observed At
+      type: object
+      required:
+      - carrier
+      - activation_state
+      - network_state
+      - network_state_observed_at
+      - provider_status
+      - provider_status_observed_at
+      - voice_enabled
+      - voice_enabled_observed_at
+      title: LineStateView
+    LineSummary:
+      properties:
+        entitlement_id:
+          type: string
+          format: uuid
+          title: Entitlement Id
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        order_reference:
+          type: string
+          title: Order Reference
+        product_name:
+          type: string
+          title: Product Name
+        delivery:
+          $ref: '#/components/schemas/LineDelivery'
+        number_status:
+          $ref: '#/components/schemas/NumberStatus'
+        e164:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: E164
+        activation_state:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Activation State
+        installation_state:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Installation State
+        ready_to_use:
+          type: boolean
+          title: Ready To Use
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+        expired:
+          type: boolean
+          title: Expired
+      type: object
+      required:
+      - entitlement_id
+      - order_id
+      - order_reference
+      - product_name
+      - delivery
+      - number_status
+      - e164
+      - activation_state
+      - installation_state
+      - ready_to_use
+      - expires_at
+      - expired
+      title: LineSummary
     LivenessResponse:
       properties:
         status:
@@ -4382,6 +4983,14 @@ components:
       - otpauth_uri
       title: MfaEnrollmentResponse
       description: Shown once. The secret is never readable again after this response.
+    NumberStatus:
+      type: string
+      enum:
+      - assigned
+      - pending
+      - not_included
+      title: NumberStatus
+      description: Three answers, because "no number shown" has three different meanings.
     OTPRequest:
       properties:
         phone_number:
@@ -5150,6 +5759,43 @@ components:
       required:
       - refresh_token
       title: RefreshRequest
+    RestrictionView:
+      properties:
+        suspended:
+          type: boolean
+          title: Suspended
+        enforcement:
+          type: string
+          title: Enforcement
+        control_state:
+          type: string
+          title: Control State
+        requested_limit_bytes:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Requested Limit Bytes
+        confirmed_limit_bytes:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Confirmed Limit Bytes
+        detail:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Detail
+      type: object
+      required:
+      - suspended
+      - enforcement
+      - control_state
+      - requested_limit_bytes
+      - confirmed_limit_bytes
+      - detail
+      title: RestrictionView
+      description: Whether anything is stopping this line carrying traffic, and who
+        said so.
     RetailPricingTierListResponse:
       properties:
         tiers:
@@ -5298,6 +5944,12 @@ components:
           type: string
           format: uuid
           title: Order Item Id
+        entitlement_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Entitlement Id
         order_id:
           type: string
           format: uuid
@@ -5464,6 +6116,25 @@ components:
       required:
       - expires_at
       title: StepUpResponse
+    TariffView:
+      properties:
+        version:
+          type: integer
+          title: Version
+        currency:
+          type: string
+          title: Currency
+        destinations:
+          items:
+            $ref: '#/components/schemas/CallDestinationView'
+          type: array
+          title: Destinations
+      type: object
+      required:
+      - version
+      - currency
+      - destinations
+      title: TariffView
     TokenResponse:
       properties:
         access_token:
@@ -5477,6 +6148,27 @@ components:
       - access_token
       - refresh_token
       title: TokenResponse
+    TopUpView:
+      properties:
+        applied_data_bytes:
+          type: integer
+          title: Applied Data Bytes
+        applied_voice_seconds:
+          type: integer
+          title: Applied Voice Seconds
+        applied_extra_days:
+          type: integer
+          title: Applied Extra Days
+        pending_count:
+          type: integer
+          title: Pending Count
+      type: object
+      required:
+      - applied_data_bytes
+      - applied_voice_seconds
+      - applied_extra_days
+      - pending_count
+      title: TopUpView
     UnorderedPilgrim:
       properties:
         id:
@@ -5513,6 +6205,61 @@ components:
       required:
       - pilgrims
       title: UnorderedPilgrimListResponse
+    UsageView:
+      properties:
+        data_bytes_total:
+          type: integer
+          title: Data Bytes Total
+        data_bytes_used:
+          type: integer
+          title: Data Bytes Used
+        data_bytes_remaining:
+          type: integer
+          title: Data Bytes Remaining
+        voice_seconds_total:
+          type: integer
+          title: Voice Seconds Total
+        voice_seconds_used:
+          type: integer
+          title: Voice Seconds Used
+        voice_seconds_remaining:
+          type: integer
+          title: Voice Seconds Remaining
+        observed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Observed At
+        freshness:
+          type: string
+          title: Freshness
+        has_provisional:
+          type: boolean
+          title: Has Provisional
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+        expired:
+          type: boolean
+          title: Expired
+      type: object
+      required:
+      - data_bytes_total
+      - data_bytes_used
+      - data_bytes_remaining
+      - voice_seconds_total
+      - voice_seconds_used
+      - voice_seconds_remaining
+      - observed_at
+      - freshness
+      - has_provisional
+      - expires_at
+      - expired
+      title: UsageView
     UserResponse:
       properties:
         id:

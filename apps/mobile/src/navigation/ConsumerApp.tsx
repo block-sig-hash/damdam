@@ -11,6 +11,7 @@ import { ApiError } from '../api/http';
 import { PlaceholderScreen } from '../screens/Placeholder/PlaceholderScreen';
 import { ConsumerHomeScreen } from '../screens/ConsumerHome/ConsumerHomeScreen';
 import { InvitationScreen } from '../screens/Invitation/InvitationScreen';
+import { MyLineFlow } from '../screens/MyLine/MyLineFlow';
 import { PurchaseFlow } from '../screens/Purchase/PurchaseFlow';
 import {
   clearPendingLink,
@@ -67,6 +68,13 @@ export function ConsumerApp({
    * be told which order to open rather than having to guess from storage.
    */
   const [requestedOrderId, setRequestedOrderId] = useState<string | null>(null);
+  /**
+   * A line the customer asked for by name — from Home's "install now", or from
+   * an order screen once the service is provisioned. Held here for the same
+   * reason as the order id: both routes arrive at the host, and the flow is told
+   * which line to open rather than guessing.
+   */
+  const [requestedLineId, setRequestedLineId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -169,7 +177,10 @@ export function ConsumerApp({
             errorMessage={errorMessage}
             onRetry={load}
             onBrowsePlans={() => setTab('plans')}
-            onOpenMyLine={() => setTab('my-line')}
+            onOpenMyLine={entitlementId => {
+              setRequestedLineId(entitlementId);
+              setTab('my-line');
+            }}
             onOpenOrder={orderId => {
               setRequestedOrderId(orderId);
               setTab('plans');
@@ -185,11 +196,12 @@ export function ConsumerApp({
             onOpenMyLine={() => setTab('my-line')}
           />
         ) : tab === 'my-line' ? (
-          <PlaceholderScreen
-            title={t('placeholder.myLineTitle')}
-            note={`${t('placeholder.myLineBody')} ${t('placeholder.owner', {
-              chunk: 20,
-            })}`}
+          <MyLineFlow
+            accessToken={accessToken}
+            initialEntitlementId={requestedLineId}
+            onEntitlementOpened={() => setRequestedLineId(null)}
+            onBrowsePlans={() => setTab('plans')}
+            onLineChanged={load}
           />
         ) : (
           <PlaceholderScreen

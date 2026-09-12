@@ -1,0 +1,173 @@
+{
+  "list": {
+    "title": "Your lines",
+    "open": "Open"
+  },
+  "loading": {
+    "title": "Opening your line…",
+    "body": "We're fetching what the network says about it."
+  },
+  "empty": {
+    "title": "You don't have a line yet",
+    "body": "A plan with an eSIM or internet calling will show up here once it's set up.",
+    "action": "Browse plans"
+  },
+  "actions": {
+    "refresh": "Check again",
+    "retry": "Try again"
+  },
+  "errors": {
+    "loadTitle": "We couldn't open your line",
+    "unexpected": "Something went wrong. Please try again."
+  },
+  "number": {
+    "label": "Your number",
+    "pending": "Your number is being assigned. We'll show it here as soon as the network gives us one.",
+    "notIncluded": "This plan doesn't include a phone number."
+  },
+  "next": {
+    "installTitle": "One step left: install your eSIM",
+    "installBody": "Your profile is ready. Installing it puts the line on this phone.",
+    "installAction": "Install eSIM",
+    "awaitingProfileTitle": "We're preparing your eSIM",
+    "awaitingProfileBody": "The network hasn't handed us your profile yet. This usually takes a few minutes.",
+    "awaitingProfileFootnote": "You don't need to keep the app open.",
+    "awaitingActivationTitle": "Installed — waiting for the network",
+    "awaitingActivationBody": "Your profile is on this phone. The network still has to switch the line on, which is a separate step we don't control.",
+    "suspendedTitle": "This line is suspended",
+    "suspendedBody": "It won't carry calls or data until it's topped up.",
+    "expiredTitle": "This line has expired",
+    "expiredBody": "Its allowance is no longer available.",
+    "expiredAction": "Browse plans",
+    "readyTitle": "Your line is working",
+    "readyBody": "Nothing to do here. Your balance and call rates are below."
+  },
+  "states": {
+    "label": "What we know",
+    "installation": "Profile",
+    "activation": "Line",
+    "network": "Network",
+    "voice": "Calls",
+    "installationValue": {
+      "not_installed": "Not installed",
+      "installed": "Installed",
+      "removed": "Removed"
+    },
+    "activationValue": {
+      "pending": "Not switched on",
+      "activating": "Switching on",
+      "active": "Active",
+      "suspended": "Suspended",
+      "terminated": "Ended"
+    },
+    "networkValue": {
+      "unknown": "Not reported",
+      "attached": "Connected",
+      "detached": "Not connected"
+    },
+    "voiceValue": {
+      "enabled": "Enabled",
+      "notEnabled": "Not enabled"
+    },
+    "providerStatus": "The network calls this: {{status}}"
+  },
+  "usage": {
+    "label": "What's left",
+    "data": "Data",
+    "calls": "Calls",
+    "minutes": "{{minutes}} min",
+    "none": "None",
+    "neverReported": "The network hasn't reported any usage on this line yet, so this is what you bought rather than what's left.",
+    "stale": "This reading is older than usual. Your real balance may be lower.",
+    "provisional": "Some of this usage is still being confirmed and may change.",
+    "pendingTopUp": "A top-up you've paid for isn't usable yet. We're waiting for the network to apply it.",
+    "age": {
+      "now": "Updated just now",
+      "minutes": "Updated {{value}} min ago",
+      "hours": "Updated {{value}} h ago",
+      "days": "Updated {{value}} d ago"
+    }
+  },
+  "restriction": {
+    "noEnforcement": "Nothing at the network is capping this line. We count usage as it's reported, which can arrive late.",
+    "confirmedLimit": "The network has confirmed a cap of {{amount}}."
+  },
+  "calling": {
+    "label": "Calls",
+    "nativeAvailable": "This line can make calls from your phone's normal dialer.",
+    "nativeUnavailable": {
+      "no_carrier_line": "This is an internet-calling plan, so it doesn't use your phone's dialer.",
+      "line_not_provisioned": "This line isn't set up with the network yet, so it can't make calls.",
+      "voice_not_enabled": "The network hasn't enabled calls on this line. It carries data only.",
+      "line_not_active": "This line isn't active yet, so it can't make calls.",
+      "unknown": "We can't confirm whether this line can make calls."
+    },
+    "internetDialerUnavailable": "Calling from inside the app isn't available yet. Calls go through your phone's own dialer.",
+    "guideAction": "How to call on this line"
+  },
+  "tariff": {
+    "label": "Call rates",
+    "rate": "{{country}}: {{amount}} per minute, billed in {{increment}}s steps",
+    "version": "Rates version {{version}}. Charges appear after a call ends.",
+    "none": "No call rates have been published for this plan, so we can't show what calls cost."
+  },
+  "install": {
+    "title": "Install your eSIM",
+    "privacyProtected": "Screenshots are blocked on this screen. Your activation code can only be used once, so keep it off other screens too.",
+    "privacyIosWarning": "iPhone doesn't let us block screenshots. Your activation code can only be used once — don't screenshot or share this screen.",
+    "privacyFailedWarning": "We couldn't block screenshots on this screen. Your activation code can only be used once — don't screenshot or share it.",
+    "revealTitle": "Ready when you are",
+    "revealBody": "We'll show your activation code once you're ready to install. Have your phone's eSIM settings open, or use the button we show next.",
+    "revealFootnote": "Opening this screen doesn't use up your code.",
+    "revealAction": "Show my activation code",
+    "revealing": "Getting your code…",
+    "shownBefore": "This code has been shown {{count}} times. If you didn't do that, your eSIM may already be installed on another device — contact support before continuing.",
+    "manualTitle": "Enter these in your phone's eSIM settings",
+    "smdpLabel": "SM-DP+ address",
+    "activationCodeLabel": "Activation code",
+    "wholeCodeLabel": "Activation code",
+    "manualHint": "Some phones ask for one combined code instead of two fields. Both are the same profile.",
+    "directAction": "Install on this phone",
+    "invoked": "Your phone is asking you to confirm the install. Finish there, then come back.",
+    "guideTitle": "Steps for {{device}}",
+    "guideGeneric": "These are the usual steps for Android. Your phone's menu names may differ slightly.",
+    "noReinstall": "This profile can only be downloaded once. If you change or reset your phone, you'll need to buy a new plan — that's a limit of the eSIM standard, not a policy.",
+    "confirmAction": "I've installed it",
+    "failedAction": "It didn't install",
+    "errorTitle": "We couldn't get your activation code",
+    "retry": "Try again",
+    "back": "Back to my line"
+  },
+  "guide": {
+    "title": "Calling on this line",
+    "availableForVoice": "The network says this line can make calls.",
+    "thisLineIs": "This line is {{number}}.",
+    "callsTitle": "Choose this line for calls",
+    "dataTitle": "Choose this line for data",
+    "caveat": "We can't set this for you, and we can't see which line you pick — your phone doesn't tell apps either. Opening the dialer isn't proof a call went out on this line.",
+    "back": "Back to my line",
+    "ios": {
+      "calls": {
+        "openSettings": "Open Settings on your iPhone.",
+        "openCellular": "Tap Cellular (or Mobile Service).",
+        "chooseLine": "Find this line in the list and make sure it's turned on.",
+        "setDefaultVoice": "Tap Default Voice Line and choose it."
+      },
+      "data": {
+        "openCellularData": "In the same Cellular screen, tap Cellular Data.",
+        "chooseLine": "Choose this line."
+      }
+    },
+    "android": {
+      "calls": {
+        "openSettings": "Open Settings on your phone.",
+        "openSims": "Tap Network & internet, then SIMs.",
+        "chooseCallsSim": "Under Calls, choose this line."
+      },
+      "data": {
+        "openSims": "In the same SIMs screen, find Mobile data.",
+        "chooseDataSim": "Choose this line."
+      }
+    }
+  }
+}
