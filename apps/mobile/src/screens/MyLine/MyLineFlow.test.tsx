@@ -705,11 +705,11 @@ describe('only the device reports an installation (AC-38.1, AC-38.5)', () => {
 });
 
 describe('calling guidance claims nothing it cannot see (AC-38.4)', () => {
-  it('offers no in-app dialer and says calls go through the phone', async () => {
+  it('reports the in-app dialer as unavailable', async () => {
     await renderFlow();
 
     expect(screen.getByTestId('my-line-internet-dialer')).toHaveTextContent(
-      /phone's own dialer/,
+      /inside the app is not available/,
     );
   });
 
