@@ -297,6 +297,7 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
         order={FIXTURE_ORDER}
         reference={FIXTURE_ORDER.reference}
         paymentStarted
+        paymentHandoffFailed={false}
         loading={false}
         busy={false}
         errorMessage={null}
@@ -315,6 +316,7 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
         order={FIXTURE_ORDER_AWAITING_WEBHOOK}
         reference={FIXTURE_ORDER_AWAITING_WEBHOOK.reference}
         paymentStarted
+        paymentHandoffFailed={false}
         loading={false}
         busy={false}
         errorMessage={null}
@@ -333,6 +335,7 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
         order={FIXTURE_ORDER_DECLINED}
         reference={FIXTURE_ORDER_DECLINED.reference}
         paymentStarted
+        paymentHandoffFailed={false}
         loading={false}
         busy={false}
         errorMessage={null}

@@ -970,3 +970,27 @@ logs. Invitation and product intents survive authentication in platform secure
 storage. The one-time login/recovery link is consumed directly and never
 overwrites that deferred intent; otherwise opening the sign-in email would erase
 the invitation that caused the user to sign in.
+
+---
+
+## 8.16 Amendment — Consumer Purchase Recovery (US-37)
+
+Chunk 19 connects the Plans tab to catalog browsing, device guidance, immutable
+quote review, hosted checkout and order status. Prices cross the API as strings
+and the review screen renders the server total without recomputing it. A plan is
+not purchasable unless supplier capability, visited-network coverage, allowance,
+device eligibility and server pricing are all present.
+
+The pending-order record contains `userId`, `orderId`, `quoteId`, the public
+order reference and whether this device opened the processor page. Reads require
+the current account id; ownerless records from an older build and records from a
+different account are ignored. Session-ending paths clear the record. Processor
+URLs and payment credentials are never persisted.
+
+Order recovery is server-led. `quote_id` lets any authenticated device resume
+the existing checkout rather than create a new basket, while
+`payment_attempt_state` distinguishes created, pending, unknown and definitively
+failed attempts. A local `paymentStarted` flag only says whether this device
+completed the browser handoff. Pending payment, provisioning and unknown
+supplier states do not offer a route back to plan purchase; failed or
+never-opened payment sessions retry the same quote and order.

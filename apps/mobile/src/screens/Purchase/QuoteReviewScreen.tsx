@@ -57,7 +57,12 @@ export function QuoteReviewScreen({
   const { t } = useTranslation('consumer');
   const expired = quoteRejected || hasExpired(quote.expires_at);
   const minutes = minutesUntil(quote.expires_at);
-  const collectionBlocked = methods !== null && !methods.collection_enabled;
+  // Unknown is not enabled. A failed method-discovery request must not turn a
+  // payment button on by omission and let checkout discover the gate later.
+  const collectionBlocked =
+    methods === null ||
+    !methods.collection_enabled ||
+    !methods.methods.includes('card');
 
   if (expired) {
     return (

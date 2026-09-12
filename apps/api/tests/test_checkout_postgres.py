@@ -51,6 +51,7 @@ from app.orders.models import Order, OrderItem, PaymentState
 from app.payments.contract import (
     AttemptStatus,
     MerchantAccount,
+    MerchantPaymentMethod,
     PaymentAttempt,
     PaymentIntent,
     PaymentMethodKind,
@@ -69,7 +70,8 @@ pytestmark = pytest.mark.skipif(
 
 NOW = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
 TABLES = (
-    "excess_payments, payment_attempts, payment_intents, merchant_accounts, "
+    "excess_payments, payment_attempts, payment_intents, "
+    "merchant_payment_methods, merchant_accounts, "
     "quote_items, quotes, order_items, orders, number_policies, "
     "tariff_rates, tariffs, "
     "device_eligibility_rules, provider_offerings, product_coverage, "
@@ -96,6 +98,9 @@ class FakeProcessor:
 
     def __init__(self) -> None:
         self.checkouts: list[str] = []
+        self.methods: list[PaymentMethodKind] = []
+        self.metadata: list[dict[str, Any]] = []
+        self.processor_reference: str | None = None
         self.unreachable = False
 
     def create_checkout(
@@ -109,8 +114,10 @@ class FakeProcessor:
         if self.unreachable:
             raise RuntimeError("processor timed out")
         self.checkouts.append(idempotency_key)
+        self.methods.append(method)
+        self.metadata.append(metadata)
         return CheckoutSession(
-            processor_reference=idempotency_key,
+            processor_reference=self.processor_reference or idempotency_key,
             redirect_url=f"https://pay.example.test/{idempotency_key}",
             metadata=metadata,
         )
@@ -167,7 +174,12 @@ def processor() -> FakeProcessor:
 
 
 def _user(session: Session, phone: str = "+2348010000001") -> User:
-    user = User(phone_number=phone, locale=Locale.EN, status=UserStatus.ACTIVE)
+    user = User(
+        phone_number=phone,
+        email=f"buyer-{phone[-4:]}@example.test",
+        locale=Locale.EN,
+        status=UserStatus.ACTIVE,
+    )
     session.add(user)
     session.flush()
     return user
@@ -294,6 +306,12 @@ def _sellable(
     )
     session.add(merchant)
     session.flush()
+    session.add(
+        MerchantPaymentMethod(
+            merchant_account_id=merchant.id, method=PaymentMethodKind.CARD
+        )
+    )
+    session.flush()
     return entity, product, market, merchant
 
 
@@ -303,7 +321,7 @@ def _quote(
     product: Product,
     *,
     quantity: int = 1,
-    recipient: User | None = None,
+    recipient: User,
 ) -> UUID:
     quote, _items = catalog.issue_quote(
         session,
@@ -313,7 +331,7 @@ def _quote(
             LineRequest(
                 product_id=product.id,
                 quantity=quantity,
-                recipient_user_id=recipient.id if recipient else None,
+                recipient_user_id=recipient.id,
             )
         ],
         device=DeviceFacts(supports_esim=True, is_unlocked=True),
@@ -340,7 +358,7 @@ def test_a_second_checkout_of_one_quote_returns_the_first_order(
     """
     _entity, product, _market, _merchant = _sellable(session, clock)
     payer = _user(session)
-    quote_id = _quote(session, catalog, product)
+    quote_id = _quote(session, catalog, product, recipient=payer)
 
     first = service.place(
         session,
@@ -361,14 +379,130 @@ def test_a_second_checkout_of_one_quote_returns_the_first_order(
     assert second.resumed is True
     assert second.order.id == first.order.id
     assert session.exec(select(Order)).all() == [first.order]
-    assert (
-        len(session.exec(select(PaymentIntent)).all()) == 1
-    ), "a second intent means a second collectable amount"
+    assert len(session.exec(select(PaymentIntent)).all()) == 1, (
+        "a second intent means a second collectable amount"
+    )
     # The live attempt is reused rather than replaced: two open processor
     # sessions against one intent is two ways for the customer to pay.
     assert second.attempt is not None
     assert second.attempt.id == first.attempt.id
     assert processor.checkouts == [first.attempt.idempotency_key] * 2
+
+
+def test_a_live_attempt_keeps_its_original_method_on_resume(
+    session: Session,
+    service: CheckoutService,
+    catalog: CatalogService,
+    clock: Clock,
+    processor: FakeProcessor,
+) -> None:
+    """A replay may not mutate one idempotency key into a different rail."""
+    _entity, product, _market, _merchant = _sellable(session, clock)
+    payer = _user(session)
+    quote_id = _quote(session, catalog, product, recipient=payer)
+
+    service.place(
+        session,
+        quote_id=quote_id,
+        payer=payer,
+        method=PaymentMethodKind.CARD,
+        adapter=processor,
+    )
+    service.place(
+        session,
+        quote_id=quote_id,
+        payer=payer,
+        method=PaymentMethodKind.BANK_TRANSFER,
+        adapter=processor,
+    )
+
+    assert processor.methods == [PaymentMethodKind.CARD, PaymentMethodKind.CARD]
+
+
+def test_processor_reference_and_payer_email_are_recorded_safely(
+    session: Session,
+    service: CheckoutService,
+    catalog: CatalogService,
+    clock: Clock,
+    processor: FakeProcessor,
+) -> None:
+    """The provider may return a reference different from our idempotency key."""
+    _entity, product, _market, _merchant = _sellable(session, clock)
+    payer = _user(session)
+    quote_id = _quote(session, catalog, product, recipient=payer)
+    processor.processor_reference = "provider-reference-42"
+
+    placed = service.place(
+        session,
+        quote_id=quote_id,
+        payer=payer,
+        method=PaymentMethodKind.CARD,
+        adapter=processor,
+    )
+
+    assert placed.attempt is not None
+    assert placed.attempt.processor_reference == "provider-reference-42"
+    assert placed.attempt.status is AttemptStatus.PENDING
+    assert processor.metadata[0]["customer_email"] == payer.email
+
+    failed = PaymentRouter(clock=clock).capture(
+        session,
+        ProcessorCharge(
+            processor_reference="provider-reference-42",
+            status="declined",
+            amount=placed.intent.amount,
+            currency=placed.intent.currency,
+            succeeded=False,
+        ),
+        processor="fakepay",
+    )
+    assert failed.id == placed.attempt.id
+    assert failed.status is AttemptStatus.FAILED
+
+    processor.processor_reference = "provider-reference-43"
+    retried = service.place(
+        session,
+        quote_id=quote_id,
+        payer=payer,
+        method=PaymentMethodKind.CARD,
+        adapter=processor,
+    )
+    assert retried.attempt is not None
+    assert retried.attempt.id != failed.id
+    assert retried.attempt.status is AttemptStatus.PENDING
+    assert retried.attempt.processor_reference == "provider-reference-43"
+
+
+def test_a_redeemed_quote_cannot_resume_another_payers_order(
+    session: Session,
+    service: CheckoutService,
+    catalog: CatalogService,
+    clock: Clock,
+    processor: FakeProcessor,
+) -> None:
+    _entity, product, _market, _merchant = _sellable(session, clock)
+    payer = _user(session, "+2348010000041")
+    stranger = _user(session, "+2348010000042")
+    quote_id = _quote(session, catalog, product, recipient=payer)
+    service.place(
+        session,
+        quote_id=quote_id,
+        payer=payer,
+        method=PaymentMethodKind.CARD,
+        adapter=processor,
+    )
+
+    with pytest.raises(CheckoutError) as raised:
+        service.place(
+            session,
+            quote_id=quote_id,
+            payer=stranger,
+            method=PaymentMethodKind.CARD,
+            adapter=processor,
+        )
+
+    assert raised.value.code == "quote_not_yours"
+    assert len(session.exec(select(Order)).all()) == 1
 
 
 def test_a_paid_order_is_never_offered_a_new_payment_session(
@@ -386,7 +520,7 @@ def test_a_paid_order_is_never_offered_a_new_payment_session(
     """
     _entity, product, _market, merchant = _sellable(session, clock)
     payer = _user(session)
-    quote_id = _quote(session, catalog, product)
+    quote_id = _quote(session, catalog, product, recipient=payer)
 
     placed = service.place(
         session,
@@ -444,7 +578,7 @@ def test_two_simultaneous_checkouts_produce_one_order(
     """
     _entity, product, _market, _merchant = _sellable(session, clock)
     payer = _user(session)
-    quote_id = _quote(session, catalog, product)
+    quote_id = _quote(session, catalog, product, recipient=payer)
     payer_id = payer.id
     session.commit()
 
@@ -488,9 +622,7 @@ def test_two_simultaneous_checkouts_produce_one_order(
     assert len(order_ids) <= 1
     # Whichever thread lost either returned the same order or reported the
     # claimed quote. What it must never do is create a second order.
-    assert all(
-        code in {"quote_already_redeemed", None} for code in codes
-    ), codes
+    assert all(code in {"quote_already_redeemed", None} for code in codes), codes
 
 
 def test_a_quote_line_for_three_becomes_three_recoverable_order_items(
@@ -508,7 +640,7 @@ def test_a_quote_line_for_three_becomes_three_recoverable_order_items(
     """
     _entity, product, _market, _merchant = _sellable(session, clock)
     payer = _user(session)
-    quote_id = _quote(session, catalog, product, quantity=3)
+    quote_id = _quote(session, catalog, product, quantity=3, recipient=payer)
 
     result = service.place(
         session,
@@ -538,7 +670,7 @@ def test_an_expired_quote_cannot_be_bought(
 ) -> None:
     _entity, product, _market, _merchant = _sellable(session, clock)
     payer = _user(session)
-    quote_id = _quote(session, catalog, product)
+    quote_id = _quote(session, catalog, product, recipient=payer)
 
     clock.advance(minutes=31)
 
@@ -594,7 +726,7 @@ def test_an_unreachable_processor_leaves_a_resumable_order_not_a_lost_basket(
     """
     _entity, product, _market, _merchant = _sellable(session, clock)
     payer = _user(session)
-    quote_id = _quote(session, catalog, product)
+    quote_id = _quote(session, catalog, product, recipient=payer)
     processor.unreachable = True
 
     result = service.place(
@@ -633,11 +765,9 @@ def test_checkout_is_refused_while_the_merchant_account_is_not_live(
     the price was claimed and the customer must not be able to reuse it — but
     before any order is committed by the route, which rolls back.
     """
-    _entity, product, _market, _merchant = _sellable(
-        session, clock, live_enabled=False
-    )
+    _entity, product, _market, _merchant = _sellable(session, clock, live_enabled=False)
     payer = _user(session)
-    quote_id = _quote(session, catalog, product)
+    quote_id = _quote(session, catalog, product, recipient=payer)
 
     with pytest.raises(PaymentRoutingError) as raised:
         service.place(
@@ -663,7 +793,7 @@ def test_no_adapter_still_places_the_order(
     """
     _entity, product, _market, _merchant = _sellable(session, clock)
     payer = _user(session)
-    quote_id = _quote(session, catalog, product)
+    quote_id = _quote(session, catalog, product, recipient=payer)
 
     result = service.place(
         session,
@@ -676,3 +806,28 @@ def test_no_adapter_still_places_the_order(
     assert result.session is None
     assert result.order.payment_state is PaymentState.UNPAID
     assert result.intent.amount == Decimal("10000.00")
+
+
+def test_an_adapter_cannot_collect_for_a_different_processor(
+    session: Session,
+    service: CheckoutService,
+    catalog: CatalogService,
+    clock: Clock,
+    processor: FakeProcessor,
+) -> None:
+    _entity, product, _market, _merchant = _sellable(session, clock)
+    payer = _user(session)
+    quote_id = _quote(session, catalog, product, recipient=payer)
+    processor.name = "otherpay"
+
+    with pytest.raises(PaymentRoutingError) as raised:
+        service.place(
+            session,
+            quote_id=quote_id,
+            payer=payer,
+            method=PaymentMethodKind.CARD,
+            adapter=processor,
+        )
+
+    assert raised.value.code == "wrong_processor"
+    assert processor.checkouts == []

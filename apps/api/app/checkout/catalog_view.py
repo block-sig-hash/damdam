@@ -102,9 +102,9 @@ class CatalogViewService:
         now = self.clock()
         summaries: list[ProductSummary] = []
         for product in session.exec(
-            select(Product).where(col(Product.active).is_(True)).order_by(
-                col(Product.name)
-            )
+            select(Product)
+            .where(col(Product.active).is_(True))
+            .order_by(col(Product.name))
         ).all():
             price = self._price(session, product, market.legal_entity_id, currency, now)
             if price is None:
@@ -138,6 +138,11 @@ class CatalogViewService:
             tariff, destinations = self._destinations(session, product, currency, now)
 
             purchasable, reason = self._purchasable(session, product, device)
+            if country not in coverage:
+                # Supplier capability is not visited-network coverage. The
+                # consumer may see the plan, but cannot buy a profile that is
+                # not verified for the country they selected.
+                purchasable, reason = False, "coverage_unavailable"
             if allowance is None:
                 # Chunk 15's rule: provisioning cannot invent what the customer
                 # bought. A product with no allowance cannot be sold, and the

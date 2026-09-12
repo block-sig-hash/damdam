@@ -14,6 +14,8 @@ interface OrderStatusScreenProps {
   reference: string;
   /** Local knowledge: the customer was actually sent to the processor. */
   paymentStarted: boolean;
+  /** This device obtained a session but could not open its hosted page. */
+  paymentHandoffFailed: boolean;
   loading: boolean;
   busy: boolean;
   errorMessage: string | null;
@@ -42,6 +44,7 @@ export function OrderStatusScreen({
   order,
   reference,
   paymentStarted,
+  paymentHandoffFailed,
   loading,
   busy,
   errorMessage,
@@ -65,6 +68,8 @@ export function OrderStatusScreen({
           body={errorMessage ?? t('order.loadingBody')}
           actionLabel={t('order.refresh')}
           onAction={onRefresh}
+          secondaryActionLabel={errorMessage ? t('order.done') : undefined}
+          onSecondaryAction={errorMessage ? onDismiss : undefined}
           busy={loading}
           testID="order-loading-state"
         />
@@ -72,7 +77,7 @@ export function OrderStatusScreen({
     );
   }
 
-  const headline = headlineFor(order, paymentStarted);
+  const headline = headlineFor(order, paymentStarted, paymentHandoffFailed);
 
   return (
     <ScrollView contentContainerStyle={styles.screen} testID="order-status">
@@ -216,11 +221,13 @@ export function OrderStatusScreen({
         ))}
       </View>
 
-      <SecondaryButton
-        label={t('order.done')}
-        onPress={onDismiss}
-        testID="order-done"
-      />
+      {['failed', 'refunded', 'ready'].includes(headline) ? (
+        <SecondaryButton
+          label={t('order.done')}
+          onPress={onDismiss}
+          testID="order-done"
+        />
+      ) : null}
     </ScrollView>
   );
 }
@@ -240,14 +247,14 @@ type Headline =
  *
  * The order matters: an order whose payment failed has nothing useful to say
  * about provisioning, and an order that is paid must never fall through to a
- * branch that offers to pay. `paymentStarted` is the only thing that separates
- * "you have not paid yet" from "we are confirming your payment", and it is local
- * knowledge precisely because the server cannot distinguish them either — both
- * look like an unpaid order with an open attempt.
+ * branch that offers to pay. The latest attempt is server-confirmed; the local
+ * flag adds the one fact the server cannot know — whether this device actually
+ * handed the customer to the hosted page.
  */
 export function headlineFor(
   order: OrderResponse,
   paymentStarted: boolean,
+  paymentHandoffFailed = false,
 ): Headline {
   if (order.payment_state === 'failed') {
     return 'declined';
@@ -256,6 +263,16 @@ export function headlineFor(
     return 'refunded';
   }
   if (order.payment_state === 'unpaid') {
+    if (['failed', 'abandoned'].includes(order.payment_attempt_state ?? '')) {
+      return 'declined';
+    }
+    if (
+      order.payment_attempt_state === 'unknown' ||
+      order.payment_attempt_state === 'succeeded' ||
+      (order.payment_attempt_state === 'pending' && !paymentHandoffFailed)
+    ) {
+      return 'confirming';
+    }
     return paymentStarted ? 'confirming' : 'unpaid';
   }
   // `authorized` and `paid` both mean the customer is done with the payment

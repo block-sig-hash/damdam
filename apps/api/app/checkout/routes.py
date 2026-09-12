@@ -19,6 +19,7 @@ from sqlmodel import Session, col, select
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
+from app.catalog.market import ProductCoverage
 from app.catalog.models import LegalEntity, Product
 from app.catalog.quotes import Quote, QuoteItem
 from app.catalog.service import CatalogError, CatalogService, DeviceFacts, LineRequest
@@ -43,7 +44,14 @@ from app.checkout.service import CheckoutError, CheckoutService
 from app.db import SessionFactory
 from app.money import format_money
 from app.orders.models import Order, OrderItem, PaymentState, ProvisioningState
-from app.payments.contract import MerchantAccount, PaymentMethodKind
+from app.payments.contract import (
+    AttemptStatus,
+    MerchantAccount,
+    MerchantPaymentMethod,
+    PaymentAttempt,
+    PaymentIntent,
+    PaymentMethodKind,
+)
 from app.payments.routing import PaymentProcessorAdapter
 from app.payments.wallets import (
     CURRENT_CONFIGURATION,
@@ -183,8 +191,23 @@ def create_quote(
     redeemable price with an expiry, and issuing them to anonymous callers is
     issuing a claim on a price to nobody in particular.
     """
-    del user  # authorization only; a quote belongs to whoever redeems it
+    if any(line.recipient_user_id not in {None, user.id} for line in payload.lines):
+        raise CheckoutError(
+            "quote_not_yours", "consumer quotes may only name the buyer"
+        )
     with _session(request) as session:
+        for line in payload.lines:
+            product = session.get(Product, line.product_id)
+            if product is None or not product.active:
+                raise CatalogError("product_unavailable")
+            covered = session.exec(
+                select(ProductCoverage).where(
+                    ProductCoverage.product_id == line.product_id,
+                    ProductCoverage.country == payload.country.upper(),
+                )
+            ).first()
+            if covered is None:
+                raise CatalogError("coverage_unavailable")
         quote, _items = _catalog(request).issue_quote(
             session,
             country=payload.country.upper(),
@@ -193,7 +216,11 @@ def create_quote(
                 LineRequest(
                     product_id=line.product_id,
                     quantity=line.quantity,
-                    recipient_user_id=line.recipient_user_id,
+                    # Consumer checkout is self-service. Enterprise assignment
+                    # has its own authorization surface; accepting arbitrary
+                    # recipients here would let one account attach service to
+                    # another account.
+                    recipient_user_id=user.id,
                 )
                 for line in payload.lines
             ],
@@ -222,10 +249,18 @@ def read_quote(
     returned with its status and its `expires_at`, so the review screen can say
     "this price expired, here is a fresh one" instead of failing blank.
     """
-    del user
     with _session(request) as session:
         quote = session.get(Quote, quote_id)
         if quote is None:
+            raise CatalogError("quote_not_found")
+        recipients = {
+            item.recipient_user_id
+            for item in session.exec(
+                select(QuoteItem).where(QuoteItem.quote_id == quote.id)
+            ).all()
+        }
+        if recipients != {user.id}:
+            # Use the same response as an absent quote so ids cannot be probed.
             raise CatalogError("quote_not_found")
         return _quote_response(session, quote)
 
@@ -249,7 +284,6 @@ def payment_methods(
     has been selected" sends whoever is debugging to the wrong place, and the
     customer to a support conversation nobody can resolve.
     """
-    del user
     domain = str(getattr(request.app.state.settings, "app_bundle_id", "") or "")
     wallets = [
         WalletOption(
@@ -286,30 +320,63 @@ def payment_methods(
         for wallet in Wallet
     )
 
+    adapter = _adapter(request)
     with _session(request) as session:
-        merchant = _live_merchant(session, country.upper(), currency.upper())
+        merchants = _live_merchants(session, country.upper(), currency.upper())
+        configured = (
+            list(
+                session.exec(
+                    select(MerchantPaymentMethod).where(
+                        col(MerchantPaymentMethod.merchant_account_id).in_(
+                            [merchant.id for merchant in merchants]
+                        )
+                    )
+                ).all()
+            )
+            if merchants
+            else []
+        )
 
-    methods = [PaymentMethodKind.CARD.value, PaymentMethodKind.BANK_TRANSFER.value]
-    methods += [
-        option.wallet for option in wallets if option.available
+    routable: list[PaymentMethodKind] = []
+    if adapter is not None:
+        for method in PaymentMethodKind:
+            candidates = [
+                merchant
+                for merchant in merchants
+                if any(
+                    entry.merchant_account_id == merchant.id and entry.method == method
+                    for entry in configured
+                )
+            ]
+            # Exactly the same uniqueness rule PaymentRouter applies. An
+            # ambiguous rail is unavailable, not something the UI may offer
+            # only for checkout to reject after claiming the quote.
+            if len(candidates) == 1 and candidates[0].processor == adapter.name:
+                routable.append(method)
+
+    methods = [
+        method.value for method in routable if method is not PaymentMethodKind.WALLET
     ]
+    if PaymentMethodKind.WALLET in routable:
+        methods.extend(option.wallet for option in wallets if option.available)
+    collection_enabled = bool(methods)
     return PaymentMethodsResponse(
         methods=methods,
         wallets=wallets,
         card_fallback_required=needs_card,
-        collection_enabled=merchant is not None,
+        collection_enabled=collection_enabled,
         collection_blocked_reason=(
             None
-            if merchant is not None
-            else "no live merchant account for this seller and currency "
-            "(DECISIONS.md D3/D4)"
+            if collection_enabled
+            else "no approved live processor and payment rail for this seller "
+            "and currency (DECISIONS.md D3/D4)"
         ),
     )
 
 
-def _live_merchant(
+def _live_merchants(
     session: Session, country: str, currency: str
-) -> MerchantAccount | None:
+) -> list[MerchantAccount]:
     from app.catalog.market import PublicationStatus, SalesMarket
 
     market = session.exec(
@@ -320,14 +387,16 @@ def _live_merchant(
         )
     ).first()
     if market is None or market.legal_entity_id is None:
-        return None
-    return session.exec(
-        select(MerchantAccount).where(
-            MerchantAccount.legal_entity_id == market.legal_entity_id,
-            MerchantAccount.currency == currency,
-            col(MerchantAccount.live_enabled).is_(True),
-        )
-    ).first()
+        return []
+    return list(
+        session.exec(
+            select(MerchantAccount).where(
+                MerchantAccount.legal_entity_id == market.legal_entity_id,
+                MerchantAccount.currency == currency,
+                col(MerchantAccount.live_enabled).is_(True),
+            )
+        ).all()
+    )
 
 
 # --- checkout --------------------------------------------------------------
@@ -420,12 +489,42 @@ def _order_response(session: Session, order: Order) -> OrderResponse:
             )
         ).all()
     }
+    intent = session.exec(
+        select(PaymentIntent).where(PaymentIntent.order_id == order.id)
+    ).first()
+    attempts = (
+        []
+        if intent is None
+        else list(
+            session.exec(
+                select(PaymentAttempt).where(PaymentAttempt.intent_id == intent.id)
+            ).all()
+        )
+    )
+    # Active/authoritative states outrank terminal failures. Two attempts may
+    # share a timestamp under a coarse clock, so ordering by created_at alone
+    # can report an old decline after its retry is already pending.
+    attempt_priority = {
+        AttemptStatus.SUCCEEDED: 5,
+        AttemptStatus.UNKNOWN: 4,
+        AttemptStatus.PENDING: 3,
+        AttemptStatus.CREATED: 2,
+        AttemptStatus.FAILED: 1,
+        AttemptStatus.ABANDONED: 1,
+    }
+    latest_attempt = max(
+        attempts,
+        key=lambda attempt: (attempt_priority[attempt.status], attempt.created_at),
+        default=None,
+    )
     return OrderResponse(
         order_id=order.id,
+        quote_id=intent.quote_id if intent else None,
         reference=order.reference,
         currency=order.currency,
         total_amount=format_money(order.total_amount, order.currency),
         payment_state=order.payment_state.value,
+        payment_attempt_state=(latest_attempt.status.value if latest_attempt else None),
         placed_at=order.placed_at,
         items=[
             OrderItemResponse(

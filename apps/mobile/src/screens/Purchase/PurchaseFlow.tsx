@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Linking } from 'react-native';
 import {
   createQuote,
@@ -57,6 +58,7 @@ type Stage = 'browse' | 'review' | 'order';
 
 interface PurchaseFlowProps {
   accessToken: string;
+  userId: string;
   /** An order to open directly — from Home, or from an `damdam://orders/:id` link. */
   initialOrderId?: string | null;
   /** Called once the requested order has been opened, so it is not reopened. */
@@ -68,11 +70,13 @@ interface PurchaseFlowProps {
 
 export function PurchaseFlow({
   accessToken,
+  userId,
   initialOrderId = null,
   onOrderOpened,
   onPurchaseSettled,
   onOpenMyLine,
 }: PurchaseFlowProps): React.JSX.Element {
+  const { t } = useTranslation('consumer');
   const [stage, setStage] = useState<Stage>('browse');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -93,6 +97,7 @@ export function PurchaseFlow({
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderReference, setOrderReference] = useState('');
   const [paymentStarted, setPaymentStarted] = useState(false);
+  const [paymentHandoffFailed, setPaymentHandoffFailed] = useState(false);
   const [quoteIdForOrder, setQuoteIdForOrder] = useState<string | null>(null);
 
   /**
@@ -104,8 +109,8 @@ export function PurchaseFlow({
   const paying = useRef(false);
 
   const describe = useCallback((error: unknown): string => {
-    return error instanceof ApiError ? error.message : String(error);
-  }, []);
+    return error instanceof ApiError ? error.message : t('errors.temporary');
+  }, [t]);
 
   // --- browsing ------------------------------------------------------------
 
@@ -140,7 +145,14 @@ export function PurchaseFlow({
   // --- opening an order ----------------------------------------------------
 
   const openOrder = useCallback(
-    async (id: string, options: { started?: boolean; reference?: string } = {}) => {
+    async (
+      id: string,
+      options: {
+        started?: boolean;
+        reference?: string;
+        handoffFailed?: boolean;
+      } = {},
+    ) => {
       setStage('order');
       setOrderId(id);
       if (options.reference !== undefined) {
@@ -149,18 +161,26 @@ export function PurchaseFlow({
       if (options.started !== undefined) {
         setPaymentStarted(options.started);
       }
+      if (options.handoffFailed !== undefined) {
+        setPaymentHandoffFailed(options.handoffFailed);
+      }
       setLoading(true);
       setErrorMessage(null);
       try {
         const fetched = await getOrder(accessToken, id);
         setOrder(fetched);
         setOrderReference(fetched.reference);
+        setQuoteIdForOrder(fetched.quote_id);
         // A settled order should not force the status screen onto the next cold
         // start. The record is dropped now; the screen itself stays until the
         // customer dismisses it, because it is their confirmation.
-        const headline = headlineFor(fetched, options.started ?? paymentStarted);
+        const headline = headlineFor(
+          fetched,
+          options.started ?? paymentStarted,
+          options.handoffFailed ?? paymentHandoffFailed,
+        );
         if (headline === 'ready' || headline === 'refunded') {
-          await clearPendingOrder();
+          await clearPendingOrder(userId, id);
         }
       } catch (error) {
         setErrorMessage(describe(error));
@@ -168,7 +188,7 @@ export function PurchaseFlow({
         setLoading(false);
       }
     },
-    [accessToken, describe, paymentStarted],
+    [accessToken, describe, paymentHandoffFailed, paymentStarted, userId],
   );
 
   // --- first paint ---------------------------------------------------------
@@ -188,15 +208,17 @@ export function PurchaseFlow({
         return;
       }
 
-      const pending = await loadPendingOrder();
+      const pending = await loadPendingOrder(userId);
       if (cancelled) {
         return;
       }
       if (pending) {
         setQuoteIdForOrder(pending.quoteId);
+        setPaymentHandoffFailed(!pending.paymentStarted);
         await openOrder(pending.orderId, {
           started: pending.paymentStarted,
           reference: pending.reference,
+          handoffFailed: !pending.paymentStarted,
         });
         return;
       }
@@ -214,7 +236,7 @@ export function PurchaseFlow({
     if (!initialOrderId) {
       return;
     }
-    openOrder(initialOrderId);
+    openOrder(initialOrderId, { handoffFailed: false });
     onOrderOpened?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialOrderId]);
@@ -239,9 +261,9 @@ export function PurchaseFlow({
         setQuoteRejected(false);
         setChosenProduct(product);
         setStage('review');
-        // Best effort: a review screen that cannot say which wallets are
-        // offered is still a usable review screen, and failing the whole
-        // quote over it would be worse.
+        // Best effort for rendering: the quote remains readable if discovery
+        // fails, but QuoteReview keeps payment disabled until a supported live
+        // rail is confirmed.
         getPaymentMethods(accessToken, {
           country: market.country,
           currency: market.currency,
@@ -277,6 +299,7 @@ export function PurchaseFlow({
       }
       paying.current = true;
       setBusy(true);
+      setPaymentHandoffFailed(false);
       setErrorMessage(null);
       try {
         const result = await placeCheckout(accessToken, quoteId);
@@ -289,20 +312,31 @@ export function PurchaseFlow({
         // Written before the redirect, never after: the app may not be alive
         // when the processor hands the screen back.
         await savePendingOrder({
+          userId,
           orderId: result.order.order_id,
           quoteId,
           reference: result.order.reference,
-          paymentStarted: started,
+          paymentStarted: false,
         });
-        setPaymentStarted(started);
+        setPaymentStarted(false);
         setStage('order');
 
         if (started && result.redirect_url) {
-          await markPaymentStarted();
           // The URL is opened and deliberately not kept. See pendingOrder.ts:
           // it is a payment capability, and AsyncStorage is not the place for
           // one.
-          Linking.openURL(result.redirect_url).catch(() => undefined);
+          try {
+            await Linking.openURL(result.redirect_url);
+            await markPaymentStarted(userId, result.order.order_id);
+            setPaymentStarted(true);
+          } catch {
+            // The order and processor session still exist, so the retry must
+            // keep the same quote/order. Record that this device never left;
+            // the status screen can safely offer to resume that session.
+            setPaymentStarted(false);
+            setPaymentHandoffFailed(true);
+            setErrorMessage(t('order.openPaymentError'));
+          }
         }
         onPurchaseSettled?.();
       } catch (error) {
@@ -319,7 +353,7 @@ export function PurchaseFlow({
         setBusy(false);
       }
     },
-    [accessToken, describe, onPurchaseSettled],
+    [accessToken, describe, onPurchaseSettled, t, userId],
   );
 
   // --- order actions -------------------------------------------------------
@@ -328,12 +362,12 @@ export function PurchaseFlow({
     if (!orderId) {
       return;
     }
-    await openOrder(orderId);
+    await openOrder(orderId, { handoffFailed: paymentHandoffFailed });
     onPurchaseSettled?.();
-  }, [onPurchaseSettled, openOrder, orderId]);
+  }, [onPurchaseSettled, openOrder, orderId, paymentHandoffFailed]);
 
   const dismiss = useCallback(async () => {
-    await clearPendingOrder();
+    await clearPendingOrder(userId, orderId ?? undefined);
     setOrder(null);
     setOrderId(null);
     setOrderReference('');
@@ -341,9 +375,10 @@ export function PurchaseFlow({
     setChosenProduct(null);
     setQuoteIdForOrder(null);
     setPaymentStarted(false);
+    setPaymentHandoffFailed(false);
     setStage('browse');
     await loadCatalog(device);
-  }, [device, loadCatalog]);
+  }, [device, loadCatalog, orderId, userId]);
 
   const confirmEsimCapable = useCallback(async () => {
     const next = confirmedByCustomer(device);
@@ -367,6 +402,7 @@ export function PurchaseFlow({
         order={order}
         reference={orderReference}
         paymentStarted={paymentStarted}
+        paymentHandoffFailed={paymentHandoffFailed}
         loading={loading}
         busy={busy}
         errorMessage={errorMessage}

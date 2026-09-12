@@ -16,13 +16,14 @@ from __future__ import annotations
 import os
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import text
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.auth.models import Locale, User, UserStatus
 from app.catalog.market import (
@@ -44,7 +45,13 @@ from app.catalog.models import (
 )
 from app.catalog.service import CatalogService
 from app.catalog.tariffs import DestinationKind, OriginKind, Tariff, TariffRate
-from app.payments.contract import MerchantAccount
+from app.payments.contract import (
+    AttemptStatus,
+    MerchantAccount,
+    MerchantPaymentMethod,
+    PaymentAttempt,
+    PaymentMethodKind,
+)
 
 NOW = datetime(2026, 7, 13, tzinfo=timezone.utc)
 
@@ -90,7 +97,12 @@ def client(api: FastAPI) -> TestClient:
 
 
 def _user(session: Session, phone: str = "+2348010000001") -> User:
-    user = User(phone_number=phone, locale=Locale.EN, status=UserStatus.ACTIVE)
+    user = User(
+        phone_number=phone,
+        email=f"buyer-{phone[-4:]}@example.test",
+        locale=Locale.EN,
+        status=UserStatus.ACTIVE,
+    )
     session.add(user)
     session.commit()
     session.refresh(user)
@@ -114,6 +126,8 @@ def _sellable(
     requires_esim: bool = True,
     live_enabled: bool = True,
     with_offering: bool = True,
+    with_coverage: bool = True,
+    coverage_country: str = "NG",
     name: str = "Travel 5GB + calls",
 ) -> Product:
     """A published market with one purchasable product.
@@ -179,7 +193,8 @@ def _sellable(
             assignment=NumberAssignment.NEW_ASSIGNED,
         )
     )
-    session.add(ProductCoverage(product_id=product.id, country="NG"))
+    if with_coverage:
+        session.add(ProductCoverage(product_id=product.id, country=coverage_country))
 
     tariff = Tariff(
         product_id=product.id,
@@ -217,13 +232,18 @@ def _sellable(
     session.refresh(market)
     CatalogService(clock=api.state.clock).publish_market(session, market, entity)
 
+    merchant = MerchantAccount(
+        legal_entity_id=entity.id,
+        processor="fakepay",
+        currency="NGN",
+        live_enabled=live_enabled,
+        approval_reference="approval-1",
+    )
+    session.add(merchant)
+    session.flush()
     session.add(
-        MerchantAccount(
-            legal_entity_id=entity.id,
-            processor="fakepay",
-            currency="NGN",
-            live_enabled=live_enabled,
-            approval_reference="approval-1",
+        MerchantPaymentMethod(
+            merchant_account_id=merchant.id, method=PaymentMethodKind.CARD
         )
     )
     session.commit()
@@ -384,6 +404,63 @@ def test_a_plan_with_no_verified_supplier_is_listed_as_unavailable(
     assert card["unavailable_reason"] == "no_verified_supplier"
 
 
+def test_a_plan_with_no_verified_coverage_cannot_be_bought(
+    api: FastAPI, client: TestClient, session_factory: type[Session]
+) -> None:
+    with session_factory() as session:
+        product = _sellable(api, session, with_coverage=False)
+        user = _user(session)
+
+    card = client.get(
+        "/v1/catalog/products",
+        params={"country": "NG", "currency": "NGN", "supports_esim": True},
+    ).json()["products"][0]
+    assert card["purchasable"] is False
+    assert card["unavailable_reason"] == "coverage_unavailable"
+
+    response = client.post(
+        "/v1/quotes",
+        json={
+            "country": "NG",
+            "currency": "NGN",
+            "lines": [{"product_id": str(product.id), "quantity": 1}],
+            "device": {"supports_esim": True, "is_unlocked": True},
+        },
+        headers=_auth(api, user),
+    )
+    assert response.status_code == 409
+    assert response.json()["error"] == "coverage_unavailable"
+
+
+def test_coverage_in_a_different_country_does_not_make_this_destination_sellable(
+    api: FastAPI, client: TestClient, session_factory: type[Session]
+) -> None:
+    with session_factory() as session:
+        product = _sellable(api, session, coverage_country="SA")
+        user = _user(session)
+
+    card = client.get(
+        "/v1/catalog/products",
+        params={"country": "NG", "currency": "NGN", "supports_esim": True},
+    ).json()["products"][0]
+    assert card["coverage_countries"] == ["SA"]
+    assert card["purchasable"] is False
+    assert card["unavailable_reason"] == "coverage_unavailable"
+
+    response = client.post(
+        "/v1/quotes",
+        json={
+            "country": "NG",
+            "currency": "NGN",
+            "lines": [{"product_id": str(product.id), "quantity": 1}],
+            "device": {"supports_esim": True, "is_unlocked": True},
+        },
+        headers=_auth(api, user),
+    )
+    assert response.status_code == 409
+    assert response.json()["error"] == "coverage_unavailable"
+
+
 # --- quoting ----------------------------------------------------------------
 
 
@@ -452,6 +529,52 @@ def test_an_expired_quote_reads_back_with_its_status_rather_than_failing(
     assert datetime.fromisoformat(response.json()["expires_at"]) < clock.value
 
 
+def test_a_quote_is_visible_only_to_the_account_that_requested_it(
+    api: FastAPI, client: TestClient, session_factory: type[Session]
+) -> None:
+    with session_factory() as session:
+        product = _sellable(api, session)
+        buyer = _user(session, "+2348010000011")
+        stranger = _user(session, "+2348010000012")
+    quote = _quote(client, _auth(api, buyer), product)
+
+    response = client.get(
+        f"/v1/quotes/{quote['quote_id']}", headers=_auth(api, stranger)
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"] == "quote_not_found"
+
+
+def test_a_consumer_cannot_issue_a_quote_for_another_account(
+    api: FastAPI, client: TestClient, session_factory: type[Session]
+) -> None:
+    with session_factory() as session:
+        product = _sellable(api, session)
+        buyer = _user(session, "+2348010000013")
+        recipient = _user(session, "+2348010000014")
+
+    response = client.post(
+        "/v1/quotes",
+        json={
+            "country": "NG",
+            "currency": "NGN",
+            "lines": [
+                {
+                    "product_id": str(product.id),
+                    "quantity": 1,
+                    "recipient_user_id": str(recipient.id),
+                }
+            ],
+            "device": {"supports_esim": True, "is_unlocked": True},
+        },
+        headers=_auth(api, buyer),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "quote_not_yours"
+
+
 def test_buying_an_expired_quote_is_refused_with_a_recoverable_error(
     api: FastAPI, client: TestClient, session_factory: type[Session], clock
 ) -> None:
@@ -499,6 +622,33 @@ def test_a_first_checkout_creates_an_order_and_a_repeat_returns_it(
 
     orders = client.get("/v1/me/orders", headers=headers).json()["orders"]
     assert len(orders) == 1, "two orders would be two charges for one basket"
+
+
+def test_a_replayed_quote_cannot_reveal_another_payers_order(
+    api: FastAPI, client: TestClient, session_factory: type[Session]
+) -> None:
+    with session_factory() as session:
+        product = _sellable(api, session)
+        buyer = _user(session, "+2348010000015")
+        stranger = _user(session, "+2348010000016")
+    quote = _quote(client, _auth(api, buyer), product)
+    assert (
+        client.post(
+            "/v1/checkout",
+            json={"quote_id": quote["quote_id"]},
+            headers=_auth(api, buyer),
+        ).status_code
+        == 201
+    )
+
+    replay = client.post(
+        "/v1/checkout",
+        json={"quote_id": quote["quote_id"]},
+        headers=_auth(api, stranger),
+    )
+
+    assert replay.status_code == 403
+    assert replay.json()["error"] == "quote_not_yours"
 
 
 def test_checkout_with_no_processor_selected_still_places_a_recoverable_order(
@@ -568,13 +718,35 @@ def test_payment_methods_report_why_each_wallet_is_unavailable(
         headers=_auth(api, user),
     ).json()
 
-    assert "card" in body["methods"]
+    assert body["methods"] == []
+    assert body["collection_enabled"] is False
     assert body["card_fallback_required"] is True
     reasons = {option["wallet"]: option["reason"] for option in body["wallets"]}
     # Not "your device does not offer Apple Pay" — the device does. D4 has not
     # selected a processor, and that is what has to be fixed.
     assert reasons["apple_pay"] == "no_processor_selected"
     assert reasons["google_pay"] == "no_processor_selected"
+
+
+def test_payment_methods_only_offer_explicit_rails_for_the_selected_processor(
+    api: FastAPI, client: TestClient, session_factory: type[Session]
+) -> None:
+    with session_factory() as session:
+        _sellable(api, session)
+        user = _user(session)
+    api.state.payment_processor_adapter = SimpleNamespace(name="fakepay")
+    try:
+        body = client.get(
+            "/v1/checkout/methods",
+            params={"country": "NG", "currency": "NGN"},
+            headers=_auth(api, user),
+        ).json()
+    finally:
+        api.state.payment_processor_adapter = None
+
+    assert body["collection_enabled"] is True
+    assert body["methods"] == ["card"]
+    assert "bank_transfer" not in body["methods"]
 
 
 # --- orders and recovery ----------------------------------------------------
@@ -628,8 +800,34 @@ def test_an_order_survives_the_app_being_killed_and_reopened(
 
     assert recovered["reference"] == placed["order"]["reference"]
     assert recovered["payment_state"] == "unpaid"
+    assert recovered["quote_id"] == quote["quote_id"]
+    assert recovered["payment_attempt_state"] == "created"
     assert recovered["total_amount"] == "10000.00"
     assert len(recovered["items"]) == 1
+
+
+def test_order_recovery_reports_a_definitive_failed_attempt(
+    api: FastAPI, client: TestClient, session_factory: type[Session]
+) -> None:
+    with session_factory() as session:
+        product = _sellable(api, session)
+        user = _user(session)
+    headers = _auth(api, user)
+    quote = _quote(client, headers, product)
+    placed = client.post(
+        "/v1/checkout", json={"quote_id": quote["quote_id"]}, headers=headers
+    ).json()
+    with session_factory() as session:
+        attempt = session.exec(select(PaymentAttempt)).one()
+        attempt.status = AttemptStatus.FAILED
+        session.add(attempt)
+        session.commit()
+
+    recovered = client.get(
+        f"/v1/me/orders/{placed['order']['order_id']}", headers=headers
+    ).json()
+
+    assert recovered["payment_attempt_state"] == "failed"
 
 
 def test_a_quote_line_for_three_produces_three_visible_lines(

@@ -87,6 +87,7 @@ async function renderApp(
   await render(
     <ConsumerApp
       accessToken="token"
+      currentUserId="user-1"
       currentEmail="me@example.test"
       onSwitchAccount={jest.fn()}
       {...props}

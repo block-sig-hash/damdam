@@ -1616,6 +1616,11 @@ A product with **no price** from this seller in this currency *is* omitted. That
 is not a hidden price; it is a product this market does not sell, and listing it
 with no amount would leave nothing to decide from.
 
+Coverage is destination-specific: the selected country must appear in the
+product's verified `coverage_countries`. Coverage in a different country never
+makes this selection purchasable, and quote creation repeats the same check so
+a caller cannot bypass the browse result.
+
 ### The quote is the idempotency key
 
 `POST /v1/checkout` takes a `quote_id` and no `Idempotency-Key` header. A quote
@@ -1642,11 +1647,14 @@ fields:
 order, which is strictly better than losing the basket and strictly better than
 pretending a session exists.
 
-### A quote priced for named recipients may only be redeemed by one of them
+### A consumer quote belongs to exactly one account
 
-Otherwise a quote issued for somebody else, presented by an unrelated account,
-would attach their service to this payer's order and receipt. Refused with
-`quote_not_yours` (**403**).
+`POST /v1/quotes` writes the authenticated user as every consumer line's
+recipient and refuses a different `recipient_user_id` with `quote_not_yours`
+(**403**). `GET /v1/quotes/{quote_id}` returns `quote_not_found` (**404**) to a
+different account, and `POST /v1/checkout` verifies the payer again before both
+initial redemption and an existing-order resume. A quote id is an identifier,
+not an authorization capability.
 
 ### Orders are scoped to the payer, and absence is the answer
 
@@ -1659,12 +1667,20 @@ leads with, and is deliberately pessimistic: an order is `provisioned` only when
 **every** item is. The per-item `provisioning_state` values stay above it, so a
 partially provisioned order never reports success over the lines that failed.
 
+Each order also returns `quote_id` and `payment_attempt_state`. The quote id is
+the only safe way to resume the same order after an app reinstall or on another
+device. The latest attempt state distinguishes a payment never started from a
+processor session that is pending, unknown or definitively failed; clients must
+not infer those states from a device-local flag.
+
 ### `collection_enabled` is false everywhere today
 
 `GET /v1/checkout/methods` reports `collection_enabled: false` with a
-`collection_blocked_reason` unless a **live** merchant account exists for the
-seller and currency. D3 (selling entity) and D4 (processor) are open, so that is
-the current answer in every deployment — not an outage. Wallet availability is
+`collection_blocked_reason` unless a **live** merchant account, a matching
+configured adapter and exactly one explicit `merchant_payment_methods` route
+exist for the seller, currency and rail. D3 (selling entity) and D4 (processor)
+are open, so that is the current answer in every deployment — not an outage.
+Wallet availability is
 reported per wallet with its own reason, because "Apple Pay unavailable" when
 the truth is "no processor has been selected" sends the customer to a support
 conversation nobody can resolve.
@@ -1683,11 +1699,13 @@ about a tax treatment nobody has decided.
 
 Eligibility refusals are **409**, not 400: the request is well formed and the
 answer is about the world, not about the request. That covers
-`no_verified_supplier`, `supplier_capability_mismatch`, `device_rule_missing`,
+`no_verified_supplier`, `supplier_capability_mismatch`, `coverage_unavailable`,
+`device_rule_missing`,
 `device_not_checked`, `device_not_esim_capable`, `device_locked`,
 `price_unavailable`, `tariff_unavailable`, `market_not_verified`,
 `quote_already_redeemed`, `quote_void`, `quote_tampered`, `merchant_not_found`,
-`already_paid` and `live_collection_disabled`.
+`already_paid`, `live_collection_disabled`, `payment_method_not_supported`,
+`ambiguous_merchant_route`, `attempt_in_progress` and `wrong_processor`.
 
 An **expired quote is 410**, distinct from 409, because the client's route out
 is different: re-price, rather than explain. `market_unavailable`,

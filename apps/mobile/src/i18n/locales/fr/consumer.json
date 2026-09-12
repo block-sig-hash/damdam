@@ -7,6 +7,9 @@
     "accountWithInvitations_one": "Compte, {{count}} invitation en attente",
     "accountWithInvitations_other": "Compte, {{count}} invitations en attente"
   },
+  "errors": {
+    "temporary": "Un problème est survenu. Vérifiez votre connexion et réessayez."
+  },
   "signIn": {
     "title": "Connectez-vous ou créez un compte",
     "subtitle": "Saisissez votre adresse e-mail et nous vous enverrons un lien de connexion. Aucun mot de passe à retenir.",
@@ -130,6 +133,7 @@
     "unavailable": {
       "no_verified_supplier": "Nous n'avons pas encore de fournisseur vérifié pour ce forfait ; nous ne pouvons pas le vendre.",
       "supplier_capability_mismatch": "Aucun fournisseur ne peut livrer tout ce que ce forfait comprend.",
+      "coverage_unavailable": "Nous n'avons pas encore de couverture réseau vérifiée pour ce forfait.",
       "device_rule_missing": "Les exigences d'appareil de ce forfait n'ont pas encore été enregistrées.",
       "device_not_checked": "Ce forfait nécessite une eSIM. Confirmez que votre téléphone en accepte une avant d'acheter.",
       "device_not_esim_capable": "Ce téléphone ne peut pas accepter d'eSIM ; ce forfait n'y fonctionnerait pas.",
@@ -163,6 +167,7 @@
     "loadingTitle": "Ouverture de votre commande…",
     "loadingBody": "Nous récupérons ce qu'elle est devenue.",
     "loadErrorTitle": "Nous n'avons pas pu ouvrir cette commande",
+    "openPaymentError": "Nous n'avons pas pu ouvrir la page de paiement. Votre commande est conservée — réessayez pour rouvrir la même session de paiement.",
     "refresh": "Vérifier à nouveau",
     "declinedTitle": "Votre paiement n'a pas abouti",
     "declinedBody": "Rien n'a été débité. Votre commande est toujours là — vous pouvez réessayer de la payer.",

@@ -31,12 +31,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export const PENDING_ORDER_KEY = 'damdam.pendingOrder.v1';
 
 export interface PendingOrder {
+  /** Owner of every identifier below. A device may be shared by accounts. */
+  userId: string;
   orderId: string;
   /**
    * The quote this order was placed from. Kept because a resumed checkout is
    * `POST /checkout` with the *same* quote id — that is what returns the
-   * existing order instead of creating a second one — and after a restart the
-   * app has no other way to name it.
+   * existing order instead of creating a second one. The server now returns
+   * the same id with an order too; keeping it here avoids an extra read during
+   * the normal cold-start path.
    */
   quoteId: string;
   /** Shown while the order itself is still loading, so the screen is never blank. */
@@ -44,11 +47,10 @@ export interface PendingOrder {
   /**
    * True once the customer has actually been sent to the processor.
    *
-   * This is local knowledge and it changes what the app may say. An `unpaid`
-   * order the customer never tried to pay is "you haven't paid yet"; an
-   * `unpaid` order they were sent to the processor for is "we're confirming
-   * your payment" — the delayed-webhook case — and telling those two apart
-   * wrongly either nags somebody who has paid or reassures somebody who has not.
+   * This records whether this device handed the customer to the processor. The
+   * server's attempt state remains authoritative across devices; this flag is
+   * only the additional local fact needed when opening the hosted page itself
+   * failed.
    */
   paymentStarted: boolean;
   savedAt: string;
@@ -66,20 +68,21 @@ export async function savePendingOrder(
   return record;
 }
 
-export async function loadPendingOrder(): Promise<PendingOrder | null> {
+export async function loadPendingOrder(userId: string): Promise<PendingOrder | null> {
   try {
     const raw = await AsyncStorage.getItem(PENDING_ORDER_KEY);
     if (!raw) {
       return null;
     }
     const parsed = JSON.parse(raw) as StoredOrder;
-    if (!parsed.orderId || !parsed.quoteId) {
+    if (!parsed.userId || parsed.userId !== userId || !parsed.orderId || !parsed.quoteId) {
       // A record that cannot name an order cannot recover one. Dropping it is
       // better than carrying a half-written row that makes every start show an
       // order screen with nothing behind it.
       return null;
     }
     return {
+      userId: parsed.userId,
       orderId: parsed.orderId,
       quoteId: parsed.quoteId,
       reference: parsed.reference ?? '',
@@ -92,16 +95,29 @@ export async function loadPendingOrder(): Promise<PendingOrder | null> {
 }
 
 /** Called when the customer is sent to the processor, before the app loses focus. */
-export async function markPaymentStarted(): Promise<PendingOrder | null> {
-  const current = await loadPendingOrder();
-  if (!current) {
+export async function markPaymentStarted(
+  userId: string,
+  orderId: string,
+  paymentStarted = true,
+): Promise<PendingOrder | null> {
+  const current = await loadPendingOrder(userId);
+  if (!current || current.orderId !== orderId) {
     return null;
   }
-  return savePendingOrder({ ...current, paymentStarted: true });
+  return savePendingOrder({ ...current, paymentStarted });
 }
 
-export async function clearPendingOrder(): Promise<void> {
+export async function clearPendingOrder(
+  userId?: string,
+  orderId?: string,
+): Promise<void> {
   try {
+    if (userId) {
+      const current = await loadPendingOrder(userId);
+      if (!current || (orderId && current.orderId !== orderId)) {
+        return;
+      }
+    }
     await AsyncStorage.removeItem(PENDING_ORDER_KEY);
   } catch {
     // A record that outlives its order is recoverable — the app reloads it and

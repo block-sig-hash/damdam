@@ -11,6 +11,7 @@ import {
   saveSession,
   touchSession,
 } from '../services/sessionStore';
+import { clearPendingOrder } from '../services/pendingOrder';
 import {
   clearAccountScopedState,
   hasPinStoredLocally,
@@ -146,6 +147,7 @@ export function useSessionGate(): UseSessionGateResult {
       if (isSessionExpired(persisted.lastActiveAt)) {
         await clearSession();
         await clearAccountScopedState();
+        await clearPendingOrder();
         if (cancelled) {
           return;
         }
@@ -179,6 +181,7 @@ export function useSessionGate(): UseSessionGateResult {
   const onSignedOut = useCallback(async () => {
     await clearSession();
     await clearAccountScopedState();
+    await clearPendingOrder();
     setSession(null);
     setPhase('onboarding');
   }, []);
@@ -217,6 +220,9 @@ export function useSessionGate(): UseSessionGateResult {
         // Nothing persisted to unlock into -- fall back to onboarding
         // rather than entering 'authenticated' with a stale in-memory
         // session that no longer has durable backing.
+        await clearAccountScopedState();
+        await clearPendingOrder();
+        setSession(null);
         setPhase('onboarding');
         return;
       }
@@ -230,6 +236,7 @@ export function useSessionGate(): UseSessionGateResult {
       if (result.outcome === 'invalid') {
         await clearSession();
         await clearAccountScopedState();
+        await clearPendingOrder();
         setSession(null);
         setPhase('onboarding');
       } else if (result.session) {
@@ -263,6 +270,7 @@ export function useSessionGate(): UseSessionGateResult {
           if (!current || isSessionExpired(current.lastActiveAt)) {
             await clearSession();
             await clearAccountScopedState();
+            await clearPendingOrder();
             setSession(null);
             setPhase('onboarding');
             return;
@@ -303,6 +311,7 @@ export function useSessionGate(): UseSessionGateResult {
         if (isSessionExpired(current.lastActiveAt)) {
           await clearSession();
           await clearAccountScopedState();
+          await clearPendingOrder();
           setSession(null);
           setPhase('onboarding');
           return;
@@ -311,6 +320,7 @@ export function useSessionGate(): UseSessionGateResult {
         if (result.outcome === 'invalid') {
           await clearSession();
           await clearAccountScopedState();
+          await clearPendingOrder();
           setSession(null);
           setPhase('onboarding');
         } else if (result.session) {

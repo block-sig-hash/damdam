@@ -279,6 +279,7 @@ def create_app(
             # and the answer is about the world, not about the request.
             "no_verified_supplier": 409,
             "supplier_capability_mismatch": 409,
+            "coverage_unavailable": 409,
             "device_rule_missing": 409,
             "device_not_checked": 409,
             "device_not_esim_capable": 409,
@@ -326,6 +327,10 @@ def create_app(
             # able to say so.
             "live_collection_disabled": 409,
             "no_merchant_account": 409,
+            "payment_method_not_supported": 409,
+            "ambiguous_merchant_route": 409,
+            "attempt_in_progress": 409,
+            "wrong_processor": 409,
             "currency_mismatch": 409,
             "already_paid": 409,
             "intent_not_found": 404,

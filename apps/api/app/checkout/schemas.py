@@ -167,10 +167,16 @@ class OrderItemResponse(BaseModel):
 
 class OrderResponse(BaseModel):
     order_id: UUID
+    #: The immutable basket that created the order. It lets a signed-in customer
+    #: resume the same intent from another device without relying on local data.
+    quote_id: UUID | None
     reference: str
     currency: str
     total_amount: str
     payment_state: str
+    #: Latest processor attempt, including pending/unknown/failed. Order payment
+    #: state alone cannot distinguish "not started" from "webhook delayed".
+    payment_attempt_state: str | None
     placed_at: datetime
     items: list[OrderItemResponse]
     #: Where the whole order has got to, collapsing the item states into the one

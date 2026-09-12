@@ -4468,6 +4468,12 @@ components:
           type: string
           format: uuid
           title: Order Id
+        quote_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Quote Id
         reference:
           type: string
           title: Reference
@@ -4480,6 +4486,11 @@ components:
         payment_state:
           type: string
           title: Payment State
+        payment_attempt_state:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment Attempt State
         placed_at:
           type: string
           format: date-time
@@ -4495,10 +4506,12 @@ components:
       type: object
       required:
       - order_id
+      - quote_id
       - reference
       - currency
       - total_amount
       - payment_state
+      - payment_attempt_state
       - placed_at
       - items
       - fulfilment_state

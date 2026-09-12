@@ -7,6 +7,9 @@
     "accountWithInvitations_one": "Account, {{count}} invitation waiting",
     "accountWithInvitations_other": "Account, {{count}} invitations waiting"
   },
+  "errors": {
+    "temporary": "Something went wrong. Check your connection and try again."
+  },
   "signIn": {
     "title": "Sign in or create an account",
     "subtitle": "Enter your email address and we'll send you a link to sign in. No password to remember.",
@@ -130,6 +133,7 @@
     "unavailable": {
       "no_verified_supplier": "We don't have a verified supplier for this plan yet, so we can't sell it.",
       "supplier_capability_mismatch": "No supplier can deliver everything this plan includes.",
+      "coverage_unavailable": "We don't have verified network coverage for this plan yet.",
       "device_rule_missing": "This plan's device requirements haven't been recorded yet.",
       "device_not_checked": "This plan needs an eSIM. Confirm your phone can take one before buying.",
       "device_not_esim_capable": "This phone can't take an eSIM, so this plan wouldn't work on it.",
@@ -163,6 +167,7 @@
     "loadingTitle": "Opening your order…",
     "loadingBody": "We're fetching what happened to it.",
     "loadErrorTitle": "We couldn't open that order",
+    "openPaymentError": "We couldn't open the payment page. Your order is safe — try paying again to reopen the same payment session.",
     "refresh": "Check again",
     "declinedTitle": "Your payment didn't go through",
     "declinedBody": "Nothing has been charged. Your order is still here — you can try paying for it again.",

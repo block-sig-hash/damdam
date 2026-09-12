@@ -25,6 +25,7 @@ export type ConsumerTab = 'home' | 'plans' | 'my-line' | 'account';
 
 interface ConsumerAppProps {
   accessToken: string;
+  currentUserId: string;
   /** Shown when an invitation turns out to be for a different address. */
   currentEmail: string | null;
   /** Sign out and return to sign-in, optionally pre-filling an address. */
@@ -48,6 +49,7 @@ interface ConsumerAppProps {
  */
 export function ConsumerApp({
   accessToken,
+  currentUserId,
   currentEmail,
   onSwitchAccount,
 }: ConsumerAppProps): React.JSX.Element {
@@ -176,6 +178,7 @@ export function ConsumerApp({
         ) : tab === 'plans' ? (
           <PurchaseFlow
             accessToken={accessToken}
+            userId={currentUserId}
             initialOrderId={requestedOrderId}
             onOrderOpened={() => setRequestedOrderId(null)}
             onPurchaseSettled={load}

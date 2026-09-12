@@ -173,10 +173,12 @@ export const FIXTURE_PAYMENT_METHODS_BLOCKED: PaymentMethodsResponse = {
 
 export const FIXTURE_ORDER: OrderResponse = {
   order_id: 'harness-order',
+  quote_id: 'harness-quote',
   reference: 'OR-HARNESS1',
   currency: 'NGN',
   total_amount: '12000.00',
   payment_state: 'paid',
+  payment_attempt_state: 'succeeded',
   placed_at: '2026-09-11T10:05:00Z',
   items: [
     {
@@ -195,6 +197,7 @@ export const FIXTURE_ORDER: OrderResponse = {
 export const FIXTURE_ORDER_DECLINED: OrderResponse = {
   ...FIXTURE_ORDER,
   payment_state: 'failed',
+  payment_attempt_state: 'failed',
   items: FIXTURE_ORDER.items.map(item => ({
     ...item,
     provisioning_state: 'not_started',
@@ -206,4 +209,5 @@ export const FIXTURE_ORDER_DECLINED: OrderResponse = {
 export const FIXTURE_ORDER_AWAITING_WEBHOOK: OrderResponse = {
   ...FIXTURE_ORDER_DECLINED,
   payment_state: 'unpaid',
+  payment_attempt_state: 'pending',
 };

@@ -144,10 +144,19 @@ export type ProvisioningState =
 
 export interface OrderResponse {
   order_id: string;
+  quote_id: string | null;
   reference: string;
   currency: string;
   total_amount: string;
   payment_state: PaymentState;
+  payment_attempt_state:
+    | 'created'
+    | 'pending'
+    | 'succeeded'
+    | 'failed'
+    | 'unknown'
+    | 'abandoned'
+    | null;
   placed_at: string;
   items: OrderItemResponse[];
   fulfilment_state: ProvisioningState;

@@ -86,9 +86,7 @@ class CheckoutService:
 
     # --- reading an existing checkout -------------------------------------
 
-    def existing_intent(
-        self, session: Session, quote_id: UUID
-    ) -> PaymentIntent | None:
+    def existing_intent(self, session: Session, quote_id: UUID) -> PaymentIntent | None:
         """The order this quote already produced, if it produced one.
 
         `payment_intents.quote_id` is what chunk 12 recorded and nothing has
@@ -128,7 +126,7 @@ class CheckoutService:
         """
         existing = self.existing_intent(session, quote_id)
         if existing is not None:
-            return self._resume(session, existing, method, adapter, require_live)
+            return self._resume(session, existing, payer, method, adapter, require_live)
 
         quote = self.catalog.load_for_redemption(session, quote_id)
         self._assert_payer_may_redeem(session, quote, payer)
@@ -149,12 +147,10 @@ class CheckoutService:
                     "quote_already_redeemed",
                     "this quote was already claimed; ask for a new one",
                 ) from exc
-            return self._resume(session, racing, method, adapter, require_live)
+            return self._resume(session, racing, payer, method, adapter, require_live)
 
         items = list(
-            session.exec(
-                select(QuoteItem).where(QuoteItem.quote_id == quote.id)
-            ).all()
+            session.exec(select(QuoteItem).where(QuoteItem.quote_id == quote.id)).all()
         )
         order = self._create_order(session, quote, payer, items)
         merchant = self.router.route(
@@ -169,7 +165,7 @@ class CheckoutService:
         )
         attempt = self.router.begin_attempt(session, intent, merchant, method)
         checkout = self._open_processor_session(
-            adapter, attempt, intent, merchant, method
+            session, adapter, attempt, intent, merchant, method, payer
         )
         return CheckoutResult(
             order=order,
@@ -183,6 +179,7 @@ class CheckoutService:
         self,
         session: Session,
         intent: PaymentIntent,
+        payer: User,
         method: PaymentMethodKind,
         adapter: PaymentProcessorAdapter | None,
         require_live: bool,
@@ -196,6 +193,11 @@ class CheckoutService:
         order = session.get(Order, intent.order_id)
         if order is None:  # pragma: no cover - FK guarantees this
             raise CheckoutError("order_not_found")
+        if order.payer_user_id != payer.id:
+            # A quote id is not an authorization capability. This check must
+            # precede every attempt/session lookup so a replay cannot reveal
+            # another customer's order or reopen their processor session.
+            raise CheckoutError("quote_not_yours")
 
         succeeded = session.exec(
             select(PaymentAttempt).where(
@@ -234,11 +236,15 @@ class CheckoutService:
         if require_live and not merchant.live_enabled:
             raise PaymentRoutingError("live_collection_disabled")
 
-        attempt = live or self.router.begin_attempt(
-            session, intent, merchant, method
-        )
+        attempt = live or self.router.begin_attempt(session, intent, merchant, method)
         checkout = self._open_processor_session(
-            adapter, attempt, intent, merchant, method
+            session,
+            adapter,
+            attempt,
+            intent,
+            merchant,
+            attempt.method,
+            payer,
         )
         return CheckoutResult(
             order=order,
@@ -275,9 +281,7 @@ class CheckoutService:
             payer_user_id=payer.id,
             payer_organization_id=None,
             currency=quote.currency,
-            total_amount=round_money(
-                Decimal(quote.total_amount), quote.currency
-            ),
+            total_amount=round_money(Decimal(quote.total_amount), quote.currency),
             payment_state=PaymentState.UNPAID,
             placed_at=self.clock(),
         )
@@ -306,13 +310,10 @@ class CheckoutService:
         return order
 
     @staticmethod
-    def _assert_payer_may_redeem(
-        session: Session, quote: Quote, payer: User
-    ) -> None:
-        """A quote naming recipients may only be bought by one of them, or by
-        whoever it was issued to.
+    def _assert_payer_may_redeem(session: Session, quote: Quote, payer: User) -> None:
+        """A consumer quote may name exactly one account: its payer.
 
-        Consumer quotes name the buyer or nobody. This refuses the case where a
+        Consumer routes always name the buyer. This refuses the case where a
         quote issued for named recipients is presented by an unrelated account —
         which would otherwise attach somebody else's service to this payer's
         order and receipt.
@@ -324,7 +325,7 @@ class CheckoutService:
             ).all()
             if item.recipient_user_id is not None
         }
-        if recipients and payer.id not in recipients:
+        if recipients != {payer.id}:
             raise CheckoutError(
                 "quote_not_yours",
                 "this quote was priced for a different recipient",
@@ -332,11 +333,13 @@ class CheckoutService:
 
     @staticmethod
     def _open_processor_session(
+        session: Session,
         adapter: PaymentProcessorAdapter | None,
         attempt: PaymentAttempt,
         intent: PaymentIntent,
         merchant: MerchantAccount,
         method: PaymentMethodKind,
+        payer: User,
     ) -> CheckoutSession | None:
         """Ask the processor for somewhere to send the customer.
 
@@ -348,23 +351,35 @@ class CheckoutService:
         """
         if adapter is None:
             return None
+        if adapter.name != merchant.processor:
+            raise PaymentRoutingError("wrong_processor")
         try:
-            return adapter.create_checkout(
+            checkout = adapter.create_checkout(
                 idempotency_key=attempt.idempotency_key,
                 amount=intent.amount,
                 currency=intent.currency,
                 method=method,
-                # No card data, no customer identifiers beyond our own
-                # references. Whatever the processor echoes back reaches our
-                # webhook, and a webhook is not a place to put a person.
                 metadata={
                     "order_id": str(intent.order_id),
                     "intent_id": str(intent.id),
                     "merchant": merchant.processor,
+                    # Paystack requires an email to initialize hosted checkout.
+                    # It is used only for that request and is not copied into
+                    # processor metadata or persisted in a payment attempt.
+                    "customer_email": payer.email,
                 },
             )
         except Exception:  # noqa: BLE001 - any adapter failure is recoverable
             return None
+        # Webhooks are allowed to identify a charge using the processor's own
+        # reference, which need not equal our idempotency key. Persisting it is
+        # not an adapter operation, so database failures must not be swallowed
+        # as a recoverable processor timeout.
+        attempt.processor_reference = checkout.processor_reference
+        attempt.status = AttemptStatus.PENDING
+        session.add(attempt)
+        session.flush()
+        return checkout
 
 
 def quote_status_for(quote: Quote) -> str:

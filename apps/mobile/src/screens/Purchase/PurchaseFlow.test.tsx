@@ -128,10 +128,12 @@ function order(
 ): checkoutClient.OrderResponse {
   return {
     order_id: ORDER_ID,
+    quote_id: QUOTE_ID,
     reference: 'OR-DEADBEEF',
     currency: 'NGN',
     total_amount: '12000.00',
     payment_state: 'unpaid',
+    payment_attempt_state: 'created',
     placed_at: new Date().toISOString(),
     items: [
       {
@@ -175,7 +177,12 @@ async function renderFlow(
   let rendered: ReturnType<typeof render> | undefined;
   await act(async () => {
     rendered = render(
-      <PurchaseFlow accessToken="token" onOpenMyLine={jest.fn()} {...props} />,
+      <PurchaseFlow
+        accessToken="token"
+        userId="user-1"
+        onOpenMyLine={jest.fn()}
+        {...props}
+      />,
     );
   });
   await waitFor(() =>
@@ -408,6 +415,15 @@ describe('the quote is what gets charged (AC-37.4)', () => {
     expect(screen.getByTestId('quote-pay')).toBeDisabled();
     expect(mockedCheckout).not.toHaveBeenCalled();
   });
+
+  it('keeps payment disabled when method discovery fails', async () => {
+    mockedMethods.mockRejectedValue(new Error('network down'));
+
+    await reachReview();
+    await waitFor(() => expect(screen.getByTestId('collection-blocked')).toBeTruthy());
+
+    expect(screen.getByTestId('quote-pay')).toBeDisabled();
+  });
 });
 
 describe('an expired price is re-priced, not failed (AC-37.4)', () => {
@@ -507,6 +523,12 @@ describe('twice means once (AC-37.5)', () => {
 
 describe('leaving for the processor and coming back (AC-37.5)', () => {
   it('writes the order down before opening the payment page', async () => {
+    let storedWhenOpened: Record<string, unknown> | null = null;
+    jest.spyOn(Linking, 'openURL').mockImplementationOnce(async () => {
+      storedWhenOpened = JSON.parse(
+        (await AsyncStorage.getItem(PENDING_ORDER_KEY)) ?? 'null',
+      );
+    });
     mockedCheckout.mockResolvedValue({
       outcome: 'pay',
       order: order(),
@@ -522,6 +544,12 @@ describe('leaving for the processor and coming back (AC-37.5)', () => {
     expect(Linking.openURL).toHaveBeenCalledWith(
       'https://processor.test/session/abc123?token=secret',
     );
+    expect(storedWhenOpened).toMatchObject({
+      userId: 'user-1',
+      orderId: ORDER_ID,
+      quoteId: QUOTE_ID,
+      paymentStarted: false,
+    });
 
     const stored = JSON.parse(
       (await AsyncStorage.getItem(PENDING_ORDER_KEY)) ?? 'null',
@@ -549,6 +577,33 @@ describe('leaving for the processor and coming back (AC-37.5)', () => {
     const raw = (await AsyncStorage.getItem(PENDING_ORDER_KEY)) ?? '';
     expect(raw).not.toContain('processor.test');
     expect(raw).not.toContain('secret');
+  });
+
+  it('keeps the order recoverable when the phone cannot open the payment page', async () => {
+    mockedCheckout.mockResolvedValue({
+      outcome: 'pay',
+      order: order({ payment_attempt_state: 'pending' }),
+      redirect_url: 'https://processor.test/session/abc',
+      processor_reference: 'ps_1',
+      resumed: false,
+    });
+    jest.spyOn(Linking, 'openURL').mockRejectedValueOnce(new Error('no browser'));
+
+    await reachReview();
+    await press('quote-pay');
+
+    await waitFor(() => expect(screen.getByTestId('order-unpaid')).toBeTruthy());
+    expect(screen.getByTestId('order-error')).toHaveTextContent(
+      /couldn't open the payment page/,
+    );
+    const stored = JSON.parse(
+      (await AsyncStorage.getItem(PENDING_ORDER_KEY)) ?? 'null',
+    );
+    expect(stored).toMatchObject({
+      userId: 'user-1',
+      orderId: ORDER_ID,
+      paymentStarted: false,
+    });
   });
 
   it('opens the order, not the catalog, when the app restarts after paying', async () => {
@@ -603,14 +658,34 @@ describe('leaving for the processor and coming back (AC-37.5)', () => {
     expect(screen.getByTestId('order-confirming')).toBeTruthy();
     expect(screen.getByTestId('order-confirming-body')).toHaveTextContent(/Don't pay again/);
     expect(screen.queryByTestId('order-unpaid')).toBeNull();
+    expect(screen.queryByTestId('order-done')).toBeNull();
   });
 });
 
 describe('a paid order leads to its status, never to another purchase (AC-37.5)', () => {
+  it("does not open another account's pending order on a shared device", async () => {
+    await AsyncStorage.setItem(
+      PENDING_ORDER_KEY,
+      JSON.stringify({
+        userId: 'user-2',
+        orderId: 'other-order',
+        quoteId: 'other-quote',
+        reference: 'OR-OTHER',
+        paymentStarted: true,
+      }),
+    );
+
+    await renderFlow();
+
+    expect(screen.getByTestId('plan-list')).toBeTruthy();
+    expect(mockedOrder).not.toHaveBeenCalled();
+  });
+
   it('shows provisioning progress for a paid but unprovisioned order', async () => {
     await AsyncStorage.setItem(
       PENDING_ORDER_KEY,
       JSON.stringify({
+        userId: 'user-1',
         orderId: ORDER_ID,
         quoteId: QUOTE_ID,
         reference: 'OR-DEADBEEF',
@@ -634,6 +709,7 @@ describe('a paid order leads to its status, never to another purchase (AC-37.5)'
     await AsyncStorage.setItem(
       PENDING_ORDER_KEY,
       JSON.stringify({
+        userId: 'user-1',
         orderId: ORDER_ID,
         quoteId: QUOTE_ID,
         reference: 'OR-DEADBEEF',
@@ -668,6 +744,7 @@ describe('a paid order leads to its status, never to another purchase (AC-37.5)'
     await AsyncStorage.setItem(
       PENDING_ORDER_KEY,
       JSON.stringify({
+        userId: 'user-1',
         orderId: ORDER_ID,
         quoteId: QUOTE_ID,
         reference: 'OR-DEADBEEF',
@@ -688,10 +765,32 @@ describe('a paid order leads to its status, never to another purchase (AC-37.5)'
 });
 
 describe('a declined payment keeps the order (AC-37.5)', () => {
+  it('uses the backend attempt outcome even when payment_state is still unpaid', async () => {
+    await AsyncStorage.setItem(
+      PENDING_ORDER_KEY,
+      JSON.stringify({
+        userId: 'user-1',
+        orderId: ORDER_ID,
+        quoteId: QUOTE_ID,
+        reference: 'OR-DEADBEEF',
+        paymentStarted: true,
+      }),
+    );
+    mockedOrder.mockResolvedValue(
+      order({ payment_state: 'unpaid', payment_attempt_state: 'failed' }),
+    );
+
+    await renderFlow();
+
+    expect(screen.getByTestId('order-declined')).toBeTruthy();
+    expect(screen.queryByTestId('order-confirming')).toBeNull();
+  });
+
   it('offers to pay the same order again, with the same quote', async () => {
     await AsyncStorage.setItem(
       PENDING_ORDER_KEY,
       JSON.stringify({
+        userId: 'user-1',
         orderId: ORDER_ID,
         quoteId: QUOTE_ID,
         reference: 'OR-DEADBEEF',
@@ -732,6 +831,18 @@ describe('opening a named order (AC-37.3, AC-37.5)', () => {
     expect(mockedOrder).toHaveBeenCalledWith('token', ORDER_ID);
   });
 
+  it('treats a server-pending attempt as confirming on another device', async () => {
+    mockedOrder.mockResolvedValue(
+      order({ payment_state: 'unpaid', payment_attempt_state: 'pending' }),
+    );
+
+    await renderFlow({ initialOrderId: ORDER_ID });
+
+    expect(screen.getByTestId('order-confirming')).toBeTruthy();
+    expect(screen.queryByTestId('order-unpaid')).toBeNull();
+    expect(screen.queryByTestId('order-done')).toBeNull();
+  });
+
   it('explains an order it cannot open instead of showing a blank screen', async () => {
     mockedOrder.mockRejectedValue(
       new ApiError('order_not_found', 'We could not find that order.', 404),
@@ -743,6 +854,25 @@ describe('opening a named order (AC-37.3, AC-37.5)', () => {
       expect(screen.getByTestId('order-loading-state')).toHaveTextContent(/could not find that order/),
     );
     expect(screen.getByTestId('order-loading-state-action')).toBeTruthy();
+    expect(screen.getByTestId('order-loading-state-secondary-action')).toBeTruthy();
+  });
+
+  it('can resume payment using the quote returned by the server', async () => {
+    mockedOrder.mockResolvedValue(
+      order({ payment_state: 'unpaid', payment_attempt_state: 'created' }),
+    );
+    mockedCheckout.mockResolvedValue({
+      outcome: 'pay',
+      order: order({ payment_attempt_state: 'pending' }),
+      redirect_url: 'https://processor.test/session/recovered',
+      processor_reference: 'ps_2',
+      resumed: true,
+    });
+
+    await renderFlow({ initialOrderId: ORDER_ID });
+    await press('order-unpaid-action');
+
+    expect(mockedCheckout).toHaveBeenCalledWith('token', QUOTE_ID);
   });
 });
 

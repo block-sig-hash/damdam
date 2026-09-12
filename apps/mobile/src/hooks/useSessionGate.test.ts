@@ -1,9 +1,11 @@
 import * as Keychain from 'react-native-keychain';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { refreshSession } from '../api/authClient';
 import { getMyPackages } from '../api/packagesClient';
 import { SESSION_INACTIVITY_LIMIT_MS } from '../services/sessionStore';
+import { PENDING_ORDER_KEY } from '../services/pendingOrder';
 import { shouldRequirePinAfterBackground, useSessionGate } from './useSessionGate';
 
 /**
@@ -83,7 +85,8 @@ const BASE_SESSION = {
   packageId: 'package-1',
 };
 
-beforeEach(() => {
+beforeEach(async () => {
+  await AsyncStorage.clear();
   mockSet.mockReset();
   mockGet.mockReset();
   mockReset.mockReset();
@@ -138,6 +141,10 @@ describe('useSessionGate boot sequence', () => {
     await act(async () => {
       await result.current.onOnboarded(BASE_SESSION);
     });
+    await AsyncStorage.setItem(
+      PENDING_ORDER_KEY,
+      JSON.stringify({ userId: BASE_SESSION.userId, orderId: 'order-1' }),
+    );
 
     await act(async () => {
       await result.current.onSignedOut();
@@ -147,6 +154,7 @@ describe('useSessionGate boot sequence', () => {
     expect(result.current.session).toBeNull();
     expect(mockReset).toHaveBeenCalledWith({ service: 'com.damdam.session' });
     expect(mockReset).toHaveBeenCalledWith({ service: 'com.damdam.pin-unlock' });
+    expect(await AsyncStorage.getItem(PENDING_ORDER_KEY)).toBeNull();
   });
 });
 
