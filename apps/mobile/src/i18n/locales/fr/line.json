@@ -35,12 +35,12 @@
     "awaitingActivationTitle": "Installée — en attente du réseau",
     "awaitingActivationBody": "Votre profil est sur ce téléphone. Le réseau doit encore activer la ligne, une étape distincte que nous ne contrôlons pas.",
     "suspendedTitle": "Cette ligne est suspendue",
-    "suspendedBody": "Elle ne transportera ni appels ni données tant qu'elle n'est pas rechargée.",
+    "suspendedBody": "Le fournisseur a suspendu cette ligne. Contactez l’assistance pour connaître le motif et les étapes de rétablissement.",
     "expiredTitle": "Cette ligne a expiré",
     "expiredBody": "Son forfait n'est plus disponible.",
     "expiredAction": "Voir les forfaits",
-    "readyTitle": "Votre ligne fonctionne",
-    "readyBody": "Rien à faire ici. Votre solde et vos tarifs d'appel sont ci-dessous."
+    "readyTitle": "Détails du service",
+    "readyBody": "Installation, activation et connexion au réseau sont distinctes. Consultez les états signalés ci-dessous."
   },
   "states": {
     "label": "Ce que nous savons",
@@ -102,14 +102,21 @@
       "line_not_active": "Cette ligne n'est pas encore active et ne peut pas appeler.",
       "unknown": "Nous ne pouvons pas confirmer si cette ligne peut appeler."
     },
-    "internetDialerUnavailable": "Appeler depuis l'application n'est pas encore disponible. Les appels passent par le téléphone de votre appareil.",
+    "internetDialerUnavailable": "Les appels depuis l’application ne sont pas encore disponibles.",
     "guideAction": "Comment appeler sur cette ligne"
   },
   "tariff": {
     "label": "Tarifs d'appel",
-    "rate": "{{country}} : {{amount}} par minute, facturé par paliers de {{increment}} s",
+    "rate": "Depuis {{origin}} vers {{country}} ({{kind}}) : {{amount}} par minute, paliers de {{increment}} s, minimum {{minimum}} s ; connexion {{setup}}.",
     "version": "Tarifs version {{version}}. Les frais apparaissent après la fin d'un appel.",
-    "none": "Aucun tarif d'appel n'a été publié pour ce forfait ; nous ne pouvons donc pas indiquer le coût des appels."
+    "none": "Aucun tarif d'appel n'a été publié pour ce forfait ; nous ne pouvons donc pas indiquer le coût des appels.",
+    "anyOrigin": "tout réseau pris en charge",
+    "kind": {
+      "mobile": "Mobile",
+      "fixed": "Fixe",
+      "special": "Spécial",
+      "premium": "Surtaxé"
+    }
   },
   "install": {
     "title": "Installez votre eSIM",
@@ -126,17 +133,19 @@
     "smdpLabel": "Adresse SM-DP+",
     "activationCodeLabel": "Code d'activation",
     "wholeCodeLabel": "Code d'activation",
-    "manualHint": "Certains téléphones demandent un seul code combiné au lieu de deux champs. Il s'agit du même profil.",
+    "manualHint": "Sur iPhone : Réglages → Données cellulaires → Ajouter une eSIM → Utiliser un code QR → Saisir les données manuellement. Sur Android, ouvrez les paramètres SIM, puis Ajouter une eSIM et la saisie manuelle ; les menus varient.",
     "directAction": "Installer sur ce téléphone",
     "invoked": "Votre téléphone vous demande de confirmer l'installation. Terminez là-bas, puis revenez.",
     "guideTitle": "Étapes pour {{device}}",
     "guideGeneric": "Ce sont les étapes habituelles sous Android. Les noms des menus peuvent différer légèrement sur votre téléphone.",
-    "noReinstall": "Ce profil ne peut être téléchargé qu'une seule fois. Si vous changez ou réinitialisez votre téléphone, il faudra acheter un nouveau forfait — c'est une limite de la norme eSIM, pas une règle de notre part.",
+    "noReinstall": "Ce profil ne peut être téléchargé qu’une fois. Si vous changez ou réinitialisez votre téléphone, contactez l’assistance pour un remplacement. Ce fournisseur ne permet pas de retélécharger le profil.",
     "confirmAction": "Je l'ai installée",
     "failedAction": "L'installation a échoué",
     "errorTitle": "Nous n'avons pas pu obtenir votre code d'activation",
     "retry": "Réessayer",
-    "back": "Retour à ma ligne"
+    "back": "Retour à ma ligne",
+    "qrTitle": "Scannez avec le téléphone à équiper",
+    "qrHint": "Installation sur ce téléphone ? Utilisez les champs manuels ci-dessous. Ne conservez ni ne partagez ce QR code."
   },
   "guide": {
     "title": "Appeler sur cette ligne",

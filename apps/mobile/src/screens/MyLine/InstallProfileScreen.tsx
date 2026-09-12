@@ -10,6 +10,7 @@ import { StateMessage } from '../../components/StateMessage/StateMessage';
 import type { ScreenPrivacyResult } from '../../services/screenPrivacy';
 import { color, radius, space, typography } from '../../theme/tokens';
 import type { ActivationGuide } from '../EsimActivation/activationGuides';
+import { InstallationQr } from './InstallationQr';
 
 interface InstallProfileScreenProps {
   credential: InstallationCredential | null;
@@ -100,7 +101,7 @@ export function InstallProfileScreen({
           body={errorMessage}
           actionLabel={t('install.retry')}
           onAction={onReveal}
-          busy={loading}
+          busy={loading || privacy === null}
           secondaryActionLabel={t('install.back')}
           onSecondaryAction={onBack}
           testID="install-error"
@@ -115,7 +116,7 @@ export function InstallProfileScreen({
           footnote={t('install.revealFootnote')}
           actionLabel={t('install.revealAction')}
           onAction={onReveal}
-          busy={loading}
+          busy={loading || privacy === null}
           busyLabel={t('install.revealing')}
           testID="install-reveal"
         />
@@ -138,6 +139,9 @@ export function InstallProfileScreen({
           ) : null}
 
           <View style={styles.card} testID="install-code">
+            <Text style={styles.cardLabel}>{t('install.qrTitle')}</Text>
+            <InstallationQr lpa={credential.lpa} />
+            <Text style={styles.footnote}>{t('install.qrHint')}</Text>
             <Text style={styles.cardLabel}>{t('install.manualTitle')}</Text>
             {parts ? (
               <>

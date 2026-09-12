@@ -39,7 +39,7 @@ from app.catalog.market import (
     PublicationStatus,
 )
 from app.catalog.models import Product
-from app.catalog.tariffs import Tariff, TariffRate
+from app.catalog.tariffs import OriginKind, Tariff, TariffRate
 from app.connectivity.credentials import CredentialVault
 from app.connectivity.models import (
     ActivationState,
@@ -511,7 +511,14 @@ class LineViewService:
         tariff = max(live, key=lambda row: row.version)
         rates = session.exec(
             select(TariffRate)
-            .where(TariffRate.tariff_id == tariff.id)
+            .where(
+                TariffRate.tariff_id == tariff.id,
+                TariffRate.origin_kind == (
+                    OriginKind.INTERNET
+                    if self._delivery(context) is LineDelivery.INTERNET
+                    else OriginKind.CARRIER_VISITED_NETWORK
+                ),
+            )
             .order_by(col(TariffRate.destination_country))
         ).all()
         return TariffView(
@@ -520,6 +527,7 @@ class LineViewService:
             destinations=[
                 CallDestinationView(
                     country=rate.destination_country,
+                    origin_country=rate.origin_country,
                     destination_kind=rate.destination_kind.value,
                     # Full stored precision: a per-minute rate rounded to the
                     # currency's scale cannot represent a fraction of a kobo,

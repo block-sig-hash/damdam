@@ -127,6 +127,7 @@ class TopUpView(BaseModel):
 
 class CallDestinationView(BaseModel):
     country: str
+    origin_country: str | None = None
     destination_kind: str
     per_minute_amount: str
     setup_amount: str

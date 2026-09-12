@@ -35,12 +35,12 @@
     "awaitingActivationTitle": "Installed — waiting for the network",
     "awaitingActivationBody": "Your profile is on this phone. The network still has to switch the line on, which is a separate step we don't control.",
     "suspendedTitle": "This line is suspended",
-    "suspendedBody": "It won't carry calls or data until it's topped up.",
+    "suspendedBody": "The carrier has suspended this line. Contact support to confirm the reason and how to restore it.",
     "expiredTitle": "This line has expired",
     "expiredBody": "Its allowance is no longer available.",
     "expiredAction": "Browse plans",
-    "readyTitle": "Your line is working",
-    "readyBody": "Nothing to do here. Your balance and call rates are below."
+    "readyTitle": "Service details",
+    "readyBody": "Installation, carrier activation and network connection are separate. Check the reported states below."
   },
   "states": {
     "label": "What we know",
@@ -102,14 +102,21 @@
       "line_not_active": "This line isn't active yet, so it can't make calls.",
       "unknown": "We can't confirm whether this line can make calls."
     },
-    "internetDialerUnavailable": "Calling from inside the app isn't available yet. Calls go through your phone's own dialer.",
+    "internetDialerUnavailable": "Calling from inside the app is not available yet.",
     "guideAction": "How to call on this line"
   },
   "tariff": {
     "label": "Call rates",
-    "rate": "{{country}}: {{amount}} per minute, billed in {{increment}}s steps",
+    "rate": "From {{origin}} to {{country}} ({{kind}}): {{amount}} per minute, {{increment}}s steps, {{minimum}}s minimum; setup {{setup}}.",
     "version": "Rates version {{version}}. Charges appear after a call ends.",
-    "none": "No call rates have been published for this plan, so we can't show what calls cost."
+    "none": "No call rates have been published for this plan, so we can't show what calls cost.",
+    "anyOrigin": "any supported network",
+    "kind": {
+      "mobile": "Mobile",
+      "fixed": "Landline",
+      "special": "Special",
+      "premium": "Premium"
+    }
   },
   "install": {
     "title": "Install your eSIM",
@@ -126,17 +133,19 @@
     "smdpLabel": "SM-DP+ address",
     "activationCodeLabel": "Activation code",
     "wholeCodeLabel": "Activation code",
-    "manualHint": "Some phones ask for one combined code instead of two fields. Both are the same profile.",
+    "manualHint": "On iPhone: Settings → Cellular (or Mobile Service) → Add eSIM → Use QR Code → Enter Details Manually. On Android, open SIM settings and choose Add eSIM, then manual entry; menu names vary.",
     "directAction": "Install on this phone",
     "invoked": "Your phone is asking you to confirm the install. Finish there, then come back.",
     "guideTitle": "Steps for {{device}}",
     "guideGeneric": "These are the usual steps for Android. Your phone's menu names may differ slightly.",
-    "noReinstall": "This profile can only be downloaded once. If you change or reset your phone, you'll need to buy a new plan — that's a limit of the eSIM standard, not a policy.",
+    "noReinstall": "This profile can only be downloaded once. If you change or reset your phone, contact support about a replacement. Re-download is not supported by this supplier.",
     "confirmAction": "I've installed it",
     "failedAction": "It didn't install",
     "errorTitle": "We couldn't get your activation code",
     "retry": "Try again",
-    "back": "Back to my line"
+    "back": "Back to my line",
+    "qrTitle": "Scan with the phone you want to install on",
+    "qrHint": "Installing on this phone? Use the manual fields below. Do not save or share this QR code."
   },
   "guide": {
     "title": "Calling on this line",

@@ -28,7 +28,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import text
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.auth.models import Locale, User, UserStatus
 from app.catalog.market import (
@@ -317,6 +317,32 @@ def _line(
 
 
 # --- the view ---------------------------------------------------------------
+
+
+def test_carrier_rates_exclude_internet_and_preserve_roaming_origin(api, client):
+    with api.state.session_factory() as session:
+        holder = _user(session)
+        entitlement = _line(api, session, holder)
+        tariff = session.exec(select(Tariff)).one()
+        session.add(TariffRate(
+            tariff_id=tariff.id, origin_kind=OriginKind.INTERNET,
+            destination_country="NG", destination_kind=DestinationKind.MOBILE,
+            per_minute_amount=Decimal("0.01"), setup_amount=Decimal("0"),
+            minimum_seconds=1, increment_seconds=1,
+        ))
+        rate = session.exec(select(TariffRate).where(
+            TariffRate.origin_kind == OriginKind.CARRIER_VISITED_NETWORK
+        )).one()
+        rate.origin_country = "GB"
+        session.add(rate)
+        session.commit()
+    body = client.get(
+        f"/v1/me/lines/{entitlement.id}", headers=_auth(api, holder)
+    ).json()
+    rates = body["tariff"]["destinations"]
+    assert len(rates) == 1
+    assert rates[0]["origin_country"] == "GB"
+    assert Decimal(rates[0]["per_minute_amount"]) == Decimal("25.5")
 
 
 def test_my_line_reports_every_state_separately(

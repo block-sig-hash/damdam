@@ -320,17 +320,23 @@ export function MyLineScreen({
           <Text style={styles.cardLabel}>{t('tariff.label')}</Text>
           {line.tariff.destinations.map(destination => (
             <Text
-              key={`${destination.country}-${destination.destination_kind}`}
+              key={`${destination.origin_country}-${destination.country}-${destination.destination_kind}`}
               style={styles.body}
               testID={`my-line-rate-${destination.country}`}
             >
               {t('tariff.rate', {
                 country: destination.country,
+                origin: destination.origin_country ?? t('tariff.anyOrigin'),
+                kind: t(`tariff.kind.${destination.destination_kind}`, {
+                  defaultValue: destination.destination_kind,
+                }),
                 amount: money(
                   destination.per_minute_amount,
                   line.tariff?.currency ?? '',
                 ),
                 increment: destination.increment_seconds,
+                minimum: destination.minimum_seconds,
+                setup: money(destination.setup_amount, line.tariff.currency),
               })}
             </Text>
           ))}
@@ -402,9 +408,10 @@ export function nextStep(line: LineDetail): NextStep {
   if (line.restriction?.suspended) {
     return 'suspended';
   }
-  if (line.delivery === 'internet' || !line.installation) {
+  if (line.delivery === 'internet') {
     return 'ready';
   }
+  if (!line.installation) { return 'awaiting-profile'; }
   if (line.installation.state !== 'installed') {
     // A profile that has not been issued yet is a wait, not a task. Offering
     // "install" against a credential that does not exist sends the customer to

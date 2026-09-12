@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform, type AppStateStatus } from 'react-native';
 import {
   act,
   cleanup,
@@ -191,6 +191,7 @@ async function renderFlow(
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() });
   Platform.OS = 'android';
   mockedList.mockResolvedValue({ lines: [summary()] });
   mockedGet.mockResolvedValue(line());
@@ -220,6 +221,13 @@ afterEach(async () => {
 });
 
 describe('the four states are reported separately (AC-38.3)', () => {
+  it('waits for a missing carrier profile instead of reporting ready', async () => {
+    mockedGet.mockResolvedValue(line({ installation: null, line: null }));
+    await renderFlow();
+    expect(screen.getByTestId('my-line-next-awaiting')).toBeTruthy();
+    expect(screen.queryByTestId('my-line-next-ready')).toBeNull();
+  });
+
   it('shows the number, installation, activation, network and voice facts', async () => {
     await renderFlow();
 
@@ -398,6 +406,54 @@ describe('suspension and expiry lead somewhere (AC-38.5)', () => {
 });
 
 describe('the activation code is protected before it exists (AC-38.1)', () => {
+  it('does not request material while protection is still pending', async () => {
+    mockedProtect.mockImplementationOnce(() => new Promise(() => {}));
+    await renderFlow();
+    await press('my-line-next-install-action');
+    await press('install-reveal-action');
+    expect(mockedGrant).not.toHaveBeenCalled();
+  });
+
+  it('discards a late credential after leaving and reopening installation', async () => {
+    let finish!: (value: lineClient.InstallationCredential) => void;
+    mockedRedeem.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await renderFlow();
+    await press('my-line-next-install-action');
+    await press('install-reveal-action');
+    await press('install-back');
+    await press('my-line-next-install-action');
+    await act(async () => finish({ entitlement_id: ENTITLEMENT_ID, lpa: LPA,
+      one_time_use: true, delivery_count: 1, reinstall_available: false }));
+    expect(screen.queryByTestId('install-code')).toBeNull();
+  });
+
+  it('clears revealed material when the app becomes inactive', async () => {
+    let change!: (state: AppStateStatus) => void;
+    const listener = jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, callback) => {
+      change = callback;
+      return { remove: jest.fn() };
+    });
+    await renderFlow();
+    await press('my-line-next-install-action');
+    await press('install-reveal-action');
+    expect(screen.getByTestId('install-code')).toBeTruthy();
+    await act(async () => change('inactive'));
+    expect(screen.queryByTestId('install-code')).toBeNull();
+    listener.mockRestore();
+  });
+
+  it('keeps the requested line open when its navigation intent is consumed', async () => {
+    mockedList.mockResolvedValue({ lines: [summary(), summary({ entitlement_id: 'other' })] });
+    function Host() {
+      const [requested, setRequested] = React.useState<string | null>(ENTITLEMENT_ID);
+      return <MyLineFlow accessToken="token" initialEntitlementId={requested}
+        onEntitlementOpened={() => setRequested(null)} onBrowsePlans={jest.fn()} />;
+    }
+    await act(async () => { render(<Host />); });
+    expect(screen.getByTestId('my-line')).toBeTruthy();
+    expect(mockedList).not.toHaveBeenCalled();
+  });
+
   it('opens the install screen without fetching or showing the profile', async () => {
     await renderFlow();
     await press('my-line-next-install-action');

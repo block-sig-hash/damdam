@@ -77,6 +77,7 @@ export interface TopUpView {
 
 export interface CallDestination {
   country: string;
+  origin_country?: string | null;
   destination_kind: string;
   per_minute_amount: string;
   setup_amount: string;

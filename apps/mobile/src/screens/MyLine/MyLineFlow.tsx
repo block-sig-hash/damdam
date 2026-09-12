@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 import {
   confirmInstallation,
@@ -89,6 +89,10 @@ export function MyLineFlow({
    * there is only one of.
    */
   const revealing = useRef(false);
+  const installGeneration = useRef(0);
+  const installOpen = useRef(false);
+  const initialized = useRef(false);
+  const readGeneration = useRef(0);
 
   const describe = useCallback(
     (error: unknown): string =>
@@ -98,15 +102,18 @@ export function MyLineFlow({
 
   const openLine = useCallback(
     async (entitlementId: string) => {
+      const generation = ++readGeneration.current;
       setStage('line');
+      setLine(null);
       setLoading(true);
       setErrorMessage(null);
       try {
-        setLine(await getLine(accessToken, entitlementId));
+        const nextLine = await getLine(accessToken, entitlementId);
+        if (generation === readGeneration.current) { setLine(nextLine); }
       } catch (error) {
-        setErrorMessage(describe(error));
+        if (generation === readGeneration.current) { setErrorMessage(describe(error)); }
       } finally {
-        setLoading(false);
+        if (generation === readGeneration.current) { setLoading(false); }
       }
     },
     [accessToken, describe],
@@ -133,6 +140,8 @@ export function MyLineFlow({
   }, [accessToken, describe, openLine]);
 
   useEffect(() => {
+    if (initialized.current && !initialEntitlementId) { return; }
+    initialized.current = true;
     if (initialEntitlementId) {
       openLine(initialEntitlementId);
       onEntitlementOpened?.();
@@ -146,15 +155,30 @@ export function MyLineFlow({
   // --- installation --------------------------------------------------------
 
   const enterInstall = useCallback(async () => {
+    const generation = ++installGeneration.current;
+    installOpen.current = true;
+    revealing.current = false;
+    setLoading(false);
+    setPrivacy(null);
     setCredential(null);
     setInstallError(null);
     setDirectInstallInvoked(false);
     setStage('install');
     // Before anything is fetched. The order is the protection.
-    setPrivacy(await protectScreen());
+    const result = await protectScreen();
+    if (generation === installGeneration.current) {
+      setPrivacy(result);
+    } else if (!installOpen.current) {
+      await releaseScreen();
+    }
   }, []);
 
   const leaveInstall = useCallback(async () => {
+    installGeneration.current += 1;
+    installOpen.current = false;
+    revealing.current = false;
+    setLoading(false);
+    setBusy(false);
     setCredential(null);
     setInstallError(null);
     setPrivacy(null);
@@ -166,17 +190,29 @@ export function MyLineFlow({
   }, []);
 
   useEffect(() => {
-    // A backgrounded app, a crash, a navigation this component does not own —
-    // none of them go through `leaveInstall`, so unmount releases too.
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active' && installOpen.current) {
+        installGeneration.current += 1;
+        revealing.current = false;
+        setCredential(null);
+        setInstallError(null);
+        setLoading(false);
+      }
+    });
     return () => {
+      subscription.remove();
+      installGeneration.current += 1;
+      readGeneration.current += 1;
+      installOpen.current = false;
       releaseScreen().catch(() => undefined);
     };
   }, []);
 
   const reveal = useCallback(async () => {
-    if (!line || revealing.current) {
+    if (!line || revealing.current || !installOpen.current || privacy === null) {
       return;
     }
+    const generation = installGeneration.current;
     revealing.current = true;
     setLoading(true);
     setInstallError(null);
@@ -185,20 +221,22 @@ export function MyLineFlow({
         accessToken,
         line.entitlement_id,
       );
-      setCredential(
-        await redeemInstallationGrant(
+      if (generation !== installGeneration.current) { return; }
+      const material = await redeemInstallationGrant(
           accessToken,
           line.entitlement_id,
           grant.grant_token,
-        ),
       );
+      if (generation === installGeneration.current) { setCredential(material); }
     } catch (error) {
-      setInstallError(describe(error));
+      if (generation === installGeneration.current) { setInstallError(describe(error)); }
     } finally {
-      revealing.current = false;
-      setLoading(false);
+      if (generation === installGeneration.current) {
+        revealing.current = false;
+        setLoading(false);
+      }
     }
-  }, [accessToken, describe, line]);
+  }, [accessToken, describe, line, privacy]);
 
   const directInstall = useCallback(async () => {
     if (!credential) {
@@ -211,10 +249,9 @@ export function MyLineFlow({
       // `invoked` means the system accepted the request and is asking the
       // customer. It is not an installation, and the screen does not say it is.
       setDirectInstallInvoked(outcome === 'invoked');
-    } catch (error) {
-      setInstallError(
-        error instanceof Error ? error.message : t('errors.unexpected'),
-      );
+    } catch {
+      // Native/provider errors may echo the activation code.
+      setInstallError(t('errors.unexpected'));
     } finally {
       setBusy(false);
     }

@@ -213,6 +213,24 @@ def test_two_simultaneous_redemptions_deliver_one_profile(
     assert stored.delivery_count == 1
 
 
+def test_distinct_grants_refresh_a_preloaded_delivery_count(engine, session, vault):
+    holder = _user(session, "+2348010000109")
+    credential = vault.store(session, _installation(session, holder), LPA)
+    first = vault.issue_grant(session, credential, holder.id)
+    second = vault.issue_grant(session, credential, holder.id)
+    session.commit()
+    holder_id, credential_id = holder.id, credential.id
+    with Session(engine) as stale:
+        cached = stale.get(EsimActivationCredential, credential_id)
+        assert cached.delivery_count == 0
+        vault.redeem(session, first.token, holder_id)
+        session.commit()
+        vault.redeem(stale, second.token, holder_id)
+        stale.commit()
+    session.expire_all()
+    assert session.get(EsimActivationCredential, credential_id).delivery_count == 2
+
+
 def test_a_second_grant_is_a_second_delivery_not_a_second_profile(
     session: Session, vault: CredentialVault
 ) -> None:

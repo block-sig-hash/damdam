@@ -56,8 +56,7 @@ export async function protectScreen(): Promise<ScreenPrivacyResult> {
     return 'failed';
   }
   try {
-    await module.setSecure(true);
-    return 'protected';
+    return (await module.setSecure(true)) ? 'protected' : 'failed';
   } catch {
     return 'failed';
   }

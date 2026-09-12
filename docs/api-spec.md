@@ -1880,3 +1880,13 @@ is a *separate* thing still pending, so the refreshed detail comes back in the
 same response. `{"installed": false}` is recorded as not installed rather than
 ignored: a failed install on a record still reading `installed` is how a
 customer is told their line is ready while nothing is on the phone.
+
+### Chunk 20 independent review clarification — 12 September 2026
+
+My Line tariff destinations are filtered by the service's calling mode:
+carrier lines expose `carrier_visited_network` rates and internet entitlements
+expose internet rates. Each destination also includes nullable `origin_country`
+(`null` means any supported origin). Clients display this origin, destination
+kind, setup charge, minimum and increment without rounding metered rates.
+Installation redemption explicitly binds the grant to the path's credential
+before decrypting; concurrent deliveries lock and refresh the delivery counter.

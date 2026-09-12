@@ -159,24 +159,15 @@ def redeem_installation_grant(
     with _session(request) as session:
         context = service.context(session, entitlement_id, user)
         credential = service.credential_for(session, context)
-        # Read before, compared after. The vault checks that the *caller* holds
-        # the token's credential, which is satisfied by any line they own — so a
-        # token for line A, presented against line B, passes the vault and
-        # increments A. Comparing against a fixed zero would miss that whenever
-        # B had been delivered before, so the delta is what is checked.
-        delivered_before = credential.delivery_count
         try:
-            lpa = vault.redeem(session, payload.grant_token, user.id)
+            lpa = vault.redeem(
+                session, payload.grant_token, user.id,
+                expected_credential_id=credential.id,
+            )
         except CredentialError as exc:
             # One error for expired, spent, wrong-account and never-existed. An
             # attacker learning that a token *existed* learns something.
             raise LineError("grant_not_redeemable") from exc
-        if credential.delivery_count == delivered_before:
-            # `redeem` increments the row it actually spent. This line's did not
-            # move, so the token belonged to a different one. Raising before the
-            # commit rolls the other line's delivery back with it.
-            raise LineError("grant_not_redeemable")
-
         body = InstallationCredentialResponse(
             entitlement_id=context.entitlement.id,
             lpa=lpa,

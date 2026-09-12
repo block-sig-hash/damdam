@@ -3342,6 +3342,11 @@ components:
         country:
           type: string
           title: Country
+        origin_country:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Origin Country
         destination_kind:
           type: string
           title: Destination Kind
