@@ -336,7 +336,7 @@ export function MyLineScreen({
                 ),
                 increment: destination.increment_seconds,
                 minimum: destination.minimum_seconds,
-                setup: money(destination.setup_amount, line.tariff.currency),
+                setup: money(destination.setup_amount, line.tariff?.currency ?? ''),
               })}
             </Text>
           ))}
