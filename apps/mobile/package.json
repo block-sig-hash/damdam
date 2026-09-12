@@ -14,6 +14,7 @@
     "i18next": "^26.3.6",
     "phosphor-react-native": "3.0.6",
     "posthog-react-native": "^4.57.0",
+    "qrcode-generator": "2.0.4",
     "react": "19.2.7",
     "react-i18next": "^17.0.11",
     "react-native": "0.86.0",

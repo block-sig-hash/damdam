@@ -55,6 +55,11 @@ class ServiceSummary(BaseModel):
     """One line of connectivity, as the customer's account sees it."""
 
     order_item_id: UUID
+    #: Added by chunk 20. The address My Line is keyed by, so Home's "install
+    #: now" opens *this* line rather than a list. Null until provisioning grants
+    #: an entitlement — a paid, unprovisioned item has no line to open yet, and
+    #: an id invented for it would 404.
+    entitlement_id: UUID | None = None
     order_id: UUID
     order_reference: str
     product_name: str

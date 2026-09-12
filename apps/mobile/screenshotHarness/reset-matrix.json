@@ -88,6 +88,22 @@
         "ios",
         "android"
       ]
+    },
+    "consumerLine": {
+      "owner": "chunk 20",
+      "screens": [
+        "my-line",
+        "my-line-awaiting-activation",
+        "my-line-suspended",
+        "my-line-usage-unmeasured",
+        "my-line-installation",
+        "my-line-calling-guide"
+      ],
+      "why": "My Line and the states it must never collapse. Three of the six exist because the schema keeps installation, activation and network attachment apart: a line installed and not yet switched on, a line suspended with the profile still on the phone, and a balance nobody has ever measured. The installation capture is deliberately the *unprotected* variant -- iOS cannot block a screenshot at all, so the warning copy is the whole mitigation and is the thing worth reviewing.",
+      "platforms": [
+        "ios",
+        "android"
+      ]
     }
   },
   "pending": {
@@ -96,12 +112,10 @@
       "owner": "chunks 18-21",
       "screens": [
         "home",
-        "my-line",
-        "my-line-installation",
         "account",
         "receipts"
       ],
-      "why": "Chunk 19 moved `plans` and `checkout` to `implemented`. `plan-detail` is removed rather than left owed: the reset has no separate detail screen — price, contents, number policy and priced call destinations are all on the plan card, so the customer sees them before choosing rather than after a tap. Chunk 18 built Home but captured no screenshots, so `home` stays owed."
+      "why": "Chunk 19 moved `plans` and `checkout` to `implemented` and removed `plan-detail` (the reset has no separate detail screen -- price, contents, number policy and priced call destinations are all on the plan card). Chunk 20 moved `my-line` to `implemented` and replaced `my-line-installation` with six line/installation captures. Chunk 18 built Home but captured no screenshots, so `home` stays owed; `account` and `receipts` are chunk 21's."
     },
     "enterprise": {
       "owner": "chunks 22-24",

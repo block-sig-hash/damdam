@@ -46,6 +46,7 @@ function service(
 ): consumerClient.ServiceSummary {
   return {
     order_item_id: 'item-1',
+    entitlement_id: 'entitlement-1',
     order_id: 'order-1',
     order_reference: 'ORD-1',
     product_name: 'Travel 5GB',
