@@ -152,6 +152,14 @@ export const FIXTURE_QUOTE: QuoteResponse = {
   ],
 };
 
+/** Return an active quote whose visible countdown is stable at 15 minutes. */
+export function createActiveFixtureQuote(now = Date.now()): QuoteResponse {
+  return {
+    ...FIXTURE_QUOTE,
+    expires_at: new Date(now + 15 * 60 * 1000).toISOString(),
+  };
+}
+
 export const FIXTURE_PAYMENT_METHODS: PaymentMethodsResponse = {
   methods: ['card', 'bank_transfer'],
   wallets: [

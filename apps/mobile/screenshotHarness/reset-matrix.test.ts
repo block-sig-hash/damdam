@@ -23,6 +23,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 import matrix from './reset-matrix.json';
+import { FIXTURE_QUOTE, createActiveFixtureQuote } from './fixtures';
 
 const { expectedMatrix } = require('../scripts/screenshotMatrix') as {
   expectedMatrix: (
@@ -146,10 +147,24 @@ describe('the re-cut screenshot matrix', () => {
     ['esim-activation-android.yaml', 'harness-target-esim-activation-prompt-android'],
     ['esim-activation-ios.yaml', 'harness-target-esim-activation-guide-ios'],
     ['activation-success.yaml', 'harness-target-activation-success'],
+    ['plans.yaml', 'harness-target-plans'],
+    ['plans-device-unsupported.yaml', 'harness-target-plans-device-unsupported'],
+    ['checkout.yaml', 'harness-target-checkout-review'],
+    ['checkout-collection-blocked.yaml', 'harness-target-checkout-collection-blocked'],
+    ['checkout-quote-expired.yaml', 'harness-target-checkout-quote-expired'],
+    ['order-provisioning.yaml', 'harness-target-order-provisioning'],
+    ['order-confirming-payment.yaml', 'harness-target-order-confirming-payment'],
+    ['order-payment-declined.yaml', 'harness-target-order-payment-declined'],
   ])('scrolls each below-fold target into view in both locales: %s', (flow, target) => {
     const contents = readFileSync(join(FLOWS, flow), 'utf8');
     const marker = `- scrollUntilVisible:\n    element:\n      id: "${target}"\n    direction: DOWN`;
     expect(contents.split(marker)).toHaveLength(3);
+  });
+
+  it('creates active quote fixtures relative to render time', () => {
+    const now = Date.parse('2042-04-05T06:07:08.000Z');
+    expect(createActiveFixtureQuote(now).expires_at).toBe('2042-04-05T06:22:08.000Z');
+    expect(FIXTURE_QUOTE.expires_at).not.toBe(createActiveFixtureQuote(now).expires_at);
   });
 
   it('still owes the reset product its own screens', () => {

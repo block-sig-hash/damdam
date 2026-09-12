@@ -38,6 +38,7 @@ import {
   FIXTURE_PRODUCT,
   FIXTURE_PRODUCT_DEVICE_BLOCKED,
   FIXTURE_QUOTE,
+  createActiveFixtureQuote,
 } from './fixtures';
 
 const noop = () => undefined;
@@ -249,7 +250,7 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
     label: 'Checkout — quote review',
     render: () => (
       <QuoteReviewScreen
-        quote={FIXTURE_QUOTE}
+        quote={createActiveFixtureQuote()}
         methods={FIXTURE_PAYMENT_METHODS}
         paying={false}
         errorMessage={null}
@@ -264,7 +265,7 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
     label: 'Checkout — no live merchant account (D3/D4)',
     render: () => (
       <QuoteReviewScreen
-        quote={FIXTURE_QUOTE}
+        quote={createActiveFixtureQuote()}
         methods={FIXTURE_PAYMENT_METHODS_BLOCKED}
         paying={false}
         errorMessage={null}
