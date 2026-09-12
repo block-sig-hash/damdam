@@ -1,6 +1,6 @@
 # Implementation status
 
-Chunks 01–18 are **ACCEPTED after independent Codex review and fixes** for the
+Chunks 01–19 are **ACCEPTED after independent Codex review and fixes** for the
 scope stated in each review record. Live/external subsets remain explicitly
 blocked where their evidence gates are open.
 Chunk 01 merged in [PR #100](https://github.com/block-sig-hash/damdam/pull/100).
@@ -47,7 +47,7 @@ is a dry run that executes nothing.
 | 16 — Implement actual usage reconciliation and carrier charging | **ACCEPTED after fixes** (carrier documented/fixture scope); live evidence EXTERNAL_BLOCKED | accepted base `b7f5b68` / replayed `211c00d` / corrected `7bf87f0` / pipeline `9f26828` | [Independent review](reviews/16.md) | **D1/D5 OPEN** — no supplier usage observed; `usage_events` remains withheld and no WDR file is parsed. Exhaustion enforcement is chunk 17; internet-call metering is V03 |
 | 17 — Implement top-ups, spending controls and suspension | **ACCEPTED after fixes** (documented/fixture and preparatory scope); live reuse and hard prepaid guarantee EXTERNAL_BLOCKED | accepted dependency merge `ad7a267` / replayed `ab4fa78` / corrected `eebbdcd`, `c48e58d` | [Independent review](reviews/17.md) | **D1 OPEN** — no live top-up or supplier cap observed; Telnyx advertises neither verified top-up nor spending enforcement. **D5 OPEN** — bounded exposure needs an approval. Shared carrier/internet credit remains refused |
 | 18 — Connect mobile navigation, onboarding and redemption | **ACCEPTED after fixes** (navigation/authentication/Home/invitation preparatory scope) | accepted base `36448d6` / replayed `902dfd4` / corrected `3c27f00`, `605d4d8`, `b6ef16c`, `45bb23e` / contract `757116f` | [Independent review](reviews/18.md) | Mail delivery remains a discarding transport; production web-link association remains chunk 27. Plans, My Line and Account remain assigned to chunks 19–21; no complete US-37 claim |
-| 19 — Build the complete consumer purchase journey | NOT_STARTED | — | — | See assignment |
+| 19 — Build the complete consumer purchase journey | **ACCEPTED after fixes** (consumer Plans/quote/checkout/recovery scope); live catalog, payment and fulfilment **EXTERNAL_BLOCKED** | accepted base `2ddb90a` / replayed `a7995e0`, `d4cff21` / corrected `e7bc816` / CI evidence `fc9a80e`, `9660953`, `7c53ddb` | [Independent review](reviews/19.md) | **D2/D3/D4 OPEN** — no market, selling entity, tax treatment, live merchant or global processor is approved. No live purchase or supplier fulfilment is claimed; My Line/installation remains chunk 20 |
 | 20 — Build My Line, eSIM installation and native-call guidance | NOT_STARTED | — | — | See assignment |
 | 21 — Complete account, receipts, support and deletion | NOT_STARTED | — | — | See assignment |
 | 22 — Build enterprise people, teams and validated imports | NOT_STARTED | — | — | See assignment |

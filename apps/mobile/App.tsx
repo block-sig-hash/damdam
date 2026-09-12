@@ -74,10 +74,11 @@ function App(): React.JSX.Element {
         onUnlocked={onPinUnlocked}
       />
     );
-  } else if (phase === 'authenticated' && session) {
+  } else if (phase === 'authenticated' && session?.userId) {
     content = (
       <ConsumerApp
         accessToken={session.accessToken}
+        currentUserId={session.userId}
         currentEmail={session.email ?? null}
         onSwitchAccount={switchAccount}
       />

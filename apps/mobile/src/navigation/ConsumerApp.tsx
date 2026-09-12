@@ -11,6 +11,7 @@ import { ApiError } from '../api/http';
 import { PlaceholderScreen } from '../screens/Placeholder/PlaceholderScreen';
 import { ConsumerHomeScreen } from '../screens/ConsumerHome/ConsumerHomeScreen';
 import { InvitationScreen } from '../screens/Invitation/InvitationScreen';
+import { PurchaseFlow } from '../screens/Purchase/PurchaseFlow';
 import {
   clearPendingLink,
   loadPendingLink,
@@ -24,6 +25,7 @@ export type ConsumerTab = 'home' | 'plans' | 'my-line' | 'account';
 
 interface ConsumerAppProps {
   accessToken: string;
+  currentUserId: string;
   /** Shown when an invitation turns out to be for a different address. */
   currentEmail: string | null;
   /** Sign out and return to sign-in, optionally pre-filling an address. */
@@ -47,6 +49,7 @@ interface ConsumerAppProps {
  */
 export function ConsumerApp({
   accessToken,
+  currentUserId,
   currentEmail,
   onSwitchAccount,
 }: ConsumerAppProps): React.JSX.Element {
@@ -57,6 +60,13 @@ export function ConsumerApp({
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [pendingLink, setPendingLink] = useState<PendingLink | null>(null);
+  /**
+   * An order the customer asked for by name — from Home's "see order status", or
+   * from an `damdam://orders/:id` link. Held here rather than inside the
+   * purchase flow because both routes arrive at the host, and the flow needs to
+   * be told which order to open rather than having to guess from storage.
+   */
+  const [requestedOrderId, setRequestedOrderId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,6 +106,19 @@ export function ConsumerApp({
     setPendingLink(null);
     clearPendingLink().catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (pendingLink?.kind !== 'order') {
+      return;
+    }
+    // An order link is not a modal like an invitation: it is a request to look
+    // at a purchase the customer already made, and the app has a tab for that.
+    // Consumed here rather than during render so the link is cleared exactly
+    // once.
+    setRequestedOrderId(pendingLink.orderId);
+    setTab('plans');
+    dismissLink();
+  }, [dismissLink, pendingLink]);
 
   const tabs = useMemo<TabDefinition<ConsumerTab>[]>(
     () => [
@@ -147,17 +170,19 @@ export function ConsumerApp({
             onRetry={load}
             onBrowsePlans={() => setTab('plans')}
             onOpenMyLine={() => setTab('my-line')}
-            // Order detail is chunk 19's screen. Until it exists, the closest
-            // truthful destination is My Line, and Home says so rather than
-            // opening a screen that cannot answer the question.
-            onOpenOrder={() => setTab('my-line')}
+            onOpenOrder={orderId => {
+              setRequestedOrderId(orderId);
+              setTab('plans');
+            }}
           />
         ) : tab === 'plans' ? (
-          <PlaceholderScreen
-            title={t('placeholder.plansTitle')}
-            note={`${t('placeholder.plansBody')} ${t('placeholder.owner', {
-              chunk: 19,
-            })}`}
+          <PurchaseFlow
+            accessToken={accessToken}
+            userId={currentUserId}
+            initialOrderId={requestedOrderId}
+            onOrderOpened={() => setRequestedOrderId(null)}
+            onPurchaseSettled={load}
+            onOpenMyLine={() => setTab('my-line')}
           />
         ) : tab === 'my-line' ? (
           <PlaceholderScreen

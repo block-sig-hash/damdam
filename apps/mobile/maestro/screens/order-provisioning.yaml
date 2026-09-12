@@ -1,0 +1,31 @@
+appId: com.damdam.app
+---
+- launchApp
+- tapOn:
+    id: "harness-locale-en"
+- assertVisible:
+    id: "harness-locale-active-en"
+- scrollUntilVisible:
+    element:
+      id: "harness-target-order-provisioning"
+    direction: DOWN
+- tapOn:
+    id: "harness-target-order-provisioning"
+- assertVisible:
+    id: "order-provisioning"
+- takeScreenshot: order-provisioning-en
+- stopApp
+- launchApp
+- tapOn:
+    id: "harness-locale-fr"
+- assertVisible:
+    id: "harness-locale-active-fr"
+- scrollUntilVisible:
+    element:
+      id: "harness-target-order-provisioning"
+    direction: DOWN
+- tapOn:
+    id: "harness-target-order-provisioning"
+- assertVisible:
+    id: "order-provisioning"
+- takeScreenshot: order-provisioning-fr

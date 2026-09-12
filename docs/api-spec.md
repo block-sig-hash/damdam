@@ -1549,3 +1549,172 @@ mine" against the caller's **verified** identifiers only — the same rule
 acceptance would say `invitation_recipient_mismatch`.
 
 Unknown tokens answer `invitation_invalid` (**400**) with no further detail.
+
+## 7.36 Amendment — Consumer Catalog, Quotes and Checkout (US-37)
+
+Chunk 19 adds the consumer purchase journey. Chunks 09–14 built catalog,
+quoting, orders, payment routing and refunds as services with no HTTP surface;
+these are the endpoints the app buys through.
+
+### Endpoints
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /v1/catalog/markets` | none | Which country/currency pairs are on sale |
+| `GET /v1/catalog/products` | none | What can be bought there, and for anything that cannot, why not |
+| `POST /v1/quotes` | member session | Price a basket on the server, immutably, with an expiry |
+| `GET /v1/quotes/{quote_id}` | member session | Re-read a quote for review, and after an app restart |
+| `GET /v1/checkout/methods` | member session | What the customer may pay with here, with a reason for each refusal |
+| `POST /v1/checkout` | member session | Buy the basket this quote priced |
+| `GET /v1/me/orders` | member session | This payer's orders |
+| `GET /v1/me/orders/{order_id}` | member session | One order — the recovery destination |
+
+Browsing is unauthenticated and quoting is not. A quote is a redeemable claim on
+a price with an expiry, and issuing them to anonymous callers is issuing that
+claim to nobody in particular.
+
+### Every amount is a string
+
+`"12000.00"`, never `12000.0`. A price that crosses JSON as a float can come
+back a hundredth different from the one that was shown, and the one thing a
+quote must be is exactly what the customer agreed to. Amounts are rendered at
+the currency's own scale by `app.money.format_money`, which is the only place
+that decides how one looks.
+
+Per-minute call rates are the exception and carry their full stored precision
+(`"15.5000"`): a rate rounded to the currency's scale cannot represent a
+fraction of a kobo, and a metered charge built from it is wrong by the
+difference every minute.
+
+### Device facts are tri-state, and `null` is not `false`
+
+`supports_esim` and `is_unlocked` are optional on `GET /v1/catalog/products` and
+on the `device` object of `POST /v1/quotes`.
+
+| Value | Means | Effect on an eSIM plan |
+|---|---|---|
+| absent / `null` | not checked | `device_not_checked` — listed, unpurchasable, with a reason to go and check |
+| `false` | checked and incapable | `device_not_esim_capable` |
+| `true` | capable | eligible |
+
+The distinction exists because the chunk forbids implying guaranteed detection.
+No platform exposes a carrier lock at all, so a client that never sends
+`is_unlocked` is behaving correctly rather than omitting a field; only an
+explicit `false` refuses. A plan that does not require an eSIM skips the check
+entirely — which is the point of selling internet calling to somebody whose
+phone cannot take one.
+
+### An unavailable plan is listed, not hidden
+
+`products[].purchasable` is `false` with an `unavailable_reason` rather than the
+product being omitted. A customer who watches a plan disappear learns nothing;
+one told `device_not_esim_capable` can act. The reason is the verbatim code from
+`CatalogService.assert_fulfillable` — the same check quoting runs — so a browse
+screen can never say "available" where quoting would say "no verified supplier".
+
+A product with **no price** from this seller in this currency *is* omitted. That
+is not a hidden price; it is a product this market does not sell, and listing it
+with no amount would leave nothing to decide from.
+
+Coverage is destination-specific: the selected country must appear in the
+product's verified `coverage_countries`. Coverage in a different country never
+makes this selection purchasable, and quote creation repeats the same check so
+a caller cannot bypass the browse result.
+
+### The quote is the idempotency key
+
+`POST /v1/checkout` takes a `quote_id` and no `Idempotency-Key` header. A quote
+is issued once, server-priced, expiring, and redeemable exactly once by a
+conditional `UPDATE`, so "has this basket already been bought" is a question the
+database answers without trusting anything the caller sends. A client-supplied
+key would be a second, weaker key layered over a strong one, and the two would
+disagree the first time a client generated a fresh key for a retry.
+
+**201 for a new order, 200 for one that already existed.** A retry, a double
+tap, and an app cold-started on the way back from the processor all get 200 and
+the same order. `resumed` says the same thing in the body.
+
+`outcome` is decided by the server and must not be re-derived from the other
+fields:
+
+| `outcome` | Means | `redirect_url` |
+|---|---|---|
+| `pay` | a processor session is open; send the customer to it | present |
+| `already_paid` | this order is paid; go to status, never to a second charge | `null` |
+| `awaiting_processor` | placed and unpaid, with no session — D4 is open, or the processor could not be reached | `null` |
+
+`awaiting_processor` is not an error. Both of its causes leave a real, resumable
+order, which is strictly better than losing the basket and strictly better than
+pretending a session exists.
+
+### A consumer quote belongs to exactly one account
+
+`POST /v1/quotes` writes the authenticated user as every consumer line's
+recipient and refuses a different `recipient_user_id` with `quote_not_yours`
+(**403**). `GET /v1/quotes/{quote_id}` returns `quote_not_found` (**404**) to a
+different account, and `POST /v1/checkout` verifies the payer again before both
+initial redemption and an existing-order resume. A quote id is an identifier,
+not an authorization capability.
+
+### Orders are scoped to the payer, and absence is the answer
+
+`GET /v1/me/orders/{order_id}` answers `order_not_found` (**404**) for another
+account's order rather than `403`. The difference between "does not exist" and
+"is not yours" is an oracle for whether a reference is real.
+
+`fulfilment_state` collapses the item states into the one word a status screen
+leads with, and is deliberately pessimistic: an order is `provisioned` only when
+**every** item is. The per-item `provisioning_state` values stay above it, so a
+partially provisioned order never reports success over the lines that failed.
+
+Each order also returns `quote_id` and `payment_attempt_state`. The quote id is
+the only safe way to resume the same order after an app reinstall or on another
+device. The latest attempt state distinguishes a payment never started from a
+processor session that is pending, unknown or definitively failed; clients must
+not infer those states from a device-local flag.
+
+### `collection_enabled` is false everywhere today
+
+`GET /v1/checkout/methods` reports `collection_enabled: false` with a
+`collection_blocked_reason` unless a **live** merchant account, a matching
+configured adapter and exactly one explicit `merchant_payment_methods` route
+exist for the seller, currency and rail. D3 (selling entity) and D4 (processor)
+are open, so that is the current answer in every deployment — not an outage.
+Wallet availability is
+reported per wallet with its own reason, because "Apple Pay unavailable" when
+the truth is "no processor has been selected" sends the customer to a support
+conversation nobody can resolve.
+
+`card_fallback_required` is derived from the configuration rather than
+hardcoded: a checkout offering only a wallet, on a device without one, is a
+checkout nobody can complete.
+
+### `tax_configuration_reference: null` is not zero tax
+
+It means no tax treatment has been recorded — D3 is open. Clients must render it
+as "no tax has been applied" rather than as a `0.00` tax line, which is a claim
+about a tax treatment nobody has decided.
+
+### Status codes
+
+Eligibility refusals are **409**, not 400: the request is well formed and the
+answer is about the world, not about the request. That covers
+`no_verified_supplier`, `supplier_capability_mismatch`, `coverage_unavailable`,
+`device_rule_missing`,
+`device_not_checked`, `device_not_esim_capable`, `device_locked`,
+`price_unavailable`, `tariff_unavailable`, `market_not_verified`,
+`quote_already_redeemed`, `quote_void`, `quote_tampered`, `merchant_not_found`,
+`already_paid`, `live_collection_disabled`, `payment_method_not_supported`,
+`ambiguous_merchant_route`, `attempt_in_progress` and `wrong_processor`.
+
+An **expired quote is 410**, distinct from 409, because the client's route out
+is different: re-price, rather than explain. `market_unavailable`,
+`product_unavailable` and `quote_not_found` are **404**;
+`market_unavailable` is returned for both "no such market" and "not published
+yet", so a caller probing which markets are coming next learns nothing from the
+difference.
+
+`GET /v1/quotes/{quote_id}` deliberately **does not** re-run redemption's
+checks. An expired quote is returned `200` with its `status` and `expires_at`,
+so a review screen can say "this price expired, here is a fresh one" instead of
+failing blank.

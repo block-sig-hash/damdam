@@ -16,7 +16,12 @@ from app.audit.service import AuditLogService
 from app.auth.hto import HTOAuthError, HTOService
 from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
+from app.catalog.service import CatalogError, CatalogService
 from app.checkins.routes import router as checkin_router
+from app.checkout.catalog_view import CatalogViewService
+from app.checkout.routes import catalog_router, checkout_router, quote_router
+from app.checkout.routes import order_router as consumer_order_router
+from app.checkout.service import CheckoutError, CheckoutService
 from app.config import Settings, get_settings
 from app.consumer.routes import invitation_preview_router
 from app.consumer.routes import router as consumer_router
@@ -71,6 +76,7 @@ from app.packages.service import (
 )
 from app.payments.providers import PaymentProvider
 from app.payments.routes import router as payment_router
+from app.payments.routing import PaymentRouter, PaymentRoutingError
 from app.payments.service import PaymentError, PaymentService
 from app.pricing.routes import router as retail_pricing_router
 from app.pricing.service import RetailPricingService
@@ -210,6 +216,17 @@ def create_app(
         memberships=api.state.membership_service, clock=clock
     )
     api.state.consumer_service = ConsumerService(clock=clock)
+    api.state.catalog_service = CatalogService(clock=clock)
+    api.state.catalog_view_service = CatalogViewService(
+        api.state.catalog_service, clock=clock
+    )
+    api.state.checkout_service = CheckoutService(
+        api.state.catalog_service, PaymentRouter(clock=clock), clock=clock
+    )
+    # D4 is open, so no processor adapter is registered. `None` is the
+    # current state of the decision, not a missing wire-up: naming a
+    # candidate here would be a selection sitting in code.
+    api.state.payment_processor_adapter = None
     api.state.mfa_service = MfaService(clock)
     api.state.hto_pilgrim_service = HtoPilgrimService()
     api.state.report_service = ProvisioningReportService(clock)
@@ -241,6 +258,91 @@ def create_app(
                 "details": {},
             },
             headers=headers,
+        )
+
+    @api.exception_handler(CatalogError)
+    async def catalog_error_handler(
+        request: Request, exc: CatalogError
+    ) -> JSONResponse:
+        statuses = {
+            "market_unavailable": 404,
+            "product_unavailable": 404,
+            "quote_not_found": 404,
+            "quote_expired": 410,
+            "quote_already_redeemed": 409,
+            "quote_void": 409,
+            "quote_tampered": 409,
+            "empty_quote": 400,
+            "invalid_quantity": 400,
+            "currency_unsupported": 400,
+            # Eligibility refusals are 409, not 400: the request is well formed
+            # and the answer is about the world, not about the request.
+            "no_verified_supplier": 409,
+            "supplier_capability_mismatch": 409,
+            "coverage_unavailable": 409,
+            "device_rule_missing": 409,
+            "device_not_checked": 409,
+            "device_not_esim_capable": 409,
+            "device_locked": 409,
+            "price_unavailable": 409,
+            "tariff_unavailable": 409,
+            "market_not_verified": 409,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(CheckoutError)
+    async def checkout_error_handler(
+        request: Request, exc: CheckoutError
+    ) -> JSONResponse:
+        statuses = {
+            "order_not_found": 404,
+            "merchant_not_found": 409,
+            "quote_already_redeemed": 409,
+            "quote_not_yours": 403,
+            "quote_empty": 400,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(PaymentRoutingError)
+    async def payment_routing_error_handler(
+        request: Request, exc: PaymentRoutingError
+    ) -> JSONResponse:
+        statuses = {
+            # 409, not 500: nothing is broken. Collection is switched off until
+            # D3 names a seller and D4 names a processor, and the app has to be
+            # able to say so.
+            "live_collection_disabled": 409,
+            "no_merchant_account": 409,
+            "payment_method_not_supported": 409,
+            "ambiguous_merchant_route": 409,
+            "attempt_in_progress": 409,
+            "wrong_processor": 409,
+            "currency_mismatch": 409,
+            "already_paid": 409,
+            "intent_not_found": 404,
+            "merchant_not_found": 404,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
         )
 
     @api.exception_handler(MembershipError)
@@ -581,6 +683,10 @@ def create_app(
     api.include_router(invitation_router, prefix="/v1")
     api.include_router(invitation_preview_router, prefix="/v1")
     api.include_router(consumer_router, prefix="/v1")
+    api.include_router(catalog_router, prefix="/v1")
+    api.include_router(quote_router, prefix="/v1")
+    api.include_router(checkout_router, prefix="/v1")
+    api.include_router(consumer_order_router, prefix="/v1")
     api.include_router(organization_mfa_router, prefix="/v1")
     api.include_router(manifest_router, prefix="/v1")
     api.include_router(pricing_router, prefix="/v1")

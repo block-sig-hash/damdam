@@ -1,0 +1,31 @@
+appId: com.damdam.app
+---
+- launchApp
+- tapOn:
+    id: "harness-locale-en"
+- assertVisible:
+    id: "harness-locale-active-en"
+- scrollUntilVisible:
+    element:
+      id: "harness-target-checkout-review"
+    direction: DOWN
+- tapOn:
+    id: "harness-target-checkout-review"
+- assertVisible:
+    id: "quote-review"
+- takeScreenshot: checkout-en
+- stopApp
+- launchApp
+- tapOn:
+    id: "harness-locale-fr"
+- assertVisible:
+    id: "harness-locale-active-fr"
+- scrollUntilVisible:
+    element:
+      id: "harness-target-checkout-review"
+    direction: DOWN
+- tapOn:
+    id: "harness-target-checkout-review"
+- assertVisible:
+    id: "quote-review"
+- takeScreenshot: checkout-fr

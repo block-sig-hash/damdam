@@ -192,3 +192,20 @@ def sum_money(amounts: Iterable[Decimal], currency: str) -> Decimal:
             raise CurrencyError("money must be a Decimal")
         total += amount
     return round_money(total, currency)
+
+
+def format_money(amount: Decimal, currency: str) -> str:
+    """The amount as a JSON string, at the currency's own scale.
+
+    Added by chunk 19, which is the first code to put a price in a response
+    body. A price crossing JSON as a **float** can come back a hundredth
+    different from the one that was quoted, and the one thing a quote must be is
+    exactly what was shown — so amounts travel as strings, and this is the only
+    place that decides how one looks.
+
+    Rounding, rather than trusting the stored scale: a `Decimal` read back from
+    a column, summed, or built by a test can carry more digits than the currency
+    has, and `"10000.000"` on a receipt is a different number to read than
+    `"10000.00"` even when it is the same value.
+    """
+    return str(round_money(amount, currency))

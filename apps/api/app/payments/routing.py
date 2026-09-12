@@ -152,8 +152,7 @@ class PaymentRouter:
             select(MerchantAccount)
             .join(
                 MerchantPaymentMethod,
-                col(MerchantPaymentMethod.merchant_account_id)
-                == MerchantAccount.id,
+                col(MerchantPaymentMethod.merchant_account_id) == MerchantAccount.id,
             )
             .where(
                 MerchantAccount.legal_entity_id == seller_legal_entity_id,
@@ -218,8 +217,7 @@ class PaymentRouter:
             if (
                 existing.merchant_account_id != merchant.id
                 or existing.quote_id != quote_id
-                or existing.amount
-                != round_money(amount, current_order.currency)
+                or existing.amount != round_money(amount, current_order.currency)
             ):
                 raise PaymentRoutingError("idempotency_conflict")
             return existing
@@ -316,9 +314,7 @@ class PaymentRouter:
             intent_id=current_intent.id,
             processor=merchant.processor,
             method=method,
-            idempotency_key=(
-                f"intent-{current_intent.id}-attempt-{len(previous) + 1}"
-            ),
+            idempotency_key=(f"intent-{current_intent.id}-attempt-{len(previous) + 1}"),
             currency=current_intent.currency,
             amount=current_intent.amount,
             status=AttemptStatus.CREATED,
@@ -394,9 +390,7 @@ class PaymentRouter:
 
         mismatches = []
         if round_money(charge.amount, intent.currency) != intent.amount:
-            mismatches.append(
-                f"amount {charge.amount} != intended {intent.amount}"
-            )
+            mismatches.append(f"amount {charge.amount} != intended {intent.amount}")
         if charge.currency != intent.currency:
             mismatches.append(
                 f"currency {charge.currency} != intended {intent.currency}"
@@ -456,9 +450,7 @@ class PaymentRouter:
         clearing = self.ledger.account(
             session, attempt.currency, AccountKind.SETTLEMENT_CLEARING
         )
-        revenue = self.ledger.account(
-            session, attempt.currency, AccountKind.REVENUE
-        )
+        revenue = self.ledger.account(session, attempt.currency, AccountKind.REVENUE)
         self.ledger.post(
             session,
             f"payment:{attempt.id}:captured",
@@ -481,12 +473,22 @@ class PaymentRouter:
         self, session: Session, charge: ProcessorCharge, processor: str
     ) -> PaymentAttempt:
         attempt = session.exec(
-            select(PaymentAttempt).where(
+            select(PaymentAttempt)
+            .where(
                 PaymentAttempt.processor == processor,
                 PaymentAttempt.idempotency_key == charge.processor_reference,
             )
             .with_for_update()
         ).first()
+        if attempt is None:
+            attempt = session.exec(
+                select(PaymentAttempt)
+                .where(
+                    PaymentAttempt.processor == processor,
+                    PaymentAttempt.processor_reference == charge.processor_reference,
+                )
+                .with_for_update()
+            ).first()
         if attempt is None:
             raise PaymentRoutingError("attempt_not_found")
         if attempt.status is AttemptStatus.SUCCEEDED:
@@ -521,8 +523,7 @@ class PaymentRouter:
             if (
                 existing.intent_id != intent_id
                 or existing.currency != charge.currency
-                or existing.amount
-                != round_money(charge.amount, charge.currency)
+                or existing.amount != round_money(charge.amount, charge.currency)
             ):
                 raise PaymentRoutingError("idempotency_conflict")
             return existing
