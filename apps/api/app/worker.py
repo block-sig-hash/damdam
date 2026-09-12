@@ -5,9 +5,18 @@ from uuid import UUID
 from celery import Celery
 from celery.schedules import crontab
 from redis import Redis
-from sqlmodel import col, select
+from sqlmodel import Session, col, select
 
 from app.auth.models import User, utc_now
+from app.calling.charging import CallChargingService
+from app.calling.models import (
+    TERMINAL_ATTEMPT_STATES,
+    AttemptState,
+    CallAttempt,
+    CallDeadline,
+    ChargeState,
+    DeadlineKind,
+)
 from app.config import get_settings
 from app.container import (
     CeleryEsimIssuanceScheduler,
@@ -20,6 +29,7 @@ from app.db import create_session_factory
 from app.esim.models import EsimIssuanceJob
 from app.esim.providers import build_esim_providers
 from app.esim.service import EsimError, EsimProfileService
+from app.ledger.service import LedgerService
 from app.manifests.invoices import InvoicePDFGenerator, build_invoice_storage
 from app.manifests.orders import ManifestOrderService
 from app.packages.models import Package
@@ -63,6 +73,13 @@ celery_app.conf.beat_schedule = {
     "retention-delete-transactions": {
         "task": "app.retention.delete_transactions",
         "schedule": crontab(hour=3, minute=10),
+    },
+    # V03. A minute is not a guess: a renewal check that fires slower than the
+    # shortest hold could expire is a check that arrives after the money is
+    # already spoken for.
+    "calling-resolve-due-deadlines": {
+        "task": "app.calling.resolve_due_deadlines",
+        "schedule": 60.0,
     },
 }
 
@@ -270,3 +287,95 @@ def enqueue_due_esim_issuance() -> int:
             queued += 1
         session.commit()
     return queued
+
+
+# --- calling settlement (US-46, chunk V03) ---------------------------------
+
+
+@celery_app.task(name="app.calling.resolve_due_deadlines")  # type: ignore[misc]
+def resolve_due_deadlines() -> int:
+    """Do the work a previous process wrote down before it stopped existing.
+
+    Everything this task acts on is a row, not a timer. That is the whole point:
+    the assignment requires durable deadlines to survive a worker restart, and a
+    restart is exactly when an in-process timer stops existing while the call it
+    was guarding keeps costing money.
+
+    Each deadline is handled in its own transaction. One attempt that cannot be
+    resolved must not roll back the ten that could — the queue would then never
+    drain past its first bad row.
+    """
+    charging = CallChargingService(LedgerService(clock=utc_now), clock=utc_now)
+    factory = create_session_factory(settings)
+    handled = 0
+    with factory() as session:
+        due = charging.claim_due(session, now=utc_now(), limit=50)
+        claimed = [deadline.id for deadline in due]
+        session.commit()
+
+    for deadline_id in claimed:
+        with factory() as session:
+            deadline = session.get(CallDeadline, deadline_id)
+            if deadline is None:  # pragma: no cover - claimed a moment ago
+                continue
+            try:
+                _resolve_deadline(session, charging, deadline)
+                session.commit()
+                handled += 1
+            except Exception:  # noqa: BLE001 - the row must go back either way
+                session.rollback()
+                with factory() as recovery:
+                    row = recovery.get(CallDeadline, deadline_id)
+                    if row is not None:
+                        charging.release_claim(
+                            recovery, row, detail="worker failed mid-resolution"
+                        )
+                        recovery.commit()
+                logging.exception("calling deadline %s failed", deadline_id)
+    return handled
+
+
+def _resolve_deadline(
+    session: Session, charging: CallChargingService, deadline: CallDeadline
+) -> None:
+    """What each kind of deadline means when it comes due."""
+    attempt = session.get(CallAttempt, deadline.attempt_id)
+    if attempt is None:  # pragma: no cover - FK guarantees this
+        charging.abandon(session, deadline, "the attempt no longer exists")
+        return
+
+    if deadline.kind is DeadlineKind.RESERVATION_RENEWAL:
+        outcome = charging.enforce(session, attempt)
+        charging.complete(session, deadline, detail=outcome.reason)
+        return
+
+    if deadline.kind is DeadlineKind.SUPPLIER_COST_WAIT:
+        # The supplier had its window. A provisional charge that nobody
+        # corrected becomes final, because leaving it provisional forever means
+        # the books never close and the customer's receipt never settles.
+        charge = charging.charge_for_attempt(session, attempt)
+        if charge is not None and charge.state is ChargeState.PROVISIONAL:
+            charge.state = ChargeState.FINAL
+            session.add(charge)
+        charging.complete(session, deadline, detail="supplier window elapsed")
+        return
+
+    # MISSING_TERMINAL_EVENT and UNKNOWN_OUTCOME_REVIEW are the same move: ask
+    # the legs again, because a late event may have arrived since. If they still
+    # do not resolve, the hold stays and the exception stays open — a worker
+    # deciding on its own that an unmeasured call was free is the failure this
+    # queue exists to prevent.
+    resolvable = (
+        attempt.state is AttemptState.UNKNOWN
+        or attempt.state in TERMINAL_ATTEMPT_STATES
+    )
+    if resolvable:
+        result = charging.settle(session, attempt)
+        if result.charge is not None:
+            charging.complete(
+                session, deadline, detail=f"resolved as {result.status.value}"
+            )
+            return
+    charging.release_claim(
+        session, deadline, detail="still unresolved; hold retained"
+    )

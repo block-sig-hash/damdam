@@ -3382,3 +3382,93 @@ while they remain open.
 V03 owns metering and settlement: the usage records, the CDR ingestion and the
 compensating entries that turn a held reservation into a charge. Nothing here
 settles money.
+
+## 6.55 Amendment — Call Charges, Supplier Costs and Durable Deadlines (US-46)
+
+Chunk V03. Three tables, added by the chunk that turns §6.54's held reservation
+into money. Additive only: no column is added to an existing table, no
+historical row is read or rewritten, and the retained legacy voice tables
+(`call_logs`, `voice_credentials`, `verified_caller_identities`,
+`caller_id_consents`) are untouched.
+
+### What the schema is for
+
+V02 deliberately holds and never settles — *a reservation stays held until every
+known supplier liability is final*. These tables record the moment that judgement
+is made, what it was based on, and what remains unresolved when it cannot be.
+
+### `call_charges` — what the customer pays, once
+
+One live row per attempt, enforced by `ux_call_charges_live` (unique on
+`attempt_id` where `state <> 'superseded'`). Settlement is already idempotent
+through chunk 10's business event id; the index exists because two charge rows
+would let two amounts both claim to be current, and a receipt cannot be rendered
+from a disagreement.
+
+| Column | Why it exists |
+|---|---|
+| `basis` | `provider_events`, `supplier_cdr` or `manual_correction`. A dispute is answered by saying what the amount was derived from, not by re-deriving it. |
+| `state` | `provisional` until the supplier's record could still move it, then `final`. `superseded` is what a corrected row becomes; it is never deleted. |
+| `corrects_id` | The chain back to what this replaced. Chunk 16's discipline: supersede, never edit. |
+| `billable_seconds` | The tariff's minimum and increment already applied, so a receipt can show the same number that was charged. |
+| `setup_amount`, `usage_amount`, `charged_amount` | Split so the total can be explained. `ck_call_charges_total_is_its_parts` keeps the sum honest in the database rather than in a service. |
+| `metered_from`, `metered_to` | The destination leg's answered and ended times — the authoritative window. Null when nothing answered, which is also when every amount is zero. |
+| `journal_entry_id` | The entry this charge posted. Null for a zero charge: no money moved, so there is no transaction to record. |
+
+**Talk time is the destination leg, never a sum of legs and never the client's
+elapsed time.** The client leg and the destination leg describe one conversation
+from two ends; adding them charges twice for it, and a handset's clock is not
+billing evidence.
+
+### `call_supplier_costs` — what the call cost us, kept apart
+
+V01's worksheet establishes the published unit prices and explicitly **not** how
+many billable components a call produces. So this table counts observations
+rather than deriving them: one row per `(provider, provider_reference,
+component)`, unique, because a redelivered CDR is the ordinary case and counting
+it twice overstates cost and understates margin in the same motion.
+
+`attempt_id` is nullable on purpose. A cost we cannot attribute is kept and
+queued — discarding it would throw away the evidence that something was billed
+to us. `superseded_by_id` carries a supplier's later adjustment without erasing
+what it replaced.
+
+No retail amount is ever derived from a supplier cost, in either direction. The
+two are reconciled by a person reading an exception, not by arithmetic nobody
+checked.
+
+### `call_deadlines` — the clock that survives a restart
+
+A reservation renewal, an unknown outcome, a missing terminal event and a
+supplier-cost window all need something to happen later. A `threading.Timer`, an
+`asyncio.sleep` and a Redis TTL all lose their work when the process holding them
+dies — and the work they lose here is releasing or renewing customer money.
+
+`ux_call_deadlines_open` allows one open deadline per attempt and kind, so a
+restarted worker re-registering its renewals finds the existing row instead of
+creating a second one that fires twice. Claiming uses `FOR UPDATE SKIP LOCKED`
+rather than a flag written in advance: a flag needs a second write to clear when
+the worker dies, and a dead worker is exactly the case this must survive.
+
+### `exception_kind` gains five values
+
+`call_duplicate_billable_leg`, `call_missing_terminal_event`,
+`call_unknown_outcome`, `call_settlement_shortfall` and
+`call_supplier_cost_unmatched` join chunk 14's queue rather than starting a
+second one. An operations team watching two lists watches neither.
+
+`call_settlement_shortfall` is the one worth reading twice: it is raised when
+metered cost exceeds the authorized hold. The customer is charged the hold —
+never more than they agreed — and the difference is recorded as **our** exposure.
+
+### What this amendment does not do
+
+It does not extend a hold. The hold is `max_charge_amount`, derived from
+`max_seconds`, which the provider also enforces as `time_limit_secs`: the
+authorized maximum is the whole liability, so there is nothing to extend.
+Renewal re-asks whether a call may continue and stops it when the answer
+changes.
+
+It does not settle supplier invoices, reconcile FX, or record margin. V01's
+blockers B2 (no Nigeria rate deck) and B3 (no documented bound on the parked
+client leg) are open, and a schema cannot close either.

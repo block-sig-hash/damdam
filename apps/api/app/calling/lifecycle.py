@@ -40,6 +40,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
 from app.auth.models import User, utc_now
+from app.calling.charging import CallChargingService
 from app.calling.contract import (
     LEG_STATE_RANK,
     CallingAdapter,
@@ -109,10 +110,16 @@ class CallLifecycleService:
         authorization: CallAuthorizationService,
         *,
         clock: Callable[[], datetime] = utc_now,
+        charging: CallChargingService | None = None,
     ) -> None:
         self.adapter = adapter
         self.authorization = authorization
         self.clock = clock
+        #: Added by V03. Optional so V02's lifecycle keeps working unchanged
+        #: when no settlement is wired — and so a deployment that has not
+        #: configured charging holds its reservations rather than releasing
+        #: them through a half-configured path.
+        self.charging = charging
 
     # --- ingestion --------------------------------------------------------
 
@@ -515,12 +522,17 @@ class CallLifecycleService:
             # anything ever answered — not by the hangup cause, which describes
             # one leg and is provider vocabulary.
             answered = attempt.answered_at is not None
-            self.authorization.advance(
+            moved = self.authorization.advance(
                 session,
                 attempt,
                 AttemptState.COMPLETED if answered else AttemptState.FAILED,
                 end_reason=event.hangup_cause or "provider_hangup",
             )
+            if moved:
+                # The last leg ended, so liability is as final as the provider
+                # can make it. Settlement decides whether that is final enough;
+                # it defers rather than releasing when the legs do not add up.
+                self._settle(session, attempt)
             return
         mapped = _LEG_TO_ATTEMPT.get(target)
         if mapped is None:
@@ -533,6 +545,18 @@ class CallLifecycleService:
                 leg.answered_at if mapped is AttemptState.ANSWERED else None
             ),
         )
+
+    def _settle(self, session: Session, attempt: CallAttempt) -> None:
+        """Settle a finished attempt, if this deployment has charging wired.
+
+        Deliberately swallows nothing. A settlement that raised here would roll
+        back the event ingestion that caused it, and the provider would redeliver
+        an event we had already applied — so anything that can fail is a status
+        in `SettlementResult`, not an exception.
+        """
+        if self.charging is None:
+            return
+        self.charging.settle(session, attempt)
 
     def _has_live_leg(self, session: Session, attempt: CallAttempt) -> bool:
         return (

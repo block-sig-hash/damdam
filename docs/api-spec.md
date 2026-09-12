@@ -1963,6 +1963,27 @@ id.
 with no route is a quote for something that cannot be bought, and a client that
 cannot tell the difference will render a working call button.
 
+### The cost of a call appears when it has been metered (US-46, V03)
+
+`GET /calls/{id}` and `GET /calls` carry a `charge` object once the call has been
+settled, and omit it entirely before that. Three states are distinguishable, and
+a client must not collapse them:
+
+| What the client sees | What it means |
+|---|---|
+| no `charge` | The call is live, or its liability is not final and a human is looking at it. **Not** "it was free". |
+| `charge` with `is_final: false` | Metered from provider events and already charged. The supplier's own record could still correct it. |
+| `charge` with `is_final: true` | Settled and closed. |
+
+`amount` equals `setup_amount + usage_amount`, always — the database enforces it
+— and `billable_seconds` is the duration after the tariff's minimum and increment
+have been applied, so a receipt can show the number that was actually charged
+rather than the raw one.
+
+A call that nobody answered settles to a **zero** charge rather than to no charge
+at all: the distinction between "we measured nothing" and "we have not measured"
+is the whole reason the object is absent in the first case.
+
 ### Absence is the answer for somebody else's call
 
 `GET /calls/{id}` on an attempt belonging to another account returns **404**, not
