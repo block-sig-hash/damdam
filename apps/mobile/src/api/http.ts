@@ -92,7 +92,12 @@ async function toApiError(response: Response): Promise<ApiError> {
 }
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  /**
+   * `PUT` was added by chunk 21 for notification preferences, which set a value
+   * rather than amending one: the request carries the whole decision, and
+   * sending it twice leaves the same state as sending it once.
+   */
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   accessToken?: string;
   body?: unknown;
   /**

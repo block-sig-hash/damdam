@@ -2020,3 +2020,80 @@ Destination refusals are `409` rather than `400` on purpose. The request is well
 formed and the answer is about the world — an emergency number, a premium range,
 an unsold country — and a `4xx` that reads as "fix your request" invites a client
 to reformat and retry something that will never be permitted.
+
+---
+
+## 7.39 Amendment — Account, Receipts, Support and Deletion (US-38)
+
+Chunk 21. Ten endpoints under `/v1/me`, all requiring a member session.
+
+### Endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /v1/me/sessions` | Every device signed in, described well enough to recognise |
+| `DELETE /v1/me/sessions/{id}` | Sign one device out |
+| `POST /v1/me/sessions/revoke-all` | Sign everything out, sparing at most the device named |
+| `GET /v1/me/receipts` | This customer's orders as receipts |
+| `GET /v1/me/receipts/{order_id}` | One receipt, rendered from history |
+| `POST /v1/me/support-requests` | Ask a question, with the order or line attached |
+| `GET /v1/me/support-requests` | This customer's tickets |
+| `GET /v1/me/notification-preferences` | What has actually been decided |
+| `PUT /v1/me/notification-preferences` | Decide one category and channel |
+| `GET /v1/me/account/deletion-preflight` | Why deletion cannot proceed yet |
+| `POST /v1/me/account/export` | Ask for a copy of your own data |
+
+### Not-yours and never-existed are the same answer
+
+Every ownership failure is **404** with the same body: `session_not_found`,
+`receipt_not_found`, `order_not_found`. A 403 confirms the id is real, and a
+confirmed id is all somebody needs to enumerate another customer's sessions,
+orders and tickets one guess at a time.
+
+### Signing out everywhere names the device to spare
+
+`keep_session_id` is optional and is **verified against the caller's own device
+list** before it spares anything, so naming another customer's session revokes
+everything and protects nothing. Omitting it signs out every device including
+the one asking — the right default when the reason for pressing it is a phone
+somebody else is holding.
+
+It is named rather than inferred because an access token does not carry the id
+of the session it came from, and inferring it would mean guessing.
+
+### The deletion preflight returns reasons, not a boolean
+
+`GET /account/deletion-preflight` answers `may_delete` plus a list of blockers,
+each carrying a stable `code` the app localizes and an optional `amount` and
+`currency`. Today two things block: money that has not finished moving, and an
+organization this account owns that still has other active members — *do not
+erase other members' services*.
+
+**The internal `detail` is deliberately not in the response.** It can name
+another member's line, and somebody deleting their own account does not need to
+be told what a colleague is using.
+
+The preflight is a **read**. It changes nothing, and `DELETE /v1/me/account`
+keeps its existing contract and behaviour: a destructive call whose refusal
+conditions can only be discovered by making it is one customers make twice.
+
+### Support requests verify their references before storing them
+
+`order_id` and `entitlement_id` are checked against the caller. A request naming
+somebody else's order is `order_not_found`, not a ticket an agent opens in good
+faith against the wrong account. The reference returned (`S-XXXXXXXX`) is random
+rather than sequential.
+
+### Notification preferences distinguish "off" from "undecided"
+
+`GET` returns only what has been **decided** — an empty list is the honest answer
+for a new account, not a list of defaults pretending to be choices. `PUT` stores
+one decision, and an explicit `false` outlives any later change to the default.
+
+Categories are `low_balance`, `expiry` and `order_status`. A request naming
+anything else — including a retired safety category — is a **422**.
+
+### Amounts on a receipt are strings
+
+As everywhere since chunk 19. `total_amount: "5000.000000"`, never a float: the
+number on a receipt is the one thing that must be exactly what was charged.

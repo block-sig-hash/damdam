@@ -43,6 +43,15 @@ _API_EN = {
     "credential_expiry_unknown": "Calling could not be set up on this device.",
     "not_a_member": "You do not have access to this organization.",
     "line_not_found": "We could not find that line on your account.",
+    # Account, receipts and support (US-38, chunk 21). Every one of these is
+    # said to a customer who is already having a bad day, so none of them
+    # blames them and none of them says "invalid".
+    "session_not_found": "That device is not signed in to your account.",
+    "receipt_not_found": "We could not find that receipt on your account.",
+    "entitlement_not_found": "We could not find that line on your account.",
+    "support_reference_unavailable": (
+        "We could not start your request just now. Please try again."
+    ),
     "profile_not_issued": "Your eSIM profile has not been issued yet. We will have it shortly.",
     "installation_material_unavailable": "eSIM installation is not available on this service yet. Nothing is wrong with your line.",
     "installation_reporting_unavailable": "We could not record your installation just now. Try again shortly.",
@@ -236,6 +245,14 @@ _API_FR = {
     "shared_credential_forbidden": "Cette action exige un compte individuel, et non l'identifiant partagé de l'organisation.",
     "invitation_invalid": "Cette invitation n'est plus valide.",
     "line_not_found": "Nous n'avons pas trouvé cette ligne sur votre compte.",
+    "session_not_found": "Cet appareil n'est pas connecté à votre compte.",
+    "receipt_not_found": "Nous n'avons pas trouvé ce reçu sur votre compte.",
+    "entitlement_not_found": (
+        "Nous n'avons pas trouvé cette ligne sur votre compte."
+    ),
+    "support_reference_unavailable": (
+        "Nous n'avons pas pu ouvrir votre demande. Veuillez réessayer."
+    ),
     "profile_not_issued": "Votre profil eSIM n'a pas encore été émis. Nous l'aurons sous peu.",
     "installation_material_unavailable": "L'installation eSIM n'est pas encore disponible sur ce service. Votre ligne n'a aucun problème.",
     "installation_reporting_unavailable": "Nous n'avons pas pu enregistrer votre installation. Réessayez sous peu.",

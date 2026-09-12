@@ -6,6 +6,7 @@ import commonEn from './locales/en/common.json';
 import consumerEn from './locales/en/consumer.json';
 import esimEn from './locales/en/esim.json';
 import homeEn from './locales/en/home.json';
+import accountEn from './locales/en/account.json';
 import lineEn from './locales/en/line.json';
 import paymentsEn from './locales/en/payments.json';
 import statesEn from './locales/en/states.json';
@@ -14,6 +15,7 @@ import commonFr from './locales/fr/common.json';
 import consumerFr from './locales/fr/consumer.json';
 import esimFr from './locales/fr/esim.json';
 import homeFr from './locales/fr/home.json';
+import accountFr from './locales/fr/account.json';
 import lineFr from './locales/fr/line.json';
 import paymentsFr from './locales/fr/payments.json';
 import statesFr from './locales/fr/states.json';
@@ -25,7 +27,7 @@ import {
   persistLocale,
 } from './locale';
 
-export const namespaces = ['common', 'auth', 'consumer', 'home', 'line', 'esim', 'payments', 'states'] as const;
+export const namespaces = ['common', 'auth', 'consumer', 'home', 'line', 'account', 'esim', 'payments', 'states'] as const;
 
 i18n.use(initReactI18next).init({
   compatibilityJSON: 'v4',
@@ -41,6 +43,7 @@ i18n.use(initReactI18next).init({
       consumer: consumerEn,
       home: homeEn,
       line: lineEn,
+      account: accountEn,
       esim: esimEn,
       payments: paymentsEn,
       states: statesEn,
@@ -51,6 +54,7 @@ i18n.use(initReactI18next).init({
       consumer: consumerFr,
       home: homeFr,
       line: lineFr,
+      account: accountFr,
       esim: esimFr,
       payments: paymentsFr,
       states: statesFr,

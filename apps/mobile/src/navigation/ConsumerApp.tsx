@@ -8,7 +8,7 @@ import {
   type ServiceSummary,
 } from '../api/consumerClient';
 import { ApiError } from '../api/http';
-import { PlaceholderScreen } from '../screens/Placeholder/PlaceholderScreen';
+import { AccountFlow } from '../screens/Account/AccountFlow';
 import { ConsumerHomeScreen } from '../screens/ConsumerHome/ConsumerHomeScreen';
 import { InvitationScreen } from '../screens/Invitation/InvitationScreen';
 import { MyLineFlow } from '../screens/MyLine/MyLineFlow';
@@ -204,11 +204,14 @@ export function ConsumerApp({
             onLineChanged={load}
           />
         ) : (
-          <PlaceholderScreen
-            title={t('placeholder.accountTitle')}
-            note={`${t('placeholder.accountBody')} ${t('placeholder.owner', {
-              chunk: 21,
-            })}`}
+          <AccountFlow
+            accessToken={accessToken}
+            userId={currentUserId}
+            displayName={currentEmail ?? session?.verified_phone_numbers[0] ?? ''}
+            phoneNumber={session?.verified_phone_numbers[0] ?? null}
+            email={currentEmail ?? session?.verified_emails[0] ?? null}
+            onAccountDeleted={() => onSwitchAccount()}
+            onSignedOutEverywhere={() => onSwitchAccount()}
           />
         )}
       </View>

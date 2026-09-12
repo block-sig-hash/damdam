@@ -17,6 +17,7 @@ One line, one reason, and no chain to chase.
 
 # ruff: noqa: F401
 
+from app.account import models as _account
 from app.activation import service as _activation
 from app.audit import models as _audit
 from app.auth import models as _auth
