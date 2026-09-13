@@ -1546,6 +1546,399 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/bulk-jobs:
+    post:
+      tags:
+      - Bulk provisioning
+      summary: Plan Job
+      description: Choose recipients and validate them. Holds no money and buys nothing.
+      operationId: plan_job_v1_organizations__organization_id__bulk_jobs_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkJobCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkJobProgressView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Bulk provisioning
+      summary: List Jobs
+      operationId: list_jobs_v1_organizations__organization_id__bulk_jobs_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 25
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkJobListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/bulk-jobs/{job_id}:
+    get:
+      tags:
+      - Bulk provisioning
+      summary: Get Job
+      description: Counts as they are. Forty-seven of fifty is not "in progress".
+      operationId: get_job_v1_organizations__organization_id__bulk_jobs__job_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkJobProgressView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/bulk-jobs/{job_id}/items:
+    get:
+      tags:
+      - Bulk provisioning
+      summary: List Items
+      operationId: list_items_v1_organizations__organization_id__bulk_jobs__job_id__items_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkItemListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/bulk-jobs/{job_id}/fund:
+    post:
+      tags:
+      - Bulk provisioning
+      summary: Fund Job
+      description: One hold per line. Under-funding serves who it can and says so.
+      operationId: fund_job_v1_organizations__organization_id__bulk_jobs__job_id__fund_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkJobProgressView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/bulk-jobs/{job_id}/provision:
+    post:
+      tags:
+      - Bulk provisioning
+      summary: Provision Job
+      description: 'Idempotent: a lost response retried is a question, not a second
+        purchase.'
+      operationId: provision_job_v1_organizations__organization_id__bulk_jobs__job_id__provision_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkJobProgressView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/bulk-jobs/{job_id}/resume:
+    post:
+      tags:
+      - Bulk provisioning
+      summary: Resume Job
+      description: "Retry what failed. Items with an unknown outcome are **not** retried.\n\
+        \nReconciliation talks to a supplier, and no supplier is wired here \u2014\
+        \ so an\nunknown item stays unknown, keeps its hold, and is visible in the\
+        \ item list\nfor a human. That is the honest behaviour, not a gap to be papered\
+        \ over\nwith a blind retry."
+      operationId: resume_job_v1_organizations__organization_id__bulk_jobs__job_id__resume_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Job Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkJobProgressView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/bulk-jobs/{job_id}/items/{item_id}/cancel:
+    post:
+      tags:
+      - Bulk provisioning
+      summary: Cancel Item
+      description: Withdraw one line. A provisioned one is refunded under policy instead.
+      operationId: cancel_item_v1_organizations__organization_id__bulk_jobs__job_id__items__item_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Job Id
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Item Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkItemView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/bulk-jobs/{job_id}/items/{item_id}/activation-request:
+    post:
+      tags:
+      - Bulk provisioning
+      summary: Issue Activation Request
+      description: "Invite one recipient to claim their line.\n\nThe response carries\
+        \ the token **once**. It is stored as a hash, so this\nendpoint is the only\
+        \ moment it exists in a form anybody can use \u2014 including\nus."
+      operationId: issue_activation_request_v1_organizations__organization_id__bulk_jobs__job_id__items__item_id__activation_request_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Job Id
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Item Id
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivationRequestIssued'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/activation-requests/redeem:
+    post:
+      tags:
+      - Bulk provisioning
+      summary: Redeem Activation Request
+      description: 'Claim a work line, once.
+
+
+        Deliberately **not** behind an organization permission. The person claiming
+
+        a line is an employee with a phone, not an administrator of the tenant that
+
+        bought it, and requiring membership here would be exactly backwards.'
+      operationId: redeem_activation_request_v1_me_activation_requests_redeem_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkActivationRedeemRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivationRequestView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /v1/invitations:
     get:
       tags:
@@ -4276,6 +4669,76 @@ components:
       - pstn_minutes_total
       - status
       title: ActivationRedeemResponse
+    ActivationRequestIssued:
+      properties:
+        request:
+          $ref: '#/components/schemas/ActivationRequestView'
+        token:
+          type: string
+          title: Token
+      type: object
+      required:
+      - request
+      - token
+      title: ActivationRequestIssued
+      description: The one and only time the token crosses the wire.
+    ActivationRequestState:
+      type: string
+      enum:
+      - pending
+      - sent
+      - redeemed
+      - expired
+      - revoked
+      title: ActivationRequestState
+      description: The life of an invitation to claim one line.
+    ActivationRequestView:
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          title: Request Id
+        item_id:
+          type: string
+          format: uuid
+          title: Item Id
+        person_id:
+          type: string
+          format: uuid
+          title: Person Id
+        state:
+          $ref: '#/components/schemas/ActivationRequestState'
+        delivered_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Delivered To
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+        redeemed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Redeemed At
+      type: object
+      required:
+      - request_id
+      - item_id
+      - person_id
+      - state
+      - expires_at
+      title: ActivationRequestView
+      description: 'An invitation to claim a line.
+
+
+        Carries **no** installation or network state, deliberately. Those are
+
+        separate facts on separate tables, and a view that mixed them would let a
+
+        dashboard report staff as connected on the strength of an email.'
     AdminManifestOrderListResponse:
       properties:
         orders:
@@ -4544,6 +5007,243 @@ components:
       required:
       - file
       title: Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post
+    BulkActivationRedeemRequest:
+      properties:
+        token:
+          type: string
+          maxLength: 200
+          minLength: 16
+          title: Token
+      type: object
+      required:
+      - token
+      title: BulkActivationRedeemRequest
+      description: "Claim a work line bought in bulk.\n\nNamed `Bulk\u2026` rather\
+        \ than `ActivationRedeemRequest` because chunk 15\nalready publishes a schema\
+        \ by that name for redeeming an eSIM activation\ncode. Two Pydantic models\
+        \ sharing a class name silently collapse into one\nentry in the generated\
+        \ OpenAPI \u2014 the drift check caught it as ten deleted\nlines, which is\
+        \ the whole reason that check exists."
+    BulkItemListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/BulkItemView'
+          type: array
+          title: Items
+      type: object
+      required:
+      - items
+      title: BulkItemListResponse
+    BulkItemState:
+      type: string
+      enum:
+      - pending
+      - invalid
+      - reserved
+      - ordered
+      - provisioned
+      - failed
+      - unknown
+      - cancelled
+      title: BulkItemState
+      description: One recipient's line, from chosen to connected or explained.
+    BulkItemView:
+      properties:
+        item_id:
+          type: string
+          format: uuid
+          title: Item Id
+        person_id:
+          type: string
+          format: uuid
+          title: Person Id
+        state:
+          $ref: '#/components/schemas/BulkItemState'
+        error_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Code
+        order_item_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Order Item Id
+        provisioned_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Provisioned At
+      type: object
+      required:
+      - item_id
+      - person_id
+      - state
+      title: BulkItemView
+    BulkJobCreate:
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 200
+          minLength: 8
+          title: Idempotency Key
+        product_id:
+          type: string
+          format: uuid
+          title: Product Id
+        country:
+          type: string
+          maxLength: 2
+          minLength: 2
+          title: Country
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+          title: Currency
+        person_ids:
+          items:
+            type: string
+            format: uuid
+          type: array
+          maxItems: 500
+          minItems: 1
+          title: Person Ids
+      type: object
+      required:
+      - idempotency_key
+      - product_id
+      - country
+      - currency
+      - person_ids
+      title: BulkJobCreate
+      description: Choose a product and a list of this organization's own people.
+    BulkJobListResponse:
+      properties:
+        jobs:
+          items:
+            $ref: '#/components/schemas/BulkJobView'
+          type: array
+          title: Jobs
+      type: object
+      required:
+      - jobs
+      title: BulkJobListResponse
+    BulkJobProgressView:
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          title: Job Id
+        state:
+          $ref: '#/components/schemas/BulkJobState'
+        recipient_count:
+          type: integer
+          title: Recipient Count
+        reserved:
+          type: integer
+          title: Reserved
+        provisioned:
+          type: integer
+          title: Provisioned
+        failed:
+          type: integer
+          title: Failed
+        unknown:
+          type: integer
+          title: Unknown
+        invalid:
+          type: integer
+          title: Invalid
+        cancelled:
+          type: integer
+          title: Cancelled
+        outstanding:
+          type: integer
+          title: Outstanding
+      type: object
+      required:
+      - job_id
+      - state
+      - recipient_count
+      - reserved
+      - provisioned
+      - failed
+      - unknown
+      - invalid
+      - cancelled
+      - outstanding
+      title: BulkJobProgressView
+      description: 'Counts a screen must show as they are, not rounded to done or
+        failed.
+
+
+        `outstanding` is derived rather than stored: it is whatever has not reached
+
+        a terminal state, and a stored copy would be a second answer that lags.'
+    BulkJobState:
+      type: string
+      enum:
+      - planned
+      - funded
+      - provisioning
+      - completed
+      - partially_completed
+      - cancelled
+      title: BulkJobState
+      description: Where a job is. Each value is somewhere fifty purchases can actually
+        be.
+    BulkJobView:
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          title: Job Id
+        state:
+          $ref: '#/components/schemas/BulkJobState'
+        product_id:
+          type: string
+          format: uuid
+          title: Product Id
+        currency:
+          type: string
+          title: Currency
+        unit_amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Unit Amount
+        recipient_count:
+          type: integer
+          title: Recipient Count
+        order_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Order Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        completed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Completed At
+      type: object
+      required:
+      - job_id
+      - state
+      - product_id
+      - currency
+      - unit_amount
+      - recipient_count
+      - created_at
+      title: BulkJobView
     CallDestination:
       properties:
         country:
@@ -4775,6 +5475,17 @@ components:
         \ amount as\nfinal would be making a promise this chunk cannot keep: V01 could\
         \ not\nestablish how many components a call bills, so a later correction is\
         \ an\nordinary event rather than a failure."
+    CancelRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Reason
+      type: object
+      required:
+      - reason
+      title: CancelRequest
     CheckoutOutcome:
       type: string
       enum:

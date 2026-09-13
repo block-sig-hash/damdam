@@ -28,6 +28,9 @@ from app.calling.routes import webhook_router as calling_webhook_router
 from app.calling.service import CallAuthorizationError, CallAuthorizationService
 from app.calling.sessions import ClientSessionError, ClientSessionService
 from app.calling.telnyx import DisabledCallingAdapter, TelnyxCallingAdapter
+from app.bulk.routes import recipient_router as bulk_recipient_router
+from app.bulk.routes import router as bulk_router
+from app.bulk.service import BulkError, BulkProvisioningService
 from app.catalog.service import CatalogError, CatalogService
 from app.checkins.routes import router as checkin_router
 from app.checkout.catalog_view import CatalogViewService
@@ -298,6 +301,19 @@ def create_app(
     api.state.account_service = AccountService(clock=clock)
     api.state.otp_service.tokens.session_tracker = api.state.account_service
     api.state.people_service = PeopleService(clock=clock)
+    # Bulk provisioning shares the application clock with everything else that
+    # moves money, so a hold and the order that spends it cannot disagree about
+    # when.
+    #
+    # `connectivity` remains unset for bulk work even though chunk 20 now wires
+    # the shared domain service above. A ConnectivityService can grant the
+    # purchased allowance, but supplier provisioning also requires an approved
+    # adapter and the begin/commit/dispatch/reconcile sequence. No adapter is
+    # selected while D1 is open, so carrier items stay ordered instead of being
+    # mislabeled provisioned. Tests inject the domain service for local grants.
+    api.state.bulk_service = BulkProvisioningService(
+        LedgerService(clock=clock), connectivity=None, clock=clock
+    )
     api.state.mfa_service = MfaService(clock)
     api.state.hto_pilgrim_service = HtoPilgrimService()
     api.state.report_service = ProvisioningReportService(clock)
@@ -623,6 +639,41 @@ def create_app(
             # One status and one message for expired, spent, wrong-account and
             # never-existed.
             "grant_not_redeemable": 409,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(BulkError)
+    async def bulk_error_handler(
+        request: Request, exc: BulkError
+    ) -> JSONResponse:
+        statuses = {
+            "job_not_found": 404,
+            "item_not_found": 404,
+            "product_not_found": 404,
+            "market_not_found": 404,
+            "activation_request_not_found": 404,
+            # 409 for "the world is not in the state this asks for", which is
+            # every one of these: a spent token, a provisioned line somebody is
+            # trying to cancel, an unknown outcome nobody has reconciled.
+            "activation_request_spent": 409,
+            "activation_request_revoked": 409,
+            "activation_request_expired": 410,
+            "activation_request_exists": 409,
+            "item_already_provisioned": 409,
+            "item_outcome_unknown": 409,
+            "line_not_ready": 409,
+            "job_not_fundable": 409,
+            "job_not_provisionable": 409,
+            # 503: nothing is broken and an operator can act on it. D3 is open,
+            # so a published market may genuinely have no seller recorded yet.
+            "market_has_no_seller": 503,
         }
         return JSONResponse(
             status_code=statuses.get(exc.code, 400),
@@ -993,6 +1044,8 @@ def create_app(
     api.include_router(admin_router, prefix="/v1")
     api.include_router(organization_router, prefix="/v1")
     api.include_router(people_router, prefix="/v1")
+    api.include_router(bulk_router, prefix="/v1")
+    api.include_router(bulk_recipient_router, prefix="/v1")
     api.include_router(invitation_router, prefix="/v1")
     api.include_router(invitation_preview_router, prefix="/v1")
     api.include_router(consumer_router, prefix="/v1")
