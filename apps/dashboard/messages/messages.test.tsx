@@ -1,7 +1,8 @@
-import {render, screen} from "@testing-library/react";
+import {cleanup, render, screen, within} from "@testing-library/react";
 import {NextIntlClientProvider} from "next-intl";
 import {describe, expect, it, vi} from "vitest";
 
+import CallsPage from "@/app/calls/page";
 import LoginPage from "@/app/login/page";
 import en from "./en.json";
 import fr from "./fr.json";
@@ -40,5 +41,41 @@ describe("dashboard locale catalogs", () => {
       screen.getByRole("heading", {name: "Se connecter"}),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Adresse e-mail")).toBeInTheDocument();
+  });
+
+  it("renders the consumer calling route in English and French (US-48)", async () => {
+    // The signed-out state, which is what a new visitor meets and the one that
+    // has to say — in both languages — that an operator or staff sign-in does
+    // not open this page.
+    //
+    // Queries from `render` bind to `document.body`, not to the container, so a
+    // leftover render from the test above would still match: both pages have an
+    // "Adresse e-mail" field. `cleanup` plus `within(container)` is what keeps
+    // this test about this route.
+    cleanup();
+    const english = render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <CallsPage />
+      </NextIntlClientProvider>,
+    );
+    const inEnglish = within(english.container);
+    expect(
+      await inEnglish.findByRole("heading", {name: "Sign in to call"}),
+    ).toBeInTheDocument();
+    expect(inEnglish.getByLabelText("Email address")).toBeInTheDocument();
+    english.unmount();
+
+    const french = render(
+      <NextIntlClientProvider locale="fr" messages={fr}>
+        <CallsPage />
+      </NextIntlClientProvider>,
+    );
+    const inFrench = within(french.container);
+    expect(
+      await inFrench.findByRole("heading", {
+        name: "Connectez-vous pour appeler",
+      }),
+    ).toBeInTheDocument();
+    expect(inFrench.getByLabelText("Adresse e-mail")).toBeInTheDocument();
   });
 });
