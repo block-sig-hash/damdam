@@ -9,6 +9,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
   var reactNativeDelegate: ReactNativeDelegate?
   var reactNativeFactory: RCTReactNativeFactory?
+  private var privacyCover: UIView?
+
+  func applicationWillResignActive(_ application: UIApplication) {
+    guard let window = window, privacyCover == nil else { return }
+    // UIKit takes the app-switcher snapshot before a JS AppState callback is
+    // guaranteed to render. Cover synchronously so installation material stays
+    // out of that snapshot, including during system installation prompts.
+    let cover = UIView(frame: window.bounds)
+    cover.backgroundColor = .systemBackground
+    cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    window.addSubview(cover)
+    privacyCover = cover
+  }
+
+  func applicationDidBecomeActive(_ application: UIApplication) {
+    privacyCover?.removeFromSuperview()
+    privacyCover = nil
+  }
 
   func application(
     _ application: UIApplication,

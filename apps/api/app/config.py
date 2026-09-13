@@ -1,4 +1,6 @@
 import re
+from base64 import b64decode
+from binascii import Error as BinasciiError
 from functools import lru_cache
 from typing import Literal
 
@@ -140,6 +142,24 @@ class Settings(BaseSettings):
     invoice_account_name: str = "DamDam Nigeria"
     invoice_account_number: str = "Configure account number"
 
+    # docs/security.md — eSIM activation material (chunk 15's vault, chunk 20's
+    # delivery endpoints). The key itself never lives here: this is the base64
+    # of a 32-byte key supplied per environment, and `key_reference` is the name
+    # recorded on every sealed row so a rotation can be identified later.
+    #
+    # Empty is a supported state and means **no profile can be delivered**. A
+    # deployment with no key must fail closed rather than acquire a quiet
+    # development default — a Telnyx eSIM profile is one-time-use, so material
+    # sealed under a throwaway key is material that cannot be recovered.
+    activation_material_key: str = ""
+    activation_material_key_reference: str = "activation-material-v1"
+
+    # The approved calling amendment assigns the outbound internet dialer to
+    # V04/V05. Neither is accepted, so the app must not offer one. Flipping this
+    # on before then is a deploy that advertises a capability that does not
+    # exist, which is why it raises rather than quietly enabling a dead button.
+    internet_dialer_enabled: bool = False
+
     @model_validator(mode="after")
     def idt_calling_is_not_yet_supported(self) -> "Settings":
         # prd.md §5.5: IDT Express is a deliberate Phase 2+ cost-optimization
@@ -151,6 +171,40 @@ class Settings(BaseSettings):
                 "IDT_CALLING_ENABLED is not supported yet -- IDT Express "
                 "termination is a Phase 2+ item (prd.md §5.5), not "
                 "implemented by this codebase"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def activation_material_key_must_be_32_bytes(self) -> "Settings":
+        # AES-256-GCM, so exactly 32 bytes. Checked at startup rather than at
+        # the first delivery: a short or mistyped key discovered when a customer
+        # taps "show my eSIM" is discovered at the worst possible moment.
+        if not self.activation_material_key:
+            return self
+        try:
+            material = b64decode(self.activation_material_key, validate=True)
+        except (BinasciiError, ValueError) as error:
+            raise ValueError(
+                "ACTIVATION_MATERIAL_KEY must be base64-encoded"
+            ) from error
+        if len(material) != 32:
+            raise ValueError(
+                "ACTIVATION_MATERIAL_KEY must decode to exactly 32 bytes for "
+                f"AES-256-GCM, got {len(material)}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def internet_dialer_is_not_yet_accepted(self) -> "Settings":
+        # V04 (mobile) and V05 (browser) own outbound internet calling and
+        # neither is accepted. Same reasoning as IDT above: a silent no-op deploy
+        # that shows customers a dialer button doing nothing is worse than a
+        # startup failure somebody reads.
+        if self.internet_dialer_enabled:
+            raise ValueError(
+                "INTERNET_DIALER_ENABLED is not supported yet -- outbound "
+                "internet calling is assigned to V04/V05 and neither has been "
+                "accepted (docs/implementation/VOICE-EXPANSION.md)"
             )
         return self
 

@@ -13,7 +13,7 @@ interface ConsumerHomeScreenProps {
   errorMessage: string | null;
   onRetry: () => void;
   onBrowsePlans: () => void;
-  onOpenMyLine: () => void;
+  onOpenMyLine: (entitlementId: string | null) => void;
   onOpenOrder: (orderId: string) => void;
 }
 
@@ -79,7 +79,7 @@ export function ConsumerHomeScreen({
           title={t('home.installTitle')}
           body={t('home.installBody')}
           actionLabel={t('home.installAction')}
-          onAction={onOpenMyLine}
+          onAction={() => onOpenMyLine(headline.service.entitlement_id)}
           testID="home-install"
         />
       ) : headline.kind === 'suspended' ? (
@@ -88,7 +88,7 @@ export function ConsumerHomeScreen({
           title={t('home.suspendedTitle')}
           body={t('home.suspendedBody')}
           actionLabel={t('home.suspendedAction')}
-          onAction={onOpenMyLine}
+          onAction={() => onOpenMyLine(headline.service.entitlement_id)}
           testID="home-suspended"
         />
       ) : headline.kind === 'failed' ? (

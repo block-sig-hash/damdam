@@ -11,6 +11,11 @@ FR = "fr"
 
 _API_EN = {
     "not_a_member": "You do not have access to this organization.",
+    "line_not_found": "We could not find that line on your account.",
+    "profile_not_issued": "Your eSIM profile has not been issued yet. We will have it shortly.",
+    "installation_material_unavailable": "eSIM installation is not available on this service yet. Nothing is wrong with your line.",
+    "installation_reporting_unavailable": "We could not record your installation just now. Try again shortly.",
+    "grant_not_redeemable": "That eSIM link is no longer usable. Open your line again to get a new one.",
     "market_unavailable": "This country and currency are not on sale yet.",
     "product_unavailable": "That plan is no longer available.",
     "quote_not_found": "We could not find that price. Please start again.",
@@ -171,6 +176,11 @@ _API_FR = {
     "organization_not_selected": "Choisissez l'organisation dans laquelle vous agissez.",
     "shared_credential_forbidden": "Cette action exige un compte individuel, et non l'identifiant partagé de l'organisation.",
     "invitation_invalid": "Cette invitation n'est plus valide.",
+    "line_not_found": "Nous n'avons pas trouvé cette ligne sur votre compte.",
+    "profile_not_issued": "Votre profil eSIM n'a pas encore été émis. Nous l'aurons sous peu.",
+    "installation_material_unavailable": "L'installation eSIM n'est pas encore disponible sur ce service. Votre ligne n'a aucun problème.",
+    "installation_reporting_unavailable": "Nous n'avons pas pu enregistrer votre installation. Réessayez sous peu.",
+    "grant_not_redeemable": "Ce lien eSIM n'est plus utilisable. Rouvrez votre ligne pour en obtenir un nouveau.",
     "market_unavailable": "Ce pays et cette devise ne sont pas encore en vente.",
     "product_unavailable": "Ce forfait n'est plus disponible.",
     "quote_not_found": "Nous n'avons pas trouvé ce prix. Veuillez recommencer.",

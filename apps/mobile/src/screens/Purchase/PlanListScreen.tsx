@@ -7,7 +7,7 @@ import { StateMessage } from '../../components/StateMessage/StateMessage';
 import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
 import { color, radius, space, typography } from '../../theme/tokens';
 import type { DeviceCheck } from './deviceFacts';
-import { dataAllowance, money, voiceAllowance } from './format';
+import { dataAllowance, money, voiceAllowance } from '../../utils/format';
 
 interface PlanListScreenProps {
   markets: MarketSummary[];

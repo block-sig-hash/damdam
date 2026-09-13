@@ -1,3 +1,4 @@
+from base64 import b64decode
 from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Any, cast
@@ -23,6 +24,8 @@ from app.checkout.routes import catalog_router, checkout_router, quote_router
 from app.checkout.routes import order_router as consumer_order_router
 from app.checkout.service import CheckoutError, CheckoutService
 from app.config import Settings, get_settings
+from app.connectivity.credentials import CredentialVault
+from app.connectivity.service import ConnectivityService
 from app.consumer.routes import invitation_preview_router
 from app.consumer.routes import router as consumer_router
 from app.consumer.service import ConsumerService
@@ -34,6 +37,7 @@ from app.container import (
     build_payment_providers,
     default_dependencies,
 )
+from app.controls.service import ControlService
 from app.db import SessionFactory
 from app.esim.providers import EsimProvider, build_esim_providers
 from app.esim.routes import router as esim_router
@@ -45,6 +49,7 @@ from app.esim.service import (
     HtoPilgrimService,
     NoopEsimIssuanceScheduler,
 )
+from app.fulfilment.service import FulfilmentService
 from app.health import LivenessResponse, ReadinessResponse, check_readiness
 from app.i18n import api_message, localize_validation_errors, request_locale
 from app.identity.delivery import (
@@ -53,6 +58,9 @@ from app.identity.delivery import (
     RecordingDeliveryTransport,
 )
 from app.identity.service import IdentityError, IdentityService
+from app.ledger.service import LedgerService
+from app.line.routes import router as line_router
+from app.line.service import LineError, LineViewService
 from app.manifests.invoices import InvoiceStorage, build_invoice_storage
 from app.manifests.orders import ManifestOrderService, ProvisioningScheduler
 from app.manifests.routes import pricing_router
@@ -87,9 +95,30 @@ from app.reports.service import ProvisioningReportService
 from app.retention.service import RetentionService
 from app.retirement import RetiredFeatureError
 from app.sos.routes import router as sos_router
+from app.usage.service import UsageService
 from app.voice.providers import TelnyxVoiceProvider, VoiceProvider
 from app.voice.routes import router as voice_router
 from app.voice.service import VoiceError, VoiceService
+
+
+def _build_credential_vault(
+    settings: Settings, clock: Callable[[], datetime]
+) -> CredentialVault | None:
+    """A vault, or `None` and a deployment that cannot deliver profiles.
+
+    `None` is deliberate and is not a degraded mode to paper over: without a
+    key there is nothing to unseal, and the alternative — a built-in default —
+    would seal one-time-use eSIM profiles under a key that is not a secret. The
+    delivery endpoints refuse with `installation_material_unavailable`, which
+    says which way it failed.
+    """
+    if not settings.activation_material_key:
+        return None
+    return CredentialVault(
+        b64decode(settings.activation_material_key, validate=True),
+        settings.activation_material_key_reference,
+        clock=clock,
+    )
 
 
 def create_app(
@@ -227,6 +256,32 @@ def create_app(
     # current state of the decision, not a missing wire-up: naming a
     # candidate here would be a selection sitting in code.
     api.state.payment_processor_adapter = None
+
+    # Chunks 15-17 shipped the connectivity lifecycle, usage reconciliation and
+    # spending controls as services with no HTTP surface and no wiring. Chunk 20
+    # is the first thing that needs them at request time, so this is where they
+    # are constructed.
+    api.state.credential_vault = _build_credential_vault(resolved_settings, clock)
+    api.state.connectivity_service = ConnectivityService(
+        FulfilmentService(clock=clock),
+        vault=api.state.credential_vault,
+        clock=clock,
+    )
+    api.state.usage_service = UsageService(LedgerService(clock=clock), clock=clock)
+    api.state.control_service = ControlService(
+        api.state.usage_service,
+        api.state.connectivity_service,
+        LedgerService(clock=clock),
+        clock=clock,
+    )
+    api.state.line_service = LineViewService(
+        api.state.usage_service,
+        controls=api.state.control_service,
+        vault=api.state.credential_vault,
+        connectivity=api.state.connectivity_service,
+        clock=clock,
+        internet_dialer_enabled=resolved_settings.internet_dialer_enabled,
+    )
     api.state.mfa_service = MfaService(clock)
     api.state.hto_pilgrim_service = HtoPilgrimService()
     api.state.report_service = ProvisioningReportService(clock)
@@ -335,6 +390,33 @@ def create_app(
             "already_paid": 409,
             "intent_not_found": 404,
             "merchant_not_found": 404,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(LineError)
+    async def line_error_handler(
+        request: Request, exc: LineError
+    ) -> JSONResponse:
+        statuses = {
+            # Not 403. "Is not yours" and "does not exist" must be
+            # indistinguishable, or the id becomes an oracle.
+            "line_not_found": 404,
+            "profile_not_issued": 409,
+            # 503, not 500: nothing is broken. The deployment has no activation
+            # key, so no profile can be delivered, and that is a configuration
+            # answer an operator can act on.
+            "installation_material_unavailable": 503,
+            "installation_reporting_unavailable": 503,
+            # One status and one message for expired, spent, wrong-account and
+            # never-existed.
+            "grant_not_redeemable": 409,
         }
         return JSONResponse(
             status_code=statuses.get(exc.code, 400),
@@ -687,6 +769,7 @@ def create_app(
     api.include_router(quote_router, prefix="/v1")
     api.include_router(checkout_router, prefix="/v1")
     api.include_router(consumer_order_router, prefix="/v1")
+    api.include_router(line_router, prefix="/v1")
     api.include_router(organization_mfa_router, prefix="/v1")
     api.include_router(manifest_router, prefix="/v1")
     api.include_router(pricing_router, prefix="/v1")

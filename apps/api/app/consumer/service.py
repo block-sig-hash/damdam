@@ -240,6 +240,7 @@ class ConsumerService:
 
         return ServiceSummary(
             order_item_id=item.id,
+            entitlement_id=entitlement.id if entitlement is not None else None,
             order_id=order.id,
             order_reference=order.reference,
             product_name=product.name,

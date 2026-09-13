@@ -252,7 +252,8 @@ class CredentialVault:
         return IssuedGrant(grant=grant, token=token)
 
     def redeem(
-        self, session: Session, token: str, subject_user_id: UUID
+        self, session: Session, token: str, subject_user_id: UUID,
+        *, expected_credential_id: UUID | None = None,
     ) -> str:
         """Spend a grant and return the profile. Once, by the right person.
 
@@ -266,6 +267,7 @@ class CredentialVault:
             select(CredentialGrant)
             .where(CredentialGrant.token_fingerprint == fingerprint)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).first()
         if grant is None:
             # Deliberately the same error as an expired or spent grant. An
@@ -273,12 +275,22 @@ class CredentialVault:
             raise CredentialError("grant_not_redeemable")
         if grant.subject_user_id != subject_user_id:
             raise CredentialError("grant_not_redeemable")
+        if (
+            expected_credential_id is not None
+            and grant.credential_id != expected_credential_id
+        ):
+            raise CredentialError("grant_not_redeemable")
         if grant.redeemed_at is not None:
             raise CredentialError("grant_not_redeemable")
         if _aware(grant.expires_at) <= self.clock():
             raise CredentialError("grant_not_redeemable")
 
-        credential = session.get(EsimActivationCredential, grant.credential_id)
+        credential = session.exec(
+            select(EsimActivationCredential)
+            .where(EsimActivationCredential.id == grant.credential_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
         if credential is None:  # pragma: no cover - FK guarantees this
             raise CredentialError("credential_not_found")
         if not self._subject_holds_credential(session, credential, subject_user_id):

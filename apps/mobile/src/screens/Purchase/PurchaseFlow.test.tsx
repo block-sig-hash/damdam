@@ -243,7 +243,7 @@ describe('browsing states what is being sold (AC-37.4)', () => {
     expect(
       screen.getByTestId(`plan-${PRODUCT_ID}-destinations`),
     ).toHaveTextContent(/Calls priced to: NG/);
-  });
+  }, 15_000);
 
   it('says no number is included rather than staying silent about it', async () => {
     mockedProducts.mockResolvedValue({

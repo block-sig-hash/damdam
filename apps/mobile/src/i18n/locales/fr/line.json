@@ -1,0 +1,182 @@
+{
+  "list": {
+    "title": "Vos lignes",
+    "open": "Ouvrir"
+  },
+  "loading": {
+    "title": "Ouverture de votre ligne…",
+    "body": "Nous récupérons ce que le réseau en dit."
+  },
+  "empty": {
+    "title": "Vous n'avez pas encore de ligne",
+    "body": "Un forfait avec eSIM ou appels internet apparaîtra ici une fois mis en service.",
+    "action": "Voir les forfaits"
+  },
+  "actions": {
+    "refresh": "Vérifier à nouveau",
+    "retry": "Réessayer"
+  },
+  "errors": {
+    "loadTitle": "Nous n'avons pas pu ouvrir votre ligne",
+    "unexpected": "Une erreur est survenue. Veuillez réessayer."
+  },
+  "number": {
+    "label": "Votre numéro",
+    "pending": "Votre numéro est en cours d'attribution. Nous l'afficherons ici dès que le réseau nous en donnera un.",
+    "notIncluded": "Ce forfait ne comprend pas de numéro de téléphone."
+  },
+  "next": {
+    "installTitle": "Dernière étape : installez votre eSIM",
+    "installBody": "Votre profil est prêt. L'installer met la ligne sur ce téléphone.",
+    "installAction": "Installer l'eSIM",
+    "awaitingProfileTitle": "Nous préparons votre eSIM",
+    "awaitingProfileBody": "Le réseau ne nous a pas encore remis votre profil. Cela prend généralement quelques minutes.",
+    "awaitingProfileFootnote": "Vous n'avez pas besoin de garder l'application ouverte.",
+    "awaitingActivationTitle": "Installée — en attente du réseau",
+    "awaitingActivationBody": "Votre profil est sur ce téléphone. Le réseau doit encore activer la ligne, une étape distincte que nous ne contrôlons pas.",
+    "suspendedTitle": "Cette ligne est suspendue",
+    "suspendedBody": "Le fournisseur a suspendu cette ligne. Contactez l’assistance pour connaître le motif et les étapes de rétablissement.",
+    "expiredTitle": "Cette ligne a expiré",
+    "expiredBody": "Son forfait n'est plus disponible.",
+    "expiredAction": "Voir les forfaits",
+    "readyTitle": "Détails du service",
+    "readyBody": "Installation, activation et connexion au réseau sont distinctes. Consultez les états signalés ci-dessous."
+  },
+  "states": {
+    "label": "Ce que nous savons",
+    "installation": "Profil",
+    "activation": "Ligne",
+    "network": "Réseau",
+    "voice": "Appels",
+    "installationValue": {
+      "not_installed": "Non installé",
+      "installed": "Installé",
+      "removed": "Retiré"
+    },
+    "activationValue": {
+      "pending": "Pas encore activée",
+      "activating": "Activation en cours",
+      "active": "Active",
+      "suspended": "Suspendue",
+      "terminated": "Terminée"
+    },
+    "networkValue": {
+      "unknown": "Non signalé",
+      "attached": "Connectée",
+      "detached": "Non connectée"
+    },
+    "voiceValue": {
+      "enabled": "Activés",
+      "notEnabled": "Non activés"
+    },
+    "providerStatus": "Le réseau indique : {{status}}"
+  },
+  "usage": {
+    "label": "Ce qu'il reste",
+    "data": "Données",
+    "calls": "Appels",
+    "minutes": "{{minutes}} min",
+    "none": "Aucun",
+    "neverReported": "Le réseau n'a encore signalé aucune consommation sur cette ligne : voici donc ce que vous avez acheté, et non ce qu'il reste.",
+    "stale": "Ce relevé est plus ancien que d'habitude. Votre solde réel peut être inférieur.",
+    "provisional": "Une partie de cette consommation est encore en cours de confirmation et peut changer.",
+    "pendingTopUp": "Une recharge que vous avez payée n'est pas encore utilisable. Nous attendons que le réseau l'applique.",
+    "age": {
+      "now": "Mis à jour à l'instant",
+      "minutes": "Mis à jour il y a {{value}} min",
+      "hours": "Mis à jour il y a {{value}} h",
+      "days": "Mis à jour il y a {{value}} j"
+    }
+  },
+  "restriction": {
+    "noEnforcement": "Aucun plafond n'est appliqué par le réseau sur cette ligne. Nous comptons la consommation telle qu'elle est signalée, ce qui peut arriver en retard.",
+    "confirmedLimit": "Le réseau a confirmé un plafond de {{amount}}."
+  },
+  "calling": {
+    "label": "Appels",
+    "nativeAvailable": "Cette ligne peut appeler depuis le téléphone habituel de votre appareil.",
+    "nativeUnavailable": {
+      "no_carrier_line": "Il s'agit d'un forfait d'appels internet ; il n'utilise pas le téléphone de votre appareil.",
+      "line_not_provisioned": "Cette ligne n'est pas encore mise en service auprès du réseau et ne peut pas appeler.",
+      "voice_not_enabled": "Le réseau n'a pas activé les appels sur cette ligne. Elle ne transporte que des données.",
+      "line_not_active": "Cette ligne n'est pas encore active et ne peut pas appeler.",
+      "unknown": "Nous ne pouvons pas confirmer si cette ligne peut appeler."
+    },
+    "internetDialerUnavailable": "Les appels depuis l’application ne sont pas encore disponibles.",
+    "guideAction": "Comment appeler sur cette ligne"
+  },
+  "tariff": {
+    "label": "Tarifs d'appel",
+    "rate": "Depuis {{origin}} vers {{country}} ({{kind}}) : {{amount}} par minute, paliers de {{increment}} s, minimum {{minimum}} s ; connexion {{setup}}.",
+    "version": "Tarifs version {{version}}. Les frais apparaissent après la fin d'un appel.",
+    "none": "Aucun tarif d'appel n'a été publié pour ce forfait ; nous ne pouvons donc pas indiquer le coût des appels.",
+    "anyOrigin": "tout réseau pris en charge",
+    "kind": {
+      "mobile": "Mobile",
+      "fixed": "Fixe",
+      "special": "Spécial",
+      "premium": "Surtaxé"
+    }
+  },
+  "install": {
+    "title": "Installez votre eSIM",
+    "privacyProtected": "Les captures d'écran sont bloquées sur cet écran. Votre code d'activation ne sert qu'une fois : gardez-le hors des autres écrans.",
+    "privacyIosWarning": "L'iPhone ne nous permet pas de bloquer les captures d'écran. Votre code d'activation ne sert qu'une fois — ne le capturez pas et ne le partagez pas.",
+    "privacyFailedWarning": "Nous n'avons pas pu bloquer les captures d'écran ici. Votre code d'activation ne sert qu'une fois — ne le capturez pas et ne le partagez pas.",
+    "revealTitle": "Quand vous voulez",
+    "revealBody": "Nous afficherons votre code d'activation dès que vous serez prêt à installer. Ouvrez les réglages eSIM de votre téléphone, ou utilisez le bouton que nous proposons ensuite.",
+    "revealFootnote": "Ouvrir cet écran n'utilise pas votre code.",
+    "revealAction": "Afficher mon code d'activation",
+    "revealing": "Récupération de votre code…",
+    "shownBefore": "Ce code a été affiché {{count}} fois. Si ce n'était pas vous, votre eSIM est peut-être déjà installée sur un autre appareil — contactez l'assistance avant de continuer.",
+    "manualTitle": "Saisissez ceci dans les réglages eSIM de votre téléphone",
+    "smdpLabel": "Adresse SM-DP+",
+    "activationCodeLabel": "Code d'activation",
+    "wholeCodeLabel": "Code d'activation",
+    "manualHint": "Sur iPhone : Réglages → Données cellulaires → Ajouter une eSIM → Utiliser un code QR → Saisir les données manuellement. Sur Android, ouvrez les paramètres SIM, puis Ajouter une eSIM et la saisie manuelle ; les menus varient.",
+    "directAction": "Installer sur ce téléphone",
+    "invoked": "Votre téléphone vous demande de confirmer l'installation. Terminez là-bas, puis revenez.",
+    "guideTitle": "Étapes pour {{device}}",
+    "guideGeneric": "Ce sont les étapes habituelles sous Android. Les noms des menus peuvent différer légèrement sur votre téléphone.",
+    "noReinstall": "Ce profil ne peut être téléchargé qu’une fois. Si vous changez ou réinitialisez votre téléphone, contactez l’assistance pour un remplacement. Ce fournisseur ne permet pas de retélécharger le profil.",
+    "confirmAction": "Je l'ai installée",
+    "failedAction": "L'installation a échoué",
+    "errorTitle": "Nous n'avons pas pu obtenir votre code d'activation",
+    "retry": "Réessayer",
+    "back": "Retour à ma ligne",
+    "qrTitle": "Scannez avec le téléphone à équiper",
+    "qrHint": "Installation sur ce téléphone ? Utilisez les champs manuels ci-dessous. Ne conservez ni ne partagez ce QR code."
+  },
+  "guide": {
+    "title": "Appeler sur cette ligne",
+    "availableForVoice": "Le réseau indique que cette ligne peut passer des appels.",
+    "thisLineIs": "Cette ligne est le {{number}}.",
+    "callsTitle": "Choisir cette ligne pour les appels",
+    "dataTitle": "Choisir cette ligne pour les données",
+    "caveat": "Nous ne pouvons pas le régler à votre place, ni voir quelle ligne vous choisissez — votre téléphone ne le dit pas non plus aux applications. Ouvrir le téléphone ne prouve pas qu'un appel est parti sur cette ligne.",
+    "back": "Retour à ma ligne",
+    "ios": {
+      "calls": {
+        "openSettings": "Ouvrez Réglages sur votre iPhone.",
+        "openCellular": "Touchez Données cellulaires (ou Service mobile).",
+        "chooseLine": "Trouvez cette ligne dans la liste et vérifiez qu'elle est activée.",
+        "setDefaultVoice": "Touchez Ligne vocale par défaut et choisissez-la."
+      },
+      "data": {
+        "openCellularData": "Dans le même écran, touchez Données cellulaires.",
+        "chooseLine": "Choisissez cette ligne."
+      }
+    },
+    "android": {
+      "calls": {
+        "openSettings": "Ouvrez Paramètres sur votre téléphone.",
+        "openSims": "Touchez Réseau et Internet, puis Cartes SIM.",
+        "chooseCallsSim": "Sous Appels, choisissez cette ligne."
+      },
+      "data": {
+        "openSims": "Dans le même écran Cartes SIM, trouvez Données mobiles.",
+        "chooseDataSim": "Choisissez cette ligne."
+      }
+    }
+  }
+}

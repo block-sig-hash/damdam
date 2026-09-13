@@ -10,7 +10,7 @@ import { PrimaryButton } from '../../components/PrimaryButton/PrimaryButton';
 import { SecondaryButton } from '../../components/SecondaryButton/SecondaryButton';
 import { StateMessage } from '../../components/StateMessage/StateMessage';
 import { color, radius, space, typography } from '../../theme/tokens';
-import { hasExpired, minutesUntil, money } from './format';
+import { hasExpired, minutesUntil, money } from '../../utils/format';
 
 interface QuoteReviewScreenProps {
   quote: QuoteResponse;

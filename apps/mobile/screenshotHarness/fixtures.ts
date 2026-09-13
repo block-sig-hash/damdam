@@ -14,6 +14,10 @@ import type {
   QuoteResponse,
 } from '../src/api/checkoutClient';
 import type { DeviceCheck } from '../src/screens/Purchase/deviceFacts';
+import type {
+  InstallationCredential,
+  LineDetail,
+} from '../src/api/lineClient';
 
 // 1x1 transparent PNG -- stands in for a real QR code image URL so
 // <Image> has something to decode without a network round-trip.
@@ -218,4 +222,153 @@ export const FIXTURE_ORDER_AWAITING_WEBHOOK: OrderResponse = {
   ...FIXTURE_ORDER_DECLINED,
   payment_state: 'unpaid',
   payment_attempt_state: 'pending',
+};
+
+/**
+ * Chunk 20's My Line and installation screens (US-38).
+ *
+ * The activation code below is deliberately unusable: `.invalid` is a reserved
+ * TLD that can never resolve, and the matching id says what it is. A harness
+ * fixture that looked like a real LPA would be activation material living in the
+ * repository, which is the one thing `security.md` is unambiguous about.
+ */
+export const FIXTURE_HARNESS_LPA =
+  'LPA:1$harness.invalid$HARNESS-PLACEHOLDER-NOT-A-REAL-PROFILE';
+
+export const FIXTURE_LINE: LineDetail = {
+  entitlement_id: 'harness-entitlement',
+  order_id: 'harness-order',
+  order_reference: 'OR-HARNESS1',
+  order_item_id: 'harness-order-item',
+  product_id: 'harness-product',
+  product_name: 'Nigeria 5GB + calls',
+  delivery: 'carrier_esim',
+  ready_to_use: true,
+  number_status: 'assigned',
+  assigned_number: {
+    e164: '+2349012345678',
+    country: 'NG',
+    assigned_at: '2026-09-12T09:00:00Z',
+  },
+  installation: {
+    state: 'installed',
+    installed_at: '2026-09-12T09:20:00Z',
+    profile_released_at: '2026-09-12T09:10:00Z',
+    credential_available: true,
+    credential_unavailable_reason: null,
+    delivery_count: 1,
+    one_time_use: true,
+    reinstall_available: false,
+    reinstall_blocked_reason: 'one_time_profile',
+  },
+  line: {
+    carrier: 'telnyx',
+    activation_state: 'active',
+    network_state: 'attached',
+    network_state_observed_at: '2026-09-12T09:25:00Z',
+    provider_status: 'active',
+    provider_status_observed_at: '2026-09-12T09:25:00Z',
+    voice_enabled: true,
+    voice_enabled_observed_at: '2026-09-12T09:25:00Z',
+  },
+  usage: {
+    data_bytes_total: 5 * 1024 * 1024 * 1024,
+    data_bytes_used: 1024 * 1024 * 1024,
+    data_bytes_remaining: 4 * 1024 * 1024 * 1024,
+    voice_seconds_total: 3600,
+    voice_seconds_used: 600,
+    voice_seconds_remaining: 3000,
+    // Fixed rather than relative: a screenshot whose "updated N min ago" line
+    // changes between runs is a screenshot that can never be compared.
+    observed_at: '2026-09-12T09:25:00Z',
+    freshness: 'fresh',
+    has_provisional: false,
+    expires_at: null,
+    expired: false,
+  },
+  restriction: {
+    suspended: false,
+    enforcement: 'none',
+    control_state: 'requested',
+    requested_limit_bytes: null,
+    confirmed_limit_bytes: null,
+    detail: null,
+  },
+  top_ups: {
+    applied_data_bytes: 0,
+    applied_voice_seconds: 0,
+    applied_extra_days: 0,
+    pending_count: 0,
+  },
+  tariff: {
+    version: 1,
+    currency: 'NGN',
+    destinations: [
+      {
+        country: 'NG',
+        destination_kind: 'mobile',
+        per_minute_amount: '25.500000',
+        setup_amount: '0.00',
+        increment_seconds: 60,
+        minimum_seconds: 30,
+      },
+    ],
+  },
+  calling: {
+    native_available: true,
+    native_unavailable_reason: null,
+    internet_dialer_enabled: false,
+    internet_dialer_reason: 'v04_not_accepted',
+    requires_line_selection: true,
+  },
+};
+
+/** Installed on the phone, and the carrier has not switched the line on. */
+export const FIXTURE_LINE_AWAITING_ACTIVATION: LineDetail = {
+  ...FIXTURE_LINE,
+  ready_to_use: false,
+  line: {
+    ...FIXTURE_LINE.line!,
+    activation_state: 'pending',
+    network_state: 'unknown',
+    network_state_observed_at: null,
+  },
+  calling: {
+    ...FIXTURE_LINE.calling,
+    native_available: false,
+    native_unavailable_reason: 'line_not_active',
+  },
+};
+
+export const FIXTURE_LINE_SUSPENDED: LineDetail = {
+  ...FIXTURE_LINE,
+  ready_to_use: false,
+  line: { ...FIXTURE_LINE.line!, activation_state: 'suspended' },
+  restriction: {
+    ...FIXTURE_LINE.restriction!,
+    suspended: true,
+    detail: 'allowance exhausted',
+  },
+};
+
+/** Nobody has ever measured this line, which the meter must not hide. */
+export const FIXTURE_LINE_UNMEASURED: LineDetail = {
+  ...FIXTURE_LINE,
+  usage: {
+    ...FIXTURE_LINE.usage,
+    data_bytes_used: 0,
+    data_bytes_remaining: 5 * 1024 * 1024 * 1024,
+    voice_seconds_used: 0,
+    voice_seconds_remaining: 3600,
+    observed_at: null,
+    freshness: 'unknown',
+  },
+};
+
+export const FIXTURE_INSTALLATION_CREDENTIAL: InstallationCredential = {
+  entitlement_id: FIXTURE_LINE.entitlement_id,
+  lpa: FIXTURE_HARNESS_LPA,
+  one_time_use: true,
+  delivery_count: 1,
+  reinstall_available: false,
 };

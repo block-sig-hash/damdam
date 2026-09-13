@@ -1718,3 +1718,175 @@ difference.
 checks. An expired quote is returned `200` with its `status` and `expires_at`,
 so a review screen can say "this price expired, here is a fresh one" instead of
 failing blank.
+
+## 7.37 Amendment — My Line and eSIM Installation (US-38)
+
+Chunk 20 adds the holder's view of a provisioned line and the only path by which
+installation material leaves the server.
+
+### Endpoints
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /v1/me/lines` | member session | Every line this account **holds** |
+| `GET /v1/me/lines/{entitlement_id}` | member session | The My Line detail |
+| `POST /v1/me/lines/{entitlement_id}/installation/grant` | member session | Authorize one delivery of the profile. Returns **no** profile |
+| `POST /v1/me/lines/{entitlement_id}/installation/redeem` | member session | Spend the grant and receive the profile, once |
+| `POST /v1/me/lines/{entitlement_id}/installation/confirm` | member session | The device reporting what it did |
+
+The line is addressed by **entitlement id**, not order item or carrier line. The
+entitlement is what a person holds; the carrier line is a resource that may not
+exist yet, and the order item belongs to whoever paid.
+
+### Holder, not payer
+
+Every route resolves `entitlements.holder_user_id`. An organization buying for
+its staff is the payer; the holder is the person whose phone the profile goes
+on, and My Line is the holder's screen. A payer who could read a holder's line
+could read their activation material.
+
+Another account's line answers **`line_not_found` (404)**, never 403. "Does not
+exist" and "is not yours" must be indistinguishable, or the id becomes an
+oracle for which entitlements are real.
+
+### A read never returns a profile
+
+`GET /v1/me/lines/{id}` is polled by a status screen, a pull-to-refresh and a
+push handler. If installation material travelled in it, a one-time-use eSIM
+would sit in every proxy log, CDN cache and crash report between the server and
+the handset. So delivery is two deliberate calls:
+
+1. `POST …/installation/grant` mints a **single-use, 10-minute, person-bound**
+   authorization and returns its token. Safe to call twice; a customer who taps
+   "show my eSIM" twice gets two grants and spends one.
+2. `POST …/installation/redeem` spends one grant and returns the `lpa`. Not safe
+   to call twice, and the second call answers `grant_not_redeemable` (409).
+
+Both responses carry `Cache-Control: no-store`. `no-cache` would be wrong — it
+permits storing a copy and revalidating it, and that copy is exactly what must
+not exist.
+
+`grant_not_redeemable` is returned identically for expired, already-spent,
+issued-to-another-account and never-existed. An attacker learning that a token
+*existed* learns something.
+
+### Why a leaked profile has no remedy
+
+Telnyx documents that a downloaded eSIM profile **cannot be re-downloaded**; a
+lost or replaced device needs a fresh purchase. The usual reasoning about
+secrets — rotate it if it leaks — does not apply, because there is nothing to
+rotate. That is why the material is sealed with AES-256-GCM at rest under a key
+named by `activation_material_key_reference`, why the plaintext exists only
+inside one function call, and why `reinstall_available` is **always false** with
+`reinstall_blocked_reason: "one_time_profile"`. An app offering a reinstall
+button would be offering something the supplier cannot do.
+
+`delivery_count` is reported on the line detail so a customer who has already
+revealed their one-time code is told so, with
+`credential_unavailable_reason: "already_delivered"` and
+`credential_available: true` — still deliverable, because refusing outright
+would strand somebody whose screen locked mid-scan.
+
+### No activation key means no delivery, and it says so
+
+`ACTIVATION_MATERIAL_KEY` is base64 of exactly 32 bytes, supplied per
+environment and validated at **startup**. Empty is a supported state and means
+no profile can be delivered: the grant and redeem endpoints answer
+`installation_material_unavailable` (**503**), and the line detail reports
+`credential_unavailable_reason: "material_key_unavailable"`. A built-in default
+would seal one-time-use profiles under a key that is not a secret, so there is
+none.
+
+### Five states, reported separately, each with when it was observed
+
+`prd.md` and chunk 05's schema keep payment, provisioning, installation,
+activation and network attachment apart because they genuinely disagree. The
+response never recombines them:
+
+| Field | Written by | Never inferred from |
+|---|---|---|
+| `installation.state` | the **device** reporting | a QR code being delivered, or the supplier releasing the profile |
+| `installation.profile_released_at` | the supplier | installation |
+| `line.activation_state` | the carrier | installation |
+| `line.network_state` | an actual observed session | activation |
+| `line.voice_enabled` | the carrier | the product having voice in it |
+
+`ready_to_use` is the one derived boolean and requires **both** an installed
+profile and an active line. Payment is not part of it.
+
+`installation` and `line` are **null** for an internet-calling grant. There is
+no profile and no carrier line, so `not_installed` would be a false negative
+rather than a fact — the same rule §7.35 states for `installation_state`.
+
+### `number_status` has three values because a blank number means three things
+
+`assigned` (a number is live), `pending` (the plan includes one and the carrier
+has not assigned it yet), `not_included` (the plan has no number at all).
+Rendering all three as an empty space makes the first two indistinguishable from
+a bug.
+
+### Usage freshness, and what `unknown` forbids
+
+`usage.freshness` is `fresh` | `stale` | `unknown`, and `observed_at` is the end
+of the latest measurement — not the latest poll. A poll that returned nothing
+proves the poller is alive; it does not make an old figure newer.
+
+`unknown` means nobody has ever measured this line, so the grant is all there
+is. AC-36.4 forbids presenting that as a measurement, so a client must not draw
+a full balance bar against it. `has_provisional: true` means some counted usage
+may still be revised, and the UI is required to say so rather than imply a
+settled bill.
+
+Only **applied** top-ups are in `usage.*_total`. A customer who has paid but
+whose supplier cap has not been raised does not yet have the data; `top_ups`
+reports those separately as `pending_count`.
+
+### Restriction reports the request and the confirmation separately
+
+`requested_limit_bytes` is what we asked the supplier for and
+`confirmed_limit_bytes` is what it says is in force. They differ for the whole
+time a change is in flight, and showing the request as the cap tells a customer
+their limit moved when it has not. `enforcement: "none"` is an honest state —
+nothing is enforcing a cap — not a missing value, and no prepaid guarantee may
+be made on it.
+
+### Native calling and internet calling are distinct
+
+The approved calling amendment is explicit that launching the phone dialer
+proves nothing about which SIM was chosen, whether the line attached, or whether
+a call happened. So:
+
+- `calling.native_available` is the carrier's observed `voice_enabled` on an
+  **active** line, with `native_unavailable_reason` naming which condition
+  failed (`no_carrier_line`, `line_not_provisioned`, `voice_not_enabled`,
+  `line_not_active`).
+- `calling.internet_dialer_enabled` is **false**, with
+  `internet_dialer_reason: "v04_not_accepted"`. V04 and V05 own outbound
+  internet calling and neither is accepted. `INTERNET_DIALER_ENABLED=true`
+  raises at startup rather than enabling a button with nothing behind it.
+
+### Amends §7.35: `services[].entitlement_id`
+
+`GET /v1/me/services` gains `entitlement_id`, so Home's "install now" opens
+*that* line rather than a list. It is **null** until provisioning grants an
+entitlement — a paid, unprovisioned item has no line to open yet, and an id
+invented for it would 404. Clients must branch on the null rather than route to
+it.
+
+### Confirming an installation returns the line, not 204
+
+The screen that reports an install is the screen that must then say activation
+is a *separate* thing still pending, so the refreshed detail comes back in the
+same response. `{"installed": false}` is recorded as not installed rather than
+ignored: a failed install on a record still reading `installed` is how a
+customer is told their line is ready while nothing is on the phone.
+
+### Chunk 20 independent review clarification — 12 September 2026
+
+My Line tariff destinations are filtered by the service's calling mode:
+carrier lines expose `carrier_visited_network` rates and internet entitlements
+expose internet rates. Each destination also includes nullable `origin_country`
+(`null` means any supported origin). Clients display this origin, destination
+kind, setup charge, minimum and increment without rounding metered rates.
+Installation redemption explicitly binds the grant to the path's credential
+before decrypting; concurrent deliveries lock and refresh the delivery counter.

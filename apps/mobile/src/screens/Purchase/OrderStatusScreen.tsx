@@ -7,7 +7,7 @@ import { SecondaryButton } from '../../components/SecondaryButton/SecondaryButto
 import { StateMessage } from '../../components/StateMessage/StateMessage';
 import { StatusPill } from '../../components/StatusPill/StatusPill';
 import { color, radius, space, typography } from '../../theme/tokens';
-import { money } from './format';
+import { money } from '../../utils/format';
 
 interface OrderStatusScreenProps {
   order: OrderResponse | null;
