@@ -83,6 +83,8 @@ _API_EN = {
     # Bulk provisioning (US-40, chunk 23). Said to an administrator mid-way
     # through buying for fifty people, so each one says what to do next.
     "job_not_found": "We could not find that bulk order on your account.",
+    # Enterprise offboarding (US-40, chunk 24).
+    "offboarding_not_found": "We could not find that offboarding record.",
     "item_not_found": "We could not find that line in this bulk order.",
     "market_has_no_seller": (
         "We cannot sell in that market yet. Please contact support."
@@ -312,6 +314,7 @@ _API_FR = {
     "market_not_verified": "Ce marché n'a pas été vérifié pour la vente.",
     "order_not_found": "Nous n'avons pas trouvé cette commande.",
     "job_not_found": "Nous n'avons pas trouvé cette commande groupée.",
+    "offboarding_not_found": "Nous n'avons pas trouvé cet enregistrement de départ.",
     "item_not_found": "Nous n'avons pas trouvé cette ligne dans cette commande.",
     "market_has_no_seller": (
         "Nous ne pouvons pas encore vendre sur ce marché. Contactez le support."

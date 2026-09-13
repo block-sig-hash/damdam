@@ -53,6 +53,9 @@ from app.container import (
 )
 from app.controls.service import ControlService
 from app.db import SessionFactory
+from app.enterprise.offboarding import OffboardingError, OffboardingService
+from app.enterprise.reporting import EnterpriseReportingService
+from app.enterprise.routes import router as enterprise_router
 from app.esim.providers import EsimProvider, build_esim_providers
 from app.esim.routes import router as esim_router
 from app.esim.service import (
@@ -315,6 +318,16 @@ def create_app(
         connectivity=api.state.connectivity_service,
         carrier_provisioning_confirmed=False,
         clock=clock,
+    )
+    # Enterprise funding, reporting and offboarding share the same ledger clock.
+    # Reporting owns no tables: it reads the ledger, chunk 17's policies, chunk
+    # 22's structure and chunk 16's usage, because a stored report starts
+    # drifting from the books the moment it is written.
+    api.state.enterprise_reporting_service = EnterpriseReportingService(
+        LedgerService(clock=clock), clock=clock
+    )
+    api.state.offboarding_service = OffboardingService(
+        LedgerService(clock=clock), clock=clock
     )
     api.state.mfa_service = MfaService(clock)
     api.state.hto_pilgrim_service = HtoPilgrimService()
@@ -641,6 +654,25 @@ def create_app(
             # One status and one message for expired, spent, wrong-account and
             # never-existed.
             "grant_not_redeemable": 409,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(OffboardingError)
+    async def offboarding_error_handler(
+        request: Request, exc: OffboardingError
+    ) -> JSONResponse:
+        statuses = {
+            # 404 for anything belonging to another tenant, so an id cannot be
+            # used to confirm that an organization employs somebody.
+            "person_not_found": 404,
+            "offboarding_not_found": 404,
         }
         return JSONResponse(
             status_code=statuses.get(exc.code, 400),
@@ -1050,6 +1082,7 @@ def create_app(
     api.include_router(people_router, prefix="/v1")
     api.include_router(bulk_router, prefix="/v1")
     api.include_router(bulk_recipient_router, prefix="/v1")
+    api.include_router(enterprise_router, prefix="/v1")
     api.include_router(invitation_router, prefix="/v1")
     api.include_router(invitation_preview_router, prefix="/v1")
     api.include_router(consumer_router, prefix="/v1")

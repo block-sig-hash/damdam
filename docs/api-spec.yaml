@@ -1939,6 +1939,274 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /v1/organizations/{organization_id}/funding:
+    get:
+      tags:
+      - Enterprise
+      summary: Get Funding
+      description: "Credit, holds and any recorded cap \u2014 kept as three separate\
+        \ numbers."
+      operationId: get_funding_v1_organizations__organization_id__funding_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 3
+          default: NGN
+          title: Currency
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundingView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/reports/departments:
+    get:
+      tags:
+      - Enterprise
+      summary: Get Departmental Report
+      description: Spend by team or cost centre, with the freshness of the usage half.
+      operationId: get_departmental_report_v1_organizations__organization_id__reports_departments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 3
+          default: NGN
+          title: Currency
+      - name: by
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(team|cost_centre)$
+          default: team
+          title: By
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 365
+          minimum: 1
+          default: 30
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentalReportView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/reports/departments.csv:
+    get:
+      tags:
+      - Enterprise
+      summary: Export Departmental Report
+      description: "The same report as a file, audited and safe to open.\n\nTwo things\
+        \ happen here that do not happen on the JSON route. Every cell\npasses through\
+        \ `csv_safe`, because team and cost-centre names are text a\ncustomer typed\
+        \ and this file is opened in a spreadsheet. And the download is\n**recorded**\
+        \ \u2014 a tenant's staff spend leaving on somebody's laptop is a fact\nworth\
+        \ being able to reconstruct later.\n\nThe freshness line is written into the\
+        \ file itself. A CSV outlives the\nscreen it was downloaded from, and a total\
+        \ with no \"as of\" becomes a\ncurrent figure the moment it is pasted into\
+        \ a deck."
+      operationId: export_departmental_report_v1_organizations__organization_id__reports_departments_csv_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 3
+          maxLength: 3
+          default: NGN
+          title: Currency
+      - name: by
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(team|cost_centre)$
+          default: team
+          title: By
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 365
+          minimum: 1
+          default: 30
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/offboardings:
+    post:
+      tags:
+      - Enterprise
+      summary: Offboard Person
+      description: 'End somebody''s work relationship. Their personal service is untouched.
+
+
+        Idempotent: a second request for somebody already offboarded returns the
+
+        run that exists rather than re-asking a carrier to suspend a line it is
+
+        already suspending.'
+      operationId: offboard_person_v1_organizations__organization_id__offboardings_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OffboardingRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OffboardingDetailView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Enterprise
+      summary: List Offboardings
+      operationId: list_offboardings_v1_organizations__organization_id__offboardings_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OffboardingListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/offboardings/{offboarding_id}:
+    get:
+      tags:
+      - Enterprise
+      summary: Get Offboarding
+      description: Every action and its outcome, including what a carrier has not
+        answered.
+      operationId: get_offboarding_v1_organizations__organization_id__offboardings__offboarding_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: offboarding_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Offboarding Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OffboardingDetailView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/invitations:
     get:
       tags:
@@ -5676,6 +5944,87 @@ components:
       - may_delete
       - blockers
       title: DeletionPreflightResponse
+    DepartmentTotalView:
+      properties:
+        key:
+          type: string
+          title: Key
+        label:
+          type: string
+          title: Label
+        people:
+          type: integer
+          title: People
+        lines:
+          type: integer
+          title: Lines
+        purchased_amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Purchased Amount
+        usage_amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Usage Amount
+        currency:
+          type: string
+          title: Currency
+      type: object
+      required:
+      - key
+      - label
+      - people
+      - lines
+      - purchased_amount
+      - usage_amount
+      - currency
+      title: DepartmentTotalView
+    DepartmentalReportView:
+      properties:
+        organization_id:
+          type: string
+          format: uuid
+          title: Organization Id
+        currency:
+          type: string
+          title: Currency
+        period_from:
+          type: string
+          format: date-time
+          title: Period From
+        period_to:
+          type: string
+          format: date-time
+          title: Period To
+        totals:
+          items:
+            $ref: '#/components/schemas/DepartmentTotalView'
+          type: array
+          title: Totals
+        purchased_total:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Purchased Total
+        usage_total:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Usage Total
+        observed_through:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Observed Through
+      type: object
+      required:
+      - organization_id
+      - currency
+      - period_from
+      - period_to
+      - totals
+      - purchased_total
+      - usage_total
+      title: DepartmentalReportView
     DependencyChecks:
       properties:
         postgres:
@@ -6020,6 +6369,59 @@ components:
       required:
       - family_group_id
       title: FamilyGroupResponse
+    FundingView:
+      properties:
+        currency:
+          type: string
+          title: Currency
+        balance:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Balance
+        held:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Held
+        available:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Available
+        period_cap:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Period Cap
+        spent_this_period:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Spent This Period
+        headroom:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Headroom
+        pooling:
+          type: boolean
+          title: Pooling
+          default: false
+        pooling_note:
+          type: string
+          title: Pooling Note
+      type: object
+      required:
+      - currency
+      - balance
+      - held
+      - available
+      - spent_this_period
+      - pooling_note
+      title: FundingView
+      description: "What an organization has and may spend \u2014 three different\
+        \ things.\n\n`period_cap` and `headroom` are `null` when nobody has recorded\
+        \ a policy.\nThat is **undecided**, not unlimited, and a client that renders\
+        \ a missing cap\nas infinity is inventing a commitment."
     HTOApprovalResponse:
       properties:
         approval_status:
@@ -7430,6 +7832,197 @@ components:
       - otp
       - platform
       title: OTPVerifyRequest
+    OffboardingActionKind:
+      type: string
+      enum:
+      - revoke_membership
+      - revoke_activation_request
+      - cancel_pending_line
+      - suspend_line
+      - end_active_call
+      - cancel_pending_top_up
+      title: OffboardingActionKind
+      description: Each of the separate things "somebody left" actually means.
+    OffboardingActionState:
+      type: string
+      enum:
+      - requested
+      - confirmed
+      - pending_carrier
+      - not_applicable
+      - failed
+      title: OffboardingActionState
+    OffboardingActionView:
+      properties:
+        action_id:
+          type: string
+          format: uuid
+          title: Action Id
+        kind:
+          $ref: '#/components/schemas/OffboardingActionKind'
+        state:
+          $ref: '#/components/schemas/OffboardingActionState'
+        target_reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Reference
+        detail:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Detail
+        requested_at:
+          type: string
+          format: date-time
+          title: Requested At
+        confirmed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Confirmed At
+      type: object
+      required:
+      - action_id
+      - kind
+      - state
+      - requested_at
+      title: OffboardingActionView
+    OffboardingDetailView:
+      properties:
+        offboarding_id:
+          type: string
+          format: uuid
+          title: Offboarding Id
+        person_id:
+          type: string
+          format: uuid
+          title: Person Id
+        state:
+          $ref: '#/components/schemas/OffboardingState'
+        confirmed:
+          type: integer
+          title: Confirmed
+        pending_carrier:
+          type: integer
+          title: Pending Carrier
+        not_applicable:
+          type: integer
+          title: Not Applicable
+        failed:
+          type: integer
+          title: Failed
+        requested_at:
+          type: string
+          format: date-time
+          title: Requested At
+        completed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Completed At
+        actions:
+          items:
+            $ref: '#/components/schemas/OffboardingActionView'
+          type: array
+          title: Actions
+      type: object
+      required:
+      - offboarding_id
+      - person_id
+      - state
+      - confirmed
+      - pending_carrier
+      - not_applicable
+      - failed
+      - requested_at
+      - actions
+      title: OffboardingDetailView
+    OffboardingListResponse:
+      properties:
+        offboardings:
+          items:
+            $ref: '#/components/schemas/OffboardingView'
+          type: array
+          title: Offboardings
+      type: object
+      required:
+      - offboardings
+      title: OffboardingListResponse
+    OffboardingRequest:
+      properties:
+        person_id:
+          type: string
+          format: uuid
+          title: Person Id
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Reason
+      type: object
+      required:
+      - person_id
+      title: OffboardingRequest
+    OffboardingState:
+      type: string
+      enum:
+      - requested
+      - in_progress
+      - completed
+      - completed_with_pending
+      title: OffboardingState
+      description: Where an offboarding run is, in terms an administrator can act
+        on.
+    OffboardingView:
+      properties:
+        offboarding_id:
+          type: string
+          format: uuid
+          title: Offboarding Id
+        person_id:
+          type: string
+          format: uuid
+          title: Person Id
+        state:
+          $ref: '#/components/schemas/OffboardingState'
+        confirmed:
+          type: integer
+          title: Confirmed
+        pending_carrier:
+          type: integer
+          title: Pending Carrier
+        not_applicable:
+          type: integer
+          title: Not Applicable
+        failed:
+          type: integer
+          title: Failed
+        requested_at:
+          type: string
+          format: date-time
+          title: Requested At
+        completed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Completed At
+      type: object
+      required:
+      - offboarding_id
+      - person_id
+      - state
+      - confirmed
+      - pending_carrier
+      - not_applicable
+      - failed
+      - requested_at
+      title: OffboardingView
+      description: A departure, including what is still outstanding with a carrier.
     OrderItemResponse:
       properties:
         order_item_id:
