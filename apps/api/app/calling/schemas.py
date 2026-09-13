@@ -92,6 +92,28 @@ class AttemptResponse(BaseModel):
     ended_at: datetime | None = None
     end_reason: str | None = None
     organization_id: UUID | None = None
+    #: Added by V03. `None` while the call is live, unanswered liability is
+    #: still open, or settlement has been deferred for review.
+    charge: ChargeView | None = None
+
+
+class ChargeView(BaseModel):
+    """What the call actually cost, once it has been metered — US-46, V03.
+
+    Absent until the call is settled, and `is_final` says whether the supplier's
+    own record could still move it. A UI that showed a provisional amount as
+    final would be making a promise this chunk cannot keep: V01 could not
+    establish how many components a call bills, so a later correction is an
+    ordinary event rather than a failure.
+    """
+
+    amount: Decimal
+    currency: str
+    billable_seconds: int
+    setup_amount: Decimal
+    usage_amount: Decimal
+    is_final: bool
+    settled_at: datetime | None = None
 
 
 class AttemptListResponse(BaseModel):

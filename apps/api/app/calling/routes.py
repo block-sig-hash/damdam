@@ -25,14 +25,16 @@ from sqlmodel import Session, col, select
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
+from app.calling.charging import CallChargingService
 from app.calling.contract import LegState
 from app.calling.lifecycle import CallLifecycleService
-from app.calling.models import CallAttempt, CallLeg
+from app.calling.models import CallAttempt, CallCharge, CallLeg, ChargeState
 from app.calling.schemas import (
     AttemptListResponse,
     AttemptResponse,
     AuthorizeRequest,
     CallEventAckResponse,
+    ChargeView,
     ClientSessionRequest,
     ClientSessionResponse,
     EligibilityResponse,
@@ -56,11 +58,47 @@ def _sessions(request: Request) -> ClientSessionService:
     return cast(ClientSessionService, request.app.state.client_session_service)
 
 
+def _charging(request: Request) -> CallChargingService | None:
+    """Optional: a deployment without settlement wired still answers reads."""
+    return getattr(request.app.state, "call_charging_service", None)
+
+
 def _lifecycle(request: Request) -> CallLifecycleService:
     return cast(CallLifecycleService, request.app.state.call_lifecycle_service)
 
 
-def _attempt_response(attempt: CallAttempt) -> AttemptResponse:
+def _charges_for(
+    session: Session, attempts: Sequence[CallAttempt]
+) -> dict[UUID, CallCharge]:
+    """One query for the page. A per-row lookup here is the classic N+1."""
+    if not attempts:
+        return {}
+    rows = session.exec(
+        select(CallCharge).where(
+            col(CallCharge.attempt_id).in_([attempt.id for attempt in attempts]),
+            CallCharge.state != ChargeState.SUPERSEDED,
+        )
+    ).all()
+    return {row.attempt_id: row for row in rows}
+
+
+def _charge_view(charge: CallCharge | None) -> ChargeView | None:
+    if charge is None:
+        return None
+    return ChargeView(
+        amount=charge.charged_amount,
+        currency=charge.currency,
+        billable_seconds=charge.billable_seconds,
+        setup_amount=charge.setup_amount,
+        usage_amount=charge.usage_amount,
+        is_final=charge.state is ChargeState.FINAL,
+        settled_at=charge.settled_at,
+    )
+
+
+def _attempt_response(
+    attempt: CallAttempt, charge: CallCharge | None = None
+) -> AttemptResponse:
     return AttemptResponse(
         attempt_id=attempt.id,
         state=attempt.state.value,
@@ -76,6 +114,7 @@ def _attempt_response(attempt: CallAttempt) -> AttemptResponse:
         ended_at=attempt.ended_at,
         end_reason=attempt.end_reason,
         organization_id=attempt.organization_id,
+        charge=_charge_view(charge),
     )
 
 
@@ -261,8 +300,15 @@ def get_call(
     user: Annotated[User, Depends(get_current_user)],
 ) -> AttemptResponse:
     service = _authorization(request)
+    charging = _charging(request)
     with request.app.state.session_factory() as session:
-        return _attempt_response(service.get(session, user, attempt_id))
+        attempt = service.get(session, user, attempt_id)
+        charge = (
+            charging.charge_for_attempt(session, attempt)
+            if charging is not None
+            else None
+        )
+        return _attempt_response(attempt, charge)
 
 
 @router.get("/calls", response_model=AttemptListResponse)
@@ -284,8 +330,12 @@ def list_calls(
         attempts = service.history(
             session, user, organization_id=organization_id, limit=limit
         )
+        charges = _charges_for(session, attempts)
         return AttemptListResponse(
-            attempts=[_attempt_response(attempt) for attempt in attempts]
+            attempts=[
+                _attempt_response(attempt, charges.get(attempt.id))
+                for attempt in attempts
+            ]
         )
 
 

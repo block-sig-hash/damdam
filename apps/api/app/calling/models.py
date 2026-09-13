@@ -783,3 +783,292 @@ class CallingClientCredential(SQLModel, table=True):
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
+
+
+# --- chunk V03 (US-46): metering, settlement and enforced limits -----------
+#
+# Three tables, added by the chunk that turns a held reservation into money.
+# V02 deliberately stopped short of that -- it holds and never settles -- so
+# everything below is about the transition from "this call could cost up to X"
+# to "this call cost Y, and here is the evidence".
+#
+# **`call_charges`** is the retail settlement record, and it supersedes rather
+# than edits. Chunk 16 established the discipline for supplier corrections and
+# chunk 14 for disputes: a posted amount is history, and an adjustment is a new
+# row plus a compensating entry for the difference. A charge that could be
+# edited in place is a receipt that can change after the customer read it.
+#
+# **`call_supplier_costs`** is what the call cost *us*, kept strictly apart from
+# what the customer pays. V01's worksheet establishes the published unit prices
+# and explicitly not how many billable components a call produces, so this table
+# records observations and never derives a retail amount from them.
+#
+# **`call_deadlines`** is the durable clock. A reservation renewal, an unknown
+# outcome and a missing terminal event all need something to happen at a future
+# moment, and the assignment requires those deadlines to survive a worker
+# restart -- so they are rows a restarted worker finds, not timers in a process
+# that died with it.
+
+
+class ChargeState(str, Enum):
+    """Where a settlement record stands.
+
+    `PROVISIONAL` exists because liability can be known before it is final: a
+    call metered from provider events is charged, but a supplier CDR arriving
+    later can correct it. The customer is not left waiting for the supplier's
+    invoice to see what they spent.
+    """
+
+    PROVISIONAL = "provisional"
+    FINAL = "final"
+    #: Replaced by a correction. Never deleted: the entry it posted stays in the
+    #: books, and the correction posts only the difference.
+    SUPERSEDED = "superseded"
+
+
+class ChargeBasis(str, Enum):
+    """What the amount was derived from, recorded so a dispute can be answered."""
+
+    #: Signed provider events — the destination leg's answered and ended times.
+    PROVIDER_EVENTS = "provider_events"
+    #: A supplier call detail record, which may disagree with the events.
+    SUPPLIER_CDR = "supplier_cdr"
+    #: A human decision recorded against an exception item.
+    MANUAL_CORRECTION = "manual_correction"
+
+
+class SupplierCostComponent(str, Enum):
+    """The cost components V01's worksheet names, and nothing invented beyond it."""
+
+    WEBRTC = "webrtc"
+    VOICE_API = "voice_api"
+    PSTN_TERMINATION = "pstn_termination"
+    CONNECTION_FEE = "connection_fee"
+    TAX_OR_PASSTHROUGH = "tax_or_passthrough"
+    #: A supplier's own later adjustment to any of the above.
+    ADJUSTMENT = "adjustment"
+
+
+class DeadlineKind(str, Enum):
+    """Why something must be looked at again at a specific future moment."""
+
+    #: The hold covers a bounded window; extend it or stop the call.
+    RESERVATION_RENEWAL = "reservation_renewal"
+    #: We lost the outcome. Hold the money and reconcile before releasing.
+    UNKNOWN_OUTCOME_REVIEW = "unknown_outcome_review"
+    #: A leg answered and never reported ending.
+    MISSING_TERMINAL_EVENT = "missing_terminal_event"
+    #: A provisional charge is waiting for the supplier's final cost.
+    SUPPLIER_COST_WAIT = "supplier_cost_wait"
+
+
+class DeadlineState(str, Enum):
+    PENDING = "pending"
+    CLAIMED = "claimed"
+    DONE = "done"
+    #: Given up on deliberately, with a reason, after an exception was raised.
+    ABANDONED = "abandoned"
+
+
+class CallCharge(SQLModel, table=True):
+    """What one attempt cost the customer, and what posted it.
+
+    The unique index below is the invariant that matters: **one live charge per
+    attempt**. Settlement is idempotent through chunk 10's event id, but a
+    second charge row would let two amounts both claim to be current even when
+    only one of them posted, and a receipt cannot be rendered from that.
+    """
+
+    __tablename__ = "call_charges"
+    __table_args__ = (
+        Index(
+            "ux_call_charges_live",
+            "attempt_id",
+            unique=True,
+            postgresql_where=text("state <> 'superseded'"),
+            sqlite_where=text("state <> 'superseded'"),
+        ),
+        Index("ix_call_charges_attempt", "attempt_id"),
+        CheckConstraint(
+            "billable_seconds >= 0", name="ck_call_charges_seconds_not_negative"
+        ),
+        CheckConstraint(
+            "charged_amount = setup_amount + usage_amount",
+            name="ck_call_charges_total_is_its_parts",
+        ),
+        CheckConstraint(
+            "(metered_to IS NULL AND metered_from IS NULL) "
+            "OR (metered_to IS NOT NULL AND metered_from IS NOT NULL "
+            "AND metered_to >= metered_from)",
+            name="ck_call_charges_metered_window",
+        ),
+        currency_check("call_charges"),
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    attempt_id: UUID = Field(
+        sa_column=Column(
+            ForeignKey("call_attempts.id", ondelete="RESTRICT"), nullable=False
+        )
+    )
+    state: ChargeState = Field(
+        default=ChargeState.PROVISIONAL,
+        sa_column=_enum(ChargeState, "call_charge_state", ChargeState.PROVISIONAL),
+    )
+    basis: ChargeBasis = Field(sa_column=_enum(ChargeBasis, "call_charge_basis"))
+    #: The charge this one replaces. A chain, not an edit.
+    corrects_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            ForeignKey("call_charges.id", ondelete="RESTRICT"), nullable=True
+        ),
+    )
+    currency: str = Field(sa_column=currency_column())
+    billable_seconds: int = Field(sa_column=Column(Integer, nullable=False))
+    setup_amount: Decimal = Field(sa_column=money_column())
+    usage_amount: Decimal = Field(sa_column=money_column())
+    charged_amount: Decimal = Field(sa_column=money_column())
+    #: The authoritative window, copied from the destination leg. Null when
+    #: nothing was answered, which is also when every amount above is zero.
+    metered_from: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    metered_to: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    #: The entry this charge posted, when it posted one. A zero charge posts
+    #: nothing — there is no transaction to record — and this stays null.
+    journal_entry_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            ForeignKey("journal_entries.id", ondelete="RESTRICT"), nullable=True
+        ),
+    )
+    settled_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+
+
+class CallSupplierCost(SQLModel, table=True):
+    """One observed supplier cost component, in the supplier's own currency.
+
+    Deliberately not joined to the retail charge by arithmetic. The customer's
+    price comes from a versioned retail tariff; this is the other side of the
+    margin, and reconciling the two is an operations question with an exception
+    queue, not a subtraction the settlement path performs.
+    """
+
+    __tablename__ = "call_supplier_costs"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider",
+            "provider_reference",
+            "component",
+            name="uq_call_supplier_costs_reference",
+        ),
+        Index("ix_call_supplier_costs_attempt", "attempt_id"),
+        currency_check("call_supplier_costs"),
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    #: Nullable on purpose: a CDR can arrive for a leg we never correlated, and
+    #: dropping it because it has no attempt would discard the evidence that
+    #: something was billed to us. Those go to the exception queue instead.
+    attempt_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            ForeignKey("call_attempts.id", ondelete="RESTRICT"), nullable=True
+        ),
+    )
+    leg_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            ForeignKey("call_legs.id", ondelete="RESTRICT"), nullable=True
+        ),
+    )
+    provider: str = Field(sa_column=Column(String(32), nullable=False))
+    #: The supplier's identifier for this charge — a CDR id, an invoice line.
+    provider_reference: str = Field(sa_column=Column(String(200), nullable=False))
+    component: SupplierCostComponent = Field(
+        sa_column=_enum(SupplierCostComponent, "call_supplier_cost_component")
+    )
+    currency: str = Field(sa_column=currency_column())
+    amount: Decimal = Field(sa_column=money_column())
+    billable_seconds: int | None = Field(
+        default=None, sa_column=Column(Integer, nullable=True)
+    )
+    #: When the supplier says it happened, which is not when we heard about it.
+    occurred_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    recorded_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )
+    #: A later observation that replaces this one. The original stays.
+    superseded_by_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            ForeignKey("call_supplier_costs.id", ondelete="RESTRICT"), nullable=True
+        ),
+    )
+
+
+class CallDeadline(SQLModel, table=True):
+    """Something that must happen at a future moment, stored rather than timed.
+
+    The assignment's words: *durable deadlines survive worker restarts*. A
+    `threading.Timer`, an `asyncio.sleep` or a Redis TTL all lose their work
+    when the process holding them dies, and the work they lose here is releasing
+    or renewing customer money.
+
+    Claimed with `FOR UPDATE SKIP LOCKED` so several workers can drain the queue
+    without two of them renewing the same reservation.
+    """
+
+    __tablename__ = "call_deadlines"
+    __table_args__ = (
+        Index(
+            "ux_call_deadlines_open",
+            "attempt_id",
+            "kind",
+            unique=True,
+            postgresql_where=text("state IN ('pending', 'claimed')"),
+            sqlite_where=text("state IN ('pending', 'claimed')"),
+        ),
+        Index("ix_call_deadlines_due", "state", "due_at"),
+        CheckConstraint("attempts >= 0", name="ck_call_deadlines_attempts"),
+    )
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    attempt_id: UUID = Field(
+        sa_column=Column(
+            ForeignKey("call_attempts.id", ondelete="RESTRICT"), nullable=False
+        )
+    )
+    kind: DeadlineKind = Field(sa_column=_enum(DeadlineKind, "call_deadline_kind"))
+    state: DeadlineState = Field(
+        default=DeadlineState.PENDING,
+        sa_column=_enum(DeadlineState, "call_deadline_state", DeadlineState.PENDING),
+    )
+    due_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
+    attempts: int = Field(
+        default=0, sa_column=Column(Integer, nullable=False, server_default="0")
+    )
+    claimed_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    resolved_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    last_detail: str | None = Field(
+        default=None, sa_column=Column(String(500), nullable=True)
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False),
+    )

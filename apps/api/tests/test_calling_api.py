@@ -126,6 +126,10 @@ def adapter() -> FakeCallingAdapter:
 
 def test_calling_revocation_hooks_are_registered(calling_api):
     assert (
+        calling_api.state.call_charging_service.controls
+        is calling_api.state.control_service
+    )
+    assert (
         calling_api.state.call_lifecycle_service
         in calling_api.state.membership_service.revocation_listeners
     )

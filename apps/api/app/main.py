@@ -17,6 +17,7 @@ from app.audit.service import AuditLogService
 from app.auth.hto import HTOAuthError, HTOService
 from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
+from app.calling.charging import CallChargingService
 from app.calling.contract import CallingAdapter, CallingError
 from app.calling.lifecycle import CallLifecycleError, CallLifecycleService
 from app.calling.routes import router as calling_router
@@ -338,10 +339,21 @@ def create_app(
         clock=clock,
         sessions_per_hour=resolved_settings.calling_sessions_per_device_per_hour,
     )
+    # V03: settlement. Constructed with the same ledger clock as authorization
+    # so a hold and the charge that spends it cannot disagree about when.
+    api.state.call_charging_service = CallChargingService(
+        LedgerService(clock=clock),
+        controls=api.state.control_service,
+        clock=clock,
+        supplier_cost_wait_seconds=(
+            resolved_settings.calling_supplier_cost_wait_seconds
+        ),
+    )
     api.state.call_lifecycle_service = CallLifecycleService(
         resolved_calling_adapter,
         api.state.call_authorization_service,
         clock=clock,
+        charging=api.state.call_charging_service,
     )
     api.state.membership_service.add_revocation_listener(
         api.state.call_lifecycle_service

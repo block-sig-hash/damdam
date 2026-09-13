@@ -435,6 +435,25 @@ class ExceptionKind(str, Enum):
     #: A usage poller has failed enough times to stop. Invisible from outside —
     #: the customer's balance simply stops moving — so it is raised loudly.
     USAGE_POLLING_STALLED = "usage_polling_stalled"
+    # Added by chunk V03 (US-46). Internet calling settles through the same
+    # ledger and therefore through the same queue: a second list of financial
+    # exceptions is a list somebody stops reading.
+    #: Two answered destination legs on one authorized attempt. Either a
+    #: duplicate PSTN call was billed to us or two calls were correlated to one
+    #: grant, and neither is safe to settle automatically.
+    CALL_DUPLICATE_BILLABLE_LEG = "call_duplicate_billable_leg"
+    #: A leg answered and never reported ending. The hold stays; the customer is
+    #: not charged for a guess and the money is not released to a call that may
+    #: still be connected.
+    CALL_MISSING_TERMINAL_EVENT = "call_missing_terminal_event"
+    #: The provider's outcome was lost and reconciliation could not recover it.
+    CALL_UNKNOWN_OUTCOME = "call_unknown_outcome"
+    #: Metered cost exceeded the authorized hold. What was held is settled and
+    #: the difference is recorded here rather than silently written off or
+    #: silently taken from a balance nobody authorized.
+    CALL_SETTLEMENT_SHORTFALL = "call_settlement_shortfall"
+    #: A supplier cost arrived for a call we cannot identify.
+    CALL_SUPPLIER_COST_UNMATCHED = "call_supplier_cost_unmatched"
 
 
 class ExceptionItem(SQLModel, table=True):

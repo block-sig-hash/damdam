@@ -154,6 +154,12 @@ class Settings(BaseSettings):
     #: Client sessions per device per window. The amendment requires calling
     #: and credential issuance to be rate limited.
     calling_sessions_per_device_per_hour: int = 20
+    #: How long a settled charge stays provisional while the supplier's own
+    #: record could still correct it (US-46). A day by default, because V01
+    #: could not establish when a Telnyx CDR is final — and a charge marked
+    #: final before the evidence for it exists is a receipt we cannot stand
+    #: behind.
+    calling_supplier_cost_wait_seconds: int = 86_400
     #: The E.164 identity presented on outbound internet calls. A number we own
     #: and the provider has authorised, never the customer's own: own-number
     #: presentation is deferred (VOICE-EXPANSION.md) and unproven on this route.
