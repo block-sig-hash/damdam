@@ -302,15 +302,15 @@ def create_app(
 
     # --- outbound internet calling (US-45, chunk V02) ----------------------
     #
-    # The adapter is `DisabledCallingAdapter` unless the deployment has
-    # explicitly enabled the live route *and* supplied the credentials and
-    # containment-evidence reference `Settings` validates. That is the honest
-    # default: V01's go/no-go is NO-GO for a live Telnyx route until blockers
-    # B1-B5 close, and a stub that pretended to work would make the route look
-    # ready when it is not.
+    # Keep the provider adapter when either provider-side control or webhook
+    # verification remains configured. Its originate/session methods still
+    # enforce the live-route gate, while hangup, credential revocation and
+    # signed terminal events must continue after new calling is switched off.
+    # A deployment with no provider configuration gets the honest disabled
+    # adapter.
     resolved_calling_adapter: CallingAdapter = calling_adapter or (
         TelnyxCallingAdapter(resolved_settings, clock=clock)
-        if resolved_settings.telnyx_api_key and resolved_settings.telnyx_public_key
+        if resolved_settings.telnyx_api_key or resolved_settings.telnyx_public_key
         else DisabledCallingAdapter()
     )
     api.state.calling_adapter = resolved_calling_adapter

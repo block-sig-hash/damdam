@@ -26,6 +26,7 @@ from app.calling.contract import (
     ProviderLegHandle,
 )
 from app.calling.models import CallingClientCredential
+from app.calling.telnyx import DisabledCallingAdapter, TelnyxCallingAdapter
 from app.catalog.market import PublicationStatus
 from app.catalog.models import Product, ProductKind
 from app.catalog.tariffs import DestinationKind, OriginKind, Tariff, TariffRate
@@ -494,6 +495,54 @@ class TestDisabledRoute:
 
 
 class TestConfiguration:
+    @pytest.mark.parametrize(
+        ("configured", "value"),
+        (("telnyx_api_key", "control-key"), ("telnyx_public_key", "event-key")),
+    )
+    def test_disabling_new_calls_keeps_configured_provider_recovery(
+        self,
+        settings,
+        redis_client,
+        providers,
+        scheduler,
+        clock,
+        session_factory,
+        configured,
+        value,
+    ):
+        retained = settings.model_copy(update={configured: value})
+        api = create_app(
+            settings=retained,
+            redis_client=redis_client,
+            providers=providers,
+            scheduler=scheduler,
+            session_factory=session_factory,
+            clock=clock,
+        )
+
+        assert retained.calling_live_routes_enabled is False
+        assert isinstance(api.state.calling_adapter, TelnyxCallingAdapter)
+
+    def test_an_unconfigured_deployment_uses_the_disabled_adapter(
+        self,
+        settings,
+        redis_client,
+        providers,
+        scheduler,
+        clock,
+        session_factory,
+    ):
+        api = create_app(
+            settings=settings,
+            redis_client=redis_client,
+            providers=providers,
+            scheduler=scheduler,
+            session_factory=session_factory,
+            clock=clock,
+        )
+
+        assert isinstance(api.state.calling_adapter, DisabledCallingAdapter)
+
     def test_enabling_the_route_without_evidence_fails_at_startup(self):
         """A flag alone must not put billable calls on a wire."""
         with pytest.raises(ValueError) as excinfo:

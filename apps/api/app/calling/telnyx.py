@@ -3,10 +3,12 @@
 Two classes and one rule: **nothing here may be enabled by a mock passing.**
 V01's go/no-go is GO for provider-neutral preparation and NO-GO for a live
 Telnyx route until blockers B1–B5 close, so `TelnyxCallingAdapter` refuses every
-command unless `Settings.calling_live_routes_enabled` is explicitly on *and* the
-account-level containment evidence has been recorded. A deployment that forgets
-to set either gets `DisabledCallingAdapter`, which refuses honestly rather than
-half-working.
+command that can create exposure unless `Settings.calling_live_routes_enabled`
+is explicitly on *and* the account-level containment evidence has been recorded.
+Provider configuration may still select it while that flag is off so signed
+terminal events, hangups and credential revocations remain available. A
+deployment with no provider configuration gets `DisabledCallingAdapter`, which
+refuses honestly rather than half-working.
 
 The capability set is where this chunk is most careful. Everything declared
 below is documented Telnyx behaviour, checked on 9 September 2026 and recorded in

@@ -3245,6 +3245,11 @@ alone loses the provenance a dispute needs.
 > now` — a read-then-write would let two concurrent webhooks for one parked call
 both decide to proceed, and one grant would fund two calls.
 
+`stop_requested_at` is the durable stop latch. It is written before any provider
+hangup and checked again while consuming a grant or dispatching a later command,
+so a delayed parked or answered event cannot restart work after the customer or
+an organization administrator has stopped it.
+
 Constraints that carry guarantees rather than tidiness:
 
 | Constraint | What it prevents |
@@ -3293,10 +3298,17 @@ and after that window nothing on their side deduplicates at all. So the durable
 record is ours, and reconciliation asks *what did operation X produce* rather
 than *has enough time passed to try again*.
 
-`ux_call_operations_live` permits one live operation per attempt and kind, where
-live includes `outcome_unknown`. A second concurrent originate is not a retry; it
-is a second call. `outcome_unknown` staying live is what keeps the index refusing
-until a human or a reconciliation settles it.
+`ux_call_operations_live` permits one live operation per attempt, kind and
+`target_key`, where live includes `outcome_unknown`. The empty target identifies
+the one originate or bridge command; a hangup uses its leg id, allowing each leg
+to be terminated once without one leg's command suppressing the other's. A
+second concurrent originate is a second call, not a retry. `outcome_unknown`
+staying live keeps the index refusing until a human or reconciliation settles it.
+
+`dispatched_at` is set and committed before the provider call. An `in_flight`
+operation without it is an intent that was never sent and may be dispatched;
+once it is present the same operation is reconciled or held for review and is
+never sent again after a process restart.
 
 `OperationOutcome` is deliberately the same five values as
 [§6.48](#648-amendment--durable-outbox-supplier-attempts-and-worker-leases-us-32)'s
@@ -3311,7 +3323,10 @@ not deduplication. `uq_call_events_provider_event` is.
 
 The event is inserted **before** any state transition, so a crash between the two
 leaves a stored event to reprocess rather than a transition nobody recorded. The
-payload is retained, which is why this is a new table rather than a use of §6.48's
+signed raw payload is retained for audit and `normalized_payload` retains the
+provider-neutral values that were accepted after signature verification. Replay
+reconstructs the event from that normalized copy; it never trusts or reparses an
+unauthenticated projection. This is a new table rather than a use of §6.48's
 `inbox_messages`: that is a dedup marker with no body, and a body-less marker
 cannot re-apply an event that arrived before the leg it refers to.
 
@@ -3328,9 +3343,15 @@ credential share a SIP identity. The retired model gave each *user* one, which
 makes revocation all-or-nothing: signing out a lost phone would sign out every
 device the customer owns, so in practice nobody revokes at all.
 
-`ux_calling_credentials_live_device` is unique per `(user, device)` over **active
-rows only**. A revoked device can register again, and the old row survives because
-it explains which credential originated a call that was already billed.
+`ux_calling_credentials_live_device` is unique per `(user, device)` over every
+non-revoked row. Credential creation first commits a `provisioning` row with an
+`issuance_reference` and `issuance_dispatched_at`, then makes the provider call.
+Only a complete provider response moves it to `active`; a lost response becomes
+`outcome_unknown` and blocks replacement because retrying could create an orphan
+provider credential. A revoked device can register again, and the old row
+survives because it explains which credential originated a call that was already
+billed. Reissuing a client token for an active device reuses the provider
+credential rather than creating another one.
 
 The rate-limit counters live on the row rather than in Redis. A counter a process
 restart clears is not a limit; it is a speed bump that disappears exactly when
