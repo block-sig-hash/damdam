@@ -1069,6 +1069,36 @@ class TestDeadlinesSurviveTheWorker:
         ).one()
         assert item.subject_reference == f"call-missing-cdr:{attempt.id}"
 
+    def test_a_supplier_cdr_correction_satisfies_the_evidence_wait(
+        self, session, authorization, charging, ledger, clock
+    ):
+        _, _, attempt = _ready_call(
+            session, authorization, charging, ledger, clock
+        )
+        original = charging.settle(session, attempt).charge
+        deadline = session.exec(
+            select(CallDeadline).where(
+                CallDeadline.attempt_id == attempt.id,
+                CallDeadline.kind == DeadlineKind.SUPPLIER_COST_WAIT,
+            )
+        ).one()
+        corrected = charging.correct(
+            session,
+            original,
+            billable_seconds=120,
+            setup_amount=Decimal("0.00"),
+            usage_amount=Decimal("60.00"),
+            basis=ChargeBasis.SUPPLIER_CDR,
+            detail="supplier CDR agrees",
+        )
+
+        _resolve_deadline(
+            session, charging, object(), deadline  # type: ignore[arg-type]
+        )
+
+        assert corrected.state is ChargeState.FINAL
+        assert session.exec(select(ExceptionItem)).all() == []
+
 
 class TestEnforcementWhileTheCallRuns:
     def test_a_finished_call_is_not_kept_alive(

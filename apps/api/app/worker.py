@@ -19,6 +19,7 @@ from app.calling.models import (
     CallDeadline,
     CallLeg,
     CallSupplierCost,
+    ChargeBasis,
     DeadlineKind,
 )
 from app.calling.service import CallAuthorizationService
@@ -419,12 +420,16 @@ def _resolve_deadline(
         # corrected becomes final, because leaving it provisional forever means
         # the books never close and the customer's receipt never settles.
         charge = charging.finalize_provisional(session, attempt)
-        if charge is not None and not session.exec(
-            select(CallSupplierCost).where(
-                CallSupplierCost.attempt_id == attempt.id,
-                col(CallSupplierCost.billable_seconds).is_not(None),
-            )
-        ).first():
+        if (
+            charge is not None
+            and charge.basis is not ChargeBasis.SUPPLIER_CDR
+            and not session.exec(
+                select(CallSupplierCost).where(
+                    CallSupplierCost.attempt_id == attempt.id,
+                    col(CallSupplierCost.billable_seconds).is_not(None),
+                )
+            ).first()
+        ):
             charging.raise_exception(
                 session,
                 ExceptionKind.SETTLEMENT_MISMATCH,
