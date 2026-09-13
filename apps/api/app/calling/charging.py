@@ -27,15 +27,13 @@ unit prices and explicitly not how many billable components a call produces, so
 nothing here derives a retail amount from a supplier cost or vice versa. They are
 reconciled by a person looking at an exception, not by arithmetic nobody checked.
 
-Renewal deserves its own note, because the assignment asks for reservations to be
-renewed "only when funds and budgets permit" and this module deliberately does
-not extend a hold. The hold is `max_charge_amount`, computed from `max_seconds`,
-which the provider also enforces as `time_limit_secs`: the authorized maximum is
-the *whole* liability, so there is nothing to extend. What a renewal deadline
-does instead is re-ask whether the call may continue — funds still available,
-organization budget still unexhausted, carrier exposure still separately bounded
-— and stop it when the answer changes. Extending past the authorized maximum
-would mean charging a customer for a call they never agreed the price of.
+Renewal extends the reservation's expiry lease, never its amount. The amount is
+`max_charge_amount`, computed from `max_seconds`, which the provider also
+enforces as `time_limit_secs`: the authorized maximum is the *whole* liability.
+Each renewal re-asks whether the call may continue — the hold is still open,
+organization budget remains unexhausted, and carrier exposure stays separately
+bounded — before extending that lease. Increasing the amount would mean charging
+a customer for a call they never agreed the price of.
 """
 
 from __future__ import annotations
@@ -47,10 +45,11 @@ from decimal import Decimal
 from enum import Enum
 from uuid import UUID
 
-from sqlalchemy import func, text
+from sqlalchemy import func, or_, text
 from sqlmodel import Session, col, select
 
 from app.auth.models import utc_now
+from app.calling.contract import LegRole
 from app.calling.metering import (
     MeteringError,
     MeteringOutcome,
@@ -103,7 +102,7 @@ class SettlementStatus(str, Enum):
     handle ordinary outcomes eventually catches them all in one place.
     """
 
-    #: Money moved and the remaining hold was released.
+    #: Money moved; unused authorization stays held while the charge is provisional.
     SETTLED = "settled"
     #: Nobody answered. The whole hold went back; no entry was posted.
     NOTHING_TO_CHARGE = "nothing_to_charge"
@@ -147,6 +146,7 @@ class CallChargingService:
         unknown_review_seconds: int = 900,
         missing_terminal_seconds: int = 3_600,
         renewal_interval_seconds: int = 60,
+        claim_timeout_seconds: int = 300,
     ) -> None:
         self.ledger = ledger
         self.controls = controls
@@ -155,6 +155,7 @@ class CallChargingService:
         self.unknown_review_seconds = unknown_review_seconds
         self.missing_terminal_seconds = missing_terminal_seconds
         self.renewal_interval_seconds = renewal_interval_seconds
+        self.claim_timeout_seconds = claim_timeout_seconds
 
     # --- settlement -------------------------------------------------------
 
@@ -197,6 +198,25 @@ class CallChargingService:
         # metering below defers it with the hold intact.
 
         legs = self._legs(session, attempt)
+        if attempt.state is AttemptState.UNKNOWN and not any(
+            leg.role is LegRole.DESTINATION for leg in legs
+        ):
+            item = self.raise_exception(
+                session,
+                ExceptionKind.CALL_UNKNOWN_OUTCOME,
+                f"call:{attempt.id}",
+                "the destination command outcome is unknown and no provider "
+                "leg has been correlated; the hold stays until reconciliation",
+            )
+            self.schedule(
+                session,
+                attempt,
+                DeadlineKind.UNKNOWN_OUTCOME_REVIEW,
+                self.clock() + timedelta(seconds=self.unknown_review_seconds),
+            )
+            return SettlementResult(
+                SettlementStatus.DEFERRED, exception_item=item
+            )
         try:
             interval = talk_interval(legs)
         except MeteringError as error:
@@ -205,6 +225,12 @@ class CallChargingService:
                 ExceptionKind.CALL_DUPLICATE_BILLABLE_LEG,
                 f"call:{attempt.id}",
                 f"legs cannot be metered: {error.detail or error.code}",
+            )
+            self.schedule(
+                session,
+                attempt,
+                DeadlineKind.UNKNOWN_OUTCOME_REVIEW,
+                self.clock() + timedelta(seconds=self.unknown_review_seconds),
             )
             return SettlementResult(
                 SettlementStatus.AMBIGUOUS, exception_item=item
@@ -262,10 +288,16 @@ class CallChargingService:
                 setup=round_money(Decimal(0), attempt.currency),
                 usage=round_money(Decimal(0), attempt.currency),
                 basis=ChargeBasis.PROVIDER_EVENTS,
-                state=ChargeState.FINAL,
+                state=ChargeState.PROVISIONAL,
                 window=window,
+                settled_at=self.clock(),
             )
-            self._release_everything(session, reservation)
+            self.schedule(
+                session,
+                attempt,
+                DeadlineKind.SUPPLIER_COST_WAIT,
+                self.clock() + timedelta(seconds=self.supplier_cost_wait_seconds),
+            )
             return SettlementResult(SettlementStatus.NOTHING_TO_CHARGE, charge)
 
         debit = self._funding_account(session, attempt)
@@ -319,7 +351,10 @@ class CallChargingService:
             journal_entry_id=entry.id,
             settled_at=self.clock(),
         )
-        self._release_everything(session, reservation)
+        # Keep the unused authorization held while the supplier can still
+        # correct this provisional amount. Releasing it here would let another
+        # call spend those funds and make a higher CDR correction overdraw the
+        # payer or consume money reserved for somebody else.
         self.schedule(
             session,
             attempt,
@@ -365,7 +400,12 @@ class CallChargingService:
         seconds.
         """
         self._lock(session, f"call-settlement:{charge.attempt_id}")
-        current = session.get(CallCharge, charge.id)
+        current = session.exec(
+            select(CallCharge)
+            .where(CallCharge.id == charge.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
         if current is None:  # pragma: no cover - caller holds the row
             raise ChargingError("charge_not_found")
         if current.state is ChargeState.SUPERSEDED:
@@ -379,8 +419,51 @@ class CallChargingService:
 
         setup = round_money(setup_amount, current.currency)
         usage = round_money(usage_amount, current.currency)
-        total = round_money(setup + usage, current.currency)
+        requested_total = round_money(setup + usage, current.currency)
+        if requested_total < 0:
+            raise ChargingError("negative_correction")
+
+        # A late supplier record cannot enlarge the customer's authorization.
+        # The excess is our exposure and goes to the queue, just as it does in
+        # initial settlement.
+        total = min(requested_total, attempt.max_charge_amount)
+        total = round_money(total, current.currency)
+        if total != requested_total:
+            usage = round_money(total - setup, current.currency)
+            if usage < 0:
+                setup, usage = total, round_money(Decimal(0), current.currency)
+            self.raise_exception(
+                session,
+                ExceptionKind.CALL_SETTLEMENT_SHORTFALL,
+                f"call:{attempt.id}",
+                f"corrected charge of {requested_total} {current.currency} "
+                f"exceeds the authorized maximum of {total} "
+                f"{current.currency}; the difference is unrecovered exposure",
+            )
         difference = round_money(total - current.charged_amount, current.currency)
+        reservation = self._reservation(session, attempt)
+        outstanding = round_money(
+            reservation.amount
+            - reservation.settled_amount
+            - reservation.released_amount,
+            current.currency,
+        )
+        if difference > outstanding:
+            unrecovered = round_money(difference - outstanding, current.currency)
+            total = round_money(
+                current.charged_amount + outstanding, current.currency
+            )
+            difference = outstanding
+            setup = min(setup, total)
+            usage = round_money(total - setup, current.currency)
+            self.raise_exception(
+                session,
+                ExceptionKind.CALL_SETTLEMENT_SHORTFALL,
+                f"call:{attempt.id}",
+                f"a late correction could recover only {difference} "
+                f"{current.currency}; {unrecovered} {current.currency} was no "
+                "longer covered by the authorized hold",
+            )
 
         current.state = ChargeState.SUPERSEDED
         session.add(current)
@@ -399,25 +482,35 @@ class CallChargingService:
             settled_at=self.clock(),
         )
 
-        if difference != 0:
+        if difference > 0:
             debit = self._funding_account(session, attempt)
             credit = revenue_account or self.ledger.account(
                 session, current.currency, AccountKind.REVENUE
             )
             self._assert_account_currencies(current.currency, debit, credit)
-            # The hold is closed by now, so this posts directly. A positive
-            # difference takes more from the customer's credit; a negative one
-            # gives it back, in the same two accounts the original used.
-            first, second = (
-                (debit, credit) if difference > 0 else (credit, debit)
+            _, entry = self.ledger.settle(
+                session,
+                reservation,
+                difference,
+                f"call:{attempt.id}:correction:{replacement.id}",
+                credit,
+                occurred_at=current.metered_to,
             )
-            magnitude = abs(difference)
+            replacement.journal_entry_id = entry.id
+            session.add(replacement)
+            session.flush()
+        elif difference < 0:
+            debit = self._funding_account(session, attempt)
+            credit = revenue_account or self.ledger.account(
+                session, current.currency, AccountKind.REVENUE
+            )
+            self._assert_account_currencies(current.currency, debit, credit)
             entry = self.ledger.post(
                 session,
                 f"call:{attempt.id}:correction:{replacement.id}",
                 [
-                    Posting(first, Direction.DEBIT, magnitude),
-                    Posting(second, Direction.CREDIT, magnitude),
+                    Posting(credit, Direction.DEBIT, abs(difference)),
+                    Posting(debit, Direction.CREDIT, abs(difference)),
                 ],
                 occurred_at=current.metered_to,
                 reference=f"correction of call charge {current.id}",
@@ -425,6 +518,8 @@ class CallChargingService:
             replacement.journal_entry_id = entry.id
             session.add(replacement)
             session.flush()
+
+        self._release_everything(session, self._reservation(session, attempt))
 
         if basis is ChargeBasis.MANUAL_CORRECTION:
             # A human decided this amount. The queue keeps the reason beside the
@@ -473,7 +568,29 @@ class CallChargingService:
             )
         ).first()
         if existing is not None:
+            expected_attempt_id = (
+                attempt.id
+                if attempt is not None
+                else (leg.attempt_id if leg is not None else None)
+            )
+            if (
+                existing.attempt_id != expected_attempt_id
+                or existing.leg_id != (leg.id if leg is not None else None)
+                or existing.currency != currency
+                or existing.amount != round_money(amount, currency)
+                or existing.billable_seconds != billable_seconds
+            ):
+                raise ChargingError(
+                    "supplier_cost_idempotency_conflict",
+                    "the supplier reference was replayed with different facts",
+                )
             return existing
+
+        if leg is not None:
+            if attempt is not None and leg.attempt_id != attempt.id:
+                raise ChargingError("supplier_cost_attempt_mismatch")
+            if attempt is None:
+                attempt = session.get(CallAttempt, leg.attempt_id)
 
         record = CallSupplierCost(
             attempt_id=attempt.id if attempt is not None else None,
@@ -560,16 +677,24 @@ class CallChargingService:
     ) -> Sequence[CallDeadline]:
         """Take due work, skipping what another worker already holds.
 
-        `FOR UPDATE SKIP LOCKED` rather than a status flag written in advance:
-        a flag needs a second write to clear when the worker dies, and a worker
-        that died is exactly the case this has to survive.
+        Workers commit a claim before doing provider work. A claim older than
+        `claim_timeout_seconds` is therefore eligible again: the database lock
+        prevents concurrent claims, while the lease recovers a worker that died
+        after committing its claim.
         """
         moment = now or self.clock()
+        stale_before = moment - timedelta(seconds=self.claim_timeout_seconds)
         rows = session.exec(
             select(CallDeadline)
             .where(
-                CallDeadline.state == DeadlineState.PENDING,
                 col(CallDeadline.due_at) <= moment,
+                or_(
+                    col(CallDeadline.state) == DeadlineState.PENDING,
+                    (
+                        (col(CallDeadline.state) == DeadlineState.CLAIMED)
+                        & (col(CallDeadline.claimed_at) <= stale_before)
+                    ),
+                ),
             )
             .order_by(col(CallDeadline.due_at))
             .limit(limit)
@@ -582,6 +707,39 @@ class CallChargingService:
             session.add(row)
         session.flush()
         return rows
+
+    def renew(self, session: Session, attempt: CallAttempt) -> EnforcementOutcome:
+        """Recheck policy and extend the hold lease for one worker interval."""
+        outcome = self.enforce(session, attempt)
+        if outcome.decision is EnforcementDecision.STOP:
+            return outcome
+        reservation = session.exec(
+            select(Reservation)
+            .where(Reservation.id == attempt.reservation_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).one()
+        new_expiry = self.clock() + timedelta(
+            seconds=self.renewal_interval_seconds * 2
+        )
+        if reservation.expires_at is None or reservation.expires_at < new_expiry:
+            reservation.expires_at = new_expiry
+            session.add(reservation)
+            session.flush()
+        return outcome
+
+    def finalize_provisional(
+        self, session: Session, attempt: CallAttempt
+    ) -> CallCharge | None:
+        """Close an event-derived charge and release its remaining hold."""
+        self._lock(session, f"call-settlement:{attempt.id}")
+        charge = self.charge_for_attempt(session, attempt)
+        if charge is not None and charge.state is ChargeState.PROVISIONAL:
+            charge.state = ChargeState.FINAL
+            session.add(charge)
+            self._release_everything(session, self._reservation(session, attempt))
+            session.flush()
+        return charge
 
     def complete(
         self, session: Session, deadline: CallDeadline, *, detail: str | None = None
@@ -644,6 +802,13 @@ class CallChargingService:
                 EnforcementDecision.STOP,
                 "the hold that funds this call is no longer open",
             )
+        if (
+            reservation.expires_at is not None
+            and self.clock() >= reservation.expires_at
+        ):
+            return EnforcementOutcome(
+                EnforcementDecision.STOP, "the reservation lease expired"
+            )
         if self.clock() >= attempt.expires_at and attempt.grant_consumed_at is None:
             return EnforcementOutcome(
                 EnforcementDecision.STOP, "the authorization expired unused"
@@ -687,7 +852,8 @@ class CallChargingService:
         calls would change what an accepted chunk refuses, which is not this
         chunk's decision to make.
 
-        `None` means nobody has recorded a policy — not zero, and not unlimited.
+        `None` means nobody has recorded a policy and therefore no
+        organization-specific cap is applied here.
         """
         if organization_id is None or self.controls is None:
             return None
@@ -769,7 +935,7 @@ class CallChargingService:
             select(CallCharge).where(
                 CallCharge.attempt_id == attempt.id,
                 CallCharge.state != ChargeState.SUPERSEDED,
-            )
+            ).execution_options(populate_existing=True)
         ).first()
 
     def _write_charge(
@@ -834,7 +1000,11 @@ class CallChargingService:
         self, legs: Sequence[CallLeg]
     ) -> tuple[datetime | None, datetime | None]:
         for leg in legs:
-            if leg.answered_at is not None and leg.ended_at is not None:
+            if (
+                leg.role is LegRole.DESTINATION
+                and leg.answered_at is not None
+                and leg.ended_at is not None
+            ):
                 return leg.answered_at, leg.ended_at
         return None, None
 

@@ -3415,6 +3415,14 @@ from a disagreement.
 | `metered_from`, `metered_to` | The destination leg's answered and ended times — the authoritative window. Null when nothing answered, which is also when every amount is zero. |
 | `journal_entry_id` | The entry this charge posted. Null for a zero charge: no money moved, so there is no transaction to record. |
 
+An event-derived charge stays `provisional` during the supplier reconciliation
+window. Settlement spends the measured amount but retains the unused part of the
+original authorization; a higher supplier correction therefore settles only its
+difference from the same hold. A correction never exceeds `max_charge_amount`.
+Finalization or a lower correction releases what remains. If a late increase
+arrives after finalization, it cannot draw from unrelated available credit: the
+uncovered amount is queued as DamDam's exposure.
+
 **Talk time is the destination leg, never a sum of legs and never the client's
 elapsed time.** The client leg and the destination leg describe one conversation
 from two ends; adding them charges twice for it, and a handset's clock is not
@@ -3447,8 +3455,9 @@ dies — and the work they lose here is releasing or renewing customer money.
 `ux_call_deadlines_open` allows one open deadline per attempt and kind, so a
 restarted worker re-registering its renewals finds the existing row instead of
 creating a second one that fires twice. Claiming uses `FOR UPDATE SKIP LOCKED`
-rather than a flag written in advance: a flag needs a second write to clear when
-the worker dies, and a dead worker is exactly the case this must survive.
+and a persisted claim lease. Concurrent workers cannot take the same row; a
+claim older than the lease is eligible again, so a process that dies after
+committing its claim cannot strand the deadline permanently.
 
 ### `exception_kind` gains five values
 
@@ -3463,11 +3472,13 @@ never more than they agreed — and the difference is recorded as **our** exposu
 
 ### What this amendment does not do
 
-It does not extend a hold. The hold is `max_charge_amount`, derived from
-`max_seconds`, which the provider also enforces as `time_limit_secs`: the
-authorized maximum is the whole liability, so there is nothing to extend.
-Renewal re-asks whether a call may continue and stops it when the answer
-changes.
+It does not increase a hold's amount. The amount is `max_charge_amount`, derived
+from `max_seconds`, which the provider also enforces as `time_limit_secs`: the
+authorized maximum is the whole liability. Renewal does extend the reservation's
+expiry lease after rechecking its state and the recorded organization budget.
+The first provider command writes the first durable renewal deadline. Later
+deadlines either extend that lease and schedule the next check, or record stop
+intent and issue durable hangup operations for every live leg.
 
 It does not settle supplier invoices, reconcile FX, or record margin. V01's
 blockers B2 (no Nigeria rate deck) and B3 (no documented bound on the parked

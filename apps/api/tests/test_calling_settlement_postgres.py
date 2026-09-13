@@ -60,6 +60,7 @@ from app.ledger.models import (
 )
 from app.ledger.service import LedgerService, Posting
 from app.refunds.models import ExceptionItem, ExceptionKind
+from app.worker import _resolve_deadline
 
 pytestmark = pytest.mark.skipif(
     "TEST_DATABASE_URL" not in os.environ,
@@ -282,7 +283,7 @@ def _ready_call(session, authorization, charging, ledger, clock, **kwargs):
 
 
 class TestSettlementMovesTheRightMoney:
-    def test_an_answered_call_charges_metered_minutes_and_releases_the_rest(
+    def test_an_answered_call_charges_metered_minutes_and_retains_the_remainder(
         self, session, authorization, charging, ledger, clock
     ):
         """120 seconds at NGN 30/min is NGN 60.00. Computed here, by hand."""
@@ -299,15 +300,15 @@ class TestSettlementMovesTheRightMoney:
         assert result.charge.billable_seconds == 120
         assert result.charge.charged_amount == Decimal("60.00")
         assert result.shortfall is None
-        # NGN 60 spent, NGN 240 of the hold given back.
+        # NGN 60 is spent. The remaining NGN 240 stays held until the supplier
+        # reconciliation window closes, so a higher CDR cannot overdraw funds
+        # that another call has since reserved.
         assert ledger.balance(session, credit) == Decimal("9940.00")
-        assert ledger.available(session, credit) == Decimal("9940.00")
+        assert ledger.available(session, credit) == Decimal("9700.00")
         reservation = session.get(Reservation, attempt.reservation_id)
         assert reservation.settled_amount == Decimal("60.00")
-        assert reservation.released_amount == Decimal("240.00")
-        # Chunk 10 labels a disposed hold by its last operation; what matters
-        # here is that nothing is still held against this call.
-        assert reservation.state is not ReservationState.HELD
+        assert reservation.released_amount == Decimal("0.00")
+        assert reservation.state is ReservationState.HELD
 
     def test_the_entry_posted_is_the_charge_recorded(
         self, session, authorization, charging, ledger, clock
@@ -347,8 +348,10 @@ class TestSettlementMovesTheRightMoney:
         charge = charging.settle(session, attempt).charge
         assert charge.billable_seconds == 120
         assert charge.charged_amount == Decimal("60.00")
+        assert charge.metered_from == NOW + timedelta(seconds=10)
+        assert charge.metered_to == NOW + timedelta(seconds=130)
 
-    def test_a_call_nobody_answered_costs_nothing_and_frees_everything(
+    def test_a_call_nobody_answered_stays_provisional_until_reconciliation(
         self, session, authorization, charging, ledger, clock
     ):
         user = _user(session)
@@ -363,10 +366,10 @@ class TestSettlementMovesTheRightMoney:
         assert result.status is SettlementStatus.NOTHING_TO_CHARGE
         assert result.charge.charged_amount == Decimal("0.00")
         assert result.charge.journal_entry_id is None
-        assert result.charge.state is ChargeState.FINAL
-        assert ledger.available(session, credit) == Decimal("10000.00")
+        assert result.charge.state is ChargeState.PROVISIONAL
+        assert ledger.available(session, credit) == Decimal("9700.00")
         reservation = session.get(Reservation, attempt.reservation_id)
-        assert reservation.state is ReservationState.RELEASED
+        assert reservation.state is ReservationState.HELD
         assert reservation.settled_amount == Decimal("0")
 
     def test_a_rate_change_mid_call_does_not_reprice_the_call(
@@ -470,6 +473,26 @@ class TestSettlementHappensOnce:
 
 
 class TestUnknownLiabilityIsNotReleased:
+    def test_an_unknown_destination_command_without_a_leg_is_not_free(
+        self, session, authorization, charging, ledger, clock
+    ):
+        user = _user(session)
+        credit = _fund(session, ledger, user)
+        _tariff(session, clock)
+        attempt = _authorize(authorization, session, user)
+        _finish(session, attempt, AttemptState.UNKNOWN)
+
+        result = charging.settle(session, attempt)
+
+        assert result.status is SettlementStatus.DEFERRED
+        assert result.charge is None
+        assert ledger.available(session, credit) == Decimal("9700.00")
+        assert session.exec(
+            select(ExceptionItem).where(
+                ExceptionItem.kind == ExceptionKind.CALL_UNKNOWN_OUTCOME
+            )
+        ).one()
+
     def test_an_answered_leg_with_no_end_keeps_the_hold(
         self, session, authorization, charging, ledger, clock
     ):
@@ -714,6 +737,59 @@ class TestCorrectionsMoveOnlyTheDifference:
             )
         assert excinfo.value.code == "charge_already_superseded"
 
+    def test_a_correction_cannot_charge_past_the_authorized_maximum(
+        self, session, authorization, charging, ledger, clock
+    ):
+        _, credit, attempt = _ready_call(
+            session, authorization, charging, ledger, clock
+        )
+        original = charging.settle(session, attempt).charge
+
+        corrected = charging.correct(
+            session,
+            original,
+            billable_seconds=1_200,
+            setup_amount=Decimal("0.00"),
+            usage_amount=Decimal("600.00"),
+            basis=ChargeBasis.SUPPLIER_CDR,
+            detail="supplier amount exceeds the customer authorization",
+        )
+
+        assert corrected.charged_amount == Decimal("300.00")
+        assert ledger.balance(session, credit) == Decimal("9700.00")
+        assert session.exec(
+            select(ExceptionItem).where(
+                ExceptionItem.kind == ExceptionKind.CALL_SETTLEMENT_SHORTFALL
+            )
+        ).one()
+
+    def test_a_late_increase_cannot_overdraw_a_released_hold(
+        self, session, authorization, charging, ledger, clock
+    ):
+        _, credit, attempt = _ready_call(
+            session, authorization, charging, ledger, clock
+        )
+        original = charging.settle(session, attempt).charge
+        charging.finalize_provisional(session, attempt)
+
+        corrected = charging.correct(
+            session,
+            original,
+            billable_seconds=180,
+            setup_amount=Decimal("0.00"),
+            usage_amount=Decimal("90.00"),
+            basis=ChargeBasis.SUPPLIER_CDR,
+            detail="late supplier adjustment",
+        )
+
+        assert corrected.charged_amount == Decimal("60.00")
+        assert ledger.balance(session, credit) == Decimal("9940.00")
+        assert session.exec(
+            select(ExceptionItem).where(
+                ExceptionItem.kind == ExceptionKind.CALL_SETTLEMENT_SHORTFALL
+            )
+        ).one()
+
 
 class TestSupplierCostIsADifferentNumber:
     def test_supplier_cost_is_recorded_without_touching_the_customer_charge(
@@ -807,6 +883,30 @@ class TestSupplierCostIsADifferentNumber:
         ).one()
         assert "cdr-orphan" in item.subject_reference
 
+    def test_a_supplier_reference_replayed_with_different_facts_is_rejected(
+        self, session, charging
+    ):
+        charging.record_supplier_cost(
+            session,
+            provider="telnyx",
+            provider_reference="cdr-conflict",
+            component=SupplierCostComponent.PSTN_TERMINATION,
+            currency="USD",
+            amount=Decimal("0.10"),
+        )
+
+        with pytest.raises(ChargingError) as excinfo:
+            charging.record_supplier_cost(
+                session,
+                provider="telnyx",
+                provider_reference="cdr-conflict",
+                component=SupplierCostComponent.PSTN_TERMINATION,
+                currency="USD",
+                amount=Decimal("0.11"),
+            )
+
+        assert excinfo.value.code == "supplier_cost_idempotency_conflict"
+
 
 class TestDeadlinesSurviveTheWorker:
     def test_a_due_deadline_is_claimed_once_by_one_worker(
@@ -875,6 +975,27 @@ class TestDeadlinesSurviveTheWorker:
         assert [row.id for row in again] == [deadline.id]
         assert deadline.attempts == 2
 
+    def test_a_claim_from_a_dead_worker_is_reclaimed_after_its_lease(
+        self, session, authorization, charging, ledger, clock
+    ):
+        _, _, attempt = _ready_call(
+            session, authorization, charging, ledger, clock
+        )
+        deadline = charging.schedule(
+            session,
+            attempt,
+            DeadlineKind.UNKNOWN_OUTCOME_REVIEW,
+            clock() - timedelta(seconds=1),
+        )
+        assert charging.claim_due(session, now=clock()) == [deadline]
+        session.commit()  # the worker dies after this commit
+
+        clock.advance(seconds=charging.claim_timeout_seconds + 1)
+        reclaimed = charging.claim_due(session, now=clock())
+
+        assert [row.id for row in reclaimed] == [deadline.id]
+        assert reclaimed[0].attempts == 2
+
     def test_a_future_deadline_is_not_claimed_early(
         self, session, authorization, charging, ledger, clock
     ):
@@ -905,6 +1026,48 @@ class TestDeadlinesSurviveTheWorker:
             )
         ).one()
         assert deadline.due_at > clock()
+
+    def test_finalizing_after_the_supplier_window_releases_the_remainder(
+        self, session, authorization, charging, ledger, clock
+    ):
+        _, credit, attempt = _ready_call(
+            session, authorization, charging, ledger, clock
+        )
+        charging.settle(session, attempt)
+
+        charge = charging.finalize_provisional(session, attempt)
+
+        assert charge.state is ChargeState.FINAL
+        assert ledger.available(session, credit) == Decimal("9940.00")
+        reservation = session.get(Reservation, attempt.reservation_id)
+        assert reservation.released_amount == Decimal("240.00")
+
+    def test_a_missing_cdr_is_queued_when_the_worker_finalizes_the_charge(
+        self, session, authorization, charging, ledger, clock
+    ):
+        _, credit, attempt = _ready_call(
+            session, authorization, charging, ledger, clock
+        )
+        charge = charging.settle(session, attempt).charge
+        deadline = session.exec(
+            select(CallDeadline).where(
+                CallDeadline.attempt_id == attempt.id,
+                CallDeadline.kind == DeadlineKind.SUPPLIER_COST_WAIT,
+            )
+        ).one()
+
+        _resolve_deadline(
+            session, charging, object(), deadline  # type: ignore[arg-type]
+        )
+
+        assert charge.state is ChargeState.FINAL
+        assert ledger.available(session, credit) == Decimal("9940.00")
+        item = session.exec(
+            select(ExceptionItem).where(
+                ExceptionItem.kind == ExceptionKind.SETTLEMENT_MISMATCH
+            )
+        ).one()
+        assert item.subject_reference == f"call-missing-cdr:{attempt.id}"
 
 
 class TestEnforcementWhileTheCallRuns:
@@ -966,6 +1129,65 @@ class TestEnforcementWhileTheCallRuns:
         outcome = charging.enforce(session, attempt)
         assert outcome.decision is EnforcementDecision.STOP
         assert "hold" in outcome.reason
+
+    def test_an_expired_reservation_stops_the_call(
+        self, session, authorization, charging, ledger, clock
+    ):
+        user = _user(session)
+        _fund(session, ledger, user)
+        _tariff(session, clock)
+        attempt = _authorize(authorization, session, user)
+        attempt.state = AttemptState.ANSWERED
+        attempt.grant_consumed_at = clock()
+        reservation = session.get(Reservation, attempt.reservation_id)
+        reservation.expires_at = clock() - timedelta(seconds=1)
+        session.add_all([attempt, reservation])
+        session.flush()
+
+        outcome = charging.enforce(session, attempt)
+
+        assert outcome.decision is EnforcementDecision.STOP
+        assert "expired" in outcome.reason
+
+    def test_the_deadline_worker_issues_a_durable_hangup_when_enforcement_stops(
+        self, session, authorization, charging, ledger, clock
+    ):
+        user = _user(session)
+        _fund(session, ledger, user)
+        _tariff(session, clock)
+        attempt = _authorize(authorization, session, user)
+        attempt.state = AttemptState.ANSWERED
+        attempt.grant_consumed_at = clock()
+        leg = _legs(
+            session,
+            attempt,
+            answered=10,
+            state=LegState.ANSWERED,
+        )
+        reservation = session.get(Reservation, attempt.reservation_id)
+        reservation.expires_at = clock() - timedelta(seconds=1)
+        deadline = charging.schedule(
+            session,
+            attempt,
+            DeadlineKind.RESERVATION_RENEWAL,
+            clock(),
+        )
+        session.add_all([attempt, reservation])
+        session.flush()
+
+        class RecordingLifecycle:
+            def __init__(self):
+                self.legs = []
+
+            def hangup(self, _session, _attempt, stopped_leg):
+                self.legs.append(stopped_leg)
+
+        lifecycle = RecordingLifecycle()
+        _resolve_deadline(session, charging, lifecycle, deadline)  # type: ignore[arg-type]
+
+        assert attempt.stop_requested_at is not None
+        assert lifecycle.legs == [leg]
+        assert deadline.state is DeadlineState.DONE
 
 
 class TestConcurrentCallsCannotOverspend:

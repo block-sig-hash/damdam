@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -8,16 +9,22 @@ from redis import Redis
 from sqlmodel import Session, col, select
 
 from app.auth.models import User, utc_now
-from app.calling.charging import CallChargingService
+from app.calling.charging import CallChargingService, EnforcementDecision
+from app.calling.contract import LegState
+from app.calling.lifecycle import CallLifecycleService
 from app.calling.models import (
     TERMINAL_ATTEMPT_STATES,
     AttemptState,
     CallAttempt,
     CallDeadline,
-    ChargeState,
+    CallLeg,
+    CallSupplierCost,
     DeadlineKind,
 )
+from app.calling.service import CallAuthorizationService
+from app.calling.telnyx import DisabledCallingAdapter, TelnyxCallingAdapter
 from app.config import get_settings
+from app.connectivity.service import ConnectivityService
 from app.container import (
     CeleryEsimIssuanceScheduler,
     CeleryFailoverScheduler,
@@ -25,15 +32,19 @@ from app.container import (
     build_notification_service,
     build_otp_service,
 )
+from app.controls.service import ControlService
 from app.db import create_session_factory
 from app.esim.models import EsimIssuanceJob
 from app.esim.providers import build_esim_providers
 from app.esim.service import EsimError, EsimProfileService
+from app.fulfilment.service import FulfilmentService
 from app.ledger.service import LedgerService
 from app.manifests.invoices import InvoicePDFGenerator, build_invoice_storage
 from app.manifests.orders import ManifestOrderService
 from app.packages.models import Package
+from app.refunds.models import ExceptionKind
 from app.retention.service import RetentionService
+from app.usage.service import UsageService
 
 settings = get_settings()
 celery_app = Celery("damdam", broker=settings.redis_url, backend=settings.redis_url)
@@ -305,7 +316,38 @@ def resolve_due_deadlines() -> int:
     resolved must not roll back the ten that could — the queue would then never
     drain past its first bad row.
     """
-    charging = CallChargingService(LedgerService(clock=utc_now), clock=utc_now)
+    ledger = LedgerService(clock=utc_now)
+    controls = ControlService(
+        UsageService(ledger, clock=utc_now),
+        ConnectivityService(FulfilmentService(clock=utc_now), clock=utc_now),
+        ledger,
+        clock=utc_now,
+    )
+    charging = CallChargingService(
+        ledger,
+        controls=controls,
+        clock=utc_now,
+        supplier_cost_wait_seconds=settings.calling_supplier_cost_wait_seconds,
+    )
+    adapter = (
+        TelnyxCallingAdapter(settings, clock=utc_now)
+        if settings.telnyx_api_key or settings.telnyx_public_key
+        else DisabledCallingAdapter()
+    )
+    authorization = CallAuthorizationService(
+        ledger,
+        clock=utc_now,
+        supported_countries=frozenset(
+            country.upper()
+            for country in settings.calling_supported_destination_countries
+        ),
+        grant_ttl_seconds=settings.calling_grant_ttl_seconds,
+        max_call_seconds=settings.calling_max_call_seconds,
+        route_enabled=settings.calling_live_routes_enabled,
+    )
+    lifecycle = CallLifecycleService(
+        adapter, authorization, clock=utc_now, charging=charging
+    )
     factory = create_session_factory(settings)
     handled = 0
     with factory() as session:
@@ -319,7 +361,7 @@ def resolve_due_deadlines() -> int:
             if deadline is None:  # pragma: no cover - claimed a moment ago
                 continue
             try:
-                _resolve_deadline(session, charging, deadline)
+                _resolve_deadline(session, charging, lifecycle, deadline)
                 session.commit()
                 handled += 1
             except Exception:  # noqa: BLE001 - the row must go back either way
@@ -336,7 +378,10 @@ def resolve_due_deadlines() -> int:
 
 
 def _resolve_deadline(
-    session: Session, charging: CallChargingService, deadline: CallDeadline
+    session: Session,
+    charging: CallChargingService,
+    lifecycle: CallLifecycleService,
+    deadline: CallDeadline,
 ) -> None:
     """What each kind of deadline means when it comes due."""
     attempt = session.get(CallAttempt, deadline.attempt_id)
@@ -345,18 +390,49 @@ def _resolve_deadline(
         return
 
     if deadline.kind is DeadlineKind.RESERVATION_RENEWAL:
-        outcome = charging.enforce(session, attempt)
+        outcome = charging.renew(session, attempt)
         charging.complete(session, deadline, detail=outcome.reason)
+        if outcome.decision is EnforcementDecision.CONTINUE:
+            charging.schedule(
+                session,
+                attempt,
+                DeadlineKind.RESERVATION_RENEWAL,
+                charging.clock()
+                + timedelta(seconds=charging.renewal_interval_seconds),
+            )
+            return
+        attempt.stop_requested_at = attempt.stop_requested_at or charging.clock()
+        attempt.end_reason = outcome.reason
+        session.add(attempt)
+        live_legs = session.exec(
+            select(CallLeg).where(
+                CallLeg.attempt_id == attempt.id,
+                CallLeg.state != LegState.ENDED,
+            )
+        ).all()
+        for leg in live_legs:
+            lifecycle.hangup(session, attempt, leg)
         return
 
     if deadline.kind is DeadlineKind.SUPPLIER_COST_WAIT:
         # The supplier had its window. A provisional charge that nobody
         # corrected becomes final, because leaving it provisional forever means
         # the books never close and the customer's receipt never settles.
-        charge = charging.charge_for_attempt(session, attempt)
-        if charge is not None and charge.state is ChargeState.PROVISIONAL:
-            charge.state = ChargeState.FINAL
-            session.add(charge)
+        charge = charging.finalize_provisional(session, attempt)
+        if charge is not None and not session.exec(
+            select(CallSupplierCost).where(
+                CallSupplierCost.attempt_id == attempt.id,
+                col(CallSupplierCost.billable_seconds).is_not(None),
+            )
+        ).first():
+            charging.raise_exception(
+                session,
+                ExceptionKind.SETTLEMENT_MISMATCH,
+                f"call-missing-cdr:{attempt.id}",
+                "the supplier reconciliation window elapsed without a call "
+                "detail record; the event-derived charge was finalized and "
+                "the missing evidence remains queued",
+            )
         charging.complete(session, deadline, detail="supplier window elapsed")
         return
 

@@ -343,13 +343,7 @@ def create_app(
     # so a hold and the charge that spends it cannot disagree about when.
     api.state.call_charging_service = CallChargingService(
         LedgerService(clock=clock),
-        # `controls` is left unset here on purpose. Chunk 17's `ControlService`
-        # needs `UsageService` and `ConnectivityService`, and the application
-        # wiring for all three belongs to chunk 20 — which is not merged. Building
-        # a second copy of that wiring here would conflict on merge and give the
-        # deployment two control services disagreeing about one line. Without it
-        # `organization_call_headroom` answers `None`: nobody has recorded a
-        # decision, which is the truth rather than an unlimited budget.
+        controls=api.state.control_service,
         clock=clock,
         supplier_cost_wait_seconds=(
             resolved_settings.calling_supplier_cost_wait_seconds

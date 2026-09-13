@@ -25,6 +25,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from app import model_registry  # noqa: F401
 from app.auth.models import Organization, OrganizationType, Platform, User
+from app.calling.charging import CallChargingService
 from app.calling.contract import (
     CallingCapabilities,
     CallingCapability,
@@ -38,10 +39,12 @@ from app.calling.contract import (
 from app.calling.lifecycle import CallLifecycleService
 from app.calling.models import (
     AttemptState,
+    CallDeadline,
     CallEvent,
     CallingClientCredential,
     CallLeg,
     CallOperation,
+    DeadlineKind,
     EventDisposition,
     OperationKind,
     OperationOutcome,
@@ -178,6 +181,35 @@ class FakeAdapter:
         if self.parsed is None:
             raise CallingError("invalid_webhook_signature")
         return self.parsed
+
+
+def test_starting_provider_work_renews_the_hold_and_writes_a_deadline(
+    session, adapter, authorization, clock
+):
+    charging = CallChargingService(
+        authorization.ledger, clock=clock, renewal_interval_seconds=60
+    )
+    lifecycle = CallLifecycleService(
+        adapter, authorization, clock=clock, charging=charging
+    )
+    _, attempt = _attempt(session, authorization, clock)
+    original_expiry = attempt.expires_at
+    clock.advance(seconds=90)
+    operation = lifecycle.begin_operation(
+        session, attempt, OperationKind.CREATE_DESTINATION_LEG
+    )
+
+    assert lifecycle.create_destination_leg(session, attempt, operation) is not None
+
+    reservation = session.get(Reservation, attempt.reservation_id)
+    assert reservation.expires_at > original_expiry
+    deadline = session.exec(
+        select(CallDeadline).where(
+            CallDeadline.attempt_id == attempt.id,
+            CallDeadline.kind == DeadlineKind.RESERVATION_RENEWAL,
+        )
+    ).one()
+    assert deadline.due_at == clock() + timedelta(seconds=60)
 
 
 @pytest.fixture

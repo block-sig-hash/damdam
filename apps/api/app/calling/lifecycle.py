@@ -32,7 +32,7 @@ anybody has asked it.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -40,7 +40,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
 from app.auth.models import User, utc_now
-from app.calling.charging import CallChargingService
+from app.calling.charging import CallChargingService, EnforcementDecision
 from app.calling.contract import (
     LEG_STATE_RANK,
     CallingAdapter,
@@ -61,6 +61,7 @@ from app.calling.models import (
     CallLeg,
     CallOperation,
     CredentialState,
+    DeadlineKind,
     EventDisposition,
     OperationKind,
     OperationOutcome,
@@ -749,6 +750,23 @@ class CallLifecycleService:
             and not self.authorization.consume_grant(session, attempt.id)
         ):
             raise CallLifecycleError("attempt_not_startable")
+        if self.charging is not None:
+            renewal = self.charging.renew(session, attempt)
+            if renewal.decision is EnforcementDecision.STOP:
+                self.record_rejected(session, operation, renewal.reason)
+                self.authorization.advance(
+                    session, attempt, AttemptState.FAILED, end_reason=renewal.reason
+                )
+                self._settle(session, attempt)
+                self.charging.finalize_provisional(session, attempt)
+                return None
+            self.charging.schedule(
+                session,
+                attempt,
+                DeadlineKind.RESERVATION_RENEWAL,
+                self.clock()
+                + timedelta(seconds=self.charging.renewal_interval_seconds),
+            )
         if not self._dispatch_once(
             session, attempt, operation, OperationKind.CREATE_DESTINATION_LEG
         ):
@@ -766,12 +784,21 @@ class CallLifecycleService:
             self.authorization.mark_unknown(
                 session, attempt, "destination leg outcome unknown"
             )
+            if self.charging is not None:
+                self.charging.schedule(
+                    session,
+                    attempt,
+                    DeadlineKind.UNKNOWN_OUTCOME_REVIEW,
+                    self.clock()
+                    + timedelta(seconds=self.charging.unknown_review_seconds),
+                )
             return None
         except CallingError as exc:
             self.record_rejected(session, operation, exc.detail or exc.code)
             self.authorization.advance(
                 session, attempt, AttemptState.FAILED, end_reason=exc.code
             )
+            self._settle(session, attempt)
             return None
         leg = self._ensure_destination_leg(session, attempt, handle)
         self.record_accepted(session, operation, handle.control_id)
