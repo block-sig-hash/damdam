@@ -163,7 +163,9 @@ ATTEMPT_STATE_RANK: dict[AttemptState, int] = {
 
 
 class CredentialState(str, Enum):
+    PROVISIONING = "provisioning"
     ACTIVE = "active"
+    OUTCOME_UNKNOWN = "outcome_unknown"
     #: Withdrawn by us — logout, membership revocation, or an operator.
     REVOKED = "revoked"
 
@@ -352,6 +354,9 @@ class CallAttempt(SQLModel, table=True):
     ended_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
+    stop_requested_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
     #: Why it ended, in our vocabulary rather than the provider's.
     end_reason: str | None = Field(
         default=None, sa_column=Column(String(100), nullable=True)
@@ -527,6 +532,7 @@ class CallOperation(SQLModel, table=True):
             "ux_call_operations_live",
             "attempt_id",
             "kind",
+            "target_key",
             unique=True,
             postgresql_where=text(
                 "outcome IN ('in_flight', 'accepted', 'outcome_unknown', "
@@ -549,6 +555,12 @@ class CallOperation(SQLModel, table=True):
         )
     )
     kind: OperationKind = Field(sa_column=_enum(OperationKind, "call_operation_kind"))
+    target_key: str = Field(
+        default="", sa_column=Column(String(200), nullable=False, server_default="")
+    )
+    dispatched_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
     provider: str = Field(sa_column=Column(String(32), nullable=False))
     #: Ours. Sent to the provider and reused verbatim on every reconciliation,
     #: so "what did this produce" names one request rather than a time range.
@@ -666,6 +678,10 @@ class CallEvent(SQLModel, table=True):
     #: The event body as delivered, minus nothing. Kept so a late event can be
     #: applied later and so a dispute can be answered from what we were told.
     payload: dict[str, Any] = Field(default_factory=dict, sa_column=_json())
+    #: Provider-neutral fields derived only after signature verification. These
+    #: let a worker replay an early event without re-verifying a body whose HTTP
+    #: signature headers no longer exist.
+    normalized_payload: dict[str, Any] = Field(default_factory=dict, sa_column=_json())
 
 
 class CallingClientCredential(SQLModel, table=True):
@@ -694,8 +710,8 @@ class CallingClientCredential(SQLModel, table=True):
             "user_id",
             "device_id",
             unique=True,
-            postgresql_where=text("state = 'active'"),
-            sqlite_where=text("state = 'active'"),
+            postgresql_where=text("state <> 'revoked'"),
+            sqlite_where=text("state <> 'revoked'"),
         ),
         CheckConstraint(
             "(state = 'revoked' AND revoked_at IS NOT NULL) OR state <> 'revoked'",
@@ -719,7 +735,9 @@ class CallingClientCredential(SQLModel, table=True):
         default=None, sa_column=Column(String(200), nullable=True)
     )
     provider: str = Field(sa_column=Column(String(32), nullable=False))
-    provider_credential_id: str = Field(sa_column=Column(String(200), nullable=False))
+    provider_credential_id: str | None = Field(
+        default=None, sa_column=Column(String(200), nullable=True)
+    )
     provider_connection_id: str | None = Field(
         default=None, sa_column=Column(String(200), nullable=True)
     )
@@ -733,6 +751,13 @@ class CallingClientCredential(SQLModel, table=True):
         sa_column=_enum(
             CredentialState, "calling_credential_state", CredentialState.ACTIVE
         ),
+    )
+    issuance_reference: UUID = Field(default_factory=uuid4, nullable=False)
+    issuance_dispatched_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+    issuance_detail: str | None = Field(
+        default=None, sa_column=Column(String(500), nullable=True)
     )
     #: The parent credential's own expiry, as the provider stated it. A client
     #: session can never outlive this.

@@ -92,7 +92,13 @@ class DisabledCallingAdapter:
         )
 
     def issue_client_session(
-        self, *, operation_reference: UUID, device_label: str
+        self,
+        *,
+        operation_reference: UUID,
+        device_label: str,
+        provider_credential_id: str | None = None,
+        sip_identity: str | None = None,
+        credential_expires_at: datetime | None = None,
     ) -> IssuedClientSession:
         raise self._refuse()
 
@@ -139,10 +145,14 @@ class TelnyxCallingAdapter:
     name = "telnyx"
 
     def __init__(
-        self, settings: Settings, *, clock: Callable[[], datetime] = utc_now
+        self, settings: Settings, *, clock: Callable[[], datetime] = utc_now,
+        transport: Callable[..., httpx.Response] | None = None,
     ) -> None:
         self.settings = settings
         self.clock = clock
+        if transport is not None and settings.app_env != "test":
+            raise ValueError("Calling fixture transport is test-only")
+        self._transport = transport
 
     # --- capabilities -------------------------------------------------------
 
@@ -186,6 +196,7 @@ class TelnyxCallingAdapter:
         """
         return bool(
             self.settings.calling_live_routes_enabled
+            and self._transport is not None
             and self.settings.telnyx_api_key
             and self.settings.telnyx_connection_id
             and self.settings.calling_containment_evidence_reference
@@ -202,7 +213,13 @@ class TelnyxCallingAdapter:
     # --- client sessions ----------------------------------------------------
 
     def issue_client_session(
-        self, *, operation_reference: UUID, device_label: str
+        self,
+        *,
+        operation_reference: UUID,
+        device_label: str,
+        provider_credential_id: str | None = None,
+        sip_identity: str | None = None,
+        credential_expires_at: datetime | None = None,
     ) -> IssuedClientSession:
         """One credential per device, and a short token from it.
 
@@ -211,17 +228,27 @@ class TelnyxCallingAdapter:
         the customer's other devices (reuse item F4).
         """
         self._require_live()
-        credential = self._request(
-            "POST",
-            "/telephony_credentials",
-            json={
-                "connection_id": self.settings.telnyx_connection_id,
-                "name": f"damdam-device-{operation_reference}",
-                "tag": "damdam-internet-calling",
-            },
-        )
-        data = _object(credential, "credential")
-        credential_id = _text(data, "id", "credential")
+        if provider_credential_id is None:
+            credential = self._request(
+                "POST",
+                "/telephony_credentials",
+                json={
+                    "connection_id": self.settings.telnyx_connection_id,
+                    "name": f"damdam-device-{operation_reference}",
+                    "tag": "damdam-internet-calling",
+                },
+                operation_reference=operation_reference,
+            )
+            data = _object(credential, "credential")
+            credential_id = _text(data, "id", "credential")
+            identity = _text(data, "sip_username", "credential")
+            expiry = _expiry(data, self.clock())
+        else:
+            if not sip_identity or credential_expires_at is None:
+                raise CallingError("stored_credential_incomplete")
+            credential_id = provider_credential_id
+            identity = sip_identity
+            expiry = credential_expires_at
         token = self._request(
             "POST",
             f"/telephony_credentials/{credential_id}/token",
@@ -229,11 +256,11 @@ class TelnyxCallingAdapter:
         )
         return IssuedClientSession(
             token=str(token),
-            identity=_text(data, "sip_username", "credential"),
+            identity=identity,
             # Read from the provider's own response, never computed from the
             # local clock: F4 records that the retired code added 24 hours to
             # `now`, which silently outlives a credential expired earlier.
-            expires_at=_expiry(data, self.clock()),
+            expires_at=expiry,
             provider_credential_id=credential_id,
             provider_connection_id=self.settings.telnyx_connection_id or None,
         )
@@ -276,7 +303,12 @@ class TelnyxCallingAdapter:
                 "to": destination,
                 "time_limit_secs": bound,
                 "command_id": str(operation_reference),
-                "client_state": _client_state({"attempt_id": correlation}),
+                "client_state": _client_state(
+                    {
+                        "attempt_id": correlation,
+                        "operation_id": str(operation_reference),
+                    }
+                ),
             },
             operation_reference=operation_reference,
         )
@@ -426,7 +458,7 @@ class TelnyxCallingAdapter:
         if not self.settings.telnyx_api_key:
             raise CallingError("telnyx_not_configured")
         try:
-            response = httpx.request(
+            response = (self._transport or httpx.request)(
                 method,
                 f"{self.settings.telnyx_base_url.rstrip('/')}{path}",
                 headers={"Authorization": f"Bearer {self.settings.telnyx_api_key}"},

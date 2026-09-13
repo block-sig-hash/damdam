@@ -39,7 +39,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
-from app.auth.models import utc_now
+from app.auth.models import User, utc_now
 from app.calling.contract import (
     LEG_STATE_RANK,
     CallingAdapter,
@@ -52,12 +52,14 @@ from app.calling.contract import (
 )
 from app.calling.models import (
     LIVE_OPERATION_OUTCOMES,
+    TERMINAL_ATTEMPT_STATES,
     AttemptState,
     CallAttempt,
     CallEvent,
     CallingClientCredential,
     CallLeg,
     CallOperation,
+    CredentialState,
     EventDisposition,
     OperationKind,
     OperationOutcome,
@@ -128,7 +130,9 @@ class CallLifecycleService:
         stored = self._store(session, event)
         if stored.disposition is EventDisposition.DUPLICATE:
             return stored
-        return self._apply(session, stored, event)
+        applied = self._apply(session, stored, event)
+        self._continue_after_event(session, applied, event)
+        return applied
 
     def _store(self, session: Session, event: ProviderEvent) -> CallEvent:
         """Insert by unique provider event id, or report the collision.
@@ -147,6 +151,7 @@ class CallLifecycleService:
             received_at=self.clock(),
             disposition=EventDisposition.UNMATCHED,
             payload=dict(event.raw),
+            normalized_payload=_normalized_event(event),
         )
         savepoint = session.begin_nested()
         try:
@@ -169,6 +174,53 @@ class CallLifecycleService:
         else:
             savepoint.commit()
         return record
+
+    def _continue_after_event(
+        self, session: Session, record: CallEvent, event: ProviderEvent
+    ) -> None:
+        """Drive the durable next command after an authenticated transition."""
+        if (
+            record.disposition is not EventDisposition.APPLIED
+            or record.attempt_id is None
+            or record.leg_id is None
+        ):
+            return
+        attempt = self._locked_attempt(session, record.attempt_id)
+        leg = session.get(CallLeg, record.leg_id)
+        if attempt is None or leg is None:
+            return
+        if attempt.stop_requested_at is not None and leg.state is not LegState.ENDED:
+            self.hangup(session, attempt, leg)
+            return
+        if leg.role is LegRole.CLIENT and leg.state is LegState.PARKED:
+            operation = self.begin_operation(
+                session, attempt, OperationKind.CREATE_DESTINATION_LEG
+            )
+            destination = self.create_destination_leg(session, attempt, operation)
+            if destination is not None:
+                self.replay_unmatched(session, attempt_id=attempt.id)
+            return
+        if leg.role is LegRole.DESTINATION and leg.state is LegState.ANSWERED:
+            client = session.exec(
+                select(CallLeg).where(
+                    CallLeg.attempt_id == attempt.id,
+                    CallLeg.role == LegRole.CLIENT,
+                    CallLeg.state != LegState.ENDED,
+                )
+            ).first()
+            if client is not None:
+                self.bridge(session, attempt, client, leg)
+            return
+        if leg.state is LegState.ENDED:
+            peers = session.exec(
+                select(CallLeg).where(
+                    CallLeg.attempt_id == attempt.id,
+                    CallLeg.id != leg.id,
+                    CallLeg.state != LegState.ENDED,
+                )
+            ).all()
+            for peer in peers:
+                self.hangup(session, attempt, peer)
 
     def _apply(
         self, session: Session, record: CallEvent, event: ProviderEvent
@@ -212,6 +264,11 @@ class CallLifecycleService:
                     EventDisposition.UNMATCHED,
                     "no recorded leg for this provider identifier",
                 )
+            if not self.authorization.consume_grant(session, attempt.id):
+                return self._dispose(
+                    session, record, EventDisposition.QUARANTINED,
+                    "grant cannot be consumed",
+                )
             leg = self._record_client_leg(session, attempt, event)
         record.leg_id = leg.id
 
@@ -246,7 +303,28 @@ class CallLifecycleService:
             )
         ).first()
         if leg is not None:
-            return session.get(CallAttempt, leg.attempt_id), leg
+            attempt_id = leg.attempt_id
+            attempt = self._locked_attempt(session, attempt_id)
+            session.refresh(leg, with_for_update=True)
+            return attempt, leg
+
+        operation_reference = event.client_state.get("operation_id")
+        if isinstance(operation_reference, str):
+            try:
+                operation_id = UUID(operation_reference)
+            except ValueError:
+                return None, None
+            operation = session.exec(
+                select(CallOperation).where(
+                    CallOperation.id == operation_id,
+                    CallOperation.provider == self.adapter.name,
+                    CallOperation.kind == OperationKind.CREATE_DESTINATION_LEG,
+                    col(CallOperation.dispatched_at).is_not(None),
+                )
+            ).first()
+            if operation is None:
+                return None, None
+            return self._locked_attempt(session, operation.attempt_id), None
 
         reference = event.client_state.get("attempt_id")
         if not isinstance(reference, str):
@@ -255,7 +333,14 @@ class CallLifecycleService:
             attempt_id = UUID(reference)
         except ValueError:
             return None, None
-        return session.get(CallAttempt, attempt_id), None
+        return self._locked_attempt(session, attempt_id), None
+
+    @staticmethod
+    def _locked_attempt(session: Session, attempt_id: UUID) -> CallAttempt | None:
+        return session.exec(
+            select(CallAttempt).where(CallAttempt.id == attempt_id)
+            .with_for_update().execution_options(populate_existing=True)
+        ).first()
 
     def _quarantine_reason(
         self,
@@ -272,18 +357,63 @@ class CallLifecycleService:
         a queue needs "arrived early" and "does not add up" to look different
         (N6).
         """
-        if attempt.client_credential_id is not None and event.leg.credential_id:
+        if not event.leg.control_id:
+            return "missing provider leg identity"
+        if leg is None:
+            if self._matches_destination_operation(session, attempt, event):
+                if (
+                    event.claimed_destination
+                    and event.claimed_destination != attempt.e164_destination
+                ):
+                    return "the destination on this event is not the authorized one"
+                return None
+            if attempt.client_credential_id is None:
+                return "an unbound grant cannot authorize a client leg"
             credential = session.get(
                 CallingClientCredential, attempt.client_credential_id
             )
             if (
-                credential is not None
-                and credential.provider_credential_id != event.leg.credential_id
+                credential is None
+                or credential.user_id != attempt.owner_user_id
+                or credential.state is not CredentialState.ACTIVE
+                or credential.provider != self.adapter.name
+                or credential.provider_credential_id != event.leg.credential_id
+                or not credential.provider_connection_id
+                or credential.provider_connection_id != event.leg.connection_id
+                or (
+                    credential.expires_at is not None
+                    and _aware(credential.expires_at) <= self.clock()
+                )
             ):
                 return (
                     "the provider credential on this event is not the one the "
                     "grant was bound to"
                 )
+            if (
+                attempt.stop_requested_at is not None
+                or _aware(attempt.expires_at) <= self.clock()
+            ):
+                return "grant stopped or expired"
+            if event.claimed_destination != attempt.e164_destination:
+                return "client destination differs from the grant"
+            existing_client = session.exec(
+                select(CallLeg).where(
+                    CallLeg.attempt_id == attempt.id,
+                    CallLeg.role == LegRole.CLIENT,
+                )
+            ).first()
+            if existing_client is not None:
+                return "the grant already has a client leg"
+        elif any(
+            expected and actual != expected
+            for expected, actual in (
+                (leg.provider_connection_id, event.leg.connection_id),
+                (leg.provider_credential_id, event.leg.credential_id),
+                (leg.provider_call_leg_id, event.leg.leg_id),
+                (leg.provider_call_session_id, event.leg.session_id),
+            )
+        ):
+            return "provider leg identifiers do not match the recorded leg"
         if leg is not None and leg.attempt_id != attempt.id:  # pragma: no cover
             return "this leg belongs to a different attempt"
         if (
@@ -297,6 +427,29 @@ class CallLifecycleService:
             # transition fixes (N4).
             return "the destination on this event is not the authorized one"
         return None
+
+    def _matches_destination_operation(
+        self, session: Session, attempt: CallAttempt, event: ProviderEvent
+    ) -> bool:
+        reference = event.client_state.get("operation_id")
+        if not isinstance(reference, str):
+            return False
+        try:
+            operation_id = UUID(reference)
+        except ValueError:
+            return False
+        return (
+            session.exec(
+                select(CallOperation).where(
+                    CallOperation.id == operation_id,
+                    CallOperation.attempt_id == attempt.id,
+                    CallOperation.provider == self.adapter.name,
+                    CallOperation.kind == OperationKind.CREATE_DESTINATION_LEG,
+                    col(CallOperation.dispatched_at).is_not(None),
+                )
+            ).first()
+            is not None
+        )
 
     # --- legs --------------------------------------------------------------
 
@@ -395,7 +548,8 @@ class CallLifecycleService:
     # --- durable operations -----------------------------------------------
 
     def begin_operation(
-        self, session: Session, attempt: CallAttempt, kind: OperationKind
+        self, session: Session, attempt: CallAttempt, kind: OperationKind,
+        *, target_key: str = "",
     ) -> CallOperation:
         """Write the intent down. **The caller commits before calling out.**
 
@@ -404,10 +558,12 @@ class CallLifecycleService:
         the same guard in the database, and it is the one that holds when two
         workers reach here at the same moment.
         """
+        self._locked_attempt(session, attempt.id)
         live = session.exec(
             select(CallOperation).where(
                 CallOperation.attempt_id == attempt.id,
                 CallOperation.kind == kind,
+                CallOperation.target_key == target_key,
                 col(CallOperation.outcome).in_(list(LIVE_OPERATION_OUTCOMES)),
             )
         ).first()
@@ -415,7 +571,8 @@ class CallLifecycleService:
             return live
         previous = session.exec(
             select(CallOperation).where(
-                CallOperation.attempt_id == attempt.id, CallOperation.kind == kind
+                CallOperation.attempt_id == attempt.id, CallOperation.kind == kind,
+                CallOperation.target_key == target_key,
             )
         ).all()
         number = len(previous) + 1
@@ -426,7 +583,8 @@ class CallLifecycleService:
             # Names one request. A retry of the same request reuses it; a new
             # decision gets a new number, so a legitimate second command after a
             # definite rejection is not deduplicated against the refusal.
-            operation_key=f"attempt:{attempt.id}:{kind.value}:{number}",
+            operation_key=f"attempt:{attempt.id}:{kind.value}:{target_key}:{number}",
+            target_key=target_key,
             attempt_number=number,
             outcome=OperationOutcome.IN_FLIGHT,
             created_at=self.clock(),
@@ -434,6 +592,30 @@ class CallLifecycleService:
         session.add(operation)
         session.flush()
         return operation
+
+    def _dispatch_once(
+        self, session: Session, attempt: CallAttempt,
+        operation: CallOperation, kind: OperationKind,
+    ) -> bool:
+        if operation.attempt_id != attempt.id or operation.kind is not kind:
+            raise CallLifecycleError("operation_not_authorized")
+        current = session.exec(
+            select(CallOperation)
+            .where(CallOperation.id == operation.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).one()
+        if (
+            current.dispatched_at is not None
+            or current.outcome is not OperationOutcome.IN_FLIGHT
+        ):
+            return False
+        current.dispatched_at = self.clock()
+        session.add(current)
+        # A crash from this point onwards is ambiguous and must reconcile. The
+        # grant, reservation and exact operation identity are now durable.
+        session.commit()
+        return True
 
     def record_accepted(
         self, session: Session, operation: CallOperation, reference: str
@@ -481,7 +663,10 @@ class CallLifecycleService:
         held for review, because a human deciding is better than a worker
         guessing with a PSTN leg on the line.
         """
-        if operation.outcome is not OperationOutcome.OUTCOME_UNKNOWN:
+        if operation.outcome not in (
+            OperationOutcome.OUTCOME_UNKNOWN,
+            OperationOutcome.IN_FLIGHT,
+        ):
             return operation
         try:
             handle = self.adapter.reconcile_operation(operation.id)
@@ -506,6 +691,7 @@ class CallLifecycleService:
             and operation.kind is OperationKind.CREATE_DESTINATION_LEG
         ):
             self._ensure_destination_leg(session, attempt, handle)
+            self.replay_unmatched(session, attempt_id=attempt.id)
         return self.record_accepted(session, operation, handle.control_id)
 
     # --- commands -----------------------------------------------------------
@@ -524,6 +710,25 @@ class CallLifecycleService:
         bound that survives this process dying is set from the amount of money
         that was actually reserved (V01 §6).
         """
+        if operation.dispatched_at is not None:
+            return session.exec(
+                select(CallLeg).where(
+                    CallLeg.attempt_id == attempt.id,
+                    CallLeg.role == LegRole.DESTINATION,
+                )
+            ).first()
+        self._locked_attempt(session, attempt.id)
+        if attempt.stop_requested_at is not None:
+            raise CallLifecycleError("attempt_not_startable")
+        if (
+            attempt.grant_consumed_at is None
+            and not self.authorization.consume_grant(session, attempt.id)
+        ):
+            raise CallLifecycleError("attempt_not_startable")
+        if not self._dispatch_once(
+            session, attempt, operation, OperationKind.CREATE_DESTINATION_LEG
+        ):
+            return None
         try:
             handle = self.adapter.create_destination_leg(
                 operation_reference=operation.id,
@@ -564,6 +769,11 @@ class CallLifecycleService:
             )
         ).first()
         if existing is not None:
+            if (
+                existing.attempt_id != attempt.id
+                or existing.role is not LegRole.DESTINATION
+            ):
+                raise CallLifecycleError("provider_leg_conflict")
             return existing
         leg = CallLeg(
             attempt_id=attempt.id,
@@ -609,7 +819,13 @@ class CallLifecycleService:
         already be down, and a second hangup against a control id the provider
         has reused would end somebody else's call.
         """
-        operation = self.begin_operation(session, attempt, OperationKind.HANGUP)
+        if leg.attempt_id != attempt.id:
+            raise CallLifecycleError("operation_not_authorized")
+        operation = self.begin_operation(
+            session, attempt, OperationKind.HANGUP, target_key=str(leg.id)
+        )
+        if not self._dispatch_once(session, attempt, operation, OperationKind.HANGUP):
+            return operation
         try:
             self.adapter.hangup(
                 operation_reference=operation.id,
@@ -634,12 +850,21 @@ class CallLifecycleService:
         ringing tone we are paying for and call it a conversation. V01's topology
         step 5 is explicit that the bridge follows the answer.
         """
+        if (
+            client_leg.attempt_id != attempt.id
+            or destination_leg.attempt_id != attempt.id
+        ):
+            raise CallLifecycleError("operation_not_authorized")
+        if attempt.stop_requested_at is not None:
+            raise CallLifecycleError("attempt_not_startable")
         if destination_leg.state not in (LegState.ANSWERED, LegState.BRIDGED):
             raise CallLifecycleError(
                 "destination_not_answered",
                 "a bridge before the destination answers bills a call nobody took",
             )
         operation = self.begin_operation(session, attempt, OperationKind.BRIDGE)
+        if not self._dispatch_once(session, attempt, operation, OperationKind.BRIDGE):
+            return operation
         try:
             self.adapter.bridge(
                 operation_reference=operation.id,
@@ -685,6 +910,57 @@ class CallLifecycleService:
             ).all()
         )
 
+    def replay_unmatched(
+        self, session: Session, *, attempt_id: UUID | None = None, limit: int = 100
+    ) -> int:
+        """Apply authenticated events that arrived before their recorded leg."""
+        statement = (
+            select(CallEvent)
+            .where(CallEvent.disposition == EventDisposition.UNMATCHED)
+            .order_by(col(CallEvent.received_at))
+            .limit(limit)
+        )
+        if attempt_id is not None:
+            statement = statement.where(CallEvent.attempt_id == attempt_id)
+        applied = 0
+        for record in session.exec(statement.with_for_update(skip_locked=True)).all():
+            event = _event_from_record(record)
+            current = self._apply(session, record, event)
+            if current.disposition is EventDisposition.APPLIED:
+                applied += 1
+                self._continue_after_event(session, current, event)
+        return applied
+
+    def on_membership_revoked(
+        self, session: Session, organization_id: UUID, user_id: UUID, at: datetime
+    ) -> None:
+        """Withdraw grants and terminate live work calls during offboarding."""
+        del at
+        user = session.get(User, user_id)
+        if user is None:
+            return
+        attempts = session.exec(
+            select(CallAttempt)
+            .where(
+                CallAttempt.organization_id == organization_id,
+                CallAttempt.owner_user_id == user_id,
+                col(CallAttempt.state).not_in(list(TERMINAL_ATTEMPT_STATES)),
+            )
+            .with_for_update()
+        ).all()
+        for attempt in attempts:
+            self.authorization.stop(
+                session, user, attempt.id, reason="membership_revoked"
+            )
+            legs = session.exec(
+                select(CallLeg).where(
+                    CallLeg.attempt_id == attempt.id,
+                    CallLeg.state != LegState.ENDED,
+                )
+            ).all()
+            for leg in legs:
+                self.hangup(session, attempt, leg)
+
 
 def _as_duplicate(existing: CallEvent) -> CallEvent:
     """Mark an in-memory copy as a duplicate without rewriting the stored row.
@@ -711,6 +987,47 @@ def _as_duplicate(existing: CallEvent) -> CallEvent:
 
 def _aware(moment: datetime) -> datetime:
     return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def _normalized_event(event: ProviderEvent) -> dict[str, Any]:
+    return {
+        "control_id": event.leg.control_id,
+        "leg_id": event.leg.leg_id,
+        "session_id": event.leg.session_id,
+        "connection_id": event.leg.connection_id,
+        "credential_id": event.leg.credential_id,
+        "claimed_destination": event.claimed_destination,
+        "client_state": event.client_state,
+        "hangup_cause": event.hangup_cause,
+    }
+
+
+def _event_from_record(record: CallEvent) -> ProviderEvent:
+    normalized = record.normalized_payload
+    return ProviderEvent(
+        event_id=record.provider_event_id,
+        event_type=record.event_type,
+        occurred_at=record.occurred_at,
+        leg=ProviderLegHandle(
+            control_id=str(normalized.get("control_id") or ""),
+            leg_id=_optional_text(normalized.get("leg_id")),
+            session_id=_optional_text(normalized.get("session_id")),
+            connection_id=_optional_text(normalized.get("connection_id")),
+            credential_id=_optional_text(normalized.get("credential_id")),
+        ),
+        claimed_destination=_optional_text(normalized.get("claimed_destination")),
+        client_state=(
+            dict(normalized.get("client_state", {}))
+            if isinstance(normalized.get("client_state"), dict)
+            else {}
+        ),
+        hangup_cause=_optional_text(normalized.get("hangup_cause")),
+        raw=record.payload,
+    )
+
+
+def _optional_text(value: object) -> str | None:
+    return value if isinstance(value, str) else None
 
 
 def new_operation_reference() -> UUID:

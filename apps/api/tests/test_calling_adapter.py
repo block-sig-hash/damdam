@@ -80,7 +80,9 @@ def settings(public_key_b64) -> Settings:
 
 @pytest.fixture
 def adapter(settings) -> TelnyxCallingAdapter:
-    return TelnyxCallingAdapter(settings, clock=Clock())
+    return TelnyxCallingAdapter(
+        settings, clock=Clock(), transport=lambda *a, **kw: httpx.request(*a, **kw)
+    )
 
 
 def _signed(signing_key, body: dict, *, at: datetime = NOW) -> tuple[bytes, dict]:

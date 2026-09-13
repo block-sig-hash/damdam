@@ -35,7 +35,7 @@ from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, update
+from sqlalchemy import CursorResult, text, update
 from sqlmodel import Session, col, select
 
 from app.auth.models import User, utc_now
@@ -45,6 +45,8 @@ from app.calling.models import (
     AttemptState,
     CallAttempt,
     CallingClientCredential,
+    CallLeg,
+    CallOperation,
     CredentialState,
     PayerKind,
 )
@@ -64,7 +66,13 @@ from app.catalog.tariffs import (
     select_rate,
 )
 from app.connectivity.models import Entitlement
-from app.ledger.models import AccountKind, LedgerAccount, OwnerKind, Reservation
+from app.ledger.models import (
+    AccountKind,
+    LedgerAccount,
+    OwnerKind,
+    Reservation,
+    ReservationState,
+)
 from app.ledger.service import LedgerError, LedgerService
 from app.organizations.models import MembershipStatus, OrganizationMember
 
@@ -228,6 +236,12 @@ class CallAuthorizationService:
         the caller otherwise hides a client bug that would eventually dial the
         wrong number.
         """
+        if session.get_bind().dialect.name == "postgresql":
+            session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+                {"key": f"call-authorize:{user.id}:{idempotency_key}"},
+            )
+        scope = self._resolve_scope(session, user, organization_id)
         existing = session.exec(
             select(CallAttempt).where(
                 CallAttempt.owner_user_id == user.id,
@@ -240,6 +254,12 @@ class CallAuthorizationService:
                 existing.e164_destination != destination.e164
                 or existing.currency != currency
                 or existing.organization_id != organization_id
+                or existing.max_seconds != self._bounded_seconds(requested_seconds)
+                or existing.client_credential_id != client_credential_id
+                or existing.entitlement_id != entitlement_id
+                or existing.identity_e164 != identity_e164
+                or existing.identity_number_id != identity_number_id
+                or existing.seller_legal_entity_id != seller_legal_entity_id
             ):
                 raise CallAuthorizationError(
                     "idempotency_conflict",
@@ -247,7 +267,6 @@ class CallAuthorizationService:
                 )
             return existing
 
-        scope = self._resolve_scope(session, user, organization_id)
         rate, tariff = self._rate_for(session, destination, currency)
         seconds = self._bounded_seconds(requested_seconds)
         max_charge = estimate_max_charge(
@@ -344,6 +363,9 @@ class CallAuthorizationService:
         presenting somebody else's attempt).
         """
         attempt = self._owned(session, user, attempt_id)
+        self._resolve_scope(session, user, attempt.organization_id)
+        if attempt.stop_requested_at is not None:
+            raise CallAuthorizationError("attempt_not_startable")
         if attempt.state in TERMINAL_ATTEMPT_STATES:
             raise CallAuthorizationError(
                 "attempt_not_startable", f"attempt is {attempt.state.value}"
@@ -365,7 +387,12 @@ class CallAuthorizationService:
             if (
                 credential is None
                 or credential.state is not CredentialState.ACTIVE
-                or (device_id is not None and credential.device_id != device_id)
+                or credential.user_id != user.id
+                or credential.device_id != device_id
+                or (
+                    credential.expires_at is not None
+                    and _aware(credential.expires_at) <= self.clock()
+                )
             ):
                 raise CallAuthorizationError(
                     "device_not_authorized",
@@ -402,6 +429,22 @@ class CallAuthorizationService:
         expires between the two statements.
         """
         now = self.clock()
+        attempt = session.exec(
+            select(CallAttempt).where(CallAttempt.id == attempt_id)
+            .with_for_update().execution_options(populate_existing=True)
+        ).first()
+        if attempt is None or attempt.stop_requested_at is not None:
+            return False
+        user = session.get(User, attempt.owner_user_id)
+        if user is None:
+            return False
+        try:
+            self._resolve_scope(session, user, attempt.organization_id)
+            self._resolve_credential(session, user, attempt.client_credential_id)
+        except CallAuthorizationError:
+            return False
+        if reservation_for(session, attempt).state is not ReservationState.HELD:
+            return False
         result = cast(
             "CursorResult[Any]",
             session.execute(
@@ -488,6 +531,21 @@ class CallAuthorizationService:
         if attempt.state in TERMINAL_ATTEMPT_STATES:
             return attempt
         attempt.end_reason = reason
+        attempt.stop_requested_at = self.clock()
+        # Only an untouched grant has proven zero supplier liability.
+        if (
+            attempt.grant_consumed_at is None
+            and session.exec(
+                select(CallLeg).where(CallLeg.attempt_id == attempt.id)
+            ).first()
+            is None
+            and session.exec(
+                select(CallOperation).where(CallOperation.attempt_id == attempt.id)
+            ).first()
+            is None
+        ):
+            self.advance(session, attempt, AttemptState.CANCELLED, end_reason=reason)
+            self.ledger.release(session, reservation_for(session, attempt))
         session.add(attempt)
         session.flush()
         return attempt
@@ -665,6 +723,10 @@ class CallAuthorizationService:
             credential is None
             or credential.user_id != user.id
             or credential.state is not CredentialState.ACTIVE
+            or (
+                credential.expires_at is not None
+                and _aware(credential.expires_at) <= self.clock()
+            )
         ):
             raise CallAuthorizationError(
                 "device_not_authorized", "no active credential for this device"
@@ -697,7 +759,10 @@ class CallAuthorizationService:
         exist. A distinct "forbidden" would confirm that an id is real, which is
         enough to enumerate other customers' calls.
         """
-        attempt = session.get(CallAttempt, attempt_id)
+        attempt = session.exec(
+            select(CallAttempt).where(CallAttempt.id == attempt_id)
+            .with_for_update().execution_options(populate_existing=True)
+        ).first()
         if attempt is None or attempt.owner_user_id != user.id:
             raise CallAuthorizationError("attempt_not_found")
         return attempt

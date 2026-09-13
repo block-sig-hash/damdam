@@ -310,10 +310,12 @@ def create_app(
     # ready when it is not.
     resolved_calling_adapter: CallingAdapter = calling_adapter or (
         TelnyxCallingAdapter(resolved_settings, clock=clock)
-        if resolved_settings.calling_live_routes_enabled
+        if resolved_settings.telnyx_api_key and resolved_settings.telnyx_public_key
         else DisabledCallingAdapter()
     )
     api.state.calling_adapter = resolved_calling_adapter
+    if calling_adapter is not None and resolved_settings.app_env != "test":
+        raise ValueError("Injected calling adapters are test-only")
     # The outbound identity is chosen by the server from numbers we own. Own-
     # number presentation is deferred (VOICE-EXPANSION.md) and unproven on this
     # route, so there is no request field a client could ask for one through.
@@ -340,6 +342,12 @@ def create_app(
         resolved_calling_adapter,
         api.state.call_authorization_service,
         clock=clock,
+    )
+    api.state.membership_service.add_revocation_listener(
+        api.state.call_lifecycle_service
+    )
+    api.state.identity_service.add_recovery_listener(
+        api.state.client_session_service
     )
 
     @api.exception_handler(CallAuthorizationError)

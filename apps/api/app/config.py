@@ -280,6 +280,11 @@ class Settings(BaseSettings):
                 "destination country; selling to an unlisted destination has "
                 "no published rate (blocker B2)"
             )
+        if self.app_env != "test":
+            raise ValueError(
+                "Live calling remains blocked until V03 settlement/enforcement "
+                "and V01 account-control evidence are independently accepted"
+            )
         return self
 
     @model_validator(mode="after")

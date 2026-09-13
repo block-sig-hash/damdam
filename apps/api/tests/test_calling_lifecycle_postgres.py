@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app import model_registry  # noqa: F401
-from app.auth.models import Platform, User
+from app.auth.models import Organization, OrganizationType, Platform, User
 from app.calling.contract import (
     CallingCapabilities,
     CallingCapability,
@@ -45,6 +45,7 @@ from app.calling.models import (
     EventDisposition,
     OperationKind,
     OperationOutcome,
+    PayerKind,
 )
 from app.calling.service import CallAuthorizationService
 from app.catalog.market import PublicationStatus
@@ -58,6 +59,11 @@ from app.ledger.models import (
     ReservationState,
 )
 from app.ledger.service import LedgerService, Posting
+from app.organizations.models import (
+    MembershipStatus,
+    OrganizationMember,
+    OrganizationRole,
+)
 
 pytestmark = pytest.mark.skipif(
     "TEST_DATABASE_URL" not in os.environ,
@@ -117,7 +123,15 @@ class FakeAdapter:
             evidence_reference="test fake — not provider evidence",
         )
 
-    def issue_client_session(self, *, operation_reference, device_label):
+    def issue_client_session(
+        self,
+        *,
+        operation_reference,
+        device_label,
+        provider_credential_id=None,
+        sip_identity=None,
+        credential_expires_at=None,
+    ):
         raise NotImplementedError
 
     def revoke_client_credential(self, provider_credential_id: str) -> None:
@@ -147,7 +161,7 @@ class FakeAdapter:
             raise CallingError("provider_rejected", "destination unreachable")
         return ProviderLegHandle(
             control_id=f"dest-{len(self.created)}",
-            leg_id=f"leg-{len(self.created)}",
+            leg_id=f"dest-{len(self.created)}-leg",
             session_id="session-1",
         )
 
@@ -207,7 +221,10 @@ def lifecycle(adapter, authorization, clock):
     return CallLifecycleService(adapter, authorization, clock=clock)
 
 
-def _attempt(session, authorization, clock, *, credential=None):
+_AUTO_CREDENTIAL = object()
+
+
+def _attempt(session, authorization, clock, *, credential=_AUTO_CREDENTIAL):
     user = User(
         phone_number=f"+23480{uuid4().int % 10**8:08d}",
         first_name="caller",
@@ -215,6 +232,19 @@ def _attempt(session, authorization, clock, *, credential=None):
     )
     session.add(user)
     session.flush()
+    if credential is _AUTO_CREDENTIAL:
+        credential = CallingClientCredential(
+            user_id=user.id,
+            device_id=f"phone-{uuid4().hex[:8]}",
+            provider="fake",
+            provider_credential_id="cred-1",
+            provider_connection_id="conn-1",
+            sip_identity="sip-1",
+            expires_at=clock() + timedelta(hours=1),
+            created_at=clock(),
+        )
+        session.add(credential)
+        session.flush()
     ledger = authorization.ledger
     credit = ledger.account(
         session,
@@ -282,7 +312,7 @@ def _event(
     control_id: str = "client-1",
     event_id: str | None = None,
     occurred_at: datetime | None = None,
-    credential_id: str | None = None,
+    credential_id: str | None = "cred-1",
     claimed_destination: str | None = None,
     hangup_cause: str | None = None,
     client_state: dict | None = None,
@@ -295,9 +325,10 @@ def _event(
             control_id=control_id,
             leg_id=f"{control_id}-leg",
             session_id="session-1",
+            connection_id="conn-1",
             credential_id=credential_id,
         ),
-        claimed_destination=claimed_destination,
+        claimed_destination=claimed_destination or attempt.e164_destination,
         client_state=(
             client_state
             if client_state is not None
@@ -324,7 +355,11 @@ class TestN8ReplayInsideTheToleranceWindow:
         # unique provider event id is the only thing that says "already done".
         assert second.disposition is EventDisposition.DUPLICATE
         assert len(session.exec(select(CallEvent)).all()) == 1
-        assert len(session.exec(select(CallLeg)).all()) == 1
+        assert {leg.role for leg in session.exec(select(CallLeg)).all()} == {
+            LegRole.CLIENT,
+            LegRole.DESTINATION,
+        }
+        assert len(adapter.created) == 1
 
 
 class TestN9RejectedBeforePersistence:
@@ -410,7 +445,6 @@ class TestN10LateAndReorderedEvents:
             hangup_cause="normal_clearing",
         )
         lifecycle.ingest(session, b"{}", {})
-
         # The straggler: an answer the provider emitted earlier and delivered
         # later.
         adapter.parsed = _event(
@@ -419,9 +453,12 @@ class TestN10LateAndReorderedEvents:
         late = lifecycle.ingest(session, b"{}", {})
 
         assert late.disposition is EventDisposition.SUPERSEDED
-        leg = session.exec(select(CallLeg)).one()
+        leg = session.exec(
+            select(CallLeg).where(CallLeg.role == LegRole.CLIENT)
+        ).one()
         assert leg.state is LegState.ENDED
         assert leg.answered_at is None
+        assert adapter.hangups == ["dest-1"]
         # And no negative duration, which is what the constraint exists for.
         assert leg.ended_at is not None
 
@@ -507,6 +544,43 @@ class TestN11LostOriginateResponse:
         ).all()
         assert len(legs) == 1
         assert legs[0].provider_call_control_id == "dest-recovered"
+
+    def test_reconciliation_replays_an_answer_that_overtook_the_response(
+        self, session, lifecycle, adapter, authorization, clock
+    ):
+        _user, attempt = _attempt(session, authorization, clock)
+        adapter.next_outcome = "unknown"
+        adapter.parsed = _event(attempt, "call.initiated")
+        lifecycle.ingest(session, b"{}", {})
+
+        operation = session.exec(
+            select(CallOperation).where(
+                CallOperation.kind == OperationKind.CREATE_DESTINATION_LEG
+            )
+        ).one()
+
+        adapter.parsed = _event(
+            attempt,
+            "call.answered",
+            control_id="dest-recovered",
+            client_state={
+                "attempt_id": str(attempt.id),
+                "operation_id": str(operation.id),
+            },
+        )
+        early = lifecycle.ingest(session, b"{}", {})
+        assert early.disposition is EventDisposition.UNMATCHED
+
+        adapter.reconcile_answer = ProviderLegHandle(
+            control_id="dest-recovered",
+            leg_id="dest-recovered-leg",
+            session_id="session-1",
+        )
+        lifecycle.reconcile(session, operation)
+
+        session.refresh(early)
+        assert early.disposition is EventDisposition.APPLIED
+        assert adapter.bridged == [("client-1", "dest-recovered")]
 
     def test_an_unanswerable_reconciliation_is_held_for_a_human(
         self, session, lifecycle, adapter, authorization, clock
@@ -631,6 +705,14 @@ class TestN14DestinationNeverAnswers:
             hangup_cause="no_answer",
         )
         lifecycle.ingest(session, b"{}", {})
+        adapter.parsed = _event(
+            attempt,
+            "call.hangup",
+            control_id="dest-1",
+            occurred_at=NOW + timedelta(seconds=21),
+            hangup_cause="no_answer",
+        )
+        lifecycle.ingest(session, b"{}", {})
 
         session.refresh(attempt)
         # `failed`, not `completed`: nothing answered, so there is no talk time
@@ -653,3 +735,90 @@ class TestUnknownEventTypes:
         # every feature release on their side an outage on ours.
         assert record.disposition is EventDisposition.SUPERSEDED
         assert session.exec(select(CallLeg)).all() == []
+
+
+def test_unknown_originate_is_not_dispatched_again(
+    session, lifecycle, adapter, authorization, clock
+):
+    _, attempt = _attempt(session, authorization, clock)
+    operation = lifecycle.begin_operation(
+        session, attempt, OperationKind.CREATE_DESTINATION_LEG
+    )
+    adapter.next_outcome = "unknown"
+    lifecycle.create_destination_leg(session, attempt, operation)
+    session.commit()
+    clock.advance(minutes=5)
+    lifecycle.create_destination_leg(session, attempt, operation)
+    assert len(adapter.created) == 1
+
+
+def test_originate_intent_is_committed_before_provider_call(
+    engine, session, lifecycle, adapter, authorization, clock
+):
+    _, attempt = _attempt(session, authorization, clock)
+    operation = lifecycle.begin_operation(
+        session, attempt, OperationKind.CREATE_DESTINATION_LEG
+    )
+    original = adapter.create_destination_leg
+    def probe(**kwargs):
+        with Session(engine) as observer:
+            assert observer.get(CallOperation, operation.id) is not None
+        return original(**kwargs)
+    adapter.create_destination_leg = probe
+    lifecycle.create_destination_leg(session, attempt, operation)
+
+
+def test_unbound_event_cannot_accept_a_grant(
+    session, lifecycle, adapter, authorization, clock
+):
+    _, attempt = _attempt(session, authorization, clock, credential=None)
+    adapter.parsed = _event(attempt, "call.initiated")
+    record = lifecycle.ingest(session, b"{}", {})
+    assert record.disposition is EventDisposition.QUARANTINED
+    assert session.exec(select(CallLeg)).all() == []
+
+
+def test_membership_revocation_stops_only_the_members_work_calls(
+    session, lifecycle, adapter, authorization, clock
+):
+    personal_user, personal = _attempt(
+        session, authorization, clock, credential=None
+    )
+    work_user, work = _attempt(session, authorization, clock)
+    organization = Organization(
+        name="Revoking organization",
+        primary_contact_name="Owner",
+        phone_number=f"+23490{uuid4().int % 10**8:08d}",
+        email=f"revocation-{uuid4().hex[:8]}@example.test",
+        password_hash="test",
+        org_type=OrganizationType.ENTERPRISE,
+    )
+    session.add(organization)
+    session.flush()
+    session.add(
+        OrganizationMember(
+            organization_id=organization.id,
+            user_id=work_user.id,
+            role=OrganizationRole.MEMBER,
+            status=MembershipStatus.ACTIVE,
+        )
+    )
+    work.organization_id = organization.id
+    work.payer_kind = PayerKind.ORGANIZATION
+    session.add(work)
+    session.flush()
+
+    adapter.parsed = _event(work, "call.initiated")
+    initiated = lifecycle.ingest(session, b"{}", {})
+    assert initiated.disposition is EventDisposition.APPLIED
+    lifecycle.on_membership_revoked(
+        session, organization.id, work_user.id, clock()
+    )
+
+    session.refresh(work)
+    session.refresh(personal)
+    assert work.stop_requested_at == clock()
+    assert work.end_reason == "membership_revoked"
+    assert set(adapter.hangups) == {"client-1", "dest-1"}
+    assert personal_user.id != work_user.id
+    assert personal.stop_requested_at is None

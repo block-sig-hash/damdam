@@ -7,6 +7,8 @@ do about a lost device.
 """
 
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -52,24 +54,47 @@ class FakeAdapter:
     def __init__(self, clock: Clock) -> None:
         self.clock = clock
         self.issued = 0
+        self.credentials_created = 0
         self.revoked: list[str] = []
         self.mode = "ok"
         self.stated_expiry: datetime | None = None
+        self.on_issue = None
+        self._lock = threading.Lock()
 
     def capabilities(self) -> CallingCapabilities:
         return CallingCapabilities(name=self.name, supported=frozenset())
 
-    def issue_client_session(self, *, operation_reference, device_label):
+    def issue_client_session(
+        self,
+        *,
+        operation_reference,
+        device_label,
+        provider_credential_id=None,
+        sip_identity=None,
+        credential_expires_at=None,
+    ):
+        if self.on_issue is not None:
+            self.on_issue(operation_reference)
         if self.mode == "unknown":
             raise CallOutcomeUnknown("response lost")
         if self.mode == "rejected":
             raise CallingError("provider_rejected", "no")
-        self.issued += 1
+        with self._lock:
+            self.issued += 1
+            issued_number = self.issued
+            if provider_credential_id is None:
+                self.credentials_created += 1
+                provider_credential_id = f"cred-{self.credentials_created}"
+                sip_identity = f"sip-{self.credentials_created}"
         return IssuedClientSession(
-            token=f"token-{self.issued}",
-            identity=f"sip-{self.issued}",
-            expires_at=self.stated_expiry or (self.clock() + timedelta(hours=24)),
-            provider_credential_id=f"cred-{self.issued}",
+            token=f"token-{issued_number}",
+            identity=sip_identity,
+            expires_at=(
+                self.stated_expiry
+                or credential_expires_at
+                or (self.clock() + timedelta(hours=24))
+            ),
+            provider_credential_id=provider_credential_id,
             provider_connection_id="conn-1",
         )
 
@@ -147,7 +172,9 @@ class TestIssuance:
         assert {c.device_id for c in credentials} == {"phone-a", "phone-b"}
         assert len({c.provider_credential_id for c in credentials}) == 2
 
-    def test_the_same_device_reuses_its_credential_row(self, session, service):
+    def test_the_same_device_reuses_its_provider_credential(
+        self, session, service, adapter
+    ):
         user = _user(session)
 
         first, _ = service.issue(session, user, device_id="phone-a")
@@ -155,6 +182,8 @@ class TestIssuance:
 
         assert first.id == second.id
         assert len(service.active(session, user)) == 1
+        assert adapter.credentials_created == 1
+        assert adapter.issued == 2
 
     def test_the_database_refuses_two_live_credentials_for_one_device(
         self, session, service, clock
@@ -218,6 +247,67 @@ class TestIssuance:
         assert excinfo.value.code == "session_outcome_unknown"
         assert service.active(session, user) == []
 
+        with pytest.raises(ClientSessionError) as retry:
+            service.issue(session, user, device_id="phone-a")
+
+        assert retry.value.code == "session_outcome_unknown"
+        assert adapter.issued == 0
+
+    def test_issuance_intent_is_committed_before_calling_provider(
+        self, session, service, adapter, engine
+    ):
+        user = _user(session)
+        session.commit()
+
+        def observe(operation_reference):
+            with Session(engine) as observer:
+                credential = observer.exec(
+                    select(CallingClientCredential).where(
+                        CallingClientCredential.issuance_reference
+                        == operation_reference
+                    )
+                ).one()
+                assert credential.state is CredentialState.PROVISIONING
+                assert credential.issuance_dispatched_at is not None
+
+        adapter.on_issue = observe
+
+        service.issue(session, user, device_id="phone-a")
+
+    def test_concurrent_first_issuance_creates_one_provider_credential(
+        self, session, service, adapter, engine
+    ):
+        user = _user(session)
+        user_id = user.id
+        session.commit()
+        gate = threading.Barrier(2)
+        concurrent_request_refused = threading.Event()
+        adapter.on_issue = lambda _reference: concurrent_request_refused.wait(timeout=5)
+
+        def issue():
+            with Session(engine) as worker:
+                current_user = worker.get(User, user_id)
+                assert current_user is not None
+                gate.wait(timeout=5)
+                try:
+                    _credential, client_session = service.issue(
+                        worker, current_user, device_id="phone-a"
+                    )
+                except ClientSessionError as exc:
+                    concurrent_request_refused.set()
+                    return exc.code
+                else:
+                    worker.commit()
+                    return client_session.token
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            tokens = list(pool.map(lambda _index: issue(), range(2)))
+
+        assert sum(token.startswith("token-") for token in tokens) == 1
+        assert tokens.count("session_outcome_unknown") == 1
+        assert adapter.credentials_created == 1
+        assert adapter.issued == 1
+
     def test_a_provider_refusal_surfaces_its_code(self, session, service, adapter):
         user = _user(session)
         adapter.mode = "rejected"
@@ -263,6 +353,23 @@ class TestRateLimiting:
 
 
 class TestRevocation:
+    def test_account_recovery_revokes_every_calling_credential(
+        self, session, service
+    ):
+        user = _user(session)
+        service.issue(session, user, device_id="phone-a")
+        service.issue(session, user, device_id="phone-b")
+
+        service.on_account_recovered(session, user, NOW)
+
+        assert service.active(session, user) == []
+        history = session.exec(
+            select(CallingClientCredential).where(
+                CallingClientCredential.user_id == user.id
+            )
+        ).all()
+        assert {item.revoked_reason for item in history} == {"account_recovered"}
+
     def test_revoking_one_device_leaves_the_others(self, session, service, adapter):
         user = _user(session)
         service.issue(session, user, device_id="phone-a")

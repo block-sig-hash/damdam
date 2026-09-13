@@ -259,7 +259,13 @@ class CallingAdapter(Protocol):
     def capabilities(self) -> CallingCapabilities: ...
 
     def issue_client_session(
-        self, *, operation_reference: UUID, device_label: str
+        self,
+        *,
+        operation_reference: UUID,
+        device_label: str,
+        provider_credential_id: str | None = None,
+        sip_identity: str | None = None,
+        credential_expires_at: datetime | None = None,
     ) -> IssuedClientSession:
         """Create or refresh one device's credential and return a short session."""
         ...

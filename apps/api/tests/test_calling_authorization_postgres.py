@@ -868,3 +868,32 @@ class TestConcurrency:
             list(pool.map(consume, range(2)))
 
         assert sorted(wins) == [False, True], wins
+
+
+def test_stop_an_unused_grant_prevents_later_consumption(
+    session, service, ledger, clock
+):
+    user = _user(session)
+    _fund(session, ledger, user)
+    _tariff(session, clock)
+    attempt = _authorize(service, session, user)
+    service.stop(session, user, attempt.id)
+    assert service.consume_grant(session, attempt.id) is False
+    assert attempt.state is AttemptState.CANCELLED
+
+
+def test_same_key_different_duration_is_a_conflict(session, service, ledger, clock):
+    user = _user(session)
+    _fund(session, ledger, user)
+    _tariff(session, clock)
+    _authorize(
+        service, session, user, idempotency_key="duration", requested_seconds=60
+    )
+    with pytest.raises(CallAuthorizationError, match="different call"):
+        _authorize(
+            service,
+            session,
+            user,
+            idempotency_key="duration",
+            requested_seconds=120,
+        )

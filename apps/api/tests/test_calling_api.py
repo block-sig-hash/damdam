@@ -52,14 +52,22 @@ class FakeCallingAdapter:
             evidence_reference="test fake — not provider evidence",
         )
 
-    def issue_client_session(self, *, operation_reference, device_label):
+    def issue_client_session(
+        self,
+        *,
+        operation_reference,
+        device_label,
+        provider_credential_id=None,
+        sip_identity=None,
+        credential_expires_at=None,
+    ):
         self.issued.append(device_label)
         suffix = len(self.issued)
         return IssuedClientSession(
             token=f"token-{suffix}",
-            identity=f"sip-user-{suffix}",
-            expires_at=NOW + timedelta(hours=1),
-            provider_credential_id=f"cred-{suffix}",
+            identity=sip_identity or f"sip-user-{suffix}",
+            expires_at=credential_expires_at or (NOW + timedelta(hours=1)),
+            provider_credential_id=provider_credential_id or f"cred-{suffix}",
             provider_connection_id="conn-1",
         )
 
@@ -113,6 +121,17 @@ def calling_settings() -> Settings:
 @pytest.fixture
 def adapter() -> FakeCallingAdapter:
     return FakeCallingAdapter()
+
+
+def test_calling_revocation_hooks_are_registered(calling_api):
+    assert (
+        calling_api.state.call_lifecycle_service
+        in calling_api.state.membership_service.revocation_listeners
+    )
+    assert (
+        calling_api.state.client_session_service
+        in calling_api.state.identity_service.recovery_listeners
+    )
 
 
 @pytest.fixture
@@ -277,7 +296,10 @@ class TestClientSessions:
         self, calling_api, session_factory, adapter
     ):
         client, user_id = _authenticated(calling_api)
-        client.post("/v1/calls/client-session", json={"device_id": "phone-a"})
+        client_session = client.post(
+            "/v1/calls/client-session", json={"device_id": "phone-a"}
+        )
+        assert client_session.status_code == 200, client_session.text
         client.post("/v1/calls/client-session", json={"device_id": "phone-b"})
 
         response = client.request(
@@ -318,7 +340,7 @@ class TestAuthorizeAndStart:
                 "requested_seconds": 600,
             },
         )
-        assert authorized.status_code == 201
+        assert authorized.status_code == 201, authorized.text
         attempt_id = authorized.json()["attempt_id"]
         assert authorized.json()["state"] == "authorized"
         # The identity is the server's, never the client's request.

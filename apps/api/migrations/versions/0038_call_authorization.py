@@ -102,7 +102,10 @@ _NEW_ENUMS = (
         "call_event_disposition",
         ("applied", "duplicate", "unmatched", "quarantined", "superseded"),
     ),
-    ("calling_credential_state", ("active", "revoked")),
+    (
+        "calling_credential_state",
+        ("provisioning", "active", "outcome_unknown", "revoked"),
+    ),
 )
 
 
@@ -126,9 +129,12 @@ def upgrade() -> None:
         sa.Column("device_id", sa.String(200), nullable=False),
         sa.Column("device_label", sa.String(200), nullable=True),
         sa.Column("provider", sa.String(32), nullable=False),
-        sa.Column("provider_credential_id", sa.String(200), nullable=False),
+        sa.Column("provider_credential_id", sa.String(200), nullable=True),
         sa.Column("provider_connection_id", sa.String(200), nullable=True),
         sa.Column("sip_identity", sa.String(200), nullable=True),
+        sa.Column("issuance_reference", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("issuance_dispatched_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("issuance_detail", sa.String(500), nullable=True),
         sa.Column(
             "state",
             postgresql.ENUM(name="calling_credential_state", create_type=False),
@@ -158,7 +164,7 @@ def upgrade() -> None:
         "calling_client_credentials",
         ["user_id", "device_id"],
         unique=True,
-        postgresql_where=sa.text("state = 'active'"),
+        postgresql_where=sa.text("state <> 'revoked'"),
     )
     op.create_index(
         "ix_calling_credentials_user",
@@ -259,6 +265,7 @@ def upgrade() -> None:
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("answered_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("stop_requested_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("end_reason", sa.String(100), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.UniqueConstraint(
@@ -385,6 +392,8 @@ def upgrade() -> None:
         ),
         sa.Column("provider", sa.String(32), nullable=False),
         sa.Column("operation_key", sa.String(200), nullable=False),
+        sa.Column("target_key", sa.String(200), nullable=False, server_default=""),
+        sa.Column("dispatched_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("attempt_number", sa.Integer(), nullable=False, server_default="1"),
         sa.Column(
             "outcome",
@@ -409,7 +418,7 @@ def upgrade() -> None:
     op.create_index(
         "ux_call_operations_live",
         "call_operations",
-        ["attempt_id", "kind"],
+        ["attempt_id", "kind", "target_key"],
         unique=True,
         postgresql_where=sa.text(
             "outcome IN ('in_flight', 'accepted', 'outcome_unknown', "
@@ -447,6 +456,7 @@ def upgrade() -> None:
         ),
         sa.Column("disposition_reason", sa.String(500), nullable=True),
         sa.Column("payload", postgresql.JSONB(), nullable=False),
+        sa.Column("normalized_payload", postgresql.JSONB(), nullable=False),
         sa.UniqueConstraint(
             "provider", "provider_event_id", name="uq_call_events_provider_event"
         ),
