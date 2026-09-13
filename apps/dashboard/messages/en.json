@@ -332,5 +332,105 @@
       "internalOnly": "Internal operations",
       "internalOnlyNote": "Internal support tools are a separate, visibly distinct area. An organization administrator never sees this styling, and nobody should mistake one for the other."
     }
+  },
+  "people": {
+    "title": "People",
+    "subtitle": "The people your organization buys service for. Adding somebody here does not give them access to this dashboard.",
+    "tabs": {
+      "people": "People",
+      "teams": "Teams",
+      "costCentres": "Cost centres",
+      "imports": "Imports"
+    },
+    "empty": "Nobody has been added yet.",
+    "columns": {
+      "name": "Name",
+      "email": "Email",
+      "phone": "Phone",
+      "reference": "Employee reference",
+      "jobTitle": "Job title",
+      "team": "Team",
+      "costCentre": "Cost centre",
+      "status": "Status"
+    },
+    "status": {
+      "active": "Active",
+      "archived": "Left"
+    },
+    "hasAccount": {
+      "yes": "Has an account",
+      "no": "No account"
+    },
+    "actions": {
+      "archive": "Mark as left",
+      "export": "Download CSV",
+      "addTeam": "Add a team",
+      "addCostCentre": "Add a cost centre",
+      "import": "Import from a file",
+      "retry": "Try again"
+    },
+    "notice": {
+      "noPrivilege": "Importing somebody's email does not give them access. To let a colleague administer this account, invite them from Members."
+    },
+    "teams": {
+      "empty": "No teams yet.",
+      "name": "Team name",
+      "costCentre": "Cost centre (optional)",
+      "none": "No cost centre",
+      "created": "Team added."
+    },
+    "costCentres": {
+      "empty": "No cost centres yet.",
+      "code": "Code",
+      "name": "Name",
+      "created": "Cost centre added."
+    },
+    "imports": {
+      "title": "Import people",
+      "choose": "Choose a CSV file",
+      "upload": "Read the file",
+      "reading": "Reading your file…",
+      "preview": "What this will do",
+      "willCreate": "{count} new",
+      "willUpdate": "{count} updated",
+      "invalid": "{count} rows we cannot use",
+      "ignoredColumns": "Columns we did not use: {columns}",
+      "apply": "Import these people",
+      "applying": "Importing…",
+      "cancel": "Discard this file",
+      "applied": "Imported. {created} added, {updated} updated.",
+      "empty": "No files have been imported yet.",
+      "sample": "First rows",
+      "row": "Row {number}",
+      "state": {
+        "previewed": "Waiting for you",
+        "applying": "Importing",
+        "applied": "Imported",
+        "cancelled": "Discarded",
+        "rejected": "Could not be read"
+      },
+      "rejection": {
+        "not_csv": "We could not read this as a CSV file.",
+        "no_header": "The first row needs column names.",
+        "no_identifying_column": "We could not find a name column. Add one called \"Full name\".",
+        "too_many_rows": "This file has too many rows. Please split it up.",
+        "too_large": "This file is too large.",
+        "empty": "This file has no rows in it."
+      },
+      "rowError": {
+        "missing_name": "No name",
+        "no_identifier": "No email, phone number or employee reference",
+        "invalid_email": "That email address is not valid",
+        "invalid_phone": "The phone number needs a country code, like +234…",
+        "duplicate_in_file": "This person appears earlier in the file",
+        "field_too_long": "One of these values is too long",
+        "unknown_team": "That team does not exist yet",
+        "unknown_cost_centre": "That cost centre does not exist yet"
+      }
+    },
+    "errors": {
+      "loadFailed": "We could not load your people.",
+      "uploadFailed": "We could not read that file."
+    }
   }
 }

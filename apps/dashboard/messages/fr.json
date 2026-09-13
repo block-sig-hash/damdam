@@ -332,5 +332,105 @@
       "internalOnly": "Opérations internes",
       "internalOnlyNote": "Les outils d'assistance internes forment une zone distincte et visuellement identifiable. Un administrateur d'organisation ne voit jamais ce style, et personne ne doit confondre les deux."
     }
+  },
+  "people": {
+    "title": "Personnes",
+    "subtitle": "Les personnes pour lesquelles votre organisation achète du service. Les ajouter ici ne leur donne pas accès à ce tableau de bord.",
+    "tabs": {
+      "people": "Personnes",
+      "teams": "Équipes",
+      "costCentres": "Centres de coûts",
+      "imports": "Imports"
+    },
+    "empty": "Personne n'a encore été ajouté.",
+    "columns": {
+      "name": "Nom",
+      "email": "E-mail",
+      "phone": "Téléphone",
+      "reference": "Matricule",
+      "jobTitle": "Fonction",
+      "team": "Équipe",
+      "costCentre": "Centre de coûts",
+      "status": "Statut"
+    },
+    "status": {
+      "active": "Actif",
+      "archived": "Parti"
+    },
+    "hasAccount": {
+      "yes": "A un compte",
+      "no": "Pas de compte"
+    },
+    "actions": {
+      "archive": "Marquer comme parti",
+      "export": "Télécharger le CSV",
+      "addTeam": "Ajouter une équipe",
+      "addCostCentre": "Ajouter un centre de coûts",
+      "import": "Importer depuis un fichier",
+      "retry": "Réessayer"
+    },
+    "notice": {
+      "noPrivilege": "Importer l'e-mail de quelqu'un ne lui donne pas accès. Pour qu'un collègue administre ce compte, invitez-le depuis Membres."
+    },
+    "teams": {
+      "empty": "Aucune équipe pour l'instant.",
+      "name": "Nom de l'équipe",
+      "costCentre": "Centre de coûts (facultatif)",
+      "none": "Aucun centre de coûts",
+      "created": "Équipe ajoutée."
+    },
+    "costCentres": {
+      "empty": "Aucun centre de coûts pour l'instant.",
+      "code": "Code",
+      "name": "Nom",
+      "created": "Centre de coûts ajouté."
+    },
+    "imports": {
+      "title": "Importer des personnes",
+      "choose": "Choisir un fichier CSV",
+      "upload": "Vérifier le fichier",
+      "reading": "Vérification de votre fichier…",
+      "preview": "Ce que cela va faire",
+      "willCreate": "{count} nouvelles",
+      "willUpdate": "{count} mises à jour",
+      "invalid": "{count} lignes inutilisables",
+      "ignoredColumns": "Colonnes non utilisées : {columns}",
+      "apply": "Importer ces personnes",
+      "applying": "Import en cours…",
+      "cancel": "Abandonner ce fichier",
+      "applied": "Importé. {created} ajoutées, {updated} mises à jour.",
+      "empty": "Aucun fichier n'a encore été importé.",
+      "sample": "Premières lignes",
+      "row": "Ligne {number}",
+      "state": {
+        "previewed": "En attente de votre décision",
+        "applying": "Import en cours",
+        "applied": "Importé",
+        "cancelled": "Abandonné",
+        "rejected": "Illisible"
+      },
+      "rejection": {
+        "not_csv": "Nous n'avons pas pu lire ce fichier comme un CSV.",
+        "no_header": "La première ligne doit contenir les noms de colonnes.",
+        "no_identifying_column": "Nous n'avons pas trouvé de colonne de nom. Ajoutez-en une appelée « Nom ».",
+        "too_many_rows": "Ce fichier contient trop de lignes. Veuillez le diviser.",
+        "too_large": "Ce fichier est trop volumineux.",
+        "empty": "Ce fichier ne contient aucune ligne."
+      },
+      "rowError": {
+        "missing_name": "Pas de nom",
+        "no_identifier": "Ni e-mail, ni téléphone, ni matricule",
+        "invalid_email": "Cette adresse e-mail n'est pas valide",
+        "invalid_phone": "Le numéro doit comporter un indicatif, par exemple +234…",
+        "duplicate_in_file": "Cette personne apparaît plus haut dans le fichier",
+        "field_too_long": "L'une de ces valeurs est trop longue",
+        "unknown_team": "Cette équipe n'existe pas encore",
+        "unknown_cost_centre": "Ce centre de coûts n'existe pas encore"
+      }
+    },
+    "errors": {
+      "loadFailed": "Nous n'avons pas pu charger vos personnes.",
+      "uploadFailed": "Nous n'avons pas pu lire ce fichier."
+    }
   }
 }

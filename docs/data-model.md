@@ -3563,3 +3563,80 @@ refuses active services, unsettled money/calls, or organization ownership with
 other active members. On success it revokes internet-call credentials before
 entering the existing retention flow. Order and audit history survive every
 branch of it.
+---
+
+## 6.57 Amendment — Organization People, Teams, Cost Centres and Imports (US-39)
+
+Chunk 22. Five tables, all additive, and the important one is the table that is
+**not** touched: `organization_members`.
+
+### People are not members
+
+`app/organizations/` owns membership — who may sign in to the dashboard. This
+amendment owns *people*: whom an organization buys service for. The assignment
+states the rule directly — *importing an email must not grant organization
+privilege* — and the separation is how it is enforced rather than remembered.
+There is no code path from an import to a membership, and the import format has
+no column that could feed one. A customer uploading two thousand staff creates
+two thousand recipients and zero administrators.
+
+This is what the legacy schema got wrong. A manifest row was a pilgrim, an
+organization had one shared password, and "in the file" and "may administer the
+account" were the same fact.
+
+`organization_people.user_id` is nullable and **stays null** until that person
+authenticates and claims the record. An imported email is a claim *about*
+somebody; treating it as their account would let an importer bind a colleague's
+identity by typing it.
+
+### Duplicate identity is a database policy, not a code path
+
+Three partial unique indexes — on `external_reference`, `email` and
+`phone_number` — each scoped to one organization. Partial because most of those
+fields are legitimately empty; per organization because two customers may employ
+the same contractor and neither gets to block the other.
+
+Together they are what makes the same file uploaded twice an **update** rather
+than a second Ada Obi, whichever code path does the writing.
+`ck_organization_people_identifiable` refuses a person with none of the three: a
+name nobody can deliver service to, or recognise on the next upload.
+
+### Teams and cost centres answer different questions
+
+A team is who somebody works with; a cost centre is who pays. They correlate in
+most organizations and not in all, so collapsing them would mean a customer who
+reorganizes a department has to re-cut their billing. A team carries a default
+cost centre, and a person may still be billed elsewhere — a secondment is not a
+reorganization.
+
+### An import is a record, not a request
+
+`people_imports` and `people_import_rows` exist because a five-thousand-row file
+cannot be validated, previewed, confirmed and applied inside one HTTP request,
+and an import that fails halfway with no record leaves an administrator guessing
+which half.
+
+Every row keeps its own outcome, so "what happened to line 3,412" has an answer —
+and so an apply is **resumable by construction**: a process that dies leaves the
+import in `applying` with its rows saying which people already exist, and
+re-running skips them.
+
+`ux_people_imports_digest` makes the same bytes the same import. An
+administrator who lost the response, or clicked twice, gets the preview they
+already have rather than a second one to choose between. A cancelled import
+frees the digest, because discarding a file and uploading it again is a thing
+people legitimately do.
+
+### Government is a category, not a privilege
+
+`organizations.org_type` already carried `government`; this chunk generalizes the
+*model* around it and adds nothing else. No certification is claimed and no
+additional data access follows from the category — asserted by a test rather
+than left as an intention.
+
+### What this amendment does not do
+
+It does not retire the manifest tables. `manifests`, `manifest_rows` and their
+pilgrim vocabulary are neither read nor altered here: generalizing the product's
+model of people is this chunk, and retiring the legacy tables is the removal
+sequence in `IMPLEMENTATION-PLAN.md` §7, with its own compatibility window.

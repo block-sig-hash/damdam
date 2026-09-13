@@ -2117,3 +2117,80 @@ request rather than a delivered file.
 
 As everywhere since chunk 19. `total_amount: "5000.000000"`, never a float: the
 number on a receipt is the one thing that must be exactly what was charged.
+---
+
+## 7.40 Amendment — Organization People, Teams and Imports (US-39)
+
+Chunk 22. Eleven endpoints under `/v1/organizations/{organization_id}`, all
+requiring a member session with `people:read` or `people:manage`.
+
+### Endpoints
+
+| Endpoint | Permission | Purpose |
+|---|---|---|
+| `GET /people` | `people:read` | This organization's service recipients |
+| `GET /people/{person_id}` | `people:read` | One person |
+| `POST /people/{person_id}/archive` | `people:manage` | Somebody left |
+| `GET /people.csv` | `report:export` | Download, safe to open |
+| `GET /teams`, `POST /teams` | `people:read` / `people:manage` | Teams and departments |
+| `GET /cost-centres`, `POST /cost-centres` | `people:read` / `people:manage` | Who pays |
+| `POST /people/imports` | `people:manage` | Upload a file for **preview** |
+| `GET /people/imports` | `people:read` | Past and pending imports |
+| `GET /people/imports/{id}/rows` | `people:read` | What happened to each line |
+| `POST /people/imports/{id}/apply` | `people:manage` | Turn the preview into people |
+| `POST /people/imports/{id}/cancel` | `people:manage` | Discard it |
+
+### Billing and member roles reach none of this
+
+`people:read` and `people:manage` were declared by chunk 07 and granted to
+owners and administrators only. That is the whole enforcement: the matrix is
+data, read on every request, rather than a check each route remembers to make.
+A billing session gets **403** from every endpoint above.
+
+### The organization id in the path is not the one that is used
+
+Every handler reads the organization from the resolved tenant context. The path
+segment exists for a readable URL and is discarded, so a caller who edits it
+gets their own organization's answer or a refusal — never somebody else's staff
+list. The export is included in that, deliberately: a CSV is the easiest place
+to leak a whole customer's people, because it is the one response nobody reads
+before shipping it.
+
+### An upload previews; it never creates
+
+`POST /people/imports` parses, records and returns what **would** happen —
+`valid_count`, `invalid_count`, a sample of rows and the columns it ignored. No
+person exists until `apply`. The preview is produced by the same code that does
+the work, so an administrator approving it is approving a computation rather than
+an estimate.
+
+Re-uploading the same bytes returns the import that already exists. A double
+click does not produce two previews of the same staff list.
+
+### Row errors are codes, and a row reports all of them
+
+`error_codes` is a list of stable identifiers — `missing_name`,
+`invalid_phone`, `duplicate_in_file`, `unknown_team` — which the dashboard
+localizes. A row that is wrong four ways carries four codes, because an
+administrator fixing a two-thousand-line file one error per upload gives up
+around the fourth round trip.
+
+A file that could not be read *at all* comes back with `state: "rejected"` and a
+`rejection_code`, rather than an empty success. "No name column" is an answer
+somebody can act on; a preview of zero rows is not.
+
+### Nothing in the import format grants access
+
+There is no role column, and `Role` is deliberately **not** matched as a
+synonym for a job title — the word is overloaded in exactly the dangerous
+direction. A file carrying `Role,owner` has that column reported in
+`ignored_columns` and nothing else happens. Access is an invitation, on a
+different endpoint, behind `member:invite`.
+
+### The export is safe to open
+
+Every cell passes through the shared `csv_safe` guard: a value beginning `=`,
+`+`, `-` or `@` is prefixed with an apostrophe, and embedded newlines and tabs
+are flattened. These values are almost entirely text a customer typed and
+uploaded, and the file exists to be opened in a spreadsheet — which is precisely
+the combination formula injection needs.

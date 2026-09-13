@@ -97,6 +97,8 @@ from app.payments.providers import PaymentProvider
 from app.payments.routes import router as payment_router
 from app.payments.routing import PaymentRouter, PaymentRoutingError
 from app.payments.service import PaymentError, PaymentService
+from app.people.routes import router as people_router
+from app.people.service import PeopleError, PeopleService
 from app.pricing.routes import router as retail_pricing_router
 from app.pricing.service import RetailPricingService
 from app.profile.device_tokens import DeviceTokenService
@@ -268,7 +270,6 @@ def create_app(
     # current state of the decision, not a missing wire-up: naming a
     # candidate here would be a selection sitting in code.
     api.state.payment_processor_adapter = None
-
     # Chunks 15-17 shipped the connectivity lifecycle, usage reconciliation and
     # spending controls as services with no HTTP surface and no wiring. Chunk 20
     # is the first thing that needs them at request time, so this is where they
@@ -296,6 +297,7 @@ def create_app(
     )
     api.state.account_service = AccountService(clock=clock)
     api.state.otp_service.tokens.session_tracker = api.state.account_service
+    api.state.people_service = PeopleService(clock=clock)
     api.state.mfa_service = MfaService(clock)
     api.state.hto_pilgrim_service = HtoPilgrimService()
     api.state.report_service = ProvisioningReportService(clock)
@@ -621,6 +623,30 @@ def create_app(
             # One status and one message for expired, spent, wrong-account and
             # never-existed.
             "grant_not_redeemable": 409,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(PeopleError)
+    async def people_error_handler(
+        request: Request, exc: PeopleError
+    ) -> JSONResponse:
+        statuses = {
+            # 404 throughout for anything that belongs to another tenant, so an
+            # id cannot be used to confirm that an organization has a person.
+            "person_not_found": 404,
+            "import_not_found": 404,
+            "cost_centre_not_found": 404,
+            "team_exists": 409,
+            "cost_centre_exists": 409,
+            "import_already_applied": 409,
+            "import_not_applicable": 409,
         }
         return JSONResponse(
             status_code=statuses.get(exc.code, 400),
@@ -966,6 +992,7 @@ def create_app(
     api.include_router(auth_router, prefix="/v1")
     api.include_router(admin_router, prefix="/v1")
     api.include_router(organization_router, prefix="/v1")
+    api.include_router(people_router, prefix="/v1")
     api.include_router(invitation_router, prefix="/v1")
     api.include_router(invitation_preview_router, prefix="/v1")
     api.include_router(consumer_router, prefix="/v1")
