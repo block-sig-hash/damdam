@@ -36,6 +36,7 @@ from app.fulfilment import models as _fulfilment
 from app.identity import models as _identity
 from app.ledger import models as _ledger
 from app.mfa import models as _mfa
+from app.operations import models as _operations
 from app.orders import models as _orders
 from app.organizations import models as _organizations
 from app.packages import models as _packages

@@ -86,6 +86,9 @@ from app.manifests.service import ManifestError, ManifestService
 from app.mfa.service import MfaError, MfaService
 from app.monitoring import PostHogExceptionMiddleware, build_exception_tracker
 from app.notifications.service import EmailSender, WhatsAppSender
+from app.operations.routes import router as operations_router
+from app.operations.service import OperationsError, OperationsService
+from app.operations.support import SupportDirectory
 from app.organizations.invitations import InvitationError, InvitationService
 from app.organizations.routes import invitation_router
 from app.organizations.routes import mfa_router as organization_mfa_router
@@ -400,6 +403,12 @@ def create_app(
         mfa=api.state.mfa_service,
         call_revoker=api.state.call_lifecycle_service.on_membership_revoked,
     )
+    # The internal operations surface owns only its immutable audit trail. Its
+    # constrained actions reuse the accepted ledger and calling services.
+    api.state.operations_service = OperationsService(
+        LedgerService(clock=clock), clock=clock
+    )
+    api.state.support_directory = SupportDirectory(api.state.operations_service)
     api.state.identity_service.add_recovery_listener(
         api.state.client_session_service
     )
@@ -716,6 +725,36 @@ def create_app(
             # 503: nothing is broken and an operator can act on it. D3 is open,
             # so a published market may genuinely have no seller recorded yet.
             "market_has_no_seller": 503,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(OperationsError)
+    async def operations_error_handler(
+        request: Request, exc: OperationsError
+    ) -> JSONResponse:
+        statuses = {
+            "supplier_attempt_not_found": 404,
+            "exception_not_found": 404,
+            "ledger_account_not_found": 404,
+            "line_not_found": 404,
+            # 409 for "the world is not in the state this action assumes".
+            # `reconciliation_required` is the one that matters: the caller has
+            # not asserted that anybody asked the supplier what happened, and
+            # retrying the request unchanged must not succeed.
+            "reconciliation_required": 409,
+            "provider_reference_required": 409,
+            "attempt_already_settled": 409,
+            "cross_currency_compensation": 409,
+            # 400: the request itself is malformed, not the world.
+            "one_identifier_required": 400,
+            "non_positive_amount": 400,
         }
         return JSONResponse(
             status_code=statuses.get(exc.code, 400),
@@ -1089,6 +1128,7 @@ def create_app(
     api.include_router(bulk_router, prefix="/v1")
     api.include_router(bulk_recipient_router, prefix="/v1")
     api.include_router(enterprise_router, prefix="/v1")
+    api.include_router(operations_router, prefix="/v1")
     api.include_router(invitation_router, prefix="/v1")
     api.include_router(invitation_preview_router, prefix="/v1")
     api.include_router(consumer_router, prefix="/v1")

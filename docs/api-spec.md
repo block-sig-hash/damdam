@@ -2390,3 +2390,76 @@ Offboarding reaches only what the organization paid for. A line the same person
 bought themselves is on an order with no `payer_organization_id`, and every
 query here joins through that column — so it is out of scope by construction
 rather than by a filter somebody remembered to add.
+
+## 7.43 Amendment — The Internal Operations Surface (US-41)
+
+Chunk 25. Seven endpoints under `/v1/operations`, and the first thing to say
+about them is who cannot reach them.
+
+### Endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /operations/exceptions` | The queue, filtered by kind and searched by support-reference prefix |
+| `GET /operations/actions` | Every operator decision, newest first |
+| `POST /operations/supplier-attempts/{attempt_id}/resolution` | Settle a lost supplier outcome, after reconciliation |
+| `POST /operations/payment-discrepancies` | Post a balanced compensating entry |
+| `POST /operations/exceptions/{exception_id}/dismissal` | Close an item that needs nothing, with a reason |
+| `POST /operations/lines/lookup` | Confirm a line from a masked identifier |
+| `GET /operations/organizations/{organization_id}/lines.csv` | One tenant's lines, masked, audited |
+
+### A separate audience, not a separate permission
+
+Every route verifies a token minted for the `admin` audience. An enterprise
+administrator — however senior inside their own organization, holding every
+permission §7.34's matrix can grant — holds a token for a different audience and
+receives `401`. There is no operations permission an organization could be
+granted, because operations privileges are not expressed in the tenant matrix at
+all. That is the strongest form the separation can take: not a check somebody
+could widen, but an absence of any path to widen.
+
+### Every action carries a reason and an idempotency key
+
+Both are required by the request schema and the reason is required again by a
+database check. A default reason is no reason, and a server-generated
+idempotency key would make a replay a second action. Replaying a key returns the
+decision that already exists — same action id, same `ledger_entry_id`, nothing
+posted twice.
+
+### `409 reconciliation_required` is a refusal, not a warning
+
+`POST /supplier-attempts/{id}/resolution` takes `reconciled` as an explicit
+assertion that somebody asked the supplier what happened to the original
+operation reference. Without it the request fails with `409` and the attempt is
+unchanged. Confirming a *success* additionally requires `provider_reference`;
+omitting it fails with `409 provider_reference_required`.
+
+Related refusals: `409 attempt_already_settled`,
+`409 cross_currency_compensation`, `400 one_identifier_required`,
+`400 non_positive_amount`.
+
+### The one money path posts, it does not set
+
+`POST /operations/payment-discrepancies` names two ledger accounts and an
+amount, and the response carries the `ledger_entry_id` of a balanced entry. No
+endpoint on this surface accepts a balance, and no operations route is a `PUT`
+or `PATCH`.
+
+### The lookup is a `POST` because it writes
+
+`POST /operations/lines/lookup` records who looked before it returns the view. A
+`GET` that writes an audit row is a `GET` that lies about being safe to retry,
+and a caching layer would eventually make the record wrong. The response carries
+`access_action_id` so the operator can see that looking was recorded.
+
+It takes exactly one identifier — line id, ICCID or E.164 — and returns trailing
+digits only. Accepting a whole ICCID is not disclosure: it is what the customer
+read out. Returning one they had not is. §6.51's sealed activation material has
+no field in any response shape here.
+
+### The export's tenant scope is a join
+
+`GET /operations/organizations/{organization_id}/lines.csv` reaches a line only
+through an order whose payer *is* that organization, so there is no filter
+parameter an operator could widen. Every cell passes `csv_safe`, and the export
+writes its own `view_sensitive_record` row.

@@ -110,6 +110,33 @@ _API_EN = {
     "job_not_provisionable": (
         "That bulk order cannot be started in its current state."
     ),
+    # Chunk 25 (US-41). These are read by internal operators rather than
+    # customers, so they name the missing step instead of apologising for it:
+    # the reader is the person who can go and do it.
+    "reconciliation_required": (
+        "Reconcile this attempt against the supplier's original reference "
+        "before recording an outcome. Resolving it without asking is how a "
+        "second purchase gets made."
+    ),
+    "provider_reference_required": (
+        "Record the supplier's own reference for the success you are "
+        "confirming."
+    ),
+    "attempt_already_settled": (
+        "That supplier attempt already has a definitive outcome."
+    ),
+    "cross_currency_compensation": (
+        "A compensating entry moves one currency. Converting here would invent "
+        "a rate nobody agreed."
+    ),
+    "one_identifier_required": (
+        "Look a line up by exactly one of its id, its ICCID or its number."
+    ),
+    "non_positive_amount": "A compensating entry needs a positive amount.",
+    "supplier_attempt_not_found": "We could not find that supplier attempt.",
+    "exception_not_found": "We could not find that exception item.",
+    "ledger_account_not_found": "We could not find that ledger account.",
+    "line_not_found": "We could not find a line with that identifier.",
     "merchant_not_found": "No payment account is set up for this seller.",
     "live_collection_disabled": "We cannot take payments yet. Nothing has been charged.",
     "no_merchant_account": "No payment account is set up for this currency.",
@@ -345,6 +372,36 @@ _API_FR = {
     "job_not_provisionable": (
         "Cette commande groupée ne peut pas être lancée dans son état actuel."
     ),
+    # Chunk 25 (US-41) — destiné aux opérateurs internes.
+    "reconciliation_required": (
+        "Rapprochez cette tentative de la référence d'origine du fournisseur "
+        "avant d'enregistrer un résultat. La résoudre sans demander, c'est "
+        "ainsi qu'un second achat est effectué."
+    ),
+    "provider_reference_required": (
+        "Enregistrez la référence du fournisseur pour le succès que vous "
+        "confirmez."
+    ),
+    "attempt_already_settled": (
+        "Cette tentative fournisseur a déjà un résultat définitif."
+    ),
+    "cross_currency_compensation": (
+        "Une écriture de compensation ne déplace qu'une devise. Convertir ici "
+        "inventerait un taux que personne n'a accepté."
+    ),
+    "one_identifier_required": (
+        "Recherchez une ligne par exactement un identifiant : son id, son "
+        "ICCID ou son numéro."
+    ),
+    "non_positive_amount": (
+        "Une écriture de compensation exige un montant positif."
+    ),
+    "supplier_attempt_not_found": (
+        "Nous n'avons pas trouvé cette tentative fournisseur."
+    ),
+    "exception_not_found": "Nous n'avons pas trouvé cet élément d'exception.",
+    "ledger_account_not_found": "Nous n'avons pas trouvé ce compte du grand livre.",
+    "line_not_found": "Nous n'avons pas trouvé de ligne avec cet identifiant.",
     "merchant_not_found": "Aucun compte de paiement n'est configuré pour ce vendeur.",
     "live_collection_disabled": "Nous ne pouvons pas encore accepter de paiements. Rien n'a été débité.",
     "no_merchant_account": "Aucun compte de paiement n'est configuré pour cette devise.",
