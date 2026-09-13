@@ -3199,3 +3199,186 @@ Two refusals are worth recording:
   `data_limit_exceeded` was not suspended by us; only raising the limit clears
   it, and a resume request would be refused by the carrier later and less
   clearly.
+
+---
+
+## 6.54 Amendment — Call Authorization, Provider Legs and the Signed Event Inbox (US-45)
+
+**Recorded 12 September 2026 by build chunk V02.** Additive: five new tables, no
+column added to an existing one, no row touched, nothing seeded and nothing
+dropped. Migration `0038_call_authorization`. This supplies the detailed shapes
+§6.46 deferred, and it is governed by the reviewed V01 contract in
+[`implementation/voice/API-CONTRACTS.md`](./implementation/voice/API-CONTRACTS.md)
+and its [go/no-go](./implementation/voice/GO-NO-GO.md).
+
+The historical voice tables chunk 04 deliberately retained — `call_logs`,
+`voice_credentials`, `verified_caller_identities`, `caller_id_consents` — are not
+read, written or altered by this migration or by `app/calling/`. Old call history
+survives unchanged because nothing here knows it exists.
+
+### What the schema is for
+
+The whole chunk exists to make one sentence true: *a destination leg starts only
+from an unused, unexpired, owner-scoped grant whose reservation committed first.*
+V01 established why that has to be enforced server-side rather than in the
+client: a Telnyx WebRTC credential authenticates an **endpoint**, and no
+per-destination scope is documented inside the token. A copied token must be
+assumed able to do whatever its connection permits, so the client is never
+trusted with a decision — it supplies a destination *claim*, and `call_attempts`
+is the authority for everything that follows.
+
+### `call_attempts` — the grant
+
+One row per authorized call, written before any external effect. It records,
+immutably, every fact the call is later judged against: owner, organization (or
+`NULL` for personal), payer kind, seller, currency, entitlement, normalized
+destination and its country/kind, origin kind, authorized outbound identity,
+tariff version **with the rate snapshotted**, maximum seconds, maximum charge,
+reservation and expiry.
+
+The rate is both referenced and snapshotted. A foreign key alone makes a
+historical charge depend on a join a later correction can change; a snapshot
+alone loses the provenance a dispute needs.
+
+`grant_consumed_at` is a single-use latch. Consumption is a conditional
+`UPDATE … WHERE grant_consumed_at IS NULL AND state = 'authorized' AND expires_at
+> now` — a read-then-write would let two concurrent webhooks for one parked call
+both decide to proceed, and one grant would fund two calls.
+
+`stop_requested_at` is the durable stop latch. It is written before any provider
+hangup and checked again while consuming a grant or dispatching a later command,
+so a delayed parked or answered event cannot restart work after the customer or
+an organization administrator has stopped it.
+
+Constraints that carry guarantees rather than tidiness:
+
+| Constraint | What it prevents |
+|---|---|
+| `uq_call_attempts_idempotency` (owner + key) | A retried authorize creating a second attempt and a second hold. Scoped per user, because a global key space lets one customer's replay return another's call |
+| `uq_call_attempts_reservation` | Two attempts sharing one hold, the second funded by money the first has spoken for |
+| `ck_call_attempts_payer_matches_scope` | A work call billed to an organization that appears nowhere on the row |
+| `ck_call_attempts_unconsumed_while_authorized` | A grant recorded as unused after it has been spent |
+| `ck_call_attempts_destination_e164` / `_identity_e164` | A destination or identity that was never normalized |
+
+`entitlement_id` is nullable on purpose: an internet call may be funded from
+ledger credit with no allowance behind it. There is no eSIM, so there need not be
+a package — and **no column here references an installation or a carrier line**,
+because the calling amendment requires internet calling to be sellable without
+either and a nullable FK is still a column somebody eventually depends on.
+
+`seller_legal_entity_id` is nullable only because D3 is open and `legal_entities`
+is deliberately unseeded. It is not optional in the product sense; V03 cannot
+settle a call without it.
+
+### `call_legs` — provider legs, counted separately from attempts
+
+Attempts and legs are not the same count. V01's cost review is explicit that the
+number of billable legs per attempt is unproven for the chosen topology, and the
+retained legacy code assumed exactly one.
+
+`ux_call_legs_live_destination` is a partial unique index allowing **one live
+destination leg per attempt**. That is the "no duplicate PSTN leg" requirement
+held by the database rather than by a code path: a worker that lost an originate
+response and reconnects cannot create a second billable leg even when its own
+bookkeeping is confused.
+
+Provider identifiers — control id, leg id, session id, connection id, credential
+id — are all stored and none is the sole correlation key. Public documentation
+does not establish that independently created legs share a `call_session_id`, so
+`attempt_id` is the correlation and the rest is corroboration (V01 invariant 7).
+
+`time_limit_seconds` is `NULL` on a client-created leg. V01 found no documented
+provider-enforced bound on a parked leg; recording a number there would claim a
+limit that does not exist (blocker B3).
+
+### `call_operations` — every command, written before it is sent
+
+Telnyx's `command_id` deduplicates for 60 seconds. A worker restart takes longer,
+and after that window nothing on their side deduplicates at all. So the durable
+record is ours, and reconciliation asks *what did operation X produce* rather
+than *has enough time passed to try again*.
+
+`ux_call_operations_live` permits one live operation per attempt, kind and
+`target_key`, where live includes `outcome_unknown`. The empty target identifies
+the one originate or bridge command; a hangup uses its leg id, allowing each leg
+to be terminated once without one leg's command suppressing the other's. A
+second concurrent originate is a second call, not a retry. `outcome_unknown`
+staying live keeps the index refusing until a human or reconciliation settles it.
+
+`dispatched_at` is set and committed before the provider call. An `in_flight`
+operation without it is an intent that was never sent and may be dispatched;
+once it is present the same operation is reconciled or held for review and is
+never sent again after a process restart.
+
+`OperationOutcome` is deliberately the same five values as
+[§6.48](#648-amendment--durable-outbox-supplier-attempts-and-worker-leases-us-32)'s
+`AttemptOutcome`, for the identical reason: collapsing `outcome_unknown` into
+`failed` makes a lost response look retryable.
+
+### `call_events` — the signed event inbox
+
+V01's independent review found that an Ed25519 signature plus a timestamp
+tolerance accepts the *same valid event* again inside the window. Freshness is
+not deduplication. `uq_call_events_provider_event` is.
+
+The event is inserted **before** any state transition, so a crash between the two
+leaves a stored event to reprocess rather than a transition nobody recorded. The
+signed raw payload is retained for audit and `normalized_payload` retains the
+provider-neutral values that were accepted after signature verification. Replay
+reconstructs the event from that normalized copy; it never trusts or reparses an
+unauthenticated projection. This is a new table rather than a use of §6.48's
+`inbox_messages`: that is a dedup marker with no body, and a body-less marker
+cannot re-apply an event that arrived before the leg it refers to.
+
+`EventDisposition` separates `unmatched` from `quarantined` on purpose. Unmatched
+is ordinary — an event that overtook the response to the command that caused it,
+and is replayable. Quarantined means the event contradicted our records: a
+credential that is not the attempt's, a destination that is not the authorized
+one. That is a security signal and must never be filed under "arrived early".
+
+### `calling_client_credentials` — one per device, revocable alone
+
+Telnyx recommends a credential per device and warns that several clients on one
+credential share a SIP identity. The retired model gave each *user* one, which
+makes revocation all-or-nothing: signing out a lost phone would sign out every
+device the customer owns, so in practice nobody revokes at all.
+
+`ux_calling_credentials_live_device` is unique per `(user, device)` over every
+non-revoked row. Credential creation first commits a `provisioning` row with an
+`issuance_reference` and `issuance_dispatched_at`, then makes the provider call.
+Only a complete provider response moves it to `active`; a lost response becomes
+`outcome_unknown` and blocks replacement because retrying could create an orphan
+provider credential. A revoked device can register again, and the old row
+survives because it explains which credential originated a call that was already
+billed. Reissuing a client token for an active device reuses the provider
+credential rather than creating another one.
+
+The rate-limit counters live on the row rather than in Redis. A counter a process
+restart clears is not a limit; it is a speed bump that disappears exactly when
+somebody is deliberately attacking it.
+
+### State vocabularies are provider-observable, and converge forward
+
+`AttemptState` and `LegState` separate accepted, ringing, answered, terminal and
+unknown because each drives a different recovery. Both carry an explicit rank, and
+a transition is applied only if it ranks above the current state: provider events
+are duplicated, delayed and reordered, and a `call.answered` overtaking a
+`call.hangup` would otherwise resurrect a finished call and produce a negative
+duration. `ck_call_legs_not_negative_duration` is the same rule in the database.
+
+`unknown` ranks *below* everything, so any real observation supersedes it, and it
+never overwrites a state we actually saw.
+
+### What this amendment does not do
+
+No provider is enabled, no credential is created, no connection is configured and
+no rate is seeded. `Settings.calling_live_routes_enabled` defaults to False and
+refuses to start without provider credentials, a named containment-evidence
+artifact, an outbound identity and at least one supported destination country —
+blockers B1–B5 are open and a flag does not close them. The schema exists so the
+authorization path can be built and tested against PostgreSQL's real guarantees
+while they remain open.
+
+V03 owns metering and settlement: the usage records, the CDR ingestion and the
+compensating entries that turn a held reservation into a charge. Nothing here
+settles money.

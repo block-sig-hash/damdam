@@ -16,7 +16,7 @@ import math
 import secrets
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from sqlalchemy import CursorResult, func, update
 from sqlalchemy.exc import IntegrityError
@@ -48,6 +48,14 @@ class IdentityError(Exception):
         super().__init__(code)
 
 
+class RecoveryListener(Protocol):
+    """A capability whose durable access must die during account recovery."""
+
+    def on_account_recovered(
+        self, session: Session, user: User, at: datetime
+    ) -> None: ...
+
+
 def normalize(kind: IdentifierKind, value: str) -> str:
     """Normalise before storing *and* before looking up.
 
@@ -69,6 +77,7 @@ class IdentityService:
         redis: Any | None = None,
         send_cooldown_seconds: int = 60,
         sends_per_hour: int = 5,
+        recovery_listeners: list[RecoveryListener] | None = None,
     ) -> None:
         self.transport = transport
         self.clock = clock
@@ -76,6 +85,10 @@ class IdentityService:
         self.redis = redis
         self.send_cooldown_seconds = send_cooldown_seconds
         self.sends_per_hour = sends_per_hour
+        self.recovery_listeners = list(recovery_listeners or [])
+
+    def add_recovery_listener(self, listener: RecoveryListener) -> None:
+        self.recovery_listeners.append(listener)
 
     # --- abuse control ----------------------------------------------------
 
@@ -443,6 +456,8 @@ class IdentityService:
             )
             .values(consumed_at=moment)
         )
+        for listener in self.recovery_listeners:
+            listener.on_account_recovered(session, user, moment)
         session.flush()
         return user
 

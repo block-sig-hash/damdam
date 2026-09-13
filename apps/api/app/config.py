@@ -131,6 +131,34 @@ class Settings(BaseSettings):
     cli_verification_confirm_attempt_limit: int = 3
     cli_verification_confirm_lockout_seconds: int = 60
 
+    # Outbound internet calling (US-45, chunk V02). Governed by
+    # docs/implementation/voice/GO-NO-GO.md, whose verdict is GO for
+    # provider-neutral preparation and NO-GO for a live Telnyx route until
+    # blockers B1-B5 close. These default to off; see the validator below for
+    # why turning the route on takes more than a flag.
+    calling_live_routes_enabled: bool = False
+    #: The recorded account-test artifact proving a client credential cannot
+    #: reach emergency or direct PSTN routing on its own (blocker B1). A
+    #: reference, not evidence in itself -- but a route cannot be enabled
+    #: without somebody naming the artifact a reviewer can go and read.
+    calling_containment_evidence_reference: str = ""
+    #: ISO country codes this deployment sells outbound calls to. Empty means
+    #: none, which is the honest default while no rate deck exists (B2).
+    calling_supported_destination_countries: list[str] = Field(default_factory=list)
+    #: How long an authorization stays usable. Short on purpose: this is the
+    #: window in which a copied client token could spend a grant.
+    calling_grant_ttl_seconds: int = 120
+    #: The ceiling on any single call, and therefore on any single
+    #: reservation. Below Telnyx's documented 14400s `time_limit_secs` maximum.
+    calling_max_call_seconds: int = 3600
+    #: Client sessions per device per window. The amendment requires calling
+    #: and credential issuance to be rate limited.
+    calling_sessions_per_device_per_hour: int = 20
+    #: The E.164 identity presented on outbound internet calls. A number we own
+    #: and the provider has authorised, never the customer's own: own-number
+    #: presentation is deferred (VOICE-EXPANSION.md) and unproven on this route.
+    calling_outbound_identity_e164: str = ""
+
     invoice_storage_backend: Literal["filesystem", "s3"] = "filesystem"
     invoice_storage_path: str = "/tmp/damdam-invoices"
     invoice_s3_endpoint_url: str = ""
@@ -205,6 +233,57 @@ class Settings(BaseSettings):
                 "INTERNET_DIALER_ENABLED is not supported yet -- outbound "
                 "internet calling is assigned to V04/V05 and neither has been "
                 "accepted (docs/implementation/VOICE-EXPANSION.md)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def live_calling_needs_credentials_and_containment_evidence(self) -> "Settings":
+        """A flag alone must not put billable calls on a wire.
+
+        `VOICE-EXPANSION.md`: *UI feature flags alone cannot enable an
+        unsupported service.* V01's blocker B1 is that no documentation
+        establishes a client credential cannot originate an emergency or direct
+        PSTN call, and only an account test can close it. So enabling the live
+        route requires the provider credentials *and* a named containment
+        artifact, and a deployment that sets the flag without them fails at
+        startup rather than accepting calls it cannot bound.
+        """
+        if not self.calling_live_routes_enabled:
+            return self
+        missing = [
+            name
+            for name, value in (
+                ("TELNYX_API_KEY", self.telnyx_api_key),
+                ("TELNYX_CONNECTION_ID", self.telnyx_connection_id),
+                ("TELNYX_PUBLIC_KEY", self.telnyx_public_key),
+                (
+                    "CALLING_CONTAINMENT_EVIDENCE_REFERENCE",
+                    self.calling_containment_evidence_reference,
+                ),
+                (
+                    "CALLING_OUTBOUND_IDENTITY_E164",
+                    self.calling_outbound_identity_e164,
+                ),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(
+                "CALLING_LIVE_ROUTES_ENABLED requires "
+                + ", ".join(missing)
+                + " -- blocker B1 (credential containment and emergency "
+                "bypass) is open and a flag does not close it"
+            )
+        if not self.calling_supported_destination_countries:
+            raise ValueError(
+                "CALLING_LIVE_ROUTES_ENABLED requires at least one supported "
+                "destination country; selling to an unlisted destination has "
+                "no published rate (blocker B2)"
+            )
+        if self.app_env != "test":
+            raise ValueError(
+                "Live calling remains blocked until V03 settlement/enforcement "
+                "and V01 account-control evidence are independently accepted"
             )
         return self
 

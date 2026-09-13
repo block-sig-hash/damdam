@@ -1890,3 +1890,112 @@ expose internet rates. Each destination also includes nullable `origin_country`
 kind, setup charge, minimum and increment without rounding metered rates.
 Installation redemption explicitly binds the grant to the path's credential
 before decrypting; concurrent deliveries lock and refresh the delivery counter.
+
+---
+
+## 7.38 Amendment — Outbound Internet Calling (US-45)
+
+Chunk V02 adds the shared backend for outbound internet calls. These shapes come
+from V01's reviewed interface proposal
+([GO-NO-GO.md](./implementation/voice/GO-NO-GO.md)), **not** from the retired
+`/v1/voice/*` surface — those contracts no longer match anything and chunk 04
+left them returning 410.
+
+Nothing here is live. `Settings.calling_live_routes_enabled` defaults to False,
+and a deployment that sets it without provider credentials, a named
+containment-evidence artifact, an outbound identity and at least one supported
+destination country fails at startup.
+
+### Endpoints
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /v1/calls/eligibility` | member session | What a call would cost and whether it could start. Holds nothing |
+| `POST /v1/calls/client-session` | member session | A short provider token for one device |
+| `DELETE /v1/calls/client-session` | member session | Revoke this device's credential, or every device's |
+| `POST /v1/calls/authorize` | member session | Create one durable grant, with the money already held |
+| `POST /v1/calls/{attempt_id}/start` | member session | The dial instruction for one attempt |
+| `POST /v1/calls/{attempt_id}/stop` | member session | End a call. Works with calling disabled |
+| `GET /v1/calls/{attempt_id}` | member session | One attempt's current state |
+| `GET /v1/calls` | member session | This caller's calls, in one scope |
+| `POST /v1/webhooks/calling/events` | provider signature | Signed provider events, applied at most once |
+
+### Authorization and dialling are two steps, deliberately
+
+A client that holds a grant does not thereby hold the means to place a call, and
+a client that holds a provider token cannot choose what to spend it on. Splitting
+them is the whole point: V01 found no per-destination scope inside a provider
+token, so the destination has to be bound somewhere the token cannot reach.
+
+`POST /calls/authorize` returns an attempt and **no provider material**. `POST
+/calls/{id}/start` returns the destination and a correlation string and **no
+token** — the client already has a device session from `client-session`.
+
+### The client never names an identity, a payer or a rate
+
+There is no request field for the outbound identity: it is chosen by the server
+from numbers we own, because own-number presentation is deferred and unproven on
+this route. There is no field for a rate or an amount. `organization_id` is the
+one field that influences money, and it is a *request* to bill a tenant that the
+server verifies against an active membership before anything is held.
+
+### `idempotency_key` is the client's, and scoped to the caller
+
+Replaying it returns the same attempt and the same reservation. Replaying it with
+a **different destination** is a 409 rather than a silent return of the first
+call: the two requests are not the same request, and answering the second with
+the first hides a client bug that eventually dials the wrong number.
+
+Two customers may use the same key. The uniqueness is per user, because a global
+key space lets one customer's replay return another customer's call.
+
+### No provider identifier crosses the boundary
+
+No response carries a `call_control_id`, `call_session_id` or connection id. Our
+attempt-to-leg mapping is authoritative and the provider's identifiers are
+corroboration; a client that learned one would start correlating on it, and V01
+is explicit that independently created legs are not documented to share a session
+id.
+
+### `route_enabled` is reported, never implied
+
+`GET /calls/eligibility` returns a price *and* whether a route exists. A price
+with no route is a quote for something that cannot be bought, and a client that
+cannot tell the difference will render a working call button.
+
+### Absence is the answer for somebody else's call
+
+`GET /calls/{id}` on an attempt belonging to another account returns **404**, not
+403. A distinct answer would confirm the id is real, which is enough to enumerate
+other customers' calls. `GET /calls` filters by owner and scope in the query;
+personal and work histories are separate lists, because the payer differs and so
+does who may read them.
+
+### The webhook says as little as possible
+
+`POST /v1/webhooks/calling/events` returns `202 {"received": true}` for every
+event it stores — including a duplicate it did not apply. Telling the provider
+which deliveries were novel would tell an attacker probing the endpoint the same
+thing. An unverifiable event gets **401** and is not stored.
+
+The raw body is verified before it is parsed. A signature checked against
+re-serialized JSON verifies what our parser produced rather than what was sent.
+
+### Status codes
+
+| Code | When |
+|---|---|
+| `400` | The request is malformed — including `destination_not_e164`, which really is a bad number |
+| `401` | No session, or an unverifiable webhook signature |
+| `403` | Authenticated, but not this tenant's member and not this device |
+| `404` | No such attempt, or not this caller's |
+| `409` | Well-formed and refused by the world: insufficient funds, a refused destination, an idempotency conflict, an unresolved session outcome |
+| `410` | The authorization expired |
+| `429` | Too many client sessions for this device |
+| `502` | The provider refused or answered incomprehensibly |
+| `503` | Calling is not enabled here. No request the client can make will work while B1–B5 are open |
+
+Destination refusals are `409` rather than `400` on purpose. The request is well
+formed and the answer is about the world — an emergency number, a premium range,
+an unsold country — and a `4xx` that reads as "fix your request" invites a client
+to reformat and retry something that will never be permitted.

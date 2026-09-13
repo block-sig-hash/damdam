@@ -17,6 +17,13 @@ from app.audit.service import AuditLogService
 from app.auth.hto import HTOAuthError, HTOService
 from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
+from app.calling.contract import CallingAdapter, CallingError
+from app.calling.lifecycle import CallLifecycleError, CallLifecycleService
+from app.calling.routes import router as calling_router
+from app.calling.routes import webhook_router as calling_webhook_router
+from app.calling.service import CallAuthorizationError, CallAuthorizationService
+from app.calling.sessions import ClientSessionError, ClientSessionService
+from app.calling.telnyx import DisabledCallingAdapter, TelnyxCallingAdapter
 from app.catalog.service import CatalogError, CatalogService
 from app.checkins.routes import router as checkin_router
 from app.checkout.catalog_view import CatalogViewService
@@ -137,6 +144,7 @@ def create_app(
     identity_transport: DeliveryTransport | None = None,
     esim_providers: Mapping[str, EsimProvider] | None = None,
     esim_scheduler: EsimIssuanceScheduler | None = None,
+    calling_adapter: CallingAdapter | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     supplied = (redis_client, providers, scheduler, session_factory)
@@ -291,6 +299,159 @@ def create_app(
         clock,
         cast(RedisClient, redis_client),
     )
+
+    # --- outbound internet calling (US-45, chunk V02) ----------------------
+    #
+    # Keep the provider adapter when either provider-side control or webhook
+    # verification remains configured. Its originate/session methods still
+    # enforce the live-route gate, while hangup, credential revocation and
+    # signed terminal events must continue after new calling is switched off.
+    # A deployment with no provider configuration gets the honest disabled
+    # adapter.
+    resolved_calling_adapter: CallingAdapter = calling_adapter or (
+        TelnyxCallingAdapter(resolved_settings, clock=clock)
+        if resolved_settings.telnyx_api_key or resolved_settings.telnyx_public_key
+        else DisabledCallingAdapter()
+    )
+    api.state.calling_adapter = resolved_calling_adapter
+    if calling_adapter is not None and resolved_settings.app_env != "test":
+        raise ValueError("Injected calling adapters are test-only")
+    # The outbound identity is chosen by the server from numbers we own. Own-
+    # number presentation is deferred (VOICE-EXPANSION.md) and unproven on this
+    # route, so there is no request field a client could ask for one through.
+    api.state.calling_identity_e164 = (
+        resolved_settings.calling_outbound_identity_e164
+    )
+    api.state.call_authorization_service = CallAuthorizationService(
+        LedgerService(clock=clock),
+        clock=clock,
+        supported_countries=frozenset(
+            country.upper()
+            for country in resolved_settings.calling_supported_destination_countries
+        ),
+        grant_ttl_seconds=resolved_settings.calling_grant_ttl_seconds,
+        max_call_seconds=resolved_settings.calling_max_call_seconds,
+        route_enabled=resolved_settings.calling_live_routes_enabled,
+    )
+    api.state.client_session_service = ClientSessionService(
+        resolved_calling_adapter,
+        clock=clock,
+        sessions_per_hour=resolved_settings.calling_sessions_per_device_per_hour,
+    )
+    api.state.call_lifecycle_service = CallLifecycleService(
+        resolved_calling_adapter,
+        api.state.call_authorization_service,
+        clock=clock,
+    )
+    api.state.membership_service.add_revocation_listener(
+        api.state.call_lifecycle_service
+    )
+    api.state.identity_service.add_recovery_listener(
+        api.state.client_session_service
+    )
+
+    @api.exception_handler(CallAuthorizationError)
+    async def call_authorization_error_handler(
+        request: Request, exc: CallAuthorizationError
+    ) -> JSONResponse:
+        statuses = {
+            # `attempt_not_found` covers somebody else's attempt as well as one
+            # that does not exist. A distinct 403 would confirm that an id is
+            # real, which is enough to enumerate other customers' calls.
+            "attempt_not_found": 404,
+            "not_a_member": 403,
+            "device_not_authorized": 403,
+            "entitlement_not_available": 403,
+            "attempt_expired": 410,
+            "idempotency_conflict": 409,
+            "insufficient_funds": 409,
+            "attempt_not_startable": 409,
+            "reservation_failed": 409,
+            # 503, not 400: the request is well formed and the route is off.
+            # A 4xx would tell a client to change its request, and no request
+            # it can make will work while B1-B5 are open.
+            "calling_route_disabled": 503,
+            # Destination refusals are about the world, not about the syntax of
+            # the request, so they are 409 apart from the one that really is a
+            # malformed number.
+            "destination_not_e164": 400,
+            "destination_emergency_or_special": 409,
+            "destination_premium": 409,
+            "destination_country_not_supported": 409,
+            "destination_country_unknown": 409,
+            "rate_unavailable": 409,
+            "rate_unusable": 409,
+            "invalid_duration": 400,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(ClientSessionError)
+    async def client_session_error_handler(
+        request: Request, exc: ClientSessionError
+    ) -> JSONResponse:
+        statuses = {
+            "device_id_required": 400,
+            "session_rate_limited": 429,
+            # An unknown outcome is not a failure and not a success. 409 says
+            # "the state is unresolved", and the client must not retry into a
+            # second orphaned credential.
+            "session_outcome_unknown": 409,
+            "calling_route_disabled": 503,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(CallingError)
+    async def calling_provider_error_handler(
+        request: Request, exc: CallingError
+    ) -> JSONResponse:
+        statuses = {
+            # A bad signature gets 401 and nothing else. No detail, because the
+            # sender of an unverifiable event is not somebody to help debug.
+            "invalid_webhook_signature": 401,
+            "webhook_verification_unconfigured": 401,
+            "invalid_webhook_payload": 400,
+            "calling_route_disabled": 503,
+            "capability_not_available": 503,
+            "telnyx_not_configured": 503,
+            "provider_rejected": 502,
+            "invalid_provider_response": 502,
+            "credential_expiry_unknown": 502,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 502),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(CallLifecycleError)
+    async def call_lifecycle_error_handler(
+        request: Request, exc: CallLifecycleError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
 
     @api.exception_handler(IdentityError)
     async def identity_error_handler(
@@ -781,6 +942,8 @@ def create_app(
     api.include_router(esim_router, prefix="/v1")
     api.include_router(reports_router, prefix="/v1")
     api.include_router(voice_router, prefix="/v1")
+    api.include_router(calling_router, prefix="/v1")
+    api.include_router(calling_webhook_router, prefix="/v1")
     api.include_router(checkin_router, prefix="/v1")
     api.include_router(sos_router, prefix="/v1")
     return api
