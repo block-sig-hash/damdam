@@ -133,7 +133,7 @@ it does not reverse chunk 04 acceptance or imply restored calling code.
 | Chunk | Story | Status | Remaining gate |
 |---|---|---|---|
 | V01 — Internet-voice feasibility | US-44 | **ACCEPTED AFTER FIXES** (documented/preparatory scope); live route **EXTERNAL_BLOCKED** | corrected content `90f6a4c` / [review](reviews/V01.md), [handoff](handoffs/V01.md), [evidence](voice/) — Park Outbound Calls is the documented preparation route; emergency bypass, containment, bounds, billing and live client proof remain B1–B5 |
-| V02 — Outbound call control | US-45 | NOT_STARTED | Accepted V01 contract and 06/07/09/10/11; live controls gated |
+| V02 — Outbound call control | US-45 | **ACCEPTED after fixes** (provider-neutral backend); live route **EXTERNAL_BLOCKED** | submitted `f90400f` / rebased `b2e2789` / corrected `fd45280`, `ed2a2a5` / [review](reviews/V02.md), [handoff](handoffs/V02.md) — authorization, durable provider operations, signed event inbox and per-device credentials are implemented; D1 and B1–B5 remain open |
 | V03 — Internet charging | US-46 | NOT_STARTED | V02/10/14; provider cutoff, rates and D5 |
 | V04 — Mobile outbound | US-47 | NOT_STARTED | V03/08/18; device/SDK and live evidence |
 | V05 — Browser outbound | US-48 | NOT_STARTED | V03/08 and 06/07 browser auth; browser/live evidence |
