@@ -1,0 +1,97 @@
+{
+  "tab": "Calls",
+  "title": "Internet calling",
+  "subtitle": "Calls placed inside DamDam. No eSIM needed.",
+  "mode": {
+    "internet": "Internet call",
+    "carrier": "Carrier call",
+    "internetExplainer": "Placed inside DamDam over your internet connection. Needs the microphone. Billed against your DamDam balance.",
+    "carrierExplainer": "Placed by your phone's own dialler on your eSIM. Billed by the carrier, not by DamDam. DamDam cannot start one for you."
+  },
+  "destination": {
+    "label": "Number to call",
+    "hint": "Include the country code, for example +44 20 7946 0011",
+    "invalid": "Enter a number in international format, starting with +.",
+    "clear": "Delete last digit"
+  },
+  "payer": {
+    "label": "Who pays",
+    "personal": "Personal",
+    "work": "Work — {{organization}}",
+    "workDisclosure": "Your organization can see that this call happened, how long it lasted and what it cost. It cannot hear it.",
+    "personalDisclosure": "Billed to your own DamDam balance."
+  },
+  "preview": {
+    "heading": "Before you call",
+    "rate": "{{amount}} {{currency}} per minute",
+    "maximum": "Up to {{amount}} {{currency}} for {{minutes}} minutes",
+    "identity": "They will see {{number}}",
+    "identityUnknown": "We cannot confirm the number they will see",
+    "available": "{{amount}} {{currency}} available",
+    "checking": "Working out the rate…",
+    "unavailable": "No rate for this destination",
+    "routeDisabled": "Internet calling is switched off right now. Nothing has been charged.",
+    "notFundable": "Not enough DamDam balance for this call."
+  },
+  "action": {
+    "call": "Call",
+    "hangUp": "Hang up",
+    "mute": "Mute",
+    "unmute": "Unmute",
+    "keypad": "Keypad",
+    "speaker": "Speaker",
+    "retry": "Try again",
+    "dismiss": "Close"
+  },
+  "phase": {
+    "preparing": "Getting ready…",
+    "connecting": "Connecting…",
+    "ringing": "Ringing…",
+    "answered": "On the call",
+    "ended": "Call ended",
+    "failed": "Call failed"
+  },
+  "elapsed": {
+    "label": "{{minutes}}:{{seconds}}",
+    "estimate": "Estimated. The final cost comes from our records, not this timer."
+  },
+  "unsupported": {
+    "mute": "This build cannot mute.",
+    "dtmf": "This build cannot send keypad tones.",
+    "audioRoute": "This build cannot change the audio output.",
+    "background": "Audio may stop if you leave DamDam or lock the screen."
+  },
+  "failure": {
+    "calling_unavailable": "Internet calling is not available in this version of the app.",
+    "microphone_denied": "DamDam needs the microphone to place a call. Nothing has been charged.",
+    "microphone_blocked": "Microphone access is turned off for DamDam. Turn it on in Settings to call.",
+    "session_expired": "Your session expired. Sign in again to call.",
+    "offline": "You appear to be offline. Nothing has been charged.",
+    "not_permitted": "You can no longer place calls on this organization's account.",
+    "insufficient_funds": "Not enough DamDam balance for this call.",
+    "insufficient_available_balance": "Not enough available balance — some of it is held against another call.",
+    "calling_route_disabled": "Internet calling is switched off right now. Nothing has been charged.",
+    "attempt_expired": "That call was not started in time. Nothing has been charged.",
+    "device_not_authorized": "This device is not set up for calling. Sign in again.",
+    "rate_unavailable": "We have no rate for that destination, so we cannot place the call.",
+    "entitlement_not_available": "You have no calling allowance on this account.",
+    "sdk_unavailable": "Internet calling is not available in this version of the app.",
+    "generic": "The call could not be placed. Nothing has been charged unless a cost is shown below."
+  },
+  "history": {
+    "heading": "Recent calls",
+    "empty": "No calls yet.",
+    "loading": "Loading your calls…",
+    "error": "We could not load your calls.",
+    "duration_one": "{{count}} second",
+    "duration_other": "{{count}} seconds",
+    "cost": "{{amount}} {{currency}}",
+    "costPending": "Cost still being worked out",
+    "costProvisional": "{{amount}} {{currency}} so far — may change",
+    "unanswered": "Not answered",
+    "scope": {
+      "personal": "Personal",
+      "work": "Work"
+    }
+  }
+}

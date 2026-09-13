@@ -5,7 +5,8 @@
     "myLine": "Ma ligne",
     "account": "Compte",
     "accountWithInvitations_one": "Compte, {{count}} invitation en attente",
-    "accountWithInvitations_other": "Compte, {{count}} invitations en attente"
+    "accountWithInvitations_other": "Compte, {{count}} invitations en attente",
+    "calls": "Appels"
   },
   "errors": {
     "temporary": "Un problème est survenu. Vérifiez votre connexion et réessayez."

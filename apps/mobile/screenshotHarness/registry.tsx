@@ -25,10 +25,15 @@ import { OrderStatusScreen } from '../src/screens/Purchase/OrderStatusScreen';
 import { MyLineScreen } from '../src/screens/MyLine/MyLineScreen';
 import { InstallProfileScreen } from '../src/screens/MyLine/InstallProfileScreen';
 import { CallingGuideScreen } from '../src/screens/MyLine/CallingGuideScreen';
+import { CallsScreen } from '../src/screens/Calls/CallsScreen';
 import { activationGuideFor } from '../src/screens/EsimActivation/activationGuides';
 import { savePinLocally } from '../src/utils/pinLocalStore';
 import {
   FIXTURE_ACCESS_TOKEN,
+  FIXTURE_CALL_ACTIVE,
+  FIXTURE_CALL_ELIGIBILITY,
+  FIXTURE_CALL_HISTORY,
+  FIXTURE_CALL_IDLE,
   FIXTURE_DEVICE_CHECKED,
   FIXTURE_INSTALLATION_CREDENTIAL,
   FIXTURE_LINE,
@@ -443,5 +448,94 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
   'my-line-calling-guide': {
     label: 'My Line — choosing this line for calls',
     render: () => <CallingGuideScreen line={FIXTURE_LINE} onBack={noop} />,
+  },
+
+  /*
+   * Chunk V04 (US-47). Three states of the internet-calling surface.
+   *
+   * `call-active` is captured with `backgroundCall: false`, which is the honest
+   * setting today and the one whose copy matters: no adapter has proven audio
+   * survives the app going to background, and the disclosure is the whole
+   * mitigation. `call-history` deliberately includes a call whose cost is still
+   * being worked out and one nobody answered, because "no charge yet" and "no
+   * charge" have to look different from each other.
+   */
+  'call-setup': {
+    label: 'Calls — before dialling',
+    render: () => (
+      <CallsScreen
+        destination="+441632960011"
+        onDestinationChange={noop}
+        payers={[{ id: null, label: 'Personal' }]}
+        selectedPayerId={null}
+        onSelectPayer={noop}
+        eligibility={FIXTURE_CALL_ELIGIBILITY}
+        eligibilityLoading={false}
+        eligibilityError={null}
+        snapshot={FIXTURE_CALL_IDLE}
+        history={[]}
+        historyLoading={false}
+        historyError={null}
+        onCall={noop}
+        onHangUp={noop}
+        onToggleMute={noop}
+        onDigit={noop}
+        onToggleSpeaker={noop}
+        onDismissFailure={noop}
+        onRetry={noop}
+      />
+    ),
+  },
+  'call-active': {
+    label: 'Calls — answered, on the call',
+    render: () => (
+      <CallsScreen
+        destination="+441632960011"
+        onDestinationChange={noop}
+        payers={[{ id: null, label: 'Personal' }]}
+        selectedPayerId={null}
+        onSelectPayer={noop}
+        eligibility={FIXTURE_CALL_ELIGIBILITY}
+        eligibilityLoading={false}
+        eligibilityError={null}
+        snapshot={FIXTURE_CALL_ACTIVE}
+        history={[]}
+        historyLoading={false}
+        historyError={null}
+        onCall={noop}
+        onHangUp={noop}
+        onToggleMute={noop}
+        onDigit={noop}
+        onToggleSpeaker={noop}
+        onDismissFailure={noop}
+        onRetry={noop}
+      />
+    ),
+  },
+  'call-history': {
+    label: 'Calls — recent calls and what they cost',
+    render: () => (
+      <CallsScreen
+        destination=""
+        onDestinationChange={noop}
+        payers={[{ id: null, label: 'Personal' }]}
+        selectedPayerId={null}
+        onSelectPayer={noop}
+        eligibility={null}
+        eligibilityLoading={false}
+        eligibilityError={null}
+        snapshot={FIXTURE_CALL_IDLE}
+        history={FIXTURE_CALL_HISTORY}
+        historyLoading={false}
+        historyError={null}
+        onCall={noop}
+        onHangUp={noop}
+        onToggleMute={noop}
+        onDigit={noop}
+        onToggleSpeaker={noop}
+        onDismissFailure={noop}
+        onRetry={noop}
+      />
+    ),
   },
 };

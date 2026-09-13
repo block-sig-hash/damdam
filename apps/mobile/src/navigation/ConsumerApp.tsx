@@ -11,6 +11,7 @@ import { ApiError } from '../api/http';
 import { AccountFlow } from '../screens/Account/AccountFlow';
 import { ConsumerHomeScreen } from '../screens/ConsumerHome/ConsumerHomeScreen';
 import { InvitationScreen } from '../screens/Invitation/InvitationScreen';
+import { CallsFlow } from '../screens/Calls/CallsFlow';
 import { MyLineFlow } from '../screens/MyLine/MyLineFlow';
 import { PurchaseFlow } from '../screens/Purchase/PurchaseFlow';
 import {
@@ -22,7 +23,7 @@ import {
 import { color } from '../theme/tokens';
 import { TabBar, type TabDefinition } from './TabBar';
 
-export type ConsumerTab = 'home' | 'plans' | 'my-line' | 'account';
+export type ConsumerTab = 'home' | 'plans' | 'calls' | 'my-line' | 'account';
 
 interface ConsumerAppProps {
   accessToken: string;
@@ -34,8 +35,13 @@ interface ConsumerAppProps {
 }
 
 /**
- * The authenticated host: four tabs, plus the deep-link intents that interrupt
+ * The authenticated host: five tabs, plus the deep-link intents that interrupt
  * them (AC-37.1, AC-37.2, AC-37.3).
+ *
+ * **Calls is a peer of Plans and My Line, not a section inside My Line**
+ * (AC-47.1). An internet call needs no eSIM and no installation, so putting it
+ * behind the screen that manages a carrier line would make a customer with no
+ * line believe they cannot call.
  *
  * Two things it is careful about.
  *
@@ -132,6 +138,7 @@ export function ConsumerApp({
     () => [
       { key: 'home', label: t('tabs.home') },
       { key: 'plans', label: t('tabs.plans') },
+      { key: 'calls', label: t('tabs.calls') },
       { key: 'my-line', label: t('tabs.myLine') },
       {
         key: 'account',
@@ -194,6 +201,16 @@ export function ConsumerApp({
             onOrderOpened={() => setRequestedOrderId(null)}
             onPurchaseSettled={load}
             onOpenMyLine={() => setTab('my-line')}
+          />
+        ) : tab === 'calls' ? (
+          <CallsFlow
+            accessToken={accessToken}
+            userId={currentUserId}
+            deviceId={currentUserId}
+            organizations={(session?.organizations ?? []).map(membership => ({
+              id: membership.organization_id,
+              name: membership.name,
+            }))}
           />
         ) : tab === 'my-line' ? (
           <MyLineFlow

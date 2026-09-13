@@ -122,12 +122,13 @@ afterEach(async () => {
   await setAppLocale('en');
 });
 
-describe('AC-37.1 — four destinations, all reachable', () => {
+describe('AC-37.1 / AC-47.1 — five destinations, all reachable', () => {
   it('renders every tab and moves between them', async () => {
     await renderApp();
 
     expect(screen.getByTestId('tab-home')).toBeTruthy();
     expect(screen.getByTestId('tab-plans')).toBeTruthy();
+    expect(screen.getByTestId('tab-calls')).toBeTruthy();
     expect(screen.getByTestId('tab-my-line')).toBeTruthy();
     expect(screen.getByTestId('tab-account')).toBeTruthy();
 
@@ -141,6 +142,22 @@ describe('AC-37.1 — four destinations, all reachable', () => {
     expect(screen.getByTestId('tab-home').props.accessibilityState.selected).toBe(
       false,
     );
+  });
+
+  it('AC-47.1: Calls is its own destination, reachable without any line', async () => {
+    // A peer of Plans and My Line rather than a section inside My Line. An
+    // internet call needs no eSIM, so a customer with no line must not have to
+    // go through the screen that manages one to find the call button.
+    await renderApp();
+
+    await press('tab-calls');
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('tab-calls').props.accessibilityState.selected,
+      ).toBe(true),
+    );
+    expect(screen.getByTestId('calls-screen')).toBeTruthy();
   });
 
   it('announces a waiting invitation on the tab that leads to it', async () => {
