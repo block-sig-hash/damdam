@@ -1662,6 +1662,281 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/sessions:
+    get:
+      tags:
+      - Account
+      summary: List Sessions
+      description: Every device signed in to this account, recognisable enough to
+        act on.
+      operationId: list_sessions_v1_me_sessions_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+      security:
+      - HTTPBearer: []
+  /v1/me/sessions/{session_id}:
+    delete:
+      tags:
+      - Account
+      summary: Revoke Session
+      description: Sign one device out. The refresh token is revoked, not just the
+        row.
+      operationId: revoke_session_v1_me_sessions__session_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Session Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/sessions/revoke-all:
+    post:
+      tags:
+      - Account
+      summary: Revoke All Sessions
+      description: "Sign every device out, sparing at most the one named.\n\n`keep_session_id`\
+        \ is verified against this caller's own device list before\nit spares anything,\
+        \ so naming another customer's session revokes everything\nand protects nothing\
+        \ \u2014 there is no id a client can send that reaches outside\nits own account."
+      operationId: revoke_all_sessions_v1_me_sessions_revoke_all_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeAllRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokeAllResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/me/receipts:
+    get:
+      tags:
+      - Account
+      summary: List Receipts
+      operationId: list_receipts_v1_me_receipts_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/receipts/{order_id}:
+    get:
+      tags:
+      - Account
+      summary: Get Receipt
+      description: 'Rendered from what was recorded.
+
+
+        Last year''s receipt therefore says last year''s price, in last year''s
+
+        currency, however much the catalog has moved on since.'
+      operationId: get_receipt_v1_me_receipts__order_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/support-requests:
+    post:
+      tags:
+      - Account
+      summary: Open Support Request
+      description: Ask a question with the order or line it is about attached.
+      operationId: open_support_request_v1_me_support_requests_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupportRequestCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportRequestView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Account
+      summary: List Support Requests
+      operationId: list_support_requests_v1_me_support_requests_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportRequestListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/me/notification-preferences:
+    get:
+      tags:
+      - Account
+      summary: List Preferences
+      operationId: list_preferences_v1_me_notification_preferences_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreferenceListResponse'
+      security:
+      - HTTPBearer: []
+    put:
+      tags:
+      - Account
+      summary: Set Preference
+      operationId: set_preference_v1_me_notification_preferences_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreferenceUpdate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreferenceView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/me/account/deletion-preflight:
+    get:
+      tags:
+      - Account
+      summary: Deletion Preflight
+      description: "Why this account cannot be deleted yet \u2014 before anybody presses\
+        \ anything.\n\n`detail` is deliberately **not** returned. It can name another\
+        \ member's\nline, and the person deleting their own account does not need\
+        \ to be told\nwhat somebody else is using; the code is what the app localizes."
+      operationId: deletion_preflight_v1_me_account_deletion_preflight_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletionPreflightResponse'
+      security:
+      - HTTPBearer: []
+  /v1/me/account/export:
+    post:
+      tags:
+      - Account
+      summary: Request Export
+      description: Ask for a copy of your own data. One live request at a time.
+      operationId: request_export_v1_me_account_export_post
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportJobView'
+      security:
+      - HTTPBearer: []
   /v1/auth/mfa/enroll:
     post:
       tags:
@@ -4107,6 +4382,47 @@ components:
         credential''s, so a client is never told it has a working session after the
 
         credential behind it has gone.'
+    DeletionBlockerView:
+      properties:
+        kind:
+          type: string
+          title: Kind
+        code:
+          type: string
+          title: Code
+        amount:
+          anyOf:
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          - type: 'null'
+          title: Amount
+        currency:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Currency
+      type: object
+      required:
+      - kind
+      - code
+      title: DeletionBlockerView
+      description: A reason, in a form the app can localize and the customer can act
+        on.
+    DeletionPreflightResponse:
+      properties:
+        may_delete:
+          type: boolean
+          title: May Delete
+        blockers:
+          items:
+            $ref: '#/components/schemas/DeletionBlockerView'
+          type: array
+          title: Blockers
+      type: object
+      required:
+      - may_delete
+      - blockers
+      title: DeletionPreflightResponse
     DependencyChecks:
       properties:
         postgres:
@@ -4391,6 +4707,37 @@ components:
       - qr_code_url
       - status
       title: EsimProfileResponse
+    ExportJobView:
+      properties:
+        export_id:
+          type: string
+          format: uuid
+          title: Export Id
+        state:
+          type: string
+          title: State
+        requested_at:
+          type: string
+          format: date-time
+          title: Requested At
+        completed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Completed At
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+      type: object
+      required:
+      - export_id
+      - state
+      - requested_at
+      title: ExportJobView
     FamilyGroupRequest:
       properties:
         manifest_pilgrim_ids:
@@ -5643,6 +5990,24 @@ components:
       - otpauth_uri
       title: MfaEnrollmentResponse
       description: Shown once. The secret is never readable again after this response.
+    NotificationCategory:
+      type: string
+      enum:
+      - low_balance
+      - expiry
+      - order_status
+      title: NotificationCategory
+      description: "The three things we may tell somebody about, and nothing else.\n\
+        \nSafety alerts and location tracking are retired (`SCOPE-DISPOSITION.md`)\
+        \ and\nare not re-introduced as a preference \u2014 a preference row is a\
+        \ feature that\nexists, switched off."
+    NotificationChannel:
+      type: string
+      enum:
+      - push
+      - email
+      - sms
+      title: NotificationChannel
     NumberStatus:
       type: string
       enum:
@@ -5979,6 +6344,47 @@ components:
       - ios
       - android
       title: Platform
+    PreferenceListResponse:
+      properties:
+        preferences:
+          items:
+            $ref: '#/components/schemas/PreferenceView'
+          type: array
+          title: Preferences
+      type: object
+      required:
+      - preferences
+      title: PreferenceListResponse
+    PreferenceUpdate:
+      properties:
+        category:
+          $ref: '#/components/schemas/NotificationCategory'
+        channel:
+          $ref: '#/components/schemas/NotificationChannel'
+        enabled:
+          type: boolean
+          title: Enabled
+      type: object
+      required:
+      - category
+      - channel
+      - enabled
+      title: PreferenceUpdate
+    PreferenceView:
+      properties:
+        category:
+          $ref: '#/components/schemas/NotificationCategory'
+        channel:
+          $ref: '#/components/schemas/NotificationChannel'
+        enabled:
+          type: boolean
+          title: Enabled
+      type: object
+      required:
+      - category
+      - channel
+      - enabled
+      title: PreferenceView
     PricingTierListResponse:
       properties:
         tiers:
@@ -6394,6 +6800,84 @@ components:
       - status
       - checks
       title: ReadinessResponse
+    ReceiptLineView:
+      properties:
+        description:
+          type: string
+          title: Description
+        quantity:
+          type: integer
+          title: Quantity
+        unit_amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Unit Amount
+        total_amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Total Amount
+      type: object
+      required:
+      - description
+      - quantity
+      - unit_amount
+      - total_amount
+      title: ReceiptLineView
+    ReceiptListResponse:
+      properties:
+        receipts:
+          items:
+            $ref: '#/components/schemas/ReceiptView'
+          type: array
+          title: Receipts
+      type: object
+      required:
+      - receipts
+      title: ReceiptListResponse
+    ReceiptView:
+      properties:
+        order_id:
+          type: string
+          format: uuid
+          title: Order Id
+        reference:
+          type: string
+          title: Reference
+        placed_at:
+          type: string
+          format: date-time
+          title: Placed At
+        currency:
+          type: string
+          title: Currency
+        total_amount:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Total Amount
+        payment_state:
+          type: string
+          title: Payment State
+        lines:
+          items:
+            $ref: '#/components/schemas/ReceiptLineView'
+          type: array
+          title: Lines
+        organization_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Organization Id
+      type: object
+      required:
+      - order_id
+      - reference
+      - placed_at
+      - currency
+      - total_amount
+      - payment_state
+      - lines
+      title: ReceiptView
     RecoverySessionResponse:
       properties:
         access_token:
@@ -6543,6 +7027,34 @@ components:
         user, so the shape is part of the published contract, not an incidental
 
         detail of the handler.'
+    RevokeAllRequest:
+      properties:
+        keep_session_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Keep Session Id
+      type: object
+      title: RevokeAllRequest
+      description: "Sign everything out, optionally sparing one device.\n\nThe device\
+        \ to keep is named explicitly rather than inferred from the\nrequest, because\
+        \ an access token does not carry the id of the session it\ncame from and inferring\
+        \ it would mean guessing. The named session is still\nverified against the\
+        \ caller \u2014 it is skipped only if it appears in *their*\ndevice list \u2014\
+        \ so naming somebody else's spares nothing.\n\nOmitting it signs out every\
+        \ device including this one, which is the right\ndefault for \"my phone was\
+        \ stolen\" and is what the app asks for when the\ncustomer confirms they are\
+        \ signing themselves out too."
+    RevokeAllResponse:
+      properties:
+        revoked:
+          type: integer
+          title: Revoked
+      type: object
+      required:
+      - revoked
+      title: RevokeAllResponse
     RoleChangeRequest:
       properties:
         role:
@@ -6701,6 +7213,25 @@ components:
       - service_state
       - services
       title: ServicesResponse
+    SessionListResponse:
+      properties:
+        sessions:
+          items:
+            $ref: '#/components/schemas/SessionView'
+          type: array
+          title: Sessions
+      type: object
+      required:
+      - sessions
+      title: SessionListResponse
+    SessionPlatform:
+      type: string
+      enum:
+      - ios
+      - android
+      - web
+      - unknown
+      title: SessionPlatform
     SessionResponse:
       properties:
         user_id:
@@ -6748,6 +7279,57 @@ components:
         re-renders once the service call lands, which is the flicker every "no
 
         service" screen in the old app had.'
+    SessionView:
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          title: Session Id
+        platform:
+          $ref: '#/components/schemas/SessionPlatform'
+        device_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Device Label
+        app_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: App Version
+        last_seen_city:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Seen City
+        last_seen_country:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Seen Country
+        last_seen_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Seen At
+        revoked_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Revoked At
+        is_current:
+          type: boolean
+          title: Is Current
+          default: false
+      type: object
+      required:
+      - session_id
+      - platform
+      title: SessionView
+      description: One device, described for the person deciding whether to revoke
+        it.
     StartResponse:
       properties:
         attempt_id:
@@ -6822,6 +7404,113 @@ components:
           title: Reason
       type: object
       title: StopRequest
+    SupportCategory:
+      type: string
+      enum:
+      - installation
+      - connectivity
+      - billing
+      - refund
+      - account
+      - other
+      title: SupportCategory
+      description: 'What the customer says it is about, in their words, mapped to
+        a queue.
+
+
+        Deliberately short. A category list long enough to be precise is one people
+
+        pick the first item from.'
+    SupportRequestCreate:
+      properties:
+        category:
+          $ref: '#/components/schemas/SupportCategory'
+        subject:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Subject
+        body:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Body
+        order_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Order Id
+        entitlement_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Entitlement Id
+      type: object
+      required:
+      - category
+      - subject
+      - body
+      title: SupportRequestCreate
+    SupportRequestListResponse:
+      properties:
+        requests:
+          items:
+            $ref: '#/components/schemas/SupportRequestView'
+          type: array
+          title: Requests
+      type: object
+      required:
+      - requests
+      title: SupportRequestListResponse
+    SupportRequestView:
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          title: Request Id
+        reference:
+          type: string
+          title: Reference
+        category:
+          $ref: '#/components/schemas/SupportCategory'
+        state:
+          type: string
+          title: State
+        subject:
+          type: string
+          title: Subject
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        order_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Order Id
+        entitlement_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Entitlement Id
+        subject_summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Subject Summary
+      type: object
+      required:
+      - request_id
+      - reference
+      - category
+      - state
+      - subject
+      - created_at
+      title: SupportRequestView
     TariffView:
       properties:
         version:

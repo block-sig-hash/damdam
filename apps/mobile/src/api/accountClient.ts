@@ -29,6 +29,7 @@ export interface DeviceSession {
   last_seen_at: string | null;
   /** Set once this device is signed out. The row stays so it can be shown. */
   revoked_at: string | null;
+  is_current: boolean;
 }
 
 export interface ReceiptLine {
@@ -199,6 +200,15 @@ export function fetchDeletionPreflight(
 export function requestExport(accessToken: string): Promise<ExportJob> {
   return apiRequest<ExportJob>('/me/account/export', {
     method: 'POST',
+    accessToken,
+  });
+}
+
+export function deleteAccount(
+  accessToken: string,
+): Promise<{ status: string; deletion_requested_at: string }> {
+  return apiRequest<{ status: string; deletion_requested_at: string }>('/me/account', {
+    method: 'DELETE',
     accessToken,
   });
 }

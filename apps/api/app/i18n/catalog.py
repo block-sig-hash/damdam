@@ -48,6 +48,7 @@ _API_EN = {
     # blames them and none of them says "invalid".
     "session_not_found": "That device is not signed in to your account.",
     "receipt_not_found": "We could not find that receipt on your account.",
+    "account_deletion_blocked": "Resolve the items shown in Account before deleting your account.",
     "entitlement_not_found": "We could not find that line on your account.",
     "support_reference_unavailable": (
         "We could not start your request just now. Please try again."
@@ -247,6 +248,7 @@ _API_FR = {
     "line_not_found": "Nous n'avons pas trouvé cette ligne sur votre compte.",
     "session_not_found": "Cet appareil n'est pas connecté à votre compte.",
     "receipt_not_found": "Nous n'avons pas trouvé ce reçu sur votre compte.",
+    "account_deletion_blocked": "Résolvez les éléments affichés dans Compte avant de supprimer votre compte.",
     "entitlement_not_found": (
         "Nous n'avons pas trouvé cette ligne sur votre compte."
     ),

@@ -16,6 +16,7 @@ import { ApiError } from '../../api/http';
 import { SecondaryButton } from '../../components/SecondaryButton/SecondaryButton';
 import { StateMessage } from '../../components/StateMessage/StateMessage';
 import { downloadEsimProfile } from '../../services/esimDownload';
+import { readSlice, writeSlice } from '../../services/accountCache';
 import {
   protectScreen,
   releaseScreen,
@@ -54,6 +55,7 @@ type Stage = 'list' | 'line' | 'install' | 'calling-guide';
 
 interface MyLineFlowProps {
   accessToken: string;
+  userId: string;
   /** Open this line directly, e.g. from Home's "install now". */
   initialEntitlementId?: string | null;
   onEntitlementOpened?: () => void;
@@ -64,6 +66,7 @@ interface MyLineFlowProps {
 
 export function MyLineFlow({
   accessToken,
+  userId,
   initialEntitlementId = null,
   onEntitlementOpened,
   onBrowsePlans,
@@ -76,6 +79,7 @@ export function MyLineFlow({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [offlineObservedAt, setOfflineObservedAt] = useState<string | null>(null);
 
   const [credential, setCredential] = useState<InstallationCredential | null>(null);
   const [privacy, setPrivacy] = useState<ScreenPrivacyResult | null>(null);
@@ -109,14 +113,37 @@ export function MyLineFlow({
       setErrorMessage(null);
       try {
         const nextLine = await getLine(accessToken, entitlementId);
-        if (generation === readGeneration.current) { setLine(nextLine); }
+        if (generation === readGeneration.current) {
+          setLine(nextLine);
+          setOfflineObservedAt(null);
+          const observedAt = new Date().toISOString();
+          const existing = await readSlice<Record<string, LineDetail>>(
+            userId,
+            'usage',
+          );
+          await writeSlice(
+            userId,
+            'usage',
+            { ...(existing?.value ?? {}), [entitlementId]: nextLine },
+            observedAt,
+          );
+        }
       } catch (error) {
-        if (generation === readGeneration.current) { setErrorMessage(describe(error)); }
+        const cached = await readSlice<Record<string, LineDetail>>(userId, 'usage');
+        const saved = cached?.value[entitlementId];
+        if (generation === readGeneration.current) {
+          if (saved && cached) {
+            setLine(saved);
+            setOfflineObservedAt(cached.observedAt);
+          } else {
+            setErrorMessage(describe(error));
+          }
+        }
       } finally {
         if (generation === readGeneration.current) { setLoading(false); }
       }
     },
-    [accessToken, describe],
+    [accessToken, describe, userId],
   );
 
   const loadLines = useCallback(async () => {
@@ -133,11 +160,19 @@ export function MyLineFlow({
       }
       setStage('list');
     } catch (error) {
-      setErrorMessage(describe(error));
+      const cached = await readSlice<Record<string, LineDetail>>(userId, 'usage');
+      const saved = cached ? Object.values(cached.value) : [];
+      if (saved.length > 0 && cached) {
+        setLine(saved[0]);
+        setStage('line');
+        setOfflineObservedAt(cached.observedAt);
+      } else {
+        setErrorMessage(describe(error));
+      }
     } finally {
       setLoading(false);
     }
-  }, [accessToken, describe, openLine]);
+  }, [accessToken, describe, openLine, userId]);
 
   useEffect(() => {
     if (initialized.current && !initialEntitlementId) { return; }
@@ -271,6 +306,14 @@ export function MyLineFlow({
           installed,
         );
         setLine(refreshed);
+        const observedAt = new Date().toISOString();
+        const existing = await readSlice<Record<string, LineDetail>>(userId, 'usage');
+        await writeSlice(
+          userId,
+          'usage',
+          { ...(existing?.value ?? {}), [refreshed.entitlement_id]: refreshed },
+          observedAt,
+        );
         onLineChanged?.();
         await leaveInstall();
       } catch (error) {
@@ -279,7 +322,7 @@ export function MyLineFlow({
         setBusy(false);
       }
     },
-    [accessToken, describe, leaveInstall, line, onLineChanged],
+    [accessToken, describe, leaveInstall, line, onLineChanged, userId],
   );
 
   // --- render --------------------------------------------------------------
@@ -329,6 +372,7 @@ export function MyLineFlow({
     return (
       <MyLineScreen
         line={line}
+        offlineObservedAt={offlineObservedAt}
         loading={loading}
         errorMessage={errorMessage}
         onRefresh={() => openLine(line.entitlement_id)}

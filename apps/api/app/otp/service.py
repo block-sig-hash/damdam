@@ -400,7 +400,7 @@ class OTPService:
                 )
             )
 
-        pair = self.tokens.issue(session, user, now)
+        pair = self.tokens.issue(session, user, now, platform=platform.value)
         session.commit()
         session.refresh(user)
         self.redis.delete(self._challenge_key(phone_number))

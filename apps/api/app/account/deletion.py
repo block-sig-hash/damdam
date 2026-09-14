@@ -33,13 +33,15 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from uuid import UUID
 
 from sqlmodel import Session, col, select
 
-from app.auth.models import User
+from app.auth.models import User, utc_now
+from app.connectivity.models import Entitlement
 from app.organizations.models import (
     MembershipStatus,
     OrganizationMember,
@@ -57,6 +59,7 @@ class BlockerKind(str, Enum):
     #: A liability this deployment knows about through a registered probe —
     #: an active call, an open grant — contributed by the chunk that owns it.
     ACTIVE_LIABILITY = "active_liability"
+    ACTIVE_SERVICE = "active_service"
 
 
 @dataclass(frozen=True)
@@ -105,14 +108,39 @@ def register_liability_probe(probe: LiabilityProbe) -> LiabilityProbe:
     return probe
 
 
-def assess(session: Session, user: User) -> DeletionAssessment:
+def assess(
+    session: Session, user: User, now: datetime | None = None
+) -> DeletionAssessment:
     """Everything standing between this account and erasure, gathered once."""
     blockers: list[DeletionBlocker] = []
     blockers.extend(_unsettled_money(session, user))
+    blockers.extend(_active_services(session, user, now or utc_now()))
     blockers.extend(_others_depend_on(session, user))
     for probe in LIABILITY_PROBES:
         blockers.extend(probe(session, user))
     return DeletionAssessment(tuple(blockers))
+
+
+def _active_services(
+    session: Session, user: User, now: datetime
+) -> Sequence[DeletionBlocker]:
+    """A live personal or work entitlement cannot be orphaned by deletion."""
+    active = session.exec(
+        select(Entitlement).where(
+            Entitlement.holder_user_id == user.id,
+            (col(Entitlement.expires_at).is_(None))
+            | (col(Entitlement.expires_at) > now),
+        )
+    ).first()
+    if active is None:
+        return ()
+    return (
+        DeletionBlocker(
+            BlockerKind.ACTIVE_SERVICE,
+            "active_service",
+            f"entitlement {active.id} is still active",
+        ),
+    )
 
 
 def _unsettled_money(
@@ -130,7 +158,7 @@ def _unsettled_money(
     is the account being erased.
     """
     from app.orders.models import Order
-    from app.payments.contract import PaymentAttempt, PaymentIntent
+    from app.payments.contract import AttemptStatus, PaymentAttempt, PaymentIntent
     from app.refunds.models import Refund, RefundStatus
 
     open_states = [
@@ -148,7 +176,7 @@ def _unsettled_money(
             col(Refund.status).in_(open_states),
         )
     ).all()
-    return tuple(
+    blockers = list(
         DeletionBlocker(
             BlockerKind.UNSETTLED_MONEY,
             "refund_in_progress",
@@ -158,6 +186,28 @@ def _unsettled_money(
         )
         for refund in refunds
     )
+    attempts = session.exec(
+        select(PaymentAttempt, PaymentIntent)
+        .join(PaymentIntent, col(PaymentAttempt.intent_id) == col(PaymentIntent.id))
+        .join(Order, col(PaymentIntent.order_id) == col(Order.id))
+        .where(
+            Order.payer_user_id == user.id,
+            col(PaymentAttempt.status).in_(
+                [AttemptStatus.CREATED, AttemptStatus.PENDING, AttemptStatus.UNKNOWN]
+            ),
+        )
+    ).all()
+    blockers.extend(
+        DeletionBlocker(
+            BlockerKind.UNSETTLED_MONEY,
+            "payment_in_progress",
+            f"payment attempt {attempt.id} is {attempt.status.value}",
+            amount=intent.amount,
+            currency=intent.currency,
+        )
+        for attempt, intent in attempts
+    )
+    return tuple(blockers)
 
 
 def _others_depend_on(session: Session, user: User) -> Sequence[DeletionBlocker]:

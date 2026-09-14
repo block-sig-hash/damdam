@@ -121,7 +121,7 @@ export function DevicesScreen({
           <SecondaryButton
             label={t('devices.signOutAllOthers')}
             onPress={() => onRevokeAll(true)}
-            disabled={busy}
+            disabled={busy || currentSessionId === null}
             testID="revoke-all-others"
           />
         </View>

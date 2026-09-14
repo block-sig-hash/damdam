@@ -44,6 +44,7 @@ def get_current_user(
             or user.auth_version != identity.auth_version
         ):
             raise PINError("invalid_access_token")
+        request.state.current_refresh_token_id = identity.session_id
         session.expunge(user)
         return user
 

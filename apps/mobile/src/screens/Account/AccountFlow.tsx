@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 import { ApiError } from '../../api/http';
 import {
+  deleteAccount,
   fetchDeletionPreflight,
   fetchPreferences,
   fetchReceipts,
@@ -146,6 +147,11 @@ export function AccountFlow({
     setErrorMessage(null);
     try {
       await revokeSession(accessToken, sessionId);
+      if (sessions.some(row => row.session_id === sessionId && row.is_current)) {
+        await clearAccount(userId);
+        onSignedOutEverywhere();
+        return;
+      }
       await load();
     } catch (error) {
       setErrorMessage(
@@ -160,13 +166,17 @@ export function AccountFlow({
     setBusy(true);
     setErrorMessage(null);
     try {
-      // There is no id for this device yet — the API takes one and the app does
-      // not know it, so "keep this one" cannot be honoured and is not claimed.
-      // Signing out everything clears this account's cache, because the next
-      // person to open the app must not find it.
-      await revokeAllSessions(accessToken);
-      await clearAccount(userId);
+      const currentSessionId = sessions.find(row => row.is_current)?.session_id;
+      if (keepCurrent && !currentSessionId) {
+        setErrorMessage(t('devices.currentUnknown'));
+        return;
+      }
+      await revokeAllSessions(
+        accessToken,
+        keepCurrent ? currentSessionId : undefined,
+      );
       if (!keepCurrent) {
+        await clearAccount(userId);
         onSignedOutEverywhere();
         return;
       }
@@ -243,10 +253,13 @@ export function AccountFlow({
     setBusy(true);
     setErrorMessage(null);
     try {
-      // Clearing the cache first: whatever happens next, this account's data
-      // should not be the thing left behind on the handset.
+      await deleteAccount(accessToken);
       await clearAccount(userId);
       onAccountDeleted();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof ApiError ? error.message : t('errors.unexpected'),
+      );
     } finally {
       setBusy(false);
     }
@@ -281,9 +294,11 @@ export function AccountFlow({
   return (
     <View style={styles.container}>
       {stage === 'devices' ? (
-        <DevicesScreen
+      <DevicesScreen
           sessions={sessions}
-          currentSessionId={null}
+        currentSessionId={
+          sessions.find(row => row.is_current)?.session_id ?? null
+        }
           busy={busy}
           errorMessage={errorMessage}
           onRevoke={sessionId => handleRevoke(sessionId).catch(() => undefined)}

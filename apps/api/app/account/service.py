@@ -147,8 +147,81 @@ class AccountService:
         session.flush()
         return record
 
+    def on_token_issued(
+        self,
+        session: Session,
+        user: User,
+        token: RefreshToken,
+        now: datetime,
+        *,
+        platform: str | None,
+    ) -> None:
+        """Project every real login into the device list.
+
+        This also reconciles bulk revocation performed by account recovery, so
+        old descriptive rows cannot look active after their tokens died.
+        """
+        self._sync_revoked_sessions(session, user, now)
+        try:
+            session_platform = SessionPlatform(
+                platform or getattr(user.platform, "value", user.platform) or "unknown"
+            )
+        except ValueError:
+            session_platform = SessionPlatform.UNKNOWN
+        self.record_session(
+            session, user, token, platform=session_platform, app_version=None
+        )
+
+    def on_token_rotated(
+        self,
+        session: Session,
+        user: User,
+        old_token: RefreshToken,
+        new_token: RefreshToken,
+        now: datetime,
+    ) -> None:
+        """A refresh is the same device, not a second device."""
+        record = session.exec(
+            select(AccountSession).where(
+                AccountSession.user_id == user.id,
+                AccountSession.refresh_token_id == old_token.id,
+            )
+        ).first()
+        if record is None:
+            self.on_token_issued(
+                session, user, new_token, now, platform=None
+            )
+            return
+        record.refresh_token_id = new_token.id
+        record.last_seen_at = now
+        session.add(record)
+        session.flush()
+
+    def _sync_revoked_sessions(
+        self, session: Session, user: User, now: datetime
+    ) -> None:
+        for record in session.exec(
+            select(AccountSession).where(
+                AccountSession.user_id == user.id,
+                col(AccountSession.revoked_at).is_(None),
+            )
+        ).all():
+            token = session.get(RefreshToken, record.refresh_token_id)
+            if token is None:
+                record.revoked_at = now
+                record.revoked_reason = "token_removed"
+                session.add(record)
+            elif token.revoked_at is not None or token.expires_at <= now:
+                record.revoked_at = token.revoked_at or token.expires_at
+                record.revoked_reason = (
+                    "account_recovery" if token.revoked_at is not None else "expired"
+                )
+                session.add(record)
+
     def sessions(self, session: Session, user: User) -> Sequence[AccountSession]:
         """This account's devices, most recently seen first, revoked ones last."""
+        self._sync_revoked_sessions(session, user, self.clock())
+        session.flush()
         return session.exec(
             select(AccountSession)
             .where(AccountSession.user_id == user.id)
@@ -241,13 +314,9 @@ class AccountService:
     def _receipt(self, session: Session, order: Order) -> Receipt:
         """Built from what was recorded, never from what things cost now.
 
-        `order_items` stores a unit amount and a quantity — chunk 05's invariant
-        keeps that quantity at one — so the line total is computed here rather
-        than read. The product name is a *lookup*, and it is the one thing on a
-        receipt that can drift: a renamed product renames it on old receipts
-        too. Recording the name at purchase belongs to whichever chunk owns
-        invoicing; this is a read model and does not get to change the schema
-        for it. Named in the handoff as a known gap.
+        `order_items` stores a unit amount, quantity and the product description
+        captured at purchase. The live lookup is only a compatibility fallback
+        for a partially migrated historical row.
         """
         from app.catalog.models import Product
 
@@ -260,7 +329,10 @@ class AccountService:
             total = item.unit_amount * item.quantity
             lines.append(
                 ReceiptLine(
-                    description=product.name if product is not None else "item",
+                    description=(
+                        item.description_snapshot
+                        or (product.name if product is not None else "item")
+                    ),
                     quantity=item.quantity,
                     unit_amount=item.unit_amount,
                     total_amount=total,
@@ -478,7 +550,28 @@ class AccountService:
         organization's other orders, and any activation material, which is a
         secret that happens to be stored near their data rather than part of it.
         """
+        from app.calling.models import CallAttempt, CallCharge
+
         receipts = self.receipts(session, user, limit=1000)
+        attempts = session.exec(
+            select(CallAttempt)
+            .where(CallAttempt.owner_user_id == user.id)
+            .order_by(col(CallAttempt.created_at).desc())
+        ).all()
+        charges = (
+            {
+                charge.attempt_id: charge
+                for charge in session.exec(
+                    select(CallCharge).where(
+                        col(CallCharge.attempt_id).in_(
+                            [attempt.id for attempt in attempts]
+                        )
+                    )
+                ).all()
+            }
+            if attempts
+            else {}
+        )
         return {
             "account": {
                 "id": str(user.id),
@@ -543,12 +636,37 @@ class AccountService:
                 }
                 for preference in self.preferences(session, user)
             ],
+            "calls": [
+                {
+                    "attempt_id": str(attempt.id),
+                    "destination": attempt.e164_destination,
+                    "destination_country": attempt.destination_country,
+                    "state": attempt.state.value,
+                    "created_at": attempt.created_at.isoformat(),
+                    "ended_at": (
+                        attempt.ended_at.isoformat() if attempt.ended_at else None
+                    ),
+                    "currency": attempt.currency,
+                    "authorized_maximum": str(attempt.max_charge_amount),
+                    "charged_amount": (
+                        str(charges[attempt.id].charged_amount)
+                        if attempt.id in charges
+                        else None
+                    ),
+                    "charge_state": (
+                        charges[attempt.id].state.value
+                        if attempt.id in charges
+                        else None
+                    ),
+                }
+                for attempt in attempts
+            ],
         }
 
     # --- deletion ---------------------------------------------------------
 
     def assess_deletion(self, session: Session, user: User) -> DeletionAssessment:
-        return assess(session, user)
+        return assess(session, user, self.clock())
 
     def _owns_entitlement(
         self, session: Session, user: User, entitlement_id: UUID
@@ -557,13 +675,7 @@ class AccountService:
         from app.connectivity.models import Entitlement
 
         entitlement = session.get(Entitlement, entitlement_id)
-        if entitlement is None:
-            return False
-        item = session.get(OrderItem, entitlement.order_item_id)
-        if item is None:  # pragma: no cover - FK guarantees this
-            return False
-        order = session.get(Order, item.order_id)
-        return order is not None and order.payer_user_id == user.id
+        return entitlement is not None and entitlement.holder_user_id == user.id
 
 
 def _trim(value: str | None, length: int) -> str | None:

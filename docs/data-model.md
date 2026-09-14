@@ -3488,9 +3488,11 @@ client leg) are open, and a schema cannot close either.
 
 ## 6.56 Amendment — Account Sessions, Support, Preferences and Exports (US-38)
 
-Chunk 21. Four tables behind the account area, all additive: no column is added
-to an existing table, no row is rewritten, and `refresh_tokens` — the table
-authentication actually checks — is left exactly as it is.
+Chunk 21. Four tables behind the account area plus one nullable receipt snapshot
+column on `order_items`. Existing items are backfilled from the current product
+name so later catalog edits do not rewrite historical receipt descriptions.
+`refresh_tokens` — the table authentication actually checks — is left exactly
+as it is.
 
 The parallel voice migrations now occupy revisions `0038` and `0039`; this
 account migration follows them as `0040_account_and_support`.
@@ -3543,8 +3545,9 @@ a preference row for a retired feature is that feature, switched off.
 ### `account_export_jobs` — a request, not a response
 
 An export that streams from a request handler ties a customer's data to one HTTP
-connection surviving. This is a row a worker fulfils, so a customer who closed
-the app still gets it.
+connection surviving. This is shaped as a row a worker can fulfil without the
+original connection. The worker/storage/download integration is not yet wired;
+until it is, rows remain durable requests rather than delivered files.
 
 `ux_account_export_jobs_live` allows one unfinished export per account: pressing
 the button twice returns the job already asked for rather than building a second
@@ -3554,8 +3557,9 @@ of an account history that anyone can forward.
 
 ### What this amendment does not do
 
-It deletes nothing and weakens no retention rule. The deletion **preflight**
-added by this chunk is a read: it reports what stands in the way — unsettled
-money, an organization that still has other members — and refuses to proceed, but
-the erasure path itself is chunk 23's and is unchanged. Order and audit history
-survive every branch of it.
+It deletes nothing and weakens no retention rule. The deletion **preflight** is
+a read, while the existing deletion endpoint now repeats the same checks and
+refuses active services, unsettled money/calls, or organization ownership with
+other active members. On success it revokes internet-call credentials before
+entering the existing retention flow. Order and audit history survive every
+branch of it.

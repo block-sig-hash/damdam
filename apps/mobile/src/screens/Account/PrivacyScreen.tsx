@@ -57,8 +57,11 @@ export function PrivacyScreen({
         : t('privacy.blockers.refund_in_progress_noamount');
     }
     const known = [
+      'active_service',
+      'payment_in_progress',
       'organization_has_other_members',
       'call_in_progress',
+      'call_settlement_pending',
       'call_unsettled',
     ];
     return known.includes(blocker.code)

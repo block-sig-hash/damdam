@@ -147,6 +147,9 @@
     "qrTitle": "Scannez avec le téléphone à équiper",
     "qrHint": "Installation sur ce téléphone ? Utilisez les champs manuels ci-dessous. Ne conservez ni ne partagez ce QR code."
   },
+  "offline": {
+    "savedAt": "Hors ligne — informations de ligne et d’utilisation enregistrées le {{when}}. Les étapes d’installation restent disponibles, mais l’affichage du profil nécessite une connexion."
+  },
   "guide": {
     "title": "Appeler sur cette ligne",
     "availableForVoice": "Le réseau indique que cette ligne peut passer des appels.",

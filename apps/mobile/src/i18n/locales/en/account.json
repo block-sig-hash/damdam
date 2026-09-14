@@ -32,6 +32,7 @@
     "signOutAll": "Sign out every device",
     "signOutAllConfirm": "This signs out every device, including this one. You'll need to sign in again.",
     "signOutAllOthers": "Sign out the others",
+    "currentUnknown": "This app cannot identify its current session yet. Refresh or sign in again before keeping this device signed in.",
     "signedOutCount": "Signed out {{count}} device",
     "signedOutCount_other": "Signed out {{count}} devices",
     "empty": "No other devices are signed in.",
@@ -108,8 +109,11 @@
     "blockers": {
       "refund_in_progress": "A refund of {{amount}} {{currency}} is still going through.",
       "refund_in_progress_noamount": "A refund is still going through.",
+      "payment_in_progress": "A payment is still being confirmed.",
       "organization_has_other_members": "You own an organization that other people are still using. Hand it over to somebody else first.",
       "call_in_progress": "A call is still connected.",
+      "call_settlement_pending": "A recent call is still being reconciled.",
+      "active_service": "A personal or work service is still active. Contact support before deleting your account.",
       "call_unsettled": "A call is still being charged.",
       "unknown": "Something on your account is still in progress."
     }

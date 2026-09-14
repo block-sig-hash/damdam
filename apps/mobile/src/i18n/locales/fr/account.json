@@ -32,6 +32,7 @@
     "signOutAll": "Déconnecter tous les appareils",
     "signOutAllConfirm": "Cela déconnecte tous les appareils, y compris celui-ci. Vous devrez vous reconnecter.",
     "signOutAllOthers": "Déconnecter les autres",
+    "currentUnknown": "L’application ne peut pas encore identifier cette session. Actualisez ou reconnectez-vous avant de garder cet appareil connecté.",
     "signedOutCount": "{{count}} appareil déconnecté",
     "signedOutCount_other": "{{count}} appareils déconnectés",
     "empty": "Aucun autre appareil n'est connecté.",
@@ -108,8 +109,11 @@
     "blockers": {
       "refund_in_progress": "Un remboursement de {{amount}} {{currency}} est encore en cours.",
       "refund_in_progress_noamount": "Un remboursement est encore en cours.",
+      "payment_in_progress": "Un paiement est encore en cours de confirmation.",
       "organization_has_other_members": "Vous êtes propriétaire d'une organisation que d'autres personnes utilisent encore. Transférez-la d'abord à quelqu'un d'autre.",
       "call_in_progress": "Un appel est encore en cours.",
+      "call_settlement_pending": "Un appel récent est encore en cours de rapprochement.",
+      "active_service": "Un service personnel ou professionnel est encore actif. Contactez l’assistance avant de supprimer votre compte.",
       "call_unsettled": "Un appel est encore en cours de facturation.",
       "unknown": "Quelque chose sur votre compte est encore en cours."
     }

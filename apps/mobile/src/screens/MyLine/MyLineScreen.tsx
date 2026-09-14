@@ -20,6 +20,7 @@ import {
 
 interface MyLineScreenProps {
   line: LineDetail;
+  offlineObservedAt?: string | null;
   loading: boolean;
   errorMessage: string | null;
   onRefresh: () => void;
@@ -47,6 +48,7 @@ interface MyLineScreenProps {
  */
 export function MyLineScreen({
   line,
+  offlineObservedAt = null,
   loading,
   errorMessage,
   onRefresh,
@@ -60,6 +62,14 @@ export function MyLineScreen({
   return (
     <ScrollView contentContainerStyle={styles.screen} testID="my-line">
       <Text style={styles.title}>{line.product_name}</Text>
+
+      {offlineObservedAt ? (
+        <Banner
+          tone="info"
+          testID="my-line-offline"
+          message={t('offline.savedAt', { when: offlineObservedAt })}
+        />
+      ) : null}
 
       {/* --- the number ---------------------------------------------------- */}
       <View style={styles.card} testID="my-line-number">

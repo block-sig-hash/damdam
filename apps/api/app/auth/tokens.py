@@ -2,7 +2,7 @@ import hashlib
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Protocol
 from uuid import UUID, uuid4
 
 import jwt
@@ -14,6 +14,29 @@ from app.config import Settings
 
 class InvalidRefreshTokenError(Exception):
     pass
+
+
+class SessionTracker(Protocol):
+    """Optional account-device projection maintained beside refresh tokens."""
+
+    def on_token_issued(
+        self,
+        session: Session,
+        user: User,
+        token: RefreshToken,
+        now: datetime,
+        *,
+        platform: str | None,
+    ) -> None: ...
+
+    def on_token_rotated(
+        self,
+        session: Session,
+        user: User,
+        old_token: RefreshToken,
+        new_token: RefreshToken,
+        now: datetime,
+    ) -> None: ...
 
 
 def decode_with_clock(
@@ -62,17 +85,36 @@ class TokenPair:
 class AccessIdentity:
     user_id: UUID
     auth_version: int
+    session_id: UUID | None = None
 
 
 class TokenService:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        self.session_tracker: SessionTracker | None = None
 
     @staticmethod
     def _hash(token: str) -> str:
         return hashlib.sha256(token.encode()).hexdigest()
 
-    def issue(self, session: Session, user: User, now: datetime) -> TokenPair:
+    def issue(
+        self,
+        session: Session,
+        user: User,
+        now: datetime,
+        *,
+        platform: str | None = None,
+    ) -> TokenPair:
+        pair, stored = self._issue(session, user, now)
+        if self.session_tracker is not None:
+            self.session_tracker.on_token_issued(
+                session, user, stored, now, platform=platform
+            )
+        return pair
+
+    def _issue(
+        self, session: Session, user: User, now: datetime
+    ) -> tuple[TokenPair, RefreshToken]:
         access_jti = uuid4()
         refresh_jti = uuid4()
         access_expiry = now + timedelta(minutes=self.settings.jwt_access_ttl_minutes)
@@ -83,6 +125,10 @@ class TokenService:
                 "aud": "pilgrim",
                 "type": "access",
                 "jti": str(access_jti),
+                # Bind the access token to the refresh-token session created in
+                # the same pair. Older access tokens omit it and simply cannot
+                # claim which device row is current.
+                "sid": str(refresh_jti),
                 "ver": user.auth_version,
                 "iat": now,
                 "exp": access_expiry,
@@ -103,15 +149,15 @@ class TokenService:
             self.settings.jwt_secret,
             algorithm="HS256",
         )
-        session.add(
-            RefreshToken(
-                id=refresh_jti,
-                user_id=user.id,
-                token_hash=self._hash(refresh),
-                expires_at=refresh_expiry,
-            )
+        stored = RefreshToken(
+            id=refresh_jti,
+            user_id=user.id,
+            token_hash=self._hash(refresh),
+            expires_at=refresh_expiry,
         )
-        return TokenPair(access_token=access, refresh_token=refresh)
+        session.add(stored)
+        session.flush()
+        return TokenPair(access_token=access, refresh_token=refresh), stored
 
     def rotate(self, session: Session, token: str, now: datetime) -> TokenPair:
         try:
@@ -150,7 +196,11 @@ class TokenService:
             raise InvalidRefreshTokenError
 
         stored.revoked_at = now
-        pair = self.issue(session, user, now)
+        pair, replacement = self._issue(session, user, now)
+        if self.session_tracker is not None:
+            self.session_tracker.on_token_rotated(
+                session, user, stored, replacement, now
+            )
         session.commit()
         return pair
 
@@ -172,6 +222,7 @@ class TokenService:
             return AccessIdentity(
                 user_id=UUID(claims["sub"]),
                 auth_version=self._auth_version(claims),
+                session_id=(UUID(claims["sid"]) if claims.get("sid") else None),
             )
         except InvalidRefreshTokenError:
             raise

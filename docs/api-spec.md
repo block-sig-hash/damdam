@@ -2025,7 +2025,8 @@ to reformat and retry something that will never be permitted.
 
 ## 7.39 Amendment — Account, Receipts, Support and Deletion (US-38)
 
-Chunk 21. Ten endpoints under `/v1/me`, all requiring a member session.
+Chunk 21. Eleven new endpoints under `/v1/me`, all requiring a member session,
+plus enforcement added to the existing deletion endpoint.
 
 ### Endpoints
 
@@ -2042,6 +2043,7 @@ Chunk 21. Ten endpoints under `/v1/me`, all requiring a member session.
 | `PUT /v1/me/notification-preferences` | Decide one category and channel |
 | `GET /v1/me/account/deletion-preflight` | Why deletion cannot proceed yet |
 | `POST /v1/me/account/export` | Ask for a copy of your own data |
+| `DELETE /v1/me/account` | Request deletion only after the same blockers pass |
 
 ### Not-yours and never-existed are the same answer
 
@@ -2058,24 +2060,28 @@ everything and protects nothing. Omitting it signs out every device including
 the one asking — the right default when the reason for pressing it is a phone
 somebody else is holding.
 
-It is named rather than inferred because an access token does not carry the id
-of the session it came from, and inferring it would mean guessing.
+New access tokens carry the opaque refresh-session id used to mark the current
+device. Older access tokens do not, so the API leaves every `is_current` value
+false instead of guessing which device is making the request.
 
 ### The deletion preflight returns reasons, not a boolean
 
 `GET /account/deletion-preflight` answers `may_delete` plus a list of blockers,
 each carrying a stable `code` the app localizes and an optional `amount` and
-`currency`. Today two things block: money that has not finished moving, and an
-organization this account owns that still has other active members — *do not
-erase other members' services*.
+`currency`. Blockers cover unfinished payments/refunds, active personal or work
+service, an organization this account owns while other members still depend on
+it, and active or unsettled internet-call liabilities — *do not erase another
+person's service or a financial record still changing*.
 
 **The internal `detail` is deliberately not in the response.** It can name
 another member's line, and somebody deleting their own account does not need to
 be told what a colleague is using.
 
-The preflight is a **read**. It changes nothing, and `DELETE /v1/me/account`
-keeps its existing contract and behaviour: a destructive call whose refusal
-conditions can only be discovered by making it is one customers make twice.
+The preflight is a **read**. `DELETE /v1/me/account` repeats the assessment and
+returns **409 `account_deletion_blocked`** if any blocker exists, because state
+can change between viewing the preflight and confirming deletion. When it can
+proceed, the endpoint revokes internet-calling credentials before recording the
+existing pending-deletion/retention request.
 
 ### Support requests verify their references before storing them
 
@@ -2092,6 +2098,20 @@ one decision, and an explicit `false` outlives any later change to the default.
 
 Categories are `low_balance`, `expiry` and `order_status`. A request naming
 anything else — including a retired safety category — is a **422**.
+
+The preference read/write boundary is implemented here. Runtime delivery for
+these three categories is not: low-balance threshold rows are deduplicated by
+chunk 17, but no scheduler/dispatcher yet checks these preferences and sends
+the resulting commercial notifications.
+
+### Export requests are durable but delivery remains open
+
+`POST /v1/me/account/export` creates or returns one live export job. The domain
+builder includes the caller's account, receipts, support history, devices,
+preferences and internet-call history without activation secrets or another
+member's data. No worker, private-object-store decision, status endpoint or
+authenticated download endpoint is wired yet, so this is a preparatory export
+request rather than a delivered file.
 
 ### Amounts on a receipt are strings
 

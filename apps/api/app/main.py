@@ -19,6 +19,7 @@ from app.audit.service import AuditLogService
 from app.auth.hto import HTOAuthError, HTOService
 from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
+from app.calling import account_deletion as _calling_account_deletion  # noqa: F401
 from app.calling.charging import CallChargingService
 from app.calling.contract import CallingAdapter, CallingError
 from app.calling.lifecycle import CallLifecycleError, CallLifecycleService
@@ -294,6 +295,7 @@ def create_app(
         internet_dialer_enabled=resolved_settings.internet_dialer_enabled,
     )
     api.state.account_service = AccountService(clock=clock)
+    api.state.otp_service.tokens.session_tracker = api.state.account_service
     api.state.mfa_service = MfaService(clock)
     api.state.hto_pilgrim_service = HtoPilgrimService()
     api.state.report_service = ProvisioningReportService(clock)
@@ -591,6 +593,7 @@ def create_app(
             # 503: nothing is broken and retrying later works. A reference
             # space that could not produce a free value is a capacity answer.
             "support_reference_unavailable": 503,
+            "account_deletion_blocked": 409,
         }
         return JSONResponse(
             status_code=statuses.get(exc.code, 400),

@@ -3,8 +3,10 @@ from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Request
 
+from app.account.service import AccountError, AccountService
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
+from app.calling.sessions import ClientSessionService
 from app.profile.device_tokens import DeviceTokenService
 from app.profile.schemas import (
     AccountDeletionResponse,
@@ -30,12 +32,28 @@ def _retention_service(request: Request) -> RetentionService:
     return cast(RetentionService, request.app.state.retention_service)
 
 
+def _account_service(request: Request) -> AccountService:
+    return cast(AccountService, request.app.state.account_service)
+
+
+def _calling_sessions(request: Request) -> ClientSessionService:
+    return cast(ClientSessionService, request.app.state.client_session_service)
+
+
 @router.delete("/account", response_model=AccountDeletionResponse, status_code=202)
 def request_account_deletion(
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
 ) -> AccountDeletionResponse:
     with request.app.state.session_factory() as session:
+        account = session.get(User, user.id)
+        if account is None:  # pragma: no cover - a valid token implies a row
+            raise AccountError("account_not_found")
+        if not _account_service(request).assess_deletion(session, account).may_delete:
+            raise AccountError("account_deletion_blocked")
+        _calling_sessions(request).revoke(
+            session, account, reason="account_deletion"
+        )
         deleted_user = _retention_service(request).request_account_deletion(
             session, user.id
         )

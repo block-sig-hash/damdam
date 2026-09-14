@@ -38,6 +38,7 @@ jest.mock('../../api/accountClient', () => ({
   setPreference: jest.fn(),
   openSupportRequest: jest.fn(),
   requestExport: jest.fn(),
+  deleteAccount: jest.fn(),
 }));
 
 const mocked = accountClient as jest.Mocked<typeof accountClient>;
@@ -51,6 +52,7 @@ const SESSION = {
   last_seen_country: 'NG',
   last_seen_at: '2026-09-12T10:00:00Z',
   revoked_at: null,
+  is_current: true,
 };
 
 const RECEIPT = {
@@ -104,6 +106,10 @@ function happyPath() {
 describe('AccountFlow', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    mocked.deleteAccount.mockResolvedValue({
+      status: 'pending_deletion',
+      deletion_requested_at: '2026-09-12T10:00:00Z',
+    });
     await AsyncStorage.clear();
   });
 
@@ -343,7 +349,31 @@ describe('AccountFlow', () => {
       await press('delete-confirm');
 
       await waitFor(() => expect(onAccountDeleted).toHaveBeenCalled());
+      expect(mocked.deleteAccount).toHaveBeenCalledWith('token');
       expect(await readSlice('user-a', 'receipts')).toBeNull();
+    });
+
+    it('keeps the local session when server deletion is refused', async () => {
+      happyPath();
+      mocked.fetchDeletionPreflight.mockResolvedValue({ may_delete: true, blockers: [] });
+      mocked.deleteAccount.mockRejectedValue(
+        new ApiError('account_deletion_blocked', 'Deletion blocked', 409),
+      );
+      await writeSlice('user-a', 'receipts', [RECEIPT], '2026-09-11T08:00:00Z');
+      const onAccountDeleted = jest.fn();
+
+      await renderFlow({ onAccountDeleted });
+      await waitFor(() => expect(screen.getByTestId('account-screen')).toBeTruthy());
+      await press('open-privacy');
+      await waitFor(() => expect(screen.getByTestId('delete-start')).toBeTruthy());
+      await press('delete-start');
+      await press('delete-confirm');
+
+      await waitFor(() =>
+        expect(screen.getByText('Deletion blocked')).toBeTruthy(),
+      );
+      expect(onAccountDeleted).not.toHaveBeenCalled();
+      expect(await readSlice('user-a', 'receipts')).not.toBeNull();
     });
   });
 

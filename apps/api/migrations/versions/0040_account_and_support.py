@@ -1,21 +1,12 @@
 """Recognisable sessions, support requests, notification preferences, exports — US-38.
 
-Revision ID: 0038_account_and_support
-Revises: 0037_spending_controls
+Revision ID: 0040_account_and_support
+Revises: 0039_call_settlement
 
-**Purely additive.** Four new tables, no column added to an existing table, no
-row touched and nothing dropped. `refresh_tokens` in particular is left exactly
-as it is: authentication keeps checking the same table it checked yesterday, and
-`account_sessions` describes those rows from beside them rather than replacing
-them. A bug in the description can make a session unrecognisable; it cannot make
-a revoked one work.
-
-**Numbering collision, deliberately left for the merge.** `0038` is also taken
-by `0038_call_authorization` on the unmerged `chunk/V02-outbound-call-control`
-branch. Both chunks were cut from the same `0037` head at the founder's
-direction to run them in parallel. Whichever merges second renumbers — the
-alternative is guessing a number now and being wrong in a way that is harder to
-see. Named in `docs/implementation/handoffs/21.md`.
+Four new tables and one receipt-description snapshot. `refresh_tokens` remains
+the authentication authority; `account_sessions` only describes those rows.
+The implementation was developed in parallel with the calling migrations and
+now follows `0039_call_settlement` as the single Alembic head.
 
 The foreign keys encode who owns what after an account is erased, and they do
 not all agree on purpose:
@@ -40,8 +31,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0038_account_and_support"
-down_revision: str | None = "0037_spending_controls"
+revision: str = "0040_account_and_support"
+down_revision: str | None = "0039_call_settlement"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -67,6 +58,18 @@ def upgrade() -> None:
         postgresql.ENUM(*values, name=name, create_type=True).create(
             bind, checkfirst=True
         )
+
+    # Freeze what an item was called when its receipt became historical. The
+    # current catalog name is the only recoverable value for existing rows.
+    op.add_column(
+        "order_items",
+        sa.Column("description_snapshot", sa.String(255), nullable=True),
+    )
+    op.execute(
+        "UPDATE order_items AS item "
+        "SET description_snapshot = product.name "
+        "FROM products AS product WHERE product.id = item.product_id"
+    )
 
     op.create_table(
         "account_sessions",
@@ -229,6 +232,7 @@ def downgrade() -> None:
     op.drop_table("notification_preferences")
     op.drop_table("support_requests")
     op.drop_table("account_sessions")
+    op.drop_column("order_items", "description_snapshot")
     bind = op.get_bind()
     for name, _ in _NEW_ENUMS:
         postgresql.ENUM(name=name).drop(bind, checkfirst=True)

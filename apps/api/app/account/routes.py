@@ -1,6 +1,6 @@
 """Account, receipts, support and deletion (US-38, chunk 21).
 
-Ten endpoints under `/v1/me`, and one decision shapes most of them: **a customer
+Eleven endpoints under `/v1/me`, and one decision shapes most of them: **a customer
 is told why**, never just no. The deletion preflight returns a list of reasons
 with codes the app localizes; revoking a stranger's session returns 404 rather
 than 403 because a different answer confirms the id is real.
@@ -96,6 +96,9 @@ def list_sessions(
     """Every device signed in to this account, recognisable enough to act on."""
     service = _service(request)
     with _session(request) as session:
+        current_refresh_token_id = getattr(
+            request.state, "current_refresh_token_id", None
+        )
         return SessionListResponse(
             sessions=[
                 SessionView(
@@ -107,6 +110,10 @@ def list_sessions(
                     last_seen_country=record.last_seen_country,
                     last_seen_at=record.last_seen_at,
                     revoked_at=record.revoked_at,
+                    is_current=(
+                        current_refresh_token_id is not None
+                        and record.refresh_token_id == current_refresh_token_id
+                    ),
                 )
                 for record in service.sessions(session, user)
             ]

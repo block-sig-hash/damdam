@@ -198,6 +198,7 @@ export function ConsumerApp({
         ) : tab === 'my-line' ? (
           <MyLineFlow
             accessToken={accessToken}
+            userId={currentUserId}
             initialEntitlementId={requestedLineId}
             onEntitlementOpened={() => setRequestedLineId(null)}
             onBrowsePlans={() => setTab('plans')}

@@ -18,7 +18,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app import model_registry  # noqa: F401
@@ -46,6 +45,7 @@ from app.auth.models import (
     User,
 )
 from app.catalog.models import LegalEntity, Product, ProductKind
+from app.connectivity.models import Entitlement
 from app.orders.models import Order, OrderItem, PaymentState
 from app.organizations.models import (
     MembershipStatus,
@@ -59,13 +59,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 NOW = datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc)
-TABLES = (
-    "account_export_jobs, notification_preferences, support_requests, "
-    "account_sessions, refresh_tokens, order_items, orders, entitlements, "
-    "products, organization_members, organizations, users, legal_entities"
-)
-
-
 class Clock:
     def __init__(self, value: datetime = NOW) -> None:
         self.value = value
@@ -77,7 +70,7 @@ class Clock:
         self.value += timedelta(**kwargs)
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def engine():
     engine = create_engine(os.environ["TEST_DATABASE_URL"])
     SQLModel.metadata.create_all(engine)
@@ -86,11 +79,17 @@ def engine():
 
 @pytest.fixture
 def session(engine):
-    with Session(engine) as session:
-        session.exec(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
-        session.commit()
-        yield session
-        session.rollback()
+    connection = engine.connect()
+    transaction = connection.begin()
+    try:
+        with Session(
+            bind=connection, join_transaction_mode="create_savepoint"
+        ) as session:
+            yield session
+            session.rollback()
+    finally:
+        transaction.rollback()
+        connection.close()
 
 
 @pytest.fixture
@@ -170,6 +169,7 @@ def _order(session: Session, user: User, clock: Clock, amount="5000.00") -> Orde
             quantity=1,
             unit_currency="NGN",
             unit_amount=Decimal(amount),
+            description_snapshot=product.name,
         )
     )
     session.flush()
@@ -276,6 +276,22 @@ class TestSessionsAreRecognisableAndRevocable:
         service.revoke_session(session, user, record.id)
         assert record.revoked_at == first
 
+    def test_an_expired_token_is_not_shown_as_an_active_session(
+        self, session, service, clock
+    ):
+        user = _user(session)
+        token = _token(session, user, clock)
+        record = service.record_session(session, user, token, device_label="Old phone")
+        token.expires_at = clock() - timedelta(seconds=1)
+        session.add(token)
+        session.flush()
+
+        listed = service.sessions(session, user)
+
+        assert listed == [record]
+        assert record.revoked_at == token.expires_at
+        assert record.revoked_reason == "expired"
+
     def test_signing_out_everywhere_can_keep_the_phone_in_your_hand(
         self, session, service, clock
     ):
@@ -308,6 +324,23 @@ class TestReceiptsComeFromHistory:
         assert receipt.currency == "NGN"
         assert len(receipt.lines) == 1
         assert receipt.lines[0].total_amount == Decimal("5000.00")
+
+    def test_catalog_renaming_does_not_rewrite_an_old_receipt(
+        self, session, service, clock
+    ):
+        user = _user(session)
+        order = _order(session, user, clock)
+        item = session.exec(
+            select(OrderItem).where(OrderItem.order_id == order.id)
+        ).one()
+        product = session.get(Product, item.product_id)
+        assert product is not None
+        product.name = "Renamed later"
+        session.add(product)
+        session.flush()
+
+        receipt = service.receipt(session, user, order.id)
+        assert receipt.lines[0].description == "Nigeria 5GB"
 
     def test_another_customers_receipt_is_not_found(self, session, service, clock):
         owner = _user(session, "owner")
@@ -398,6 +431,37 @@ class TestSupportCarriesItsReference:
             locale=Locale.FR,
         )
         assert request.locale == "fr"
+
+    def test_a_current_holder_can_reference_a_line_bought_by_somebody_else(
+        self, session, service, clock
+    ):
+        buyer = _user(session, "buyer")
+        holder = _user(session, "holder")
+        order = _order(session, buyer, clock)
+        item = session.exec(
+            select(OrderItem).where(OrderItem.order_id == order.id)
+        ).one()
+        entitlement = Entitlement(
+            order_item_id=item.id,
+            holder_user_id=holder.id,
+            product_id=item.product_id,
+            data_bytes_total=1024,
+            voice_seconds_total=0,
+        )
+        session.add(entitlement)
+        session.flush()
+
+        request = service.open_support_request(
+            session,
+            holder,
+            category=SupportCategory.CONNECTIVITY,
+            subject="My work line",
+            body="It is not attaching.",
+            locale=Locale.EN,
+            entitlement_id=entitlement.id,
+        )
+
+        assert request.entitlement_id == entitlement.id
 
 
 class TestNotificationPreferences:
@@ -563,6 +627,31 @@ class TestDeletionAnswersWithReasons:
         assessment = service.assess_deletion(session, user)
         assert assessment.may_delete is True
         assert assessment.blockers == ()
+
+    def test_an_active_personal_service_blocks_deletion(
+        self, session, service, clock
+    ):
+        user = _user(session)
+        order = _order(session, user, clock)
+        item = session.exec(
+            select(OrderItem).where(OrderItem.order_id == order.id)
+        ).one()
+        session.add(
+            Entitlement(
+                order_item_id=item.id,
+                holder_user_id=user.id,
+                product_id=item.product_id,
+                data_bytes_total=1024,
+                voice_seconds_total=0,
+                expires_at=clock() + timedelta(days=1),
+            )
+        )
+        session.flush()
+
+        assessment = service.assess_deletion(session, user)
+
+        assert assessment.may_delete is False
+        assert [blocker.code for blocker in assessment.blockers] == ["active_service"]
 
     def test_owning_an_organization_with_other_members_blocks_deletion(
         self, session, service

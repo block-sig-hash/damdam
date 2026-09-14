@@ -54,7 +54,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def session_factory():
     """The app on real PostgreSQL, in a schema of its own."""
     url = os.environ["TEST_DATABASE_URL"]
@@ -80,9 +80,10 @@ def client(api: FastAPI) -> TestClient:
 
 def _user(api: FastAPI, suffix: str = "0001", locale: Locale = Locale.EN) -> User:
     with api.state.session_factory() as session:
+        identity = uuid4().hex[:8]
         user = User(
-            phone_number=f"+234801900{suffix}",
-            email=f"account-{suffix}@example.test",
+            phone_number=f"+23480{uuid4().int % 10**8:08d}",
+            email=f"account-{suffix}-{identity}@example.test",
             first_name="Holder",
             last_name="Person",
             locale=locale,
@@ -177,10 +178,11 @@ class TestSessions:
 
         assert response.status_code == 200
         sessions = response.json()["sessions"]
-        assert len(sessions) == 1
-        assert sessions[0]["device_label"] == "Pixel 7"
-        assert sessions[0]["last_seen_country"] == "NG"
-        assert sessions[0]["revoked_at"] is None
+        assert len(sessions) == 2
+        described = next(row for row in sessions if row["device_label"] == "Pixel 7")
+        assert described["last_seen_country"] == "NG"
+        assert described["revoked_at"] is None
+        assert sum(row["is_current"] for row in sessions) == 1
 
     def test_revoking_a_device_returns_no_content_and_kills_the_token(
         self, api, client
@@ -234,23 +236,26 @@ class TestSessions:
         )
 
         assert response.status_code == 200
-        assert response.json()["revoked"] == 2
+        assert response.json()["revoked"] == 3
 
     def test_the_named_device_is_spared(self, api, client):
         user = _user(api)
-        keep = _session_row(api, user, "This phone")
+        _session_row(api, user, "This phone")
         _session_row(api, user, "Lost phone")
+        headers = _auth(api, user)
+        listed = client.get("/v1/me/sessions", headers=headers).json()["sessions"]
+        keep = next(row for row in listed if row["is_current"])
 
         response = client.post(
             "/v1/me/sessions/revoke-all",
-            json={"keep_session_id": str(keep.id)},
-            headers=_auth(api, user),
+            json={"keep_session_id": keep["session_id"]},
+            headers=headers,
         )
 
-        assert response.json()["revoked"] == 1
-        listed = client.get("/v1/me/sessions", headers=_auth(api, user)).json()
+        assert response.json()["revoked"] == 2
+        listed = client.get("/v1/me/sessions", headers=headers).json()
         spared = [s for s in listed["sessions"] if s["revoked_at"] is None]
-        assert [s["device_label"] for s in spared] == ["This phone"]
+        assert [s["session_id"] for s in spared] == [keep["session_id"]]
 
     def test_naming_another_customers_session_spares_nothing(self, api, client):
         """There is no id a client can send that reaches outside its account."""
@@ -265,12 +270,41 @@ class TestSessions:
             headers=_auth(api, owner),
         )
 
-        assert response.json()["revoked"] == 1
+        assert response.json()["revoked"] == 2
         with api.state.session_factory() as session:
             from app.account.models import AccountSession
 
             theirs = session.get(AccountSession, strangers_device.id)
             assert theirs.revoked_at is None
+
+    def test_refresh_keeps_one_current_device_row(self, api, client):
+        user = _user(api)
+        with api.state.session_factory() as session:
+            pair = api.state.otp_service.tokens.issue(
+                session,
+                session.get(User, user.id),
+                api.state.clock(),
+                platform="android",
+            )
+            session.commit()
+
+        before = client.get(
+            "/v1/me/sessions",
+            headers={"Authorization": f"Bearer {pair.access_token}"},
+        ).json()["sessions"]
+        rotated = client.post(
+            "/v1/auth/token/refresh",
+            json={"refresh_token": pair.refresh_token},
+        )
+        assert rotated.status_code == 200
+        after = client.get(
+            "/v1/me/sessions",
+            headers={"Authorization": f"Bearer {rotated.json()['access_token']}"},
+        ).json()["sessions"]
+
+        assert len(before) == len(after) == 1
+        assert before[0]["session_id"] == after[0]["session_id"]
+        assert after[0]["is_current"] is True
 
 
 class TestReceipts:
@@ -469,6 +503,12 @@ class TestDeletionPreflight:
         body = response.json()
         assert body["may_delete"] is False
         assert body["blockers"][0]["code"] == "organization_has_other_members"
+
+        deleted = client.delete("/v1/me/account", headers=_auth(api, owner))
+        assert deleted.status_code == 409
+        assert deleted.json()["error"] == "account_deletion_blocked"
+        with api.state.session_factory() as session:
+            assert session.get(User, owner.id).status == UserStatus.ACTIVE
 
     def test_the_internal_detail_never_reaches_the_customer(self, api, client):
         """It can name another member's line. The code is what the app shows."""

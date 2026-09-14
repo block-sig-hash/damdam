@@ -178,6 +178,9 @@ class OrderItem(SQLModel, table=True):
     # version must never rewrite what someone was charged.
     unit_currency: str = Field(sa_column=currency_column())
     unit_amount: Decimal = Field(sa_column=money_column())
+    description_snapshot: str | None = Field(
+        default=None, sa_column=Column(String(255), nullable=True)
+    )
     provisioning_state: ProvisioningState = Field(
         default=ProvisioningState.NOT_STARTED,
         sa_column=_enum(
