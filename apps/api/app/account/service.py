@@ -25,7 +25,7 @@ from __future__ import annotations
 import secrets
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
@@ -211,7 +211,7 @@ class AccountService:
                 record.revoked_at = now
                 record.revoked_reason = "token_removed"
                 session.add(record)
-            elif token.revoked_at is not None or token.expires_at <= now:
+            elif token.revoked_at is not None or _aware(token.expires_at) <= _aware(now):
                 record.revoked_at = token.revoked_at or token.expires_at
                 record.revoked_reason = (
                     "account_recovery" if token.revoked_at is not None else "expired"
@@ -683,6 +683,11 @@ def _trim(value: str | None, length: int) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned[:length] if cleaned else None
+
+
+def _aware(value: datetime) -> datetime:
+    """Normalize legacy/SQLite-naive UTC timestamps before comparison."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
 __all__ = [
