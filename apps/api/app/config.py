@@ -45,6 +45,23 @@ class Settings(BaseSettings):
     twilio_verify_service_sid: str = ""
 
     dashboard_base_url: str = "http://localhost:3000"
+    #: Extra browser origins allowed to call the API, comma-separated.
+    #:
+    #: V05 put a consumer calling client in a browser and `security.md` §10.18
+    #: asks for *restrictive* browser origins; this chunk owns that
+    #: configuration. The dashboard's own URL is always included, so the common
+    #: deployment needs nothing here — this exists for the cases that are
+    #: genuinely separate hosts, and it is a list rather than a wildcard because
+    #: `*` with `allow_credentials` is refused by every browser anyway and
+    #: reads, wrongly, like it works.
+    additional_browser_origins: str = ""
+    #: A bearer token that may read `/v1/ops/metrics` without an admin session.
+    #:
+    #: A metrics scraper is a process, not a person, and giving one an operator
+    #: login would mean an operator credential living in a scrape config. Empty
+    #: by default, which leaves the endpoint admin-only; set it and a scraper
+    #: can be granted exactly this one read and nothing else.
+    metrics_scrape_token: str = ""
     hto_email_verification_ttl_hours: int = 24
     notification_timeout_seconds: int = 10
     resend_api_key: str = ""
@@ -193,6 +210,84 @@ class Settings(BaseSettings):
     # on before then is a deploy that advertises a capability that does not
     # exist, which is why it raises rather than quietly enabling a dead button.
     internet_dialer_enabled: bool = False
+
+    @property
+    def browser_origins(self) -> list[str]:
+        """Every origin a browser may call this API from, deduplicated."""
+        origins = [self.dashboard_base_url.rstrip("/")]
+        origins.extend(
+            origin.strip().rstrip("/")
+            for origin in self.additional_browser_origins.split(",")
+            if origin.strip()
+        )
+        seen: dict[str, None] = {}
+        for origin in origins:
+            seen.setdefault(origin, None)
+        return list(seen)
+
+    @model_validator(mode="after")
+    def production_rejects_developer_defaults(self) -> "Settings":
+        """Production must not start on the settings that make development easy.
+
+        Each of these is harmless locally and a real incident in production, and
+        each fails *at startup* rather than at the first request. A deployment
+        that boots and then cannot sign anybody in is discovered by customers; a
+        deployment that refuses to boot is discovered by whoever deployed it.
+
+        - **The default JWT secret is public.** It is in this file, in git, and
+          in every developer's checkout. Anybody could mint an access token.
+        - **Identity mail with no provider is discarded**, silently, by
+          `NullDeliveryTransport`. That is the right behaviour in staging and a
+          total authentication outage in production: every sign-in link goes
+          nowhere and nothing logs an error, because nothing failed.
+        - **A localhost browser origin in production** means the CORS list was
+          never configured for the real host.
+        - **Unsigned provider callbacks** let anyone POST a payment or call
+          event. V02 verifies signatures when a key is present; absent one there
+          is nothing to verify against.
+        """
+        if self.app_env != "production":
+            return self
+
+        problems: list[str] = []
+        if self.jwt_secret == "development-only-secret-change-before-deploy":
+            problems.append(
+                "JWT_SECRET is still the shared development default, which is "
+                "published in this repository"
+            )
+        if not self.resend_api_key:
+            problems.append(
+                "RESEND_API_KEY is unset, so identity email would be discarded "
+                "silently and no customer could sign in"
+            )
+        insecure = [
+            origin
+            for origin in self.browser_origins
+            if origin.startswith("http://")
+            or "localhost" in origin
+            or "127.0.0.1" in origin
+        ]
+        if insecure:
+            problems.append(
+                "browser origins must be HTTPS and not localhost in production: "
+                + ", ".join(insecure)
+            )
+        if self.metrics_scrape_token and len(self.metrics_scrape_token) < 32:
+            problems.append(
+                "METRICS_SCRAPE_TOKEN must be at least 32 characters; it is a "
+                "bearer credential and a short one is guessable"
+            )
+        if not self.telnyx_public_key and self.calling_live_routes_enabled:
+            problems.append(
+                "TELNYX_PUBLIC_KEY is unset, so provider call events cannot be "
+                "verified and anyone could post one"
+            )
+        if problems:
+            raise ValueError(
+                "APP_ENV=production refuses this configuration: "
+                + "; ".join(problems)
+            )
+        return self
 
     @model_validator(mode="after")
     def idt_calling_is_not_yet_supported(self) -> "Settings":

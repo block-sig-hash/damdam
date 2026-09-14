@@ -803,6 +803,46 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/admin/metrics:
+    get:
+      tags:
+      - admin
+      summary: Operational Metrics
+      description: 'The five numbers somebody is woken up for, in Prometheus text
+        format.
+
+
+        Uncached and computed per request. A cached metric is wrong in exactly the
+
+        situation it exists for, and this is an admin-only endpoint on no customer
+
+        path, so the cost is a handful of indexed counts.'
+      operationId: operational_metrics_v1_admin_metrics_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            text/plain:
+              schema:
+                type: string
+      security:
+      - HTTPBearer: []
+  /v1/admin/metrics.json:
+    get:
+      tags:
+      - admin
+      summary: Operational Metrics Json
+      description: The same observation, for a dashboard rather than a scraper.
+      operationId: operational_metrics_json_v1_admin_metrics_json_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationalMetricsResponse'
+      security:
+      - HTTPBearer: []
   /v1/organizations:
     get:
       tags:
@@ -8560,6 +8600,58 @@ components:
       - requested_at
       title: OffboardingView
       description: A departure, including what is still outstanding with a carrier.
+    OperationalMetricsResponse:
+      properties:
+        observed_at:
+          type: string
+          format: date-time
+          title: Observed At
+        oldest_unprovisioned_order_seconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Oldest Unprovisioned Order Seconds
+        unknown_supplier_outcomes:
+          type: integer
+          title: Unknown Supplier Outcomes
+        unknown_call_outcomes:
+          type: integer
+          title: Unknown Call Outcomes
+        webhook_lag_seconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Webhook Lag Seconds
+        quarantined_events:
+          type: integer
+          title: Quarantined Events
+        unmatched_events:
+          type: integer
+          title: Unmatched Events
+        usage_staleness_seconds:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Usage Staleness Seconds
+        open_exceptions:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Open Exceptions
+          default: {}
+      type: object
+      required:
+      - observed_at
+      - unknown_supplier_outcomes
+      - unknown_call_outcomes
+      - quarantined_events
+      - unmatched_events
+      title: OperationalMetricsResponse
+      description: "One observation of the system.\n\nEvery \"oldest\" and \"lag\"\
+        \ field is nullable, and **null is not zero**. A\nsystem that has never observed\
+        \ usage and one whose usage is perfectly fresh\nwould otherwise report the\
+        \ same number, and they could not be more\ndifferent \u2014 one is healthy,\
+        \ the other has a poller that never started."
     OperatorActionKind:
       type: string
       enum:

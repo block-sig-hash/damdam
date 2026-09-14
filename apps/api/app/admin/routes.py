@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Annotated, cast
@@ -5,6 +6,7 @@ from uuid import UUID
 
 import jwt
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import PlainTextResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
@@ -35,6 +37,8 @@ from app.manifests.schemas import (
     PricingTierUpdateRequest,
     PricingTierUpdateResponse,
 )
+from app.metrics import collect_metrics, render_prometheus
+from app.ops_schemas import OperationalMetricsResponse
 from app.packages.service import PackageAdminService
 from app.retirement import RETIRED_RESPONSES, SOS, RetiredFeatureError
 
@@ -302,3 +306,67 @@ def cancel_package(
     with request.app.state.session_factory() as session:
         package = _package_admin_service(request).cancel(session, package_id, admin)
         return PackageCancelResponse(id=package.id, status=package.status.value)
+
+
+# --- operational metrics (US-42, chunk 26C) --------------------------------
+
+
+def _metrics_reader(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
+) -> None:
+    """Allow an admin session, or a scraper holding the dedicated token.
+
+    Two callers with genuinely different shapes. A person reading the numbers in
+    a browser has an admin session; Prometheus has a config file and no way to
+    complete a login. Giving the scraper an operator credential would put one in
+    a scrape config, which is how an operator credential ends up in a monitoring
+    repository — so it gets its own token, scoped to this one read.
+
+    The comparison is constant-time. A timing oracle on a bearer token is a slow
+    but real way to recover it.
+    """
+    settings = request.app.state.settings
+    token = credentials.credentials if credentials else ""
+    if settings.metrics_scrape_token and secrets.compare_digest(
+        token, settings.metrics_scrape_token
+    ):
+        return
+    # Falls through to the ordinary admin check, which raises on failure.
+    current_admin(request, credentials)
+
+
+@router.get("/metrics", response_class=PlainTextResponse)
+def operational_metrics(
+    request: Request,
+    _: Annotated[None, Depends(_metrics_reader)],
+) -> str:
+    """The five numbers somebody is woken up for, in Prometheus text format.
+
+    Uncached and computed per request. A cached metric is wrong in exactly the
+    situation it exists for, and this is an admin-only endpoint on no customer
+    path, so the cost is a handful of indexed counts.
+    """
+    with request.app.state.session_factory() as session:
+        return render_prometheus(collect_metrics(session, request.app.state.clock))
+
+
+@router.get("/metrics.json", response_model=OperationalMetricsResponse)
+def operational_metrics_json(
+    request: Request,
+    _: Annotated[None, Depends(_metrics_reader)],
+) -> OperationalMetricsResponse:
+    """The same observation, for a dashboard rather than a scraper."""
+    with request.app.state.session_factory() as session:
+        metrics = collect_metrics(session, request.app.state.clock)
+    return OperationalMetricsResponse(
+        observed_at=metrics.observed_at,
+        oldest_unprovisioned_order_seconds=metrics.oldest_unprovisioned_order_seconds,
+        unknown_supplier_outcomes=metrics.unknown_supplier_outcomes,
+        unknown_call_outcomes=metrics.unknown_call_outcomes,
+        webhook_lag_seconds=metrics.webhook_lag_seconds,
+        quarantined_events=metrics.quarantined_events,
+        unmatched_events=metrics.unmatched_events,
+        usage_staleness_seconds=metrics.usage_staleness_seconds,
+        open_exceptions=metrics.open_exceptions,
+    )
