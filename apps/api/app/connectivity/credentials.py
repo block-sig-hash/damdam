@@ -38,7 +38,7 @@ import hashlib
 import hmac
 import os
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -113,7 +113,23 @@ class CredentialVault:
         key: bytes,
         key_reference: str,
         clock: Callable[[], datetime] = utc_now,
+        retired_keys: Mapping[str, bytes] | None = None,
     ) -> None:
+        """Hold one sealing key and any number of retired unsealing keys.
+
+        **Rotation is why `retired_keys` exists** (US-42, chunk 26D). Before it,
+        `unseal` refused any reference but the current one, so the moment a key
+        was rotated every previously sealed profile became permanently
+        unreadable — and a Telnyx eSIM profile is one-time-use, so "unreadable"
+        means the customer's paid-for line is gone and the remedy is buying
+        another. The key reference recorded on each row told you *which* rows
+        you had destroyed, which is not the same as not destroying them.
+
+        New material is always sealed under the current key. Old material is
+        unsealed under whichever key its row names, so a rotation is a
+        deployment change rather than a migration, and the old key can be
+        dropped once no row references it.
+        """
         if len(key) != 32:
             raise CredentialError(
                 "invalid_key",
@@ -128,9 +144,32 @@ class CredentialVault:
                 "a rotation makes every profile unreadable with no way to tell "
                 "which rows are affected",
             )
+        retired = dict(retired_keys or {})
+        for reference, retired_key in retired.items():
+            if len(retired_key) != 32:
+                raise CredentialError(
+                    "invalid_key",
+                    f"the retired key {reference!r} is not 32 bytes; a rotation "
+                    "that cannot decrypt what it retired is not a rotation",
+                )
+        if key_reference in retired:
+            # Two different keys under one name means a row's reference no
+            # longer identifies the key that sealed it, which is the whole
+            # premise of the scheme.
+            raise CredentialError(
+                "duplicate_key_reference",
+                f"{key_reference!r} is both the current and a retired key "
+                "reference; a reference must name exactly one key",
+            )
         self._key = key
+        self._retired = retired
         self.key_reference = key_reference
         self.clock = clock
+
+    @property
+    def known_key_references(self) -> tuple[str, ...]:
+        """Every reference this vault can unseal, current first."""
+        return (self.key_reference, *sorted(self._retired))
 
     # --- sealing ----------------------------------------------------------
 
@@ -146,17 +185,19 @@ class CredentialVault:
         )
 
     def unseal(self, credential: EsimActivationCredential) -> str:
-        if credential.key_reference != self.key_reference:
-            raise CredentialError(
-                "key_reference_mismatch",
-                f"credential was sealed under {credential.key_reference!r} and "
-                f"this vault holds {self.key_reference!r}",
-            )
+        """Decrypt under whichever key this row was sealed with.
+
+        Selected by reference rather than tried in turn. A vault that attempted
+        every key it holds would turn a wrong-key failure into a slower
+        wrong-key failure, and would hide the fact that a row names a key nobody
+        configured — which is exactly the thing an operator needs told.
+        """
+        key = self._key_for(credential.key_reference)
         blob = credential.ciphertext
         if len(blob) <= _NONCE_BYTES:
             raise CredentialError("ciphertext_truncated")
         try:
-            plaintext = AESGCM(self._key).decrypt(
+            plaintext = AESGCM(key).decrypt(
                 blob[:_NONCE_BYTES],
                 blob[_NONCE_BYTES:],
                 _aad(credential.esim_installation_id),
@@ -170,6 +211,18 @@ class CredentialVault:
                 "sealed under a different key or moved between installations",
             ) from exc
         return plaintext.decode("utf-8")
+
+    def _key_for(self, reference: str) -> bytes:
+        if reference == self.key_reference:
+            return self._key
+        retired = self._retired.get(reference)
+        if retired is None:
+            raise CredentialError(
+                "key_reference_mismatch",
+                f"credential was sealed under {reference!r}; this vault holds "
+                f"{', '.join(self.known_key_references)}",
+            )
+        return retired
 
     def fingerprint(self, secret: str) -> str:
         """Keyed, so it cannot be brute-forced from a stolen database alone.

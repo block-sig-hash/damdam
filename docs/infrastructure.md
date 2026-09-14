@@ -1113,3 +1113,75 @@ requires "Offline check-in survival" and "Offline SOS survival" rows in every
 release signoff, for features the reset retires. Chunk 01 deliberately did not
 change that script — release automation is chunk 27's scope. Until chunk 27
 lands, a `staging → main` promotion still mechanically demands SOS evidence.
+
+## 11.16 Amendment — Alert Ownership, Least-Privilege Runtime Credentials and Rotation (US-42)
+
+Chunk 26D. Three operational commitments that were previously nobody's in
+particular.
+
+### Every metric has an owner, a threshold and an action
+
+Chunk 26C exposes `GET /v1/admin/metrics`. A metric with no owner is a
+dashboard; a metric with an owner and a written action is an alert. **The action
+column is the point** — a page that says "unknown supplier outcomes: 4" and
+nothing else invites whoever is woken to improvise, and improvising against a
+lost supplier response is how a second eSIM gets bought.
+
+| Metric | Threshold | Owner | Action when it fires |
+|---|---|---|---|
+| `oldest_unprovisioned_order_seconds` | > 900 | Fulfilment | Check the outbox and the supplier adapter. **Do not retry a purchase**; chunk 11 reconciles against the original operation reference |
+| `unknown_supplier_outcomes` | > 0 for 15 min | Fulfilment | Reconcile each against its original idempotency key. Never re-purchase |
+| `unknown_call_outcomes` | > 0 for 15 min | Calling | V03 reconciliation is behind; check the deadline worker's lease claims |
+| `webhook_lag_seconds` | > 600 | Calling | Provider, signing key or networking. Check the provider's own status before ours |
+| `quarantined_events` | > 0 | **Security** | Not a backlog. An event contradicted our records — a credential that is not the attempt's, a connection we do not use. Read the reason field before anything else |
+| `unmatched_events` | > 50 | Calling | Ordinary in small numbers (an event arriving before its leg). In bulk it means correlation is broken |
+| `usage_staleness_seconds` | > 7200, **or absent** | Usage | Absent means nothing has ever been observed, which is not freshness. A stalled poller stops balances moving without any error |
+| `open_exceptions` | > 25 total | Operations | Chunk 25's queue. Triage by kind; `settlement_mismatch` first, because it is money |
+
+Absence is a distinct alarm from a high value for every "oldest" and "lag"
+figure. A missing series means the thing was never observed; a zero means it was
+observed just now. Alerting only on the value would treat a poller that never
+started as perfect health.
+
+### Least-privilege runtime credentials
+
+The application must not connect as the database owner. Three roles, created by
+`scripts/create-database-roles.sql`:
+
+- **`damdam_app`** — `SELECT`/`INSERT`/`UPDATE`/`DELETE` on application tables
+  and `USAGE` on sequences. **No `CREATE`, no `DROP`, no `TRUNCATE`.** A
+  compromised application credential cannot drop a table or, more insidiously,
+  truncate one and leave the schema looking intact.
+- **`damdam_migrate`** — owns the schema and runs Alembic. Used by the migration
+  step of a deploy and by nothing that serves a request.
+- **`damdam_readonly`** — `SELECT` only, with no access to
+  `esim_activation_credentials`. For metrics scraping and support reads. It is
+  explicitly denied the one table whose contents are one-time-use customer
+  property, because a read-only credential is the one most likely to be shared.
+
+Separating `app` from `migrate` is what makes "no DDL at runtime" structural
+rather than a code review habit.
+
+### Secret rotation
+
+`ACTIVATION_MATERIAL_RETIRED_KEYS` holds `reference:base64key` pairs a
+deployment can still *unseal* with but no longer seals under. Rotation is a
+two-step deployment and no migration: move the current pair into the retired
+list, set a new key and reference, deploy. Existing rows keep naming the key
+that sealed them; new rows use the new key; a retired key may be dropped once no
+row references it.
+
+**This closes a real hole.** Before it, rotating the key made every previously
+sealed profile permanently unreadable, and a Telnyx eSIM profile is one-time-use
+— so "unreadable" means a customer's paid-for line is gone and the only remedy
+is buying another. The key reference on each row told an operator which rows had
+been destroyed, which is not the same as not destroying them.
+
+### Backup and restore
+
+`scripts/test-walg-pitr.sh` proves point-in-time recovery end to end against a
+real Postgres + WAL-G image, and now also **records the recovery time** and
+**reconciles the recovered data**: the journal it seeds must still sum to zero
+and no transaction may be half-present. A restore that returns rows is not the
+same as a restore that returns a consistent business state, and a double-entry
+transaction split by recovery is the failure a row count cannot see.

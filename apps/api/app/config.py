@@ -204,6 +204,35 @@ class Settings(BaseSettings):
     # sealed under a throwaway key is material that cannot be recovered.
     activation_material_key: str = ""
     activation_material_key_reference: str = "activation-material-v1"
+    #: Keys this deployment can still *unseal* with, but no longer seals under.
+    #:
+    #: Format: `reference:base64key` pairs, comma-separated. Rotation is
+    #: therefore a two-step deployment with no migration: move the old pair
+    #: here, set the new key and reference, deploy. Existing rows keep naming
+    #: the key that sealed them and stay readable; new rows use the new key.
+    #: A retired key may be dropped once no row references it.
+    #:
+    #: Without this, rotating the key would make every sealed profile
+    #: permanently unreadable — and a Telnyx eSIM profile is one-time-use, so
+    #: that is a customer's paid-for line gone, not an inconvenience.
+    activation_material_retired_keys: str = ""
+
+    @property
+    def retired_activation_material_keys(self) -> dict[str, bytes]:
+        """Parse `activation_material_retired_keys` into reference → key."""
+        parsed: dict[str, bytes] = {}
+        for pair in self.activation_material_retired_keys.split(","):
+            entry = pair.strip()
+            if not entry:
+                continue
+            reference, _, encoded = entry.partition(":")
+            if not reference or not encoded:
+                raise ValueError(
+                    "ACTIVATION_MATERIAL_RETIRED_KEYS entries must be "
+                    f"`reference:base64key`; got {entry!r}"
+                )
+            parsed[reference.strip()] = b64decode(encoded.strip(), validate=True)
+        return parsed
 
     # The approved calling amendment assigns the outbound internet dialer to
     # V04/V05. Neither is accepted, so the app must not offer one. Flipping this
@@ -300,6 +329,32 @@ class Settings(BaseSettings):
                 "IDT_CALLING_ENABLED is not supported yet -- IDT Express "
                 "termination is a Phase 2+ item (prd.md §5.5), not "
                 "implemented by this codebase"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def retired_activation_keys_must_parse_and_be_32_bytes(self) -> "Settings":
+        """Checked at startup, like the current key and for the same reason.
+
+        A malformed retired key is discovered when somebody taps "show my eSIM"
+        for a profile sealed before the last rotation — which is both the worst
+        moment and the hardest failure to attribute.
+        """
+        try:
+            retired = self.retired_activation_material_keys
+        except Exception as exc:
+            raise ValueError(str(exc)) from exc
+        for reference, key in retired.items():
+            if len(key) != 32:
+                raise ValueError(
+                    f"retired activation-material key {reference!r} is "
+                    f"{len(key)} bytes; AES-256 needs exactly 32"
+                )
+        if self.activation_material_key_reference in retired:
+            raise ValueError(
+                f"{self.activation_material_key_reference!r} is both the "
+                "current and a retired key reference; a reference must name "
+                "exactly one key"
             )
         return self
 

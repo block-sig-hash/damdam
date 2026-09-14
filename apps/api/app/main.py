@@ -141,6 +141,10 @@ def _build_credential_vault(
         b64decode(settings.activation_material_key, validate=True),
         settings.activation_material_key_reference,
         clock=clock,
+        # Rotation (chunk 26D): material sealed under a retired key stays
+        # readable. Without this, rotating the key destroys every existing
+        # one-time-use profile.
+        retired_keys=settings.retired_activation_material_keys,
     )
 
 
