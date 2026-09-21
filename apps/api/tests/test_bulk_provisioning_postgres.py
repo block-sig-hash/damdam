@@ -114,7 +114,12 @@ def connectivity(clock):
 
 @pytest.fixture
 def service(ledger, connectivity, clock):
-    return BulkProvisioningService(ledger, connectivity=connectivity, clock=clock)
+    return BulkProvisioningService(
+        ledger,
+        connectivity=connectivity,
+        carrier_provisioning_confirmed=True,
+        clock=clock,
+    )
 
 
 def _organization(session: Session) -> Organization:
@@ -240,6 +245,23 @@ def _plan(service, session, organization, product, people, key="bulk-1", market=
         currency="NGN",
         unit_amount=UNIT,
     )
+
+
+def _awaiting_supplier(session: Session, job: BulkJob, item) -> None:
+    """Put a fixture-confirmed line at the pre-answer boundary under test."""
+    item.state = BulkItemState.ORDERED
+    item.provisioned_at = None
+    job.provisioned_count -= 1
+    job.state = BulkJobState.PROVISIONING
+    job.completed_at = None
+    if item.order_item_id is not None:
+        order_item = session.get(OrderItem, item.order_item_id)
+        assert order_item is not None
+        order_item.provisioning_state = ProvisioningState.REQUESTED
+        session.add(order_item)
+    session.add(item)
+    session.add(job)
+    session.flush()
 
 
 class TestPlanning:
@@ -551,6 +573,24 @@ class TestPerLineFunding:
 
 
 class TestProvisioning:
+    def test_order_total_excludes_invalid_and_unfunded_recipients(
+        self, session, service, ledger
+    ):
+        organization = _organization(session)
+        _fund_organization(session, ledger, organization, "2000.00")
+        entity = _entity(session)
+        product = _product(session)
+        people = [_person(session, organization, index) for index in range(3)]
+        job = _plan(service, session, organization, product, people)
+        service.fund(session, job)
+
+        service.provision(session, job, seller_legal_entity_id=entity.id)
+
+        order = session.get(Order, job.order_id)
+        assert order is not None
+        assert order.total_amount == Decimal("2000.00")
+        assert len(session.exec(select(OrderItem)).all()) == 2
+
     def test_each_recipient_gets_one_order_item(
         self, session, service, ledger, clock
     ):
@@ -631,6 +671,24 @@ class TestProvisioning:
 
 
 class TestLostAndFailedOutcomes:
+    def test_a_confirmed_line_cannot_be_downgraded_to_unknown(
+        self, session, service, ledger
+    ):
+        organization = _organization(session)
+        _fund_organization(session, ledger, organization, "5000.00")
+        entity = _entity(session)
+        product = _product(session)
+        person = _person(session, organization, 1)
+        job = _plan(service, session, organization, product, [person])
+        service.fund(session, job)
+        service.provision(session, job, seller_legal_entity_id=entity.id)
+        item = service.items(session, job)[0]
+
+        with pytest.raises(BulkError) as excinfo:
+            service.mark_unknown(session, job, item, "late_timeout")
+
+        assert excinfo.value.code == "item_not_awaiting_supplier"
+
     def test_a_lost_response_is_never_retried_blind(
         self, session, service, ledger, clock
     ):
@@ -650,6 +708,7 @@ class TestLostAndFailedOutcomes:
         service.provision(session, job, seller_legal_entity_id=entity.id)
 
         item = service.items(session, job)[0]
+        _awaiting_supplier(session, job, item)
         service.mark_unknown(session, job, item, "supplier_timeout")
 
         to_reconcile, to_retry = service.resumable(session, job)
@@ -670,6 +729,7 @@ class TestLostAndFailedOutcomes:
         service.provision(session, job, seller_legal_entity_id=entity.id)
         item = service.items(session, job)[0]
 
+        _awaiting_supplier(session, job, item)
         service.mark_unknown(session, job, item, "supplier_timeout")
 
         reservation = session.get(Reservation, item.reservation_id)
@@ -693,6 +753,7 @@ class TestLostAndFailedOutcomes:
         service.fund(session, job)
         service.provision(session, job, seller_legal_entity_id=entity.id)
         item = service.items(session, job)[0]
+        _awaiting_supplier(session, job, item)
         service.mark_unknown(session, job, item, "supplier_timeout")
 
         service.resume(
@@ -716,6 +777,7 @@ class TestLostAndFailedOutcomes:
         service.fund(session, job)
         service.provision(session, job, seller_legal_entity_id=entity.id)
         item = service.items(session, job)[0]
+        _awaiting_supplier(session, job, item)
         service.mark_unknown(session, job, item, "supplier_timeout")
 
         service.resume(
@@ -739,6 +801,7 @@ class TestLostAndFailedOutcomes:
         service.fund(session, job)
         service.provision(session, job, seller_legal_entity_id=entity.id)
         item = service.items(session, job)[0]
+        _awaiting_supplier(session, job, item)
         service.mark_unknown(session, job, item, "supplier_timeout")
 
         with pytest.raises(BulkError) as excinfo:
@@ -937,13 +1000,8 @@ class TestFiftyRecipients:
             if item.state is BulkItemState.PROVISIONED
         ]
         failed_item, unknown_item = items[0], items[1]
-        failed_item.state = BulkItemState.ORDERED
-        unknown_item.state = BulkItemState.ORDERED
-        job.provisioned_count -= 2
-        session.add(failed_item)
-        session.add(unknown_item)
-        session.add(job)
-        session.flush()
+        _awaiting_supplier(session, job, failed_item)
+        _awaiting_supplier(session, job, unknown_item)
         service.mark_failed(session, job, failed_item, "supplier_rejected")
         service.mark_unknown(session, job, unknown_item, "supplier_timeout")
 
@@ -953,6 +1011,7 @@ class TestFiftyRecipients:
             connectivity=ConnectivityService(
                 FulfilmentService(clock=clock), clock=clock
             ),
+            carrier_provisioning_confirmed=True,
             clock=clock,
         )
         to_reconcile, to_retry = restarted.resumable(session, job)

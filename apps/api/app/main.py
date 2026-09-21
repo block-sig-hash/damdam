@@ -305,14 +305,16 @@ def create_app(
     # moves money, so a hold and the order that spends it cannot disagree about
     # when.
     #
-    # `connectivity` remains unset for bulk work even though chunk 20 now wires
-    # the shared domain service above. A ConnectivityService can grant the
-    # purchased allowance, but supplier provisioning also requires an approved
-    # adapter and the begin/commit/dispatch/reconcile sequence. No adapter is
-    # selected while D1 is open, so carrier items stay ordered instead of being
-    # mislabeled provisioned. Tests inject the domain service for local grants.
+    # The shared connectivity service grants internet-only allowances. Carrier
+    # provisioning additionally requires an approved adapter and the durable
+    # begin/commit/dispatch/reconcile sequence. No adapter is selected while D1
+    # is open, so carrier items stay ordered instead of being mislabeled
+    # provisioned; internet-only items can still receive their local grant.
     api.state.bulk_service = BulkProvisioningService(
-        LedgerService(clock=clock), connectivity=None, clock=clock
+        LedgerService(clock=clock),
+        connectivity=api.state.connectivity_service,
+        carrier_provisioning_confirmed=False,
+        clock=clock,
     )
     api.state.mfa_service = MfaService(clock)
     api.state.hto_pilgrim_service = HtoPilgrimService()
@@ -668,6 +670,7 @@ def create_app(
             "activation_request_exists": 409,
             "item_already_provisioned": 409,
             "item_outcome_unknown": 409,
+            "item_not_awaiting_supplier": 409,
             "line_not_ready": 409,
             "job_not_fundable": 409,
             "job_not_provisionable": 409,

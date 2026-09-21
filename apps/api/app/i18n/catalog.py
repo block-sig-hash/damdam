@@ -94,6 +94,9 @@ _API_EN = {
         "We are still confirming that line with our supplier. Please try again "
         "shortly."
     ),
+    "item_not_awaiting_supplier": (
+        "That line is not waiting for a supplier outcome."
+    ),
     "line_not_ready": "That line is not ready to be handed over yet.",
     "activation_request_exists": "That person already has an invitation waiting.",
     "activation_request_spent": "That invitation has already been used.",
@@ -319,6 +322,9 @@ _API_FR = {
     "item_outcome_unknown": (
         "Nous confirmons encore cette ligne auprès de notre fournisseur. "
         "Veuillez réessayer sous peu."
+    ),
+    "item_not_awaiting_supplier": (
+        "Cette ligne n'attend pas de résultat du fournisseur."
     ),
     "line_not_ready": "Cette ligne n'est pas encore prête à être transmise.",
     "activation_request_exists": (

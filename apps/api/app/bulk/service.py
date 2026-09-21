@@ -103,11 +103,13 @@ class BulkProvisioningService:
         self,
         ledger: LedgerService,
         connectivity: ConnectivityService | None = None,
+        carrier_provisioning_confirmed: bool = False,
         clock: Callable[[], datetime] = utc_now,
         activation_ttl_days: int = ACTIVATION_TTL_DAYS,
     ) -> None:
         self.ledger = ledger
         self.connectivity = connectivity
+        self.carrier_provisioning_confirmed = carrier_provisioning_confirmed
         self.clock = clock
         self.activation_ttl_days = activation_ttl_days
 
@@ -380,7 +382,7 @@ class BulkProvisioningService:
         # wired: chunk 15 owns the adapter and its evidence gates are unchanged.
         # Leaving the item ORDERED is the honest state — it is funded, it has a
         # line, and nothing has been bought yet.
-        if self.connectivity is None:
+        if self.connectivity is None or not self.carrier_provisioning_confirmed:
             return
         self._grant(session, order_item)
         self._mark_provisioned(session, job, item)
@@ -421,6 +423,8 @@ class BulkProvisioningService:
         self._lock_item(session, item)
         if item.state is BulkItemState.UNKNOWN:
             return item
+        if item.state is not BulkItemState.ORDERED:
+            raise BulkError("item_not_awaiting_supplier")
         now = self.clock()
         item.state = BulkItemState.UNKNOWN
         item.error_code = reason[:64]
@@ -445,6 +449,8 @@ class BulkProvisioningService:
         self._lock_item(session, item)
         if item.state is BulkItemState.FAILED:
             return item
+        if item.state is not BulkItemState.ORDERED:
+            raise BulkError("item_not_awaiting_supplier")
         now = self.clock()
         item.state = BulkItemState.FAILED
         item.error_code = reason[:64]
@@ -803,9 +809,9 @@ class BulkProvisioningService:
             seller_legal_entity_id=seller_legal_entity_id,
             payer_organization_id=job.organization_id,
             currency=job.currency,
-            total_amount=round_money(
-                job.unit_amount * job.recipient_count, job.currency
-            ),
+            # Only actual order items contribute. Invalid and unfunded
+            # recipients are not purchases, and may never become purchases.
+            total_amount=round_money(Decimal(0), job.currency),
             payment_state=PaymentState.AUTHORIZED,
             placed_at=self.clock(),
         )
@@ -841,6 +847,11 @@ class BulkProvisioningService:
             provisioning_state=ProvisioningState.REQUESTED,
         )
         session.add(order_item)
+        session.flush()
+        order.total_amount = round_money(
+            order.total_amount + job.unit_amount, job.currency
+        )
+        session.add(order)
         session.flush()
         return order_item
 
