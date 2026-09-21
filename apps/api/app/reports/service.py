@@ -16,6 +16,7 @@ from app.auth.models import (
     Organization,
     PricingTier,
 )
+from app.csv_export import csv_safe
 from app.esim.models import EsimProfile
 from app.packages.models import Package
 
@@ -29,20 +30,11 @@ CSV_HEADER = (
 
 _ESIM_STATUS_RANK = {"issued": 1, "downloaded": 2, "activated": 3}
 
-# Pilgrim names/phone numbers originate from an HTO-uploaded manifest CSV --
-# untrusted input -- and this report is meant to be opened in Excel/Sheets
-# by an HTO operator or NAHCON auditor. A value starting with =, +, -, or @
-# is interpreted as a formula by spreadsheet software (CSV/formula
-# injection, OWASP). Prefixing with a single quote defuses it the same way
-# spreadsheet apps themselves do for a manually-typed leading apostrophe,
-# without changing the visible text.
-_FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@")
-
-
-def _csv_safe(value: str) -> str:
-    if value.startswith(_FORMULA_TRIGGER_CHARS):
-        return f"'{value}"
-    return value
+# Names and phone numbers here originate from an uploaded CSV -- untrusted
+# input -- and this report is meant to be opened in a spreadsheet. The guard
+# moved to `app/csv_export.py` in chunk 22, which needed the same rule for the
+# organization people export; the module explains the attack it defuses.
+_csv_safe = csv_safe
 
 
 @dataclass(frozen=True)

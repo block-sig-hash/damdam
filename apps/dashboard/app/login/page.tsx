@@ -62,6 +62,9 @@ export default function LoginPage() {
             {submitting ? t("signingIn") : t("signIn")}
           </button>
         </form>
+        <p>
+          <a href="/enterprise-login">{t("enterpriseSignInLink")}</a>
+        </p>
       </section>
     </main>
   );

@@ -1066,6 +1066,486 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/cost-centres:
+    get:
+      tags:
+      - Organization people
+      summary: List Cost Centres
+      operationId: list_cost_centres_v1_organizations__organization_id__cost_centres_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostCentreListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Organization people
+      summary: Create Cost Centre
+      operationId: create_cost_centre_v1_organizations__organization_id__cost_centres_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CostCentreCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostCentreView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/teams:
+    get:
+      tags:
+      - Organization people
+      summary: List Teams
+      operationId: list_teams_v1_organizations__organization_id__teams_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - Organization people
+      summary: Create Team
+      operationId: create_team_v1_organizations__organization_id__teams_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/people:
+    get:
+      tags:
+      - Organization people
+      summary: List People
+      operationId: list_people_v1_organizations__organization_id__people_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: team_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Team Id
+      - name: include_archived
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Archived
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 5000
+          minimum: 1
+          default: 5000
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/people.csv:
+    get:
+      tags:
+      - Organization people
+      summary: Export People
+      description: "This organization's people, as a file that is safe to open.\n\n\
+        Every cell goes through `csv_safe`. The values here are, almost without\n\
+        exception, text a customer typed into a spreadsheet and uploaded \u2014 and\
+        \ this\nfile exists to be opened in a spreadsheet, which is precisely the\n\
+        combination that makes formula injection work."
+      operationId: export_people_v1_organizations__organization_id__people_csv_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: include_archived
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Archived
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/people/imports:
+    post:
+      tags:
+      - Organization people
+      summary: Upload Import
+      description: 'Parse and record. **Writes no people.**
+
+
+        The response is what *would* happen, produced by the same code that will do
+
+        it. An administrator approving a preview is approving a computation, not an
+
+        estimate.'
+      operationId: upload_import_v1_organizations__organization_id__people_imports_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_upload_import_v1_organizations__organization_id__people_imports_post'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportPreviewResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - Organization people
+      summary: List Imports
+      operationId: list_imports_v1_organizations__organization_id__people_imports_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/people/imports/{import_id}/rows:
+    get:
+      tags:
+      - Organization people
+      summary: List Import Rows
+      description: What happened to each line, so "row 3,412" has an answer.
+      operationId: list_import_rows_v1_organizations__organization_id__people_imports__import_id__rows_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: import_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Import Id
+      - name: only_invalid
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Only Invalid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportRowListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/people/imports/{import_id}/apply:
+    post:
+      tags:
+      - Organization people
+      summary: Apply Import
+      operationId: apply_import_v1_organizations__organization_id__people_imports__import_id__apply_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: import_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Import Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportSummaryView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/people/imports/{import_id}/cancel:
+    post:
+      tags:
+      - Organization people
+      summary: Cancel Import
+      operationId: cancel_import_v1_organizations__organization_id__people_imports__import_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: import_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Import Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportSummaryView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/people/{person_id}:
+    get:
+      tags:
+      - Organization people
+      summary: Get Person
+      operationId: get_person_v1_organizations__organization_id__people__person_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: person_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Person Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/organizations/{organization_id}/people/{person_id}/archive:
+    post:
+      tags:
+      - Organization people
+      summary: Archive Person
+      description: Somebody left. Their orders and receipts still name them.
+      operationId: archive_person_v1_organizations__organization_id__people__person_id__archive_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: person_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Person Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/invitations:
     get:
       tags:
@@ -4044,6 +4524,16 @@ components:
       - idempotency_key
       - currency
       title: AuthorizeRequest
+    Body_upload_import_v1_organizations__organization_id__people_imports_post:
+      properties:
+        file:
+          type: string
+          format: binary
+          title: File
+      type: object
+      required:
+      - file
+      title: Body_upload_import_v1_organizations__organization_id__people_imports_post
     Body_upload_manifest_v1_hto_manifests__manifest_id__upload_post:
       properties:
         file:
@@ -4382,6 +4872,58 @@ components:
         credential''s, so a client is never told it has a working session after the
 
         credential behind it has gone.'
+    CostCentreCreate:
+      properties:
+        code:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Code
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+      type: object
+      required:
+      - code
+      - name
+      title: CostCentreCreate
+    CostCentreListResponse:
+      properties:
+        cost_centres:
+          items:
+            $ref: '#/components/schemas/CostCentreView'
+          type: array
+          title: Cost Centres
+      type: object
+      required:
+      - cost_centres
+      title: CostCentreListResponse
+    CostCentreView:
+      properties:
+        cost_centre_id:
+          type: string
+          format: uuid
+          title: Cost Centre Id
+        code:
+          type: string
+          title: Code
+        name:
+          type: string
+          title: Name
+        archived_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Archived At
+      type: object
+      required:
+      - cost_centre_id
+      - code
+      - name
+      title: CostCentreView
     DeletionBlockerView:
       properties:
         kind:
@@ -5021,6 +5563,136 @@ components:
       required:
       - token
       title: IdentityTokenRequest
+    ImportListResponse:
+      properties:
+        imports:
+          items:
+            $ref: '#/components/schemas/ImportSummaryView'
+          type: array
+          title: Imports
+      type: object
+      required:
+      - imports
+      title: ImportListResponse
+    ImportPreviewResponse:
+      properties:
+        summary:
+          $ref: '#/components/schemas/ImportSummaryView'
+        sample_rows:
+          items:
+            $ref: '#/components/schemas/ImportRowView'
+          type: array
+          title: Sample Rows
+        ignored_columns:
+          items:
+            type: string
+          type: array
+          title: Ignored Columns
+          default: []
+      type: object
+      required:
+      - summary
+      - sample_rows
+      title: ImportPreviewResponse
+    ImportRowListResponse:
+      properties:
+        rows:
+          items:
+            $ref: '#/components/schemas/ImportRowView'
+          type: array
+          title: Rows
+      type: object
+      required:
+      - rows
+      title: ImportRowListResponse
+    ImportRowView:
+      properties:
+        row_number:
+          type: integer
+          title: Row Number
+        state:
+          type: string
+          title: State
+        error_codes:
+          items:
+            type: string
+          type: array
+          title: Error Codes
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+      type: object
+      required:
+      - row_number
+      - state
+      - error_codes
+      - payload
+      title: ImportRowView
+    ImportState:
+      type: string
+      enum:
+      - previewed
+      - applying
+      - applied
+      - cancelled
+      - rejected
+      title: ImportState
+      description: Where an import is. Each state is somewhere a file can actually
+        stop.
+    ImportSummaryView:
+      properties:
+        import_id:
+          type: string
+          format: uuid
+          title: Import Id
+        state:
+          $ref: '#/components/schemas/ImportState'
+        filename:
+          type: string
+          title: Filename
+        row_count:
+          type: integer
+          title: Row Count
+        valid_count:
+          type: integer
+          title: Valid Count
+        invalid_count:
+          type: integer
+          title: Invalid Count
+        created_count:
+          type: integer
+          title: Created Count
+        updated_count:
+          type: integer
+          title: Updated Count
+        rejection_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rejection Code
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        applied_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Applied At
+      type: object
+      required:
+      - import_id
+      - state
+      - filename
+      - row_count
+      - valid_count
+      - invalid_count
+      - created_count
+      - updated_count
+      - created_at
+      title: ImportSummaryView
     InstallationConfirmRequest:
       properties:
         installed:
@@ -6338,6 +7010,79 @@ components:
         configuration rather than from a constant: a checkout that offers only a
 
         wallet on a device without one is a checkout nobody can complete.'
+    PersonListResponse:
+      properties:
+        people:
+          items:
+            $ref: '#/components/schemas/PersonView'
+          type: array
+          title: People
+      type: object
+      required:
+      - people
+      title: PersonListResponse
+    PersonStatus:
+      type: string
+      enum:
+      - active
+      - archived
+      title: PersonStatus
+    PersonView:
+      properties:
+        person_id:
+          type: string
+          format: uuid
+          title: Person Id
+        full_name:
+          type: string
+          title: Full Name
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        phone_number:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone Number
+        external_reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: External Reference
+        job_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Job Title
+        team_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Team Id
+        cost_centre_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Cost Centre Id
+        status:
+          $ref: '#/components/schemas/PersonStatus'
+        has_account:
+          type: boolean
+          title: Has Account
+          default: false
+      type: object
+      required:
+      - person_id
+      - full_name
+      - status
+      title: PersonView
+      description: "A service recipient.\n\nCarries no role and no permissions, because\
+        \ a person has none \u2014 the field\nwould be the first step towards an import\
+        \ that grants access."
     Platform:
       type: string
       enum:
@@ -7530,6 +8275,60 @@ components:
       - currency
       - destinations
       title: TariffView
+    TeamCreate:
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Name
+        cost_centre_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Cost Centre Id
+      type: object
+      required:
+      - name
+      title: TeamCreate
+    TeamListResponse:
+      properties:
+        teams:
+          items:
+            $ref: '#/components/schemas/TeamView'
+          type: array
+          title: Teams
+      type: object
+      required:
+      - teams
+      title: TeamListResponse
+    TeamView:
+      properties:
+        team_id:
+          type: string
+          format: uuid
+          title: Team Id
+        name:
+          type: string
+          title: Name
+        cost_centre_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Cost Centre Id
+        archived_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Archived At
+      type: object
+      required:
+      - team_id
+      - name
+      title: TeamView
     TokenResponse:
       properties:
         access_token:
