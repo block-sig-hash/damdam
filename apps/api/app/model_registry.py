@@ -21,6 +21,7 @@ from app.account import models as _account
 from app.activation import service as _activation
 from app.audit import models as _audit
 from app.auth import models as _auth
+from app.bulk import models as _bulk
 from app.calling import models as _calling
 from app.catalog import market as _catalog_market
 from app.catalog import models as _catalog

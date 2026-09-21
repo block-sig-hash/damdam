@@ -2206,3 +2206,100 @@ Every cell passes through the shared `csv_safe` guard: a value beginning `=`,
 are flattened. These values are almost entirely text a customer typed and
 uploaded, and the file exists to be opened in a spreadsheet — which is precisely
 the combination formula injection needs.
+
+## 7.41 Amendment — Bulk Orders, Assignment and Activation (US-40)
+
+Chunk 23. Nine endpoints, split across two audiences and therefore two kinds of
+authority.
+
+### Endpoints
+
+| Endpoint | Permission | Purpose |
+|---|---|---|
+| `POST /organizations/{id}/bulk-jobs` | `order:place` | Choose recipients and validate them |
+| `GET /organizations/{id}/bulk-jobs` | `order:read` | This organization's bulk orders |
+| `GET /organizations/{id}/bulk-jobs/{job}` | `order:read` | Counts as they are |
+| `GET …/bulk-jobs/{job}/items` | `order:read` | Each recipient's own state |
+| `POST …/bulk-jobs/{job}/fund` | `order:place` | One hold per line |
+| `POST …/bulk-jobs/{job}/provision` | `order:place` | Order and grant |
+| `POST …/bulk-jobs/{job}/resume` | `order:place` | Retry what failed |
+| `POST …/items/{item}/cancel` | `order:place` | Withdraw one line |
+| `POST …/items/{item}/activation-request` | `order:place` | Invite one recipient |
+| `POST /me/activation-requests/redeem` | **member session only** | Claim a line |
+
+### Redeeming is deliberately not an administrator action
+
+Every other endpoint above requires a permission inside the buying
+organization. `POST /me/activation-requests/redeem` requires only an ordinary
+session, because the person claiming a work line is an employee with a phone,
+not a member of the tenant that bought it. Requiring membership to accept a work
+SIM would be exactly backwards.
+
+### Plan, fund, provision are three calls because they are three decisions
+
+`POST /bulk-jobs` holds no money and buys nothing. It validates the recipients
+and reports how many are unusable — somebody who has left, somebody with no
+email or phone, somebody who belongs to another organization — so an
+administrator fixes the list before any money moves.
+
+Planning is idempotent per organization and idempotency key. Concurrent requests
+are serialized; reusing the key with a different recipient set, product, market,
+currency or unit amount returns **409 `idempotency_conflict`** rather than
+silently returning an unrelated earlier job.
+
+`fund` takes one reservation per line. Under-funding is **partial, not fatal**:
+the lines that fit are funded and the rest are marked `failed` with
+`insufficient_funds`, because an organization that can afford forty of fifty
+lines would rather have forty than an error message.
+
+`provision` is **idempotent**. A worker that lost the response and retried is
+asking a question, not making a second purchase, so a finished job answers with
+its progress rather than a 409. Fund, provision, resume and per-item mutations
+lock the job row, so concurrent workers cannot create duplicate reservations or
+order allocations. This is not a claim of a captured charge: funding creates
+ledger reservations and actual payment settlement remains downstream work.
+
+### Progress is reported unrounded
+
+`GET /bulk-jobs/{job}` returns `recipient_count`, `reserved`, `provisioned`,
+`failed`, `unknown`, `invalid`, `cancelled` and a derived `outstanding`. A
+client must not collapse these: `unknown` in particular is not a failure, it is
+a line whose supplier outcome we lost and whose money is still held.
+
+### `resume` never retries an unknown outcome
+
+The two lists are separate by construction. An item whose supplier outcome is
+unknown is reconciled first and, if the supplier still cannot say, **stays
+unknown and keeps its hold**. No supplier is wired in this chunk, so that is the
+behaviour today: unknown items stay visible in the item list for a human rather
+than being retried blind.
+
+### A provisioned line is refunded, not cancelled
+
+`POST …/items/{item}/cancel` refuses a provisioned line with **409
+`item_already_provisioned`**. The service exists; releasing its hold would be
+giving money back for something the customer has. This bulk path has no captured
+payment attempt to refund, so unwinding it requires the later settlement and
+refund integration with a human and a reason. An `unknown` line is refused
+too — **409 `item_outcome_unknown`** — because the supplier may have provisioned
+it.
+
+### The activation token crosses the wire exactly once
+
+`POST …/activation-request` returns `token` in its response body and nowhere
+else. It is stored as a SHA-256 hash, so this response is the only moment it
+exists in a usable form — including for us. Issuing a second request for a line
+that already has a live one is **409**: two live tokens for one line is two
+people who can claim it.
+
+Redemption locks the request before changing it. Concurrent attempts produce
+one successful claim and one **409 `activation_request_spent`**; an expired
+request is persisted as expired before returning **410**.
+
+### An activation request is not an installation
+
+The request view carries **no** installation or attachment state, deliberately.
+A claimed invitation says nothing about a profile reaching a handset or a
+network seeing it; those are separate facts on separate resources, and merging
+them here would let a dashboard report staff as connected on the strength of an
+email.

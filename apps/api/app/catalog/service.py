@@ -135,6 +135,33 @@ class CatalogService:
             )
         return market
 
+    def sale_terms(
+        self, session: Session, product: Product, *, country: str, currency: str
+    ) -> tuple[SalesMarket, Decimal]:
+        """Who sells this here, and for how much, right now.
+
+        Added by chunk 23, which buys the same product for fifty people at once
+        and needs exactly what a quote needs — the published market, its seller
+        and the live price — without issuing a consumer quote per recipient.
+
+        Public rather than a reach into `_current_price`, so that a bulk order
+        and a consumer quote cannot drift into two answers about the same
+        product on the same day.
+        """
+        market = self._published_market(session, country, currency)
+        if market.legal_entity_id is None:
+            # D3 is open, so a published market can exist with no seller
+            # recorded. Refusing here is the honest answer: an order needs a
+            # party, and inventing one would put a legal entity on an invoice
+            # that nobody selected.
+            raise CatalogError(
+                "market_unavailable", f"{country}/{currency} has no recorded seller"
+            )
+        price = self._current_price(
+            session, product, market.legal_entity_id, currency, self.clock()
+        )
+        return market, price.amount
+
     # --- eligibility ------------------------------------------------------
 
     def assert_fulfillable(

@@ -3641,3 +3641,91 @@ It does not retire the manifest tables. `manifests`, `manifest_rows` and their
 pilgrim vocabulary are neither read nor altered here: generalizing the product's
 model of people is this chunk, and retiring the legacy tables is the removal
 sequence in `IMPLEMENTATION-PLAN.md` §7, with its own compatibility window.
+
+## 6.58 Amendment — Bulk Jobs, Per-Recipient Items and Activation Requests (US-40)
+
+Chunk 23. Three tables, all additive, and the shape of all three follows from
+one fact: **a bulk order is fifty independent purchases that share a button.**
+
+### Why the items carry the state
+
+An organization buying for fifty staff is not buying one thing. The interesting
+state of such a job is almost never "done" or "failed" — it is "forty-seven
+provisioned, two waiting on a supplier we lost contact with, one recipient whose
+email was mistyped". A job modelled as a single transaction has to round that
+off, and the rounding shows up as a customer charged for fifty lines who
+received forty-seven.
+
+So `bulk_job_items` carries the state and `bulk_jobs` carries the counts. The
+counts are denormalized deliberately: normal service mutations serialize on the
+job row and write the counters in the same transaction as the item. Direct SQL
+can still desynchronize this cache; there is no trigger-derived invariant.
+
+### One hold per line
+
+Fifty recipients means fifty rows in `ledger_reservations`, not one for the
+total. That is what lets a line that cannot be funded fail alone, a cancelled
+line release its own hold, and a partial refund avoid reconstructing which
+fiftieth of a lump sum belonged to whom.
+
+A **definitively failed** line has its hold released. A retry therefore takes a
+*fresh* hold under a new business event id — reusing the original would hand
+back the closed reservation through the ledger's own idempotency, and provision
+a line the organization is not holding money for.
+
+### One order item per recipient
+
+A bulk job writes ordinary `order_items`, one per person, which is chunk 05's
+quantity-one invariant used exactly as intended rather than worked around. Each
+line can then be cancelled, refunded and provisioned without touching the other
+forty-nine. `ux_bulk_job_items_order_item` keeps that one-to-one: a resumed run
+cannot attach a second line to the same purchase.
+
+The order total is accumulated only when a funded recipient receives an order
+item. Invalid and unfunded recipients therefore appear in job progress but are
+not represented as purchased value.
+
+`order_items.recipient_user_id` is **null** until somebody claims the line. An
+organization may buy for a person who has no account with us — chunk 22's people
+are recipients, not users — and inventing one here would bind a line to an
+identity nobody authenticated.
+
+### `unknown` is a state, and it is the dangerous one
+
+`bulk_item_state` separates `failed` (the supplier refused, safe to retry) from
+`unknown` (we lost the answer). The resume path returns two lists and an
+`unknown` item is never in the retry one: reconciliation happens first, and an
+item whose supplier still cannot say stays unknown and keeps its hold. Silence
+is not permission, and the alternative is a second eSIM bought for somebody who
+already has one.
+
+### `activation_requests` — a request is not an installation
+
+This table records an invitation and its redemption. Whether a profile reached a
+handset is `esim_installations` (chunk 15); whether a network ever saw it is
+`carrier_lines`. The three disagree in the field constantly — a claimed request
+with no installation is the ordinary state of somebody who has not opened the
+app yet — and a dashboard that merged them would report staff as connected on
+the strength of an email.
+
+`token_hash` is a SHA-256 and the column is unique; the token is returned once
+and never stored. A table of live invitation tokens is a table of credentials,
+and this one is readable by every administrator of the tenant.
+`ux_activation_requests_live` allows one live request per line, because two live
+tokens for one line is two people who can claim it.
+Redemption locks the request row before deciding whether it is live. Concurrent
+claims therefore have one winner; an expired request is durably marked expired
+before the API returns its 410 response.
+
+### What this amendment does not do
+
+It does not add a supplier. Carrier provisioning still belongs to chunk 15 and
+its evidence gates are unchanged; the runtime does not assert a carrier result,
+so a carrier product funds and orders its lines and stops there. Tests can inject
+a confirmed fixture outcome, but that is not a supplier call. An
+**internet-only** product needs no carrier profile at all, per the calling
+amendment, and the shared connectivity service grants that local entitlement.
+
+The per-line ledger rows are reservations, not captured charges or settlement.
+Consequently this amendment cannot perform a provisioned-line refund: that
+requires a captured payment and an approved refund policy/integration.

@@ -26,7 +26,7 @@ _API_EN = {
     "attempt_not_found": "We could not find that call.",
     "attempt_expired": "That call authorization has expired. Try calling again.",
     "attempt_not_startable": "That call has already finished.",
-    "idempotency_conflict": "That request was already used for a different call.",
+    "idempotency_conflict": "That request key was already used for different work.",
     "insufficient_funds": "You do not have enough credit for this call.",
     "reservation_failed": "We could not hold credit for this call. Please try again.",
     "device_not_authorized": "This device is not signed in for calling. Sign in again.",
@@ -80,6 +80,33 @@ _API_EN = {
     "tariff_unavailable": "That plan includes calls but has no published call rates yet.",
     "market_not_verified": "That market has not been verified for sale.",
     "order_not_found": "We could not find that order.",
+    # Bulk provisioning (US-40, chunk 23). Said to an administrator mid-way
+    # through buying for fifty people, so each one says what to do next.
+    "job_not_found": "We could not find that bulk order on your account.",
+    "item_not_found": "We could not find that line in this bulk order.",
+    "market_has_no_seller": (
+        "We cannot sell in that market yet. Please contact support."
+    ),
+    "item_already_provisioned": (
+        "That line is already active. Cancelling it is a refund request."
+    ),
+    "item_outcome_unknown": (
+        "We are still confirming that line with our supplier. Please try again "
+        "shortly."
+    ),
+    "item_not_awaiting_supplier": (
+        "That line is not waiting for a supplier outcome."
+    ),
+    "line_not_ready": "That line is not ready to be handed over yet.",
+    "activation_request_exists": "That person already has an invitation waiting.",
+    "activation_request_spent": "That invitation has already been used.",
+    "activation_request_revoked": "That invitation was withdrawn.",
+    "activation_request_expired": "That invitation has expired.",
+    "activation_request_not_found": "We could not find that invitation.",
+    "job_not_fundable": "That bulk order cannot be funded in its current state.",
+    "job_not_provisionable": (
+        "That bulk order cannot be started in its current state."
+    ),
     "merchant_not_found": "No payment account is set up for this seller.",
     "live_collection_disabled": "We cannot take payments yet. Nothing has been charged.",
     "no_merchant_account": "No payment account is set up for this currency.",
@@ -220,7 +247,9 @@ _API_FR = {
     "attempt_not_found": "Nous n'avons pas trouvé cet appel.",
     "attempt_expired": "Cette autorisation d'appel a expiré. Rappelez pour continuer.",
     "attempt_not_startable": "Cet appel est déjà terminé.",
-    "idempotency_conflict": "Cette demande a déjà servi pour un autre appel.",
+    "idempotency_conflict": (
+        "Cette clé de requête a déjà servi pour une autre opération."
+    ),
     "insufficient_funds": "Votre crédit est insuffisant pour cet appel.",
     "reservation_failed": "Nous n'avons pas pu réserver le crédit de cet appel. Réessayez.",
     "device_not_authorized": "Cet appareil n'est pas connecté pour les appels. Reconnectez-vous.",
@@ -282,6 +311,35 @@ _API_FR = {
     "tariff_unavailable": "Ce forfait comprend des appels mais aucun tarif publié.",
     "market_not_verified": "Ce marché n'a pas été vérifié pour la vente.",
     "order_not_found": "Nous n'avons pas trouvé cette commande.",
+    "job_not_found": "Nous n'avons pas trouvé cette commande groupée.",
+    "item_not_found": "Nous n'avons pas trouvé cette ligne dans cette commande.",
+    "market_has_no_seller": (
+        "Nous ne pouvons pas encore vendre sur ce marché. Contactez le support."
+    ),
+    "item_already_provisioned": (
+        "Cette ligne est déjà active. L'annuler relève d'un remboursement."
+    ),
+    "item_outcome_unknown": (
+        "Nous confirmons encore cette ligne auprès de notre fournisseur. "
+        "Veuillez réessayer sous peu."
+    ),
+    "item_not_awaiting_supplier": (
+        "Cette ligne n'attend pas de résultat du fournisseur."
+    ),
+    "line_not_ready": "Cette ligne n'est pas encore prête à être transmise.",
+    "activation_request_exists": (
+        "Cette personne a déjà une invitation en attente."
+    ),
+    "activation_request_spent": "Cette invitation a déjà été utilisée.",
+    "activation_request_revoked": "Cette invitation a été retirée.",
+    "activation_request_expired": "Cette invitation a expiré.",
+    "activation_request_not_found": "Nous n'avons pas trouvé cette invitation.",
+    "job_not_fundable": (
+        "Cette commande groupée ne peut pas être financée dans son état actuel."
+    ),
+    "job_not_provisionable": (
+        "Cette commande groupée ne peut pas être lancée dans son état actuel."
+    ),
     "merchant_not_found": "Aucun compte de paiement n'est configuré pour ce vendeur.",
     "live_collection_disabled": "Nous ne pouvons pas encore accepter de paiements. Rien n'a été débité.",
     "no_merchant_account": "Aucun compte de paiement n'est configuré pour cette devise.",
