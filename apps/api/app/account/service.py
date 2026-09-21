@@ -211,7 +211,9 @@ class AccountService:
                 record.revoked_at = now
                 record.revoked_reason = "token_removed"
                 session.add(record)
-            elif token.revoked_at is not None or _aware(token.expires_at) <= _aware(now):
+            elif token.revoked_at is not None or _aware(token.expires_at) <= _aware(
+                now
+            ):
                 record.revoked_at = token.revoked_at or token.expires_at
                 record.revoked_reason = (
                     "account_recovery" if token.revoked_at is not None else "expired"
