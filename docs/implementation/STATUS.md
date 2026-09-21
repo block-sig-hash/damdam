@@ -1,6 +1,6 @@
 # Implementation status
 
-Chunks 01–20 are **ACCEPTED after independent Codex review and fixes** for the
+Chunks 01–21 are **ACCEPTED after independent Codex review and fixes** for the
 scope stated in each review record. Live/external subsets remain explicitly
 blocked where their evidence gates are open.
 Chunk 01 merged in [PR #100](https://github.com/block-sig-hash/damdam/pull/100).
@@ -49,7 +49,7 @@ is a dry run that executes nothing.
 | 18 — Connect mobile navigation, onboarding and redemption | **ACCEPTED after fixes** (navigation/authentication/Home/invitation preparatory scope) | accepted base `36448d6` / replayed `902dfd4` / corrected `3c27f00`, `605d4d8`, `b6ef16c`, `45bb23e` / contract `757116f` | [Independent review](reviews/18.md) | Mail delivery remains a discarding transport; production web-link association remains chunk 27. Plans, My Line and Account remain assigned to chunks 19–21; no complete US-37 claim |
 | 19 — Build the complete consumer purchase journey | **ACCEPTED after fixes** (consumer Plans/quote/checkout/recovery scope); live catalog, payment and fulfilment **EXTERNAL_BLOCKED** | accepted base `2ddb90a` / replayed `a7995e0`, `d4cff21` / corrected `e7bc816` / CI evidence `fc9a80e`, `9660953`, `7c53ddb` | [Independent review](reviews/19.md) | **D2/D3/D4 OPEN** — no market, selling entity, tax treatment, live merchant or global processor is approved. No live purchase or supplier fulfilment is claimed; My Line/installation remains chunk 20 |
 | 20 — Build My Line, eSIM installation and native-call guidance | **ACCEPTED after fixes** (My Line/installation/native guidance preparatory scope); live hardware **EXTERNAL_BLOCKED** | base `a6ef588` / submitted `81e8489` / corrected `576bd25`, `9041890`, `f4f10ba`, `61ecced` / CI `f5b9b4a` | [Independent review](reviews/20.md) | **D1 OPEN** — no Telnyx account, provisioned line, activation material, physical installation or carrier call. `ACTIVATION_MATERIAL_KEY` is unset in deployed environments, so delivery fails closed. Local QR/manual fallback, Android privacy compilation and bilingual Android/iOS render evidence passed; simulator evidence does not prove installation or voice |
-| 21 — Complete account, receipts, support and deletion | NOT_STARTED | — | — | See assignment |
+| 21 — Complete account, receipts, support and deletion | **ACCEPTED after fixes** (account/session, receipts, support, deletion and offline-cache scope; export and notification delivery preparatory) | accepted base `c821099` / replayed `9ab8c34` / corrected `f319b6f`, `1e646b2` | [Independent review](reviews/21.md) | Export requests are durable but no worker/storage/download path exists. Notification preferences exist but no commercial scheduler/dispatcher consumes them. External provider and physical-device gates remain open |
 | 22 — Build enterprise people, teams and validated imports | NOT_STARTED | — | — | See assignment |
 | 23 — Build bulk orders, assignment and activation requests | NOT_STARTED | — | — | See assignment |
 | 24 — Build enterprise funding, budgets, reports and offboarding | NOT_STARTED | — | — | See assignment |
