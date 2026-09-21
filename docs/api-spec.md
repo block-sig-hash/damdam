@@ -2242,6 +2242,11 @@ and reports how many are unusable — somebody who has left, somebody with no
 email or phone, somebody who belongs to another organization — so an
 administrator fixes the list before any money moves.
 
+Planning is idempotent per organization and idempotency key. Concurrent requests
+are serialized; reusing the key with a different recipient set, product, market,
+currency or unit amount returns **409 `idempotency_conflict`** rather than
+silently returning an unrelated earlier job.
+
 `fund` takes one reservation per line. Under-funding is **partial, not fatal**:
 the lines that fit are funded and the rest are marked `failed` with
 `insufficient_funds`, because an organization that can afford forty of fifty
@@ -2249,7 +2254,10 @@ lines would rather have forty than an error message.
 
 `provision` is **idempotent**. A worker that lost the response and retried is
 asking a question, not making a second purchase, so a finished job answers with
-its progress rather than a 409.
+its progress rather than a 409. Fund, provision, resume and per-item mutations
+lock the job row, so concurrent workers cannot create duplicate reservations or
+order allocations. This is not a claim of a captured charge: funding creates
+ledger reservations and actual payment settlement remains downstream work.
 
 ### Progress is reported unrounded
 
@@ -2270,8 +2278,9 @@ than being retried blind.
 
 `POST …/items/{item}/cancel` refuses a provisioned line with **409
 `item_already_provisioned`**. The service exists; releasing its hold would be
-giving money back for something the customer has, and unwinding it is a refund
-under chunk 14's policy with a human and a reason. An `unknown` line is refused
+giving money back for something the customer has. This bulk path has no captured
+payment attempt to refund, so unwinding it requires the later settlement and
+refund integration with a human and a reason. An `unknown` line is refused
 too — **409 `item_outcome_unknown`** — because the supplier may have provisioned
 it.
 
@@ -2282,6 +2291,10 @@ else. It is stored as a SHA-256 hash, so this response is the only moment it
 exists in a usable form — including for us. Issuing a second request for a line
 that already has a live one is **409**: two live tokens for one line is two
 people who can claim it.
+
+Redemption locks the request before changing it. Concurrent attempts produce
+one successful claim and one **409 `activation_request_spent`**; an expired
+request is persisted as expired before returning **410**.
 
 ### An activation request is not an installation
 

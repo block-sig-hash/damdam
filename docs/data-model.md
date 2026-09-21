@@ -3657,9 +3657,9 @@ off, and the rounding shows up as a customer charged for fifty lines who
 received forty-seven.
 
 So `bulk_job_items` carries the state and `bulk_jobs` carries the counts. The
-counts are denormalized deliberately: they are written in the same transaction
-as the item they describe, so they are a cache that cannot drift rather than a
-summary somebody recomputes.
+counts are denormalized deliberately: normal service mutations serialize on the
+job row and write the counters in the same transaction as the item. Direct SQL
+can still desynchronize this cache; there is no trigger-derived invariant.
 
 ### One hold per line
 
@@ -3680,6 +3680,10 @@ quantity-one invariant used exactly as intended rather than worked around. Each
 line can then be cancelled, refunded and provisioned without touching the other
 forty-nine. `ux_bulk_job_items_order_item` keeps that one-to-one: a resumed run
 cannot attach a second line to the same purchase.
+
+The order total is accumulated only when a funded recipient receives an order
+item. Invalid and unfunded recipients therefore appear in job progress but are
+not represented as purchased value.
 
 `order_items.recipient_user_id` is **null** until somebody claims the line. An
 organization may buy for a person who has no account with us — chunk 22's people
@@ -3709,10 +3713,19 @@ and never stored. A table of live invitation tokens is a table of credentials,
 and this one is readable by every administrator of the tenant.
 `ux_activation_requests_live` allows one live request per line, because two live
 tokens for one line is two people who can claim it.
+Redemption locks the request row before deciding whether it is live. Concurrent
+claims therefore have one winner; an expired request is durably marked expired
+before the API returns its 410 response.
 
 ### What this amendment does not do
 
 It does not add a supplier. Carrier provisioning still belongs to chunk 15 and
-its evidence gates are unchanged; a bulk job for a carrier product funds and
-orders its lines and stops there. An **internet-only** product needs no carrier
-profile at all, per the calling amendment, so the grant is the service.
+its evidence gates are unchanged; the runtime does not assert a carrier result,
+so a carrier product funds and orders its lines and stops there. Tests can inject
+a confirmed fixture outcome, but that is not a supplier call. An
+**internet-only** product needs no carrier profile at all, per the calling
+amendment, and the shared connectivity service grants that local entitlement.
+
+The per-line ledger rows are reservations, not captured charges or settlement.
+Consequently this amendment cannot perform a provisioned-line refund: that
+requires a captured payment and an approved refund policy/integration.
