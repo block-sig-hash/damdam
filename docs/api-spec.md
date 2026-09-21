@@ -2159,21 +2159,33 @@ before shipping it.
 ### An upload previews; it never creates
 
 `POST /people/imports` parses, records and returns what **would** happen —
-`valid_count`, `invalid_count`, a sample of rows and the columns it ignored. No
-person exists until `apply`. The preview is produced by the same code that does
-the work, so an administrator approving it is approving a computation rather than
-an estimate.
+`valid_count`, `invalid_count`, `created_count`, `updated_count`, a sample of
+rows and the columns it ignored. No person exists until `apply`. Preview and
+apply use the same parser and all three database identity keys, so an
+administrator sees a concrete create/update forecast rather than every valid
+row being mislabeled as a creation.
 
 Re-uploading the same bytes returns the import that already exists. A double
-click does not produce two previews of the same staff list.
+click does not produce two previews of the same staff list; concurrent identical
+uploads are serialized before the unique digest is inserted.
 
 ### Row errors are codes, and a row reports all of them
 
 `error_codes` is a list of stable identifiers — `missing_name`,
-`invalid_phone`, `duplicate_in_file`, `unknown_team` — which the dashboard
-localizes. A row that is wrong four ways carries four codes, because an
+`invalid_phone`, `duplicate_in_file`, `identity_collision`, `unknown_team` —
+which the dashboard localizes. `identity_collision` means different supplied
+keys resolve to different existing people; the service refuses to guess which
+identity wins. A row that is wrong four ways carries four codes, because an
 administrator fixing a two-thousand-line file one error per upload gives up
 around the fourth round trip.
+
+### Apply progress is durable
+
+The import row is locked while one pending row is selected. Each person change,
+row outcome and counter update commits together before the next row starts. If
+the process dies, an `applying` import can be submitted again and continues at
+the first still-valid row; concurrent apply calls serialize on the same record.
+The preview counts become committed outcome counts when apply starts.
 
 A file that could not be read *at all* comes back with `state: "rejected"` and a
 `rejection_code`, rather than an empty success. "No name column" is an answer

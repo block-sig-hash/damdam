@@ -1229,9 +1229,9 @@ paths:
         required: false
         schema:
           type: integer
-          maximum: 500
+          maximum: 5000
           minimum: 1
-          default: 200
+          default: 5000
           title: Limit
       responses:
         '200':

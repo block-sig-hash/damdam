@@ -3612,9 +3612,10 @@ reorganization.
 ### An import is a record, not a request
 
 `people_imports` and `people_import_rows` exist because a five-thousand-row file
-cannot be validated, previewed, confirmed and applied inside one HTTP request,
-and an import that fails halfway with no record leaves an administrator guessing
-which half.
+cannot safely be applied as one database transaction, and an import that fails
+halfway with no record leaves an administrator guessing which half. The apply
+endpoint may remain one HTTP request while each completed row commits its person,
+outcome and counters atomically.
 
 Every row keeps its own outcome, so "what happened to line 3,412" has an answer —
 and so an apply is **resumable by construction**: a process that dies leaves the
