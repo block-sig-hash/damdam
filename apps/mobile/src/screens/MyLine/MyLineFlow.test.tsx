@@ -1,4 +1,5 @@
 import React from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, Platform, type AppStateStatus } from 'react-native';
 import {
   act,
@@ -176,7 +177,12 @@ async function renderFlow(
   // test. Flushing with a bare `act` *after* render is measurably worse here.
   await act(async () => {
     render(
-      <MyLineFlow accessToken="token" onBrowsePlans={jest.fn()} {...props} />,
+      <MyLineFlow
+        accessToken="token"
+        userId="user-1"
+        onBrowsePlans={jest.fn()}
+        {...props}
+      />,
     );
   });
   await waitFor(() =>
@@ -189,7 +195,8 @@ async function renderFlow(
   );
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await AsyncStorage.clear();
   jest.clearAllMocks();
   jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() });
   Platform.OS = 'android';
@@ -446,7 +453,7 @@ describe('the activation code is protected before it exists (AC-38.1)', () => {
     mockedList.mockResolvedValue({ lines: [summary(), summary({ entitlement_id: 'other' })] });
     function Host() {
       const [requested, setRequested] = React.useState<string | null>(ENTITLEMENT_ID);
-      return <MyLineFlow accessToken="token" initialEntitlementId={requested}
+      return <MyLineFlow accessToken="token" userId="user-1" initialEntitlementId={requested}
         onEntitlementOpened={() => setRequested(null)} onBrowsePlans={jest.fn()} />;
     }
     await act(async () => { render(<Host />); });

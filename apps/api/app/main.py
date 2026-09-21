@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis import Redis
 
+from app.account.routes import router as account_router
+from app.account.service import AccountError, AccountService
 from app.activation.routes import router as activation_router
 from app.activation.service import ActivationError, ActivationService
 from app.admin.routes import router as admin_router
@@ -17,6 +19,7 @@ from app.audit.service import AuditLogService
 from app.auth.hto import HTOAuthError, HTOService
 from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
+from app.calling import account_deletion as _calling_account_deletion  # noqa: F401
 from app.calling.charging import CallChargingService
 from app.calling.contract import CallingAdapter, CallingError
 from app.calling.lifecycle import CallLifecycleError, CallLifecycleService
@@ -291,6 +294,8 @@ def create_app(
         clock=clock,
         internet_dialer_enabled=resolved_settings.internet_dialer_enabled,
     )
+    api.state.account_service = AccountService(clock=clock)
+    api.state.otp_service.tokens.session_tracker = api.state.account_service
     api.state.mfa_service = MfaService(clock)
     api.state.hto_pilgrim_service = HtoPilgrimService()
     api.state.report_service = ProvisioningReportService(clock)
@@ -563,6 +568,32 @@ def create_app(
             "already_paid": 409,
             "intent_not_found": 404,
             "merchant_not_found": 404,
+        }
+        return JSONResponse(
+            status_code=statuses.get(exc.code, 400),
+            content={
+                "error": exc.code,
+                "message": api_message(request, exc.code),
+                "details": {},
+            },
+        )
+
+    @api.exception_handler(AccountError)
+    async def account_error_handler(
+        request: Request, exc: AccountError
+    ) -> JSONResponse:
+        statuses = {
+            # 404 rather than 403 throughout. "Is not yours" and "does not
+            # exist" have to be indistinguishable, or an id becomes an oracle
+            # for enumerating other customers' sessions, orders and lines.
+            "session_not_found": 404,
+            "receipt_not_found": 404,
+            "order_not_found": 404,
+            "entitlement_not_found": 404,
+            # 503: nothing is broken and retrying later works. A reference
+            # space that could not produce a free value is a capacity answer.
+            "support_reference_unavailable": 503,
+            "account_deletion_blocked": 409,
         }
         return JSONResponse(
             status_code=statuses.get(exc.code, 400),
@@ -943,6 +974,7 @@ def create_app(
     api.include_router(checkout_router, prefix="/v1")
     api.include_router(consumer_order_router, prefix="/v1")
     api.include_router(line_router, prefix="/v1")
+    api.include_router(account_router, prefix="/v1")
     api.include_router(organization_mfa_router, prefix="/v1")
     api.include_router(manifest_router, prefix="/v1")
     api.include_router(pricing_router, prefix="/v1")

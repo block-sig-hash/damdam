@@ -1,0 +1,125 @@
+{
+  "title": "Account",
+  "sections": {
+    "profile": "Your details",
+    "devices": "Signed-in devices",
+    "receipts": "Receipts",
+    "support": "Get help",
+    "notifications": "What we tell you about",
+    "privacy": "Your data"
+  },
+  "loading": {
+    "title": "Opening your account…",
+    "body": "We're fetching what's on it."
+  },
+  "errors": {
+    "loadTitle": "We couldn't open your account",
+    "unexpected": "Something went wrong. Please try again.",
+    "offlineTitle": "You're offline",
+    "offlineBody": "This is what we had the last time you were connected."
+  },
+  "actions": {
+    "retry": "Try again",
+    "refresh": "Check again"
+  },
+  "devices": {
+    "thisDevice": "This device",
+    "lastSeen": "Last used {{when}}",
+    "lastSeenUnknown": "We haven't seen this device since it signed in",
+    "location": "{{city}}, {{country}}",
+    "revoked": "Signed out {{when}}",
+    "signOut": "Sign this device out",
+    "signOutAll": "Sign out every device",
+    "signOutAllConfirm": "This signs out every device, including this one. You'll need to sign in again.",
+    "signOutAllOthers": "Sign out the others",
+    "currentUnknown": "This app cannot identify its current session yet. Refresh or sign in again before keeping this device signed in.",
+    "signedOutCount": "Signed out {{count}} device",
+    "signedOutCount_other": "Signed out {{count}} devices",
+    "empty": "No other devices are signed in.",
+    "platform": {
+      "ios": "iPhone or iPad",
+      "android": "Android phone",
+      "web": "Web browser",
+      "unknown": "Unrecognised device"
+    }
+  },
+  "receipts": {
+    "empty": "You haven't bought anything yet.",
+    "placed": "Bought {{when}}",
+    "total": "Total",
+    "paidFor": "Paid for by your organization",
+    "open": "View receipt",
+    "lines": "What you paid for",
+    "offlineNote": "Saved on this phone so you can read it without a connection."
+  },
+  "support": {
+    "intro": "Tell us what's wrong and we'll come back to you.",
+    "category": "What's it about?",
+    "categories": {
+      "installation": "Installing my eSIM",
+      "connectivity": "My line isn't working",
+      "billing": "A charge I don't recognise",
+      "refund": "A refund",
+      "account": "My account",
+      "other": "Something else"
+    },
+    "subject": "Subject",
+    "body": "What happened?",
+    "attached": "About: {{summary}}",
+    "attach": "Attach an order",
+    "submit": "Send",
+    "sent": "We've got it. Your reference is {{reference}}.",
+    "referenceLabel": "Reference",
+    "empty": "You haven't asked us anything yet.",
+    "states": {
+      "open": "Waiting for us",
+      "acknowledged": "We're looking at it",
+      "resolved": "Sorted",
+      "closed": "Closed"
+    }
+  },
+  "notifications": {
+    "intro": "We only send these. Turning one off doesn't stop your service working.",
+    "categories": {
+      "low_balance": "When your balance is running low",
+      "expiry": "When a plan is about to expire",
+      "order_status": "When an order changes"
+    },
+    "channels": {
+      "push": "On this phone",
+      "email": "By email",
+      "sms": "By text message"
+    },
+    "saved": "Saved",
+    "saveFailed": "We couldn't save that. Please try again."
+  },
+  "privacy": {
+    "exportTitle": "Get a copy of your data",
+    "exportBody": "We'll put together everything on your account and let you know when it's ready.",
+    "exportAction": "Request a copy",
+    "exportRequested": "We're putting it together. We'll let you know when it's ready.",
+    "exportPending": "You already asked for this on {{when}}. It's still being put together.",
+    "deleteTitle": "Delete your account",
+    "deleteBody": "This can't be undone. Your receipts stay in our records because we're required to keep them.",
+    "deleteAction": "Delete my account",
+    "deleteConfirm": "Delete my account permanently",
+    "deleteChecking": "Checking whether we can do this…",
+    "cannotDeleteTitle": "We can't delete your account yet",
+    "cannotDeleteBody": "Here's what's in the way:",
+    "blockers": {
+      "refund_in_progress": "A refund of {{amount}} {{currency}} is still going through.",
+      "refund_in_progress_noamount": "A refund is still going through.",
+      "payment_in_progress": "A payment is still being confirmed.",
+      "organization_has_other_members": "You own an organization that other people are still using. Hand it over to somebody else first.",
+      "call_in_progress": "A call is still connected.",
+      "call_settlement_pending": "A recent call is still being reconciled.",
+      "active_service": "A personal or work service is still active. Contact support before deleting your account.",
+      "call_unsettled": "A call is still being charged.",
+      "unknown": "Something on your account is still in progress."
+    }
+  },
+  "cache": {
+    "clearedTitle": "Signed out",
+    "clearedBody": "Everything saved on this phone for that account has been cleared."
+  }
+}

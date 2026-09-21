@@ -1,0 +1,125 @@
+{
+  "title": "Compte",
+  "sections": {
+    "profile": "Vos informations",
+    "devices": "Appareils connectés",
+    "receipts": "Reçus",
+    "support": "Obtenir de l'aide",
+    "notifications": "Ce dont nous vous informons",
+    "privacy": "Vos données"
+  },
+  "loading": {
+    "title": "Ouverture de votre compte…",
+    "body": "Nous récupérons ce qui s'y trouve."
+  },
+  "errors": {
+    "loadTitle": "Nous n'avons pas pu ouvrir votre compte",
+    "unexpected": "Une erreur s'est produite. Veuillez réessayer.",
+    "offlineTitle": "Vous êtes hors ligne",
+    "offlineBody": "Voici ce que nous avions lors de votre dernière connexion."
+  },
+  "actions": {
+    "retry": "Réessayer",
+    "refresh": "Vérifier à nouveau"
+  },
+  "devices": {
+    "thisDevice": "Cet appareil",
+    "lastSeen": "Dernière utilisation {{when}}",
+    "lastSeenUnknown": "Nous n'avons pas revu cet appareil depuis sa connexion",
+    "location": "{{city}}, {{country}}",
+    "revoked": "Déconnecté {{when}}",
+    "signOut": "Déconnecter cet appareil",
+    "signOutAll": "Déconnecter tous les appareils",
+    "signOutAllConfirm": "Cela déconnecte tous les appareils, y compris celui-ci. Vous devrez vous reconnecter.",
+    "signOutAllOthers": "Déconnecter les autres",
+    "currentUnknown": "L’application ne peut pas encore identifier cette session. Actualisez ou reconnectez-vous avant de garder cet appareil connecté.",
+    "signedOutCount": "{{count}} appareil déconnecté",
+    "signedOutCount_other": "{{count}} appareils déconnectés",
+    "empty": "Aucun autre appareil n'est connecté.",
+    "platform": {
+      "ios": "iPhone ou iPad",
+      "android": "Téléphone Android",
+      "web": "Navigateur web",
+      "unknown": "Appareil non reconnu"
+    }
+  },
+  "receipts": {
+    "empty": "Vous n'avez encore rien acheté.",
+    "placed": "Acheté {{when}}",
+    "total": "Total",
+    "paidFor": "Payé par votre organisation",
+    "open": "Voir le reçu",
+    "lines": "Ce que vous avez payé",
+    "offlineNote": "Enregistré sur ce téléphone pour le consulter sans connexion."
+  },
+  "support": {
+    "intro": "Dites-nous ce qui ne va pas et nous vous répondrons.",
+    "category": "De quoi s'agit-il ?",
+    "categories": {
+      "installation": "Installer mon eSIM",
+      "connectivity": "Ma ligne ne fonctionne pas",
+      "billing": "Un montant que je ne reconnais pas",
+      "refund": "Un remboursement",
+      "account": "Mon compte",
+      "other": "Autre chose"
+    },
+    "subject": "Objet",
+    "body": "Que s'est-il passé ?",
+    "attached": "À propos de : {{summary}}",
+    "attach": "Joindre une commande",
+    "submit": "Envoyer",
+    "sent": "Bien reçu. Votre référence est {{reference}}.",
+    "referenceLabel": "Référence",
+    "empty": "Vous ne nous avez encore rien demandé.",
+    "states": {
+      "open": "En attente de notre part",
+      "acknowledged": "Nous l'examinons",
+      "resolved": "Réglé",
+      "closed": "Fermé"
+    }
+  },
+  "notifications": {
+    "intro": "Nous n'envoyons que ceci. En désactiver un n'empêche pas votre service de fonctionner.",
+    "categories": {
+      "low_balance": "Quand votre solde est presque épuisé",
+      "expiry": "Quand un forfait va expirer",
+      "order_status": "Quand une commande change"
+    },
+    "channels": {
+      "push": "Sur ce téléphone",
+      "email": "Par e-mail",
+      "sms": "Par SMS"
+    },
+    "saved": "Enregistré",
+    "saveFailed": "Nous n'avons pas pu enregistrer. Veuillez réessayer."
+  },
+  "privacy": {
+    "exportTitle": "Obtenir une copie de vos données",
+    "exportBody": "Nous rassemblerons tout ce qui figure sur votre compte et vous préviendrons dès que ce sera prêt.",
+    "exportAction": "Demander une copie",
+    "exportRequested": "Nous préparons votre copie. Nous vous préviendrons dès qu'elle sera prête.",
+    "exportPending": "Vous l'avez déjà demandée le {{when}}. Elle est encore en préparation.",
+    "deleteTitle": "Supprimer votre compte",
+    "deleteBody": "Cette action est irréversible. Vos reçus restent dans nos registres car nous sommes tenus de les conserver.",
+    "deleteAction": "Supprimer mon compte",
+    "deleteConfirm": "Supprimer définitivement mon compte",
+    "deleteChecking": "Vérification de la possibilité de le faire…",
+    "cannotDeleteTitle": "Nous ne pouvons pas encore supprimer votre compte",
+    "cannotDeleteBody": "Voici ce qui l'empêche :",
+    "blockers": {
+      "refund_in_progress": "Un remboursement de {{amount}} {{currency}} est encore en cours.",
+      "refund_in_progress_noamount": "Un remboursement est encore en cours.",
+      "payment_in_progress": "Un paiement est encore en cours de confirmation.",
+      "organization_has_other_members": "Vous êtes propriétaire d'une organisation que d'autres personnes utilisent encore. Transférez-la d'abord à quelqu'un d'autre.",
+      "call_in_progress": "Un appel est encore en cours.",
+      "call_settlement_pending": "Un appel récent est encore en cours de rapprochement.",
+      "active_service": "Un service personnel ou professionnel est encore actif. Contactez l’assistance avant de supprimer votre compte.",
+      "call_unsettled": "Un appel est encore en cours de facturation.",
+      "unknown": "Quelque chose sur votre compte est encore en cours."
+    }
+  },
+  "cache": {
+    "clearedTitle": "Déconnecté",
+    "clearedBody": "Tout ce qui était enregistré sur ce téléphone pour ce compte a été effacé."
+  }
+}

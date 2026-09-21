@@ -8,8 +8,10 @@ import consumerFr from './locales/fr/consumer.json';
 import esimEn from './locales/en/esim.json';
 import esimFr from './locales/fr/esim.json';
 import homeEn from './locales/en/home.json';
+import accountEn from './locales/en/account.json';
 import lineEn from './locales/en/line.json';
 import homeFr from './locales/fr/home.json';
+import accountFr from './locales/fr/account.json';
 import lineFr from './locales/fr/line.json';
 import paymentsEn from './locales/en/payments.json';
 import paymentsFr from './locales/fr/payments.json';
@@ -47,6 +49,7 @@ describe('mobile locale runtime', () => {
       [consumerEn, consumerFr],
       [homeEn, homeFr],
       [lineEn, lineFr],
+      [accountEn, accountFr],
       [esimEn, esimFr],
       [paymentsEn, paymentsFr],
       [statesEn, statesFr],

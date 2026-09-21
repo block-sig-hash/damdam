@@ -3483,3 +3483,83 @@ intent and issue durable hangup operations for every live leg.
 It does not settle supplier invoices, reconcile FX, or record margin. V01's
 blockers B2 (no Nigeria rate deck) and B3 (no documented bound on the parked
 client leg) are open, and a schema cannot close either.
+
+---
+
+## 6.56 Amendment — Account Sessions, Support, Preferences and Exports (US-38)
+
+Chunk 21. Four tables behind the account area plus one nullable receipt snapshot
+column on `order_items`. Existing items are backfilled from the current product
+name so later catalog edits do not rewrite historical receipt descriptions.
+`refresh_tokens` — the table authentication actually checks — is left exactly
+as it is.
+
+The parallel voice migrations now occupy revisions `0038` and `0039`; this
+account migration follows them as `0040_account_and_support`.
+
+### `account_sessions` — a device list somebody dares act on
+
+`refresh_tokens` already knows whether a session is valid. What it cannot do is
+be rendered: a list of four identical hashes is a revocation screen nobody
+presses. This table sits **beside** the token rather than replacing it, and the
+ordering of a revocation follows from that — the token is revoked first, the
+description second. The worst outcome of a failure between the two writes is a
+session that still appears in the list after it stopped working; never one that
+vanished from the list and kept working.
+
+`device_label` and `app_version` are supplied by the client and used for display
+only. No decision is made from them, because a value a client chooses is a value
+a client can lie about.
+
+`last_seen_city` and `last_seen_country` are **coarse and derived from the
+request's own network data**. No coordinates, ever: this answers "was this you?"
+and location tracking stays retired (`SCOPE-DISPOSITION.md`).
+
+### `support_requests` — a question with its subject attached
+
+`order_id` and `entitlement_id` are verified against the customer *before* they
+are stored. An unverified reference would let somebody attach their ticket to
+another customer's order and have an agent open it in good faith.
+
+`subject_summary` freezes what the customer was looking at, so the queue still
+makes sense after the order moves on. `reference` is random over a 32-character
+alphabet with the confusable letters removed: a sequential ticket number leaks
+how many customers have a problem and lets anyone holding one guess another.
+
+`user_id` is **SET NULL**, not cascade. A closed conversation is a record of
+something the business did, and chunk 25's operations screens read it — the same
+reasoning chunk 04 applied to retained call history.
+
+### `notification_preferences` — an absent row is not a decision
+
+One row per user, category and channel. **Absence means nobody decided and the
+default applies; an explicit `false` is a decision and always wins**, including
+over a later change to the default. That is the entire reason the row is stored
+rather than inferred from a settings blob.
+
+The categories are `low_balance`, `expiry` and `order_status` — commercial and
+operational only. There is deliberately no category that could be used to reach
+somebody who has switched everything off, and no safety or location category:
+a preference row for a retired feature is that feature, switched off.
+
+### `account_export_jobs` — a request, not a response
+
+An export that streams from a request handler ties a customer's data to one HTTP
+connection surviving. This is shaped as a row a worker can fulfil without the
+original connection. The worker/storage/download integration is not yet wired;
+until it is, rows remain durable requests rather than delivered files.
+
+`ux_account_export_jobs_live` allows one unfinished export per account: pressing
+the button twice returns the job already asked for rather than building a second
+copy of somebody's history to protect and expire. `storage_key` is a storage
+reference and never a public URL — a link that works without a session is a copy
+of an account history that anyone can forward.
+
+### What this amendment does not do
+
+It deletes nothing and weakens no retention rule. The deletion **preflight** is
+a read, while the existing deletion endpoint now repeats the same checks and
+refuses active services, unsettled money/calls, or organization ownership with
+other active members. On success it revokes internet-call credentials before
+entering the existing retention flow. Order and audit history survive every
+branch of it.

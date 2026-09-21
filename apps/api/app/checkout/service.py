@@ -29,6 +29,7 @@ from uuid import UUID
 from sqlmodel import Session, col, select
 
 from app.auth.models import User
+from app.catalog.models import Product
 from app.catalog.quotes import Quote, QuoteItem, QuoteStatus
 from app.catalog.service import CatalogError, CatalogService
 from app.money import round_money
@@ -289,6 +290,7 @@ class CheckoutService:
         session.flush()
 
         for item in items:
+            product = session.get(Product, item.product_id)
             for _unit in range(item.quantity):
                 session.add(
                     OrderItem(
@@ -302,6 +304,9 @@ class CheckoutService:
                         unit_currency=item.unit_currency,
                         unit_amount=round_money(
                             Decimal(item.unit_amount), item.unit_currency
+                        ),
+                        description_snapshot=(
+                            product.name if product is not None else None
                         ),
                         provisioning_state=ProvisioningState.NOT_STARTED,
                     )

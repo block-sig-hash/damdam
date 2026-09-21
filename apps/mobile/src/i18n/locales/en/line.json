@@ -147,6 +147,9 @@
     "qrTitle": "Scan with the phone you want to install on",
     "qrHint": "Installing on this phone? Use the manual fields below. Do not save or share this QR code."
   },
+  "offline": {
+    "savedAt": "Offline — showing line and usage information saved at {{when}}. Installation steps remain available, but revealing a profile requires a connection."
+  },
   "guide": {
     "title": "Calling on this line",
     "availableForVoice": "The network says this line can make calls.",
