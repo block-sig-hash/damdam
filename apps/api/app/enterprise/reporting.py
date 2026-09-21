@@ -52,10 +52,11 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import Session, col, select
 
 from app.auth.models import utc_now
+from app.bulk.models import BulkJobItem
 from app.catalog.models import Product
 from app.connectivity.models import Entitlement
 from app.controls.models import OrganizationSpendingPolicy
@@ -239,9 +240,10 @@ class EnterpriseReportingService:
                 bucket.lines += 1
                 if item.unit_currency == currency:
                     bucket.purchased += item.unit_amount * item.quantity
-                bucket.usage += self._usage_for(
-                    session, entitlement, currency, period_from, period_to
-                )
+                if entitlement is not None:
+                    bucket.usage += self._usage_for(
+                        session, entitlement, currency, period_from, period_to
+                    )
 
         totals = [
             DepartmentTotal(
@@ -290,25 +292,38 @@ class EnterpriseReportingService:
         person: OrganizationPerson,
         period_from: datetime,
         period_to: datetime,
-    ) -> Sequence[tuple[OrderItem, Entitlement]]:
+    ) -> Sequence[tuple[OrderItem, Entitlement | None]]:
         """This person's work lines, bought by this organization, in the period.
 
         Scoped through the order's payer, the same as offboarding: who paid is
         the only durable definition of a work line, and a personal purchase by
         the same person is on an order this query does not reach.
         """
-        if person.user_id is None:
-            return []
+        identity = [col(BulkJobItem.person_id) == person.id]
+        if person.user_id is not None:
+            identity.extend(
+                [
+                    col(OrderItem.recipient_user_id) == person.user_id,
+                    col(Entitlement.holder_user_id) == person.user_id,
+                ]
+            )
         rows = session.exec(
             select(OrderItem, Entitlement)
-            .join(Entitlement, col(Entitlement.order_item_id) == col(OrderItem.id))
             .join(Order, col(OrderItem.order_id) == col(Order.id))
+            .outerjoin(
+                Entitlement, col(Entitlement.order_item_id) == col(OrderItem.id)
+            )
+            .outerjoin(
+                BulkJobItem,
+                col(BulkJobItem.order_item_id) == col(OrderItem.id),
+            )
             .where(
                 Order.payer_organization_id == organization_id,
-                Entitlement.holder_user_id == person.user_id,
+                or_(*identity),
                 col(Order.placed_at) >= period_from,
                 col(Order.placed_at) < period_to,
             )
+            .distinct()
         ).all()
         return list(rows)
 
@@ -354,26 +369,41 @@ class EnterpriseReportingService:
     def _observed_through(
         self, session: Session, organization_id: UUID
     ) -> datetime | None:
-        """The most recent usage this organization's lines have been observed to.
+        """The oldest per-line watermark, or unknown if any line has none.
 
-        Deliberately the **maximum** of what has arrived rather than a poller's
-        own watermark: a cursor can claim to be current while the supplier has
-        sent nothing, and the honest answer to "how fresh is this" is the last
-        fact we actually hold.
+        A maximum across the organization lets one healthy line hide fifty
+        stalled ones. Freshness is therefore the minimum of each line's latest
+        authoritative observation. A line with no observation makes the
+        organization-wide watermark unknown rather than silently current.
         """
-        latest = session.exec(
-            select(func.max(UsageRecord.occurred_to))
+        entitlement_ids = list(
+            session.exec(
+                select(Entitlement.id)
+                .join(OrderItem, col(Entitlement.order_item_id) == col(OrderItem.id))
+                .join(Order, col(OrderItem.order_id) == col(Order.id))
+                .where(Order.payer_organization_id == organization_id)
+            ).all()
+        )
+        if not entitlement_ids:
+            return None
+        observations = session.exec(
+            select(
+                UsageRecord.entitlement_id,
+                func.max(UsageRecord.occurred_to),
+            )
             .join(
                 Entitlement, col(UsageRecord.entitlement_id) == col(Entitlement.id)
             )
-            .join(OrderItem, col(Entitlement.order_item_id) == col(OrderItem.id))
-            .join(Order, col(OrderItem.order_id) == col(Order.id))
             .where(
-                Order.payer_organization_id == organization_id,
+                col(UsageRecord.entitlement_id).in_(entitlement_ids),
                 UsageRecord.state != UsageState.EVIDENCE,
             )
-        ).first()
-        return latest
+            .group_by(col(UsageRecord.entitlement_id))
+        ).all()
+        if len(observations) != len(entitlement_ids):
+            return None
+        watermarks = [observed for _entitlement_id, observed in observations]
+        return min(watermarks) if watermarks else None
 
 
 __all__ = [

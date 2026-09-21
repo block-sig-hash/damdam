@@ -326,9 +326,6 @@ def create_app(
     api.state.enterprise_reporting_service = EnterpriseReportingService(
         LedgerService(clock=clock), clock=clock
     )
-    api.state.offboarding_service = OffboardingService(
-        LedgerService(clock=clock), clock=clock
-    )
     api.state.mfa_service = MfaService(clock)
     api.state.hto_pilgrim_service = HtoPilgrimService()
     api.state.report_service = ProvisioningReportService(clock)
@@ -395,6 +392,13 @@ def create_app(
     )
     api.state.membership_service.add_revocation_listener(
         api.state.call_lifecycle_service
+    )
+    api.state.offboarding_service = OffboardingService(
+        LedgerService(clock=clock),
+        clock=clock,
+        memberships=api.state.membership_service,
+        mfa=api.state.mfa_service,
+        call_revoker=api.state.call_lifecycle_service.on_membership_revoked,
     )
     api.state.identity_service.add_recovery_listener(
         api.state.client_session_service
@@ -673,6 +677,7 @@ def create_app(
             # used to confirm that an organization employs somebody.
             "person_not_found": 404,
             "offboarding_not_found": 404,
+            "last_owner": 409,
         }
         return JSONResponse(
             status_code=statuses.get(exc.code, 400),
@@ -703,6 +708,7 @@ def create_app(
             "item_already_provisioned": 409,
             "item_outcome_unknown": 409,
             "item_not_awaiting_supplier": 409,
+            "recipient_archived": 409,
             "line_not_ready": 409,
             "job_not_fundable": 409,
             "job_not_provisionable": 409,

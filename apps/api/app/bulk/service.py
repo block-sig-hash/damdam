@@ -615,6 +615,20 @@ class BulkProvisioningService:
         of live invitation tokens is a table of credentials, and this one is
         readable by every administrator of the tenant.
         """
+        # Lock the recipient first, matching offboarding's lock order. This
+        # prevents an invitation from being issued after a concurrent departure
+        # archived the person, without deadlocking against the job/item locks
+        # offboarding takes while releasing their pending lines.
+        person = session.exec(
+            select(OrganizationPerson)
+            .where(OrganizationPerson.id == item.person_id)
+            .with_for_update()
+        ).first()
+        if person is None:  # pragma: no cover - FK guarantees this
+            raise BulkError("recipient_not_found")
+        if person.status is not PersonStatus.ACTIVE:
+            raise BulkError("recipient_archived")
+
         self._lock_job(session, job)
         self._lock_item(session, item)
         if item.state is not BulkItemState.PROVISIONED:
@@ -632,10 +646,6 @@ class BulkProvisioningService:
         ).first()
         if existing is not None:
             raise BulkError("activation_request_exists")
-
-        person = session.get(OrganizationPerson, item.person_id)
-        if person is None:  # pragma: no cover - FK guarantees this
-            raise BulkError("recipient_not_found")
 
         token = secrets.token_urlsafe(32)
         now = self.clock()

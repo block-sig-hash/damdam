@@ -7838,6 +7838,7 @@ components:
       - revoke_membership
       - revoke_activation_request
       - cancel_pending_line
+      - revoke_entitlement
       - suspend_line
       - end_active_call
       - cancel_pending_top_up
@@ -7974,6 +7975,7 @@ components:
       - in_progress
       - completed
       - completed_with_pending
+      - completed_with_exceptions
       title: OffboardingState
       description: Where an offboarding run is, in terms an administrator can act
         on.

@@ -43,7 +43,13 @@ depends_on: str | Sequence[str] | None = None
 _NEW_ENUMS = (
     (
         "offboarding_state",
-        ("requested", "in_progress", "completed", "completed_with_pending"),
+        (
+            "requested",
+            "in_progress",
+            "completed",
+            "completed_with_pending",
+            "completed_with_exceptions",
+        ),
     ),
     (
         "offboarding_action_kind",
@@ -51,6 +57,7 @@ _NEW_ENUMS = (
             "revoke_membership",
             "revoke_activation_request",
             "cancel_pending_line",
+            "revoke_entitlement",
             "suspend_line",
             "end_active_call",
             "cancel_pending_top_up",

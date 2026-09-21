@@ -75,6 +75,8 @@ class OffboardingState(str, Enum):
     #: answered. **Not** a failure, and not "completed" either — the difference
     #: is the whole reason this state exists.
     COMPLETED_WITH_PENDING = "completed_with_pending"
+    #: At least one local/off-provider action failed and needs intervention.
+    COMPLETED_WITH_EXCEPTIONS = "completed_with_exceptions"
 
 
 class OffboardingActionKind(str, Enum):
@@ -87,6 +89,9 @@ class OffboardingActionKind(str, Enum):
     #: A bulk line funded but not yet provisioned: cancel it and release its
     #: hold, because nobody is going to claim it now.
     CANCEL_PENDING_LINE = "cancel_pending_line"
+    #: End the organization's local service grant immediately. Carrier state is
+    #: separate and may remain pending after our entitlement has expired.
+    REVOKE_ENTITLEMENT = "revoke_entitlement"
     #: A live work line. A *request* to the carrier, whose answer arrives later.
     SUSPEND_LINE = "suspend_line"
     #: An internet call in progress on the organization's money.
