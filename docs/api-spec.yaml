@@ -6392,6 +6392,10 @@ components:
             pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           - type: 'null'
           title: Period Cap
+        committed_this_period:
+          type: string
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Committed This Period
         spent_this_period:
           type: string
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
@@ -6415,6 +6419,7 @@ components:
       - balance
       - held
       - available
+      - committed_this_period
       - spent_this_period
       - pooling_note
       title: FundingView

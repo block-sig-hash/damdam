@@ -985,6 +985,55 @@ class TestFundingIsThreeDifferentThings:
         assert summary.balance == Decimal("10000.00")
         assert summary.held == Decimal("2500.00")
         assert summary.available == Decimal("7500.00")
+        assert summary.committed_this_period == Decimal("0.00")
+        assert summary.spent_this_period == Decimal("0.00")
+
+    def test_authorized_orders_are_committed_not_settled_spend(
+        self, session, reporting, ledger
+    ):
+        organization = _organization(session)
+        _fund(session, ledger, organization, "10000.00")
+        entity = _entity(session)
+        product = _product(session)
+        unclaimed = _person(session, organization)
+        _bulk_assignment(
+            session,
+            organization,
+            unclaimed,
+            product,
+            entity,
+            state=BulkItemState.ORDERED,
+            with_entitlement=False,
+        )
+        employee = _user(session)
+        _person(session, organization, user=employee)
+        _line(
+            session,
+            entity=entity,
+            product=product,
+            holder=employee,
+            payer_organization=organization,
+            amount="500.00",
+        )
+        session.add(
+            OrganizationSpendingPolicy(
+                organization_id=organization.id,
+                currency="NGN",
+                period_cap_amount=Decimal("5000.00"),
+                enforced=True,
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
+        session.flush()
+
+        summary = reporting.funding(
+            session, organization.id, "NGN", since=NOW - timedelta(days=30)
+        )
+
+        assert summary.committed_this_period == Decimal("1500.00")
+        assert summary.spent_this_period == Decimal("500.00")
+        assert summary.headroom == Decimal("3500.00")
 
     def test_no_recorded_cap_is_undecided_not_unlimited(
         self, session, reporting, ledger

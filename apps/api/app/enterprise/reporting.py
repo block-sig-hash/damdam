@@ -63,7 +63,7 @@ from app.controls.models import OrganizationSpendingPolicy
 from app.ledger.models import AccountKind, OwnerKind
 from app.ledger.service import LedgerService
 from app.money import round_money
-from app.orders.models import Order, OrderItem
+from app.orders.models import Order, OrderItem, PaymentState
 from app.people.models import (
     OrganizationCostCentre,
     OrganizationPerson,
@@ -86,6 +86,9 @@ class FundingSummary:
     #: `None` is not "unlimited" and not zero; it is "undecided", and a screen
     #: must say so rather than rendering infinity.
     period_cap: Decimal | None = None
+    #: Authorized or paid purchases in the period. This consumes policy
+    #: headroom, but must not be described as settled spend.
+    committed_this_period: Decimal = Decimal(0)
     spent_this_period: Decimal = Decimal(0)
     #: Whether a supplier can pool allowance across this organization's lines.
     #: **False, and not a placeholder.** No adapter advertises pooling and no
@@ -100,7 +103,7 @@ class FundingSummary:
     def headroom(self) -> Decimal | None:
         if self.period_cap is None:
             return None
-        return self.period_cap - self.spent_this_period
+        return self.period_cap - self.committed_this_period
 
 
 @dataclass(frozen=True)
@@ -189,13 +192,27 @@ class EnterpriseReportingService:
             if policy is not None and policy.enforced
             else None
         )
-        spent = self._purchased_since(session, organization_id, currency, since)
+        committed = self._purchased_since(
+            session,
+            organization_id,
+            currency,
+            since,
+            states=(PaymentState.AUTHORIZED, PaymentState.PAID),
+        )
+        spent = self._purchased_since(
+            session,
+            organization_id,
+            currency,
+            since,
+            states=(PaymentState.PAID,),
+        )
         return FundingSummary(
             currency=currency,
             balance=balance,
             held=round_money(balance - available, currency),
             available=available,
             period_cap=cap,
+            committed_this_period=committed,
             spent_this_period=spent,
         )
 
@@ -319,6 +336,9 @@ class EnterpriseReportingService:
             )
             .where(
                 Order.payer_organization_id == organization_id,
+                col(Order.payment_state).in_(
+                    [PaymentState.AUTHORIZED, PaymentState.PAID]
+                ),
                 or_(*identity),
                 col(Order.placed_at) >= period_from,
                 col(Order.placed_at) < period_to,
@@ -353,13 +373,20 @@ class EnterpriseReportingService:
         return Decimal(total or 0)
 
     def _purchased_since(
-        self, session: Session, organization_id: UUID, currency: str, since: datetime
+        self,
+        session: Session,
+        organization_id: UUID,
+        currency: str,
+        since: datetime,
+        *,
+        states: Sequence[PaymentState],
     ) -> Decimal:
         total = session.exec(
             select(func.coalesce(func.sum(OrderItem.unit_amount), 0))
             .join(Order, col(OrderItem.order_id) == col(Order.id))
             .where(
                 Order.payer_organization_id == organization_id,
+                col(Order.payment_state).in_(list(states)),
                 OrderItem.unit_currency == currency,
                 col(Order.placed_at) >= since,
             )

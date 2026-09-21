@@ -28,6 +28,9 @@ class FundingView(BaseModel):
     held: Decimal
     available: Decimal
     period_cap: Decimal | None = None
+    #: Authorized or paid purchases; consumes policy headroom but is not all
+    #: settled spend.
+    committed_this_period: Decimal
     spent_this_period: Decimal
     headroom: Decimal | None = None
     #: Always false today, and carried explicitly so a dashboard cannot render a

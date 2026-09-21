@@ -110,6 +110,7 @@ def get_funding(
             held=summary.held,
             available=summary.available,
             period_cap=summary.period_cap,
+            committed_this_period=summary.committed_this_period,
             spent_this_period=summary.spent_this_period,
             headroom=summary.headroom,
             pooling=summary.pooling,
