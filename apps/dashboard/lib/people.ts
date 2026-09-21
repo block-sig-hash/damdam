@@ -47,6 +47,21 @@ export type CostCentre = {
   archived_at: string | null;
 };
 
+export type OrganizationMember = {
+  user_id: string;
+  role: "owner" | "administrator" | "billing" | "member";
+  status: "active" | "revoked";
+  joined_at: string;
+};
+
+export type OrganizationInvitation = {
+  id: string;
+  invited_value: string;
+  role: OrganizationMember["role"];
+  status: string;
+  expires_at: string | null;
+};
+
 export type ImportState =
   | "previewed"
   | "applying"
@@ -87,7 +102,9 @@ const API_BASE_URL =
 type APIError = { error?: string; message?: string };
 
 function authHeaders(): HeadersInit {
-  const token = window.localStorage.getItem("hto_access_token");
+  const token =
+    window.localStorage.getItem("member_access_token") ??
+    window.localStorage.getItem("hto_access_token");
   if (!token) {
     throw new Error(clientMessage("common.errors.signInRequired"));
   }
@@ -155,6 +172,28 @@ export async function fetchCostCentres(
   );
   const result = await parse<{ cost_centres: CostCentre[] }>(response);
   return result.cost_centres;
+}
+
+export async function fetchMembers(
+  organizationId: string,
+): Promise<OrganizationMember[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/organizations/${organizationId}/members`,
+    { headers: authHeaders() },
+  );
+  const result = await parse<{ members: OrganizationMember[] }>(response);
+  return result.members;
+}
+
+export async function fetchInvitations(
+  organizationId: string,
+): Promise<OrganizationInvitation[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/organizations/${organizationId}/invitations`,
+    { headers: authHeaders() },
+  );
+  const result = await parse<{ invitations: OrganizationInvitation[] }>(response);
+  return result.invitations;
 }
 
 export async function createCostCentre(

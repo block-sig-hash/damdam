@@ -6,6 +6,8 @@ import { useTranslations } from "next-intl";
 import {
   CostCentre,
   ImportPreview,
+  OrganizationInvitation,
+  OrganizationMember,
   Person,
   Team,
   applyPeopleImport,
@@ -14,6 +16,8 @@ import {
   createTeam,
   downloadPeopleCsv,
   fetchCostCentres,
+  fetchInvitations,
+  fetchMembers,
   fetchPeople,
   fetchTeams,
   uploadPeopleFile,
@@ -40,7 +44,7 @@ import {
  * error per upload is how people give up.
  */
 
-type Tab = "people" | "teams" | "costCentres" | "imports";
+type Tab = "people" | "teams" | "costCentres" | "access" | "imports";
 
 export default function PeoplePage() {
   const t = useTranslations("people");
@@ -49,6 +53,8 @@ export default function PeoplePage() {
   const [people, setPeople] = useState<Person[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [costCentres, setCostCentres] = useState<CostCentre[]>([]);
+  const [members, setMembers] = useState<OrganizationMember[]>([]);
+  const [invitations, setInvitations] = useState<OrganizationInvitation[]>([]);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,14 +71,24 @@ export default function PeoplePage() {
     if (!id) return;
     setError("");
     try {
-      const [loadedPeople, loadedTeams, loadedCentres] = await Promise.all([
+      const [
+        loadedPeople,
+        loadedTeams,
+        loadedCentres,
+        loadedMembers,
+        loadedInvitations,
+      ] = await Promise.all([
         fetchPeople(id),
         fetchTeams(id),
         fetchCostCentres(id),
+        fetchMembers(id),
+        fetchInvitations(id),
       ]);
       setPeople(loadedPeople);
       setTeams(loadedTeams);
       setCostCentres(loadedCentres);
+      setMembers(loadedMembers);
+      setInvitations(loadedInvitations);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("errors.loadFailed"));
     }
@@ -171,7 +187,7 @@ export default function PeoplePage() {
       ) : null}
 
       <nav aria-label={t("title")}>
-        {(["people", "teams", "costCentres", "imports"] as Tab[]).map((name) => (
+        {(["people", "teams", "costCentres", "access", "imports"] as Tab[]).map((name) => (
           <button
             key={name}
             type="button"
@@ -237,6 +253,33 @@ export default function PeoplePage() {
         />
       ) : null}
 
+      {tab === "access" ? (
+        <section aria-label={t("tabs.access")} data-testid="people-access">
+          <h2>{t("access.title")}</h2>
+          <p>{t("access.explanation")}</p>
+          <h3>{t("access.members")}</h3>
+          <ul>
+            {members.map((member) => (
+              <li key={member.user_id}>
+                {member.user_id} — {t(`access.role.${member.role}`)}
+              </li>
+            ))}
+          </ul>
+          <h3>{t("access.pendingInvitations")}</h3>
+          {invitations.length === 0 ? (
+            <p>{t("access.noInvitations")}</p>
+          ) : (
+            <ul>
+              {invitations.map((invitation) => (
+                <li key={invitation.id}>
+                  {invitation.invited_value} — {t(`access.role.${invitation.role}`)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
+
       {tab === "imports" ? (
         <section aria-label={t("tabs.imports")}>
           <h2>{t("imports.title")}</h2>
@@ -295,7 +338,10 @@ function ImportPreviewPanel({
       <h3>{t("imports.preview")}</h3>
       <ul>
         <li data-testid="import-valid">
-          {t("imports.willCreate", { count: summary.valid_count })}
+          {t("imports.willCreate", { count: summary.created_count })}
+        </li>
+        <li data-testid="import-updated">
+          {t("imports.willUpdate", { count: summary.updated_count })}
         </li>
         <li data-testid="import-invalid">
           {t("imports.invalid", { count: summary.invalid_count })}

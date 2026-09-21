@@ -33,6 +33,14 @@
     "password": "Mot de passe",
     "signingIn": "Connexion…",
     "signInFailed": "Échec de la connexion.",
+    "enterpriseDashboard": "Tableau de bord de l'organisation",
+    "enterpriseSignIn": "Connexion en tant que membre",
+    "enterpriseSignInIntro": "Utilisez l'adresse e-mail vérifiée associée à votre adhésion.",
+    "enterpriseSignInLink": "Se connecter à une organisation ou administration",
+    "sendMemberLink": "M'envoyer un lien de connexion",
+    "sendingMemberLink": "Envoi du lien…",
+    "memberLinkSent": "Consultez votre messagerie pour ouvrir le lien sécurisé.",
+    "verifyingMemberLink": "Vérification du lien de connexion…",
     "registrationReceived": "Inscription reçue",
     "checkEmail": "Consultez votre messagerie",
     "verificationSent": "Nous avons envoyé un lien de vérification à {email}. Il expire dans 24 heures. Après vérification, DamDam examinera votre licence NAHCON et vous répondra sous 24 heures.",
@@ -340,7 +348,21 @@
       "people": "Personnes",
       "teams": "Équipes",
       "costCentres": "Centres de coûts",
+      "access": "Accès",
       "imports": "Imports"
+    },
+    "access": {
+      "title": "Accès au tableau de bord",
+      "explanation": "Les membres peuvent se connecter. Les personnes sont des bénéficiaires et un import ne leur donne aucun accès.",
+      "members": "Membres",
+      "pendingInvitations": "Invitations en attente",
+      "noInvitations": "Aucune invitation en attente.",
+      "role": {
+        "owner": "Propriétaire",
+        "administrator": "Administrateur",
+        "billing": "Facturation",
+        "member": "Membre"
+      }
     },
     "empty": "Personne n'a encore été ajouté.",
     "columns": {
@@ -423,6 +445,7 @@
         "invalid_email": "Cette adresse e-mail n'est pas valide",
         "invalid_phone": "Le numéro doit comporter un indicatif, par exemple +234…",
         "duplicate_in_file": "Cette personne apparaît plus haut dans le fichier",
+        "identity_collision": "Ces identifiants appartiennent à différentes personnes existantes",
         "field_too_long": "L'une de ces valeurs est trop longue",
         "unknown_team": "Cette équipe n'existe pas encore",
         "unknown_cost_centre": "Ce centre de coûts n'existe pas encore"

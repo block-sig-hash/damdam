@@ -101,6 +101,9 @@ class RowError(str, Enum):
     INVALID_PHONE = "invalid_phone"
     #: Another row in *this file* already claimed this identity.
     DUPLICATE_IN_FILE = "duplicate_in_file"
+    #: Different identifiers on one row resolve to different existing people.
+    #: Guessing which person wins would merge two identities.
+    IDENTITY_COLLISION = "identity_collision"
     FIELD_TOO_LONG = "field_too_long"
     UNKNOWN_TEAM = "unknown_team"
     UNKNOWN_COST_CENTRE = "unknown_cost_centre"

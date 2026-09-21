@@ -30,6 +30,7 @@ from fastapi.responses import StreamingResponse
 from app.csv_export import csv_safe
 from app.organizations.dependencies import TenantContext, require
 from app.organizations.permissions import Permission
+from app.people.importing import MAX_ROWS
 from app.people.models import (
     ImportState,
     OrganizationPerson,
@@ -221,7 +222,7 @@ def list_people(
     context: Annotated[TenantContext, require(Permission.PEOPLE_READ)],
     team_id: Annotated[UUID | None, Query()] = None,
     include_archived: Annotated[bool, Query()] = False,
-    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    limit: Annotated[int, Query(ge=1, le=MAX_ROWS)] = MAX_ROWS,
 ) -> PersonListResponse:
     del organization_id
     with request.app.state.session_factory() as session:
@@ -286,7 +287,7 @@ def export_people(
             session,
             context.organization_id,
             include_archived=include_archived,
-            limit=500,
+            limit=MAX_ROWS,
         ):
             writer.writerow(
                 [

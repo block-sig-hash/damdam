@@ -165,7 +165,7 @@ class PeopleService:
         *,
         team_id: UUID | None = None,
         include_archived: bool = False,
-        limit: int = 200,
+        limit: int = 5_000,
     ) -> Sequence[OrganizationPerson]:
         statement = select(OrganizationPerson).where(
             OrganizationPerson.organization_id == organization_id
@@ -227,15 +227,27 @@ class PeopleService:
         preview rather than a second one to choose between.
         """
         digest = hashlib.sha256(content).hexdigest()
-        existing = session.exec(
+        bind = session.get_bind()
+        if bind.dialect.name == "postgresql":
+            # Serialize the read-then-insert behind the partial unique index.
+            # The index is still the invariant; this makes two identical live
+            # uploads converge on one response instead of making one a 500.
+            session.execute(
+                select(
+                    func.pg_advisory_xact_lock(
+                        func.hashtextextended(f"{organization_id}:{digest}", 0)
+                    )
+                )
+            )
+        existing_import = session.exec(
             select(PeopleImport).where(
                 PeopleImport.organization_id == organization_id,
                 PeopleImport.content_digest == digest,
                 PeopleImport.state != ImportState.CANCELLED,
             )
         ).first()
-        if existing is not None:
-            return existing, None
+        if existing_import is not None:
+            return existing_import, None
 
         teams = [team.name for team in self.teams(session, organization_id)]
         centres = [
@@ -260,6 +272,23 @@ class PeopleService:
             session.flush()
             return record, None
 
+        created_count = 0
+        updated_count = 0
+        for row in parsed.valid_rows:
+            try:
+                existing_person = self._matching_person(
+                    session, organization_id, _payload_of(row)
+                )
+            except PeopleError as exc:
+                if exc.code != "identity_collision":
+                    raise
+                row.errors.append(RowError.IDENTITY_COLLISION)
+                continue
+            if existing_person is None:
+                created_count += 1
+            else:
+                updated_count += 1
+
         record = PeopleImport(
             organization_id=organization_id,
             uploaded_by_user_id=uploaded_by_user_id,
@@ -269,6 +298,8 @@ class PeopleService:
             row_count=len(parsed.rows),
             valid_count=len(parsed.valid_rows),
             invalid_count=len(parsed.invalid_rows),
+            created_count=created_count,
+            updated_count=updated_count,
             created_at=self.clock(),
         )
         session.add(record)
@@ -291,22 +322,13 @@ class PeopleService:
     def apply_import(
         self, session: Session, organization_id: UUID, import_id: UUID
     ) -> ImportSummary:
-        """Turn a recorded preview into people. Resumable, and never doubling.
+        """Apply one durable row transaction at a time.
 
-        Only rows recorded as `VALID` are applied. A row already marked
-        `CREATED` or `UPDATED` by an earlier run is skipped, which is what makes
-        a crashed apply safe to re-run: the rows themselves are the progress
-        record, so there is nothing to remember and nothing to guess.
+        Locking the import row serializes competing callers. Each person, row
+        outcome and counter update commits together before the next row starts,
+        so a process death loses at most the current row and a later call can
+        continue from the remaining `VALID` rows.
         """
-        record = self._own_import(session, organization_id, import_id)
-        if record.state is ImportState.APPLIED:
-            return _summary(record)
-        if record.state in {ImportState.CANCELLED, ImportState.REJECTED}:
-            raise PeopleError("import_not_applicable")
-
-        record.state = ImportState.APPLYING
-        session.add(record)
-        session.flush()
 
         teams = {
             team.name.casefold(): team
@@ -317,40 +339,74 @@ class PeopleService:
             for centre in self.cost_centres(session, organization_id)
         }
 
-        rows = session.exec(
-            select(PeopleImportRow)
-            .where(
-                PeopleImportRow.import_id == record.id,
-                PeopleImportRow.state == ImportRowState.VALID,
-            )
-            .order_by(col(PeopleImportRow.row_number))
-        ).all()
+        while True:
+            session.expire_all()
+            record = session.exec(
+                select(PeopleImport)
+                .where(
+                    PeopleImport.id == import_id,
+                    PeopleImport.organization_id == organization_id,
+                )
+                .with_for_update()
+            ).first()
+            if record is None:
+                raise PeopleError("import_not_found")
+            if record.state is ImportState.APPLIED:
+                return _summary(record)
+            if record.state in {ImportState.CANCELLED, ImportState.REJECTED}:
+                raise PeopleError("import_not_applicable")
 
-        created = record.created_count
-        updated = record.updated_count
-        for row in rows:
-            person, was_created = self._upsert_person(
-                session, organization_id, row.payload, teams, centres
-            )
-            row.person_id = person.id
-            row.state = (
-                ImportRowState.CREATED if was_created else ImportRowState.UPDATED
-            )
+            if record.state is ImportState.PREVIEWED:
+                # Preview counts are a forecast. Once apply starts these fields
+                # become the durable count of committed outcomes.
+                record.state = ImportState.APPLYING
+                record.created_count = 0
+                record.updated_count = 0
+                session.add(record)
+                session.commit()
+                continue
+
+            row = session.exec(
+                select(PeopleImportRow)
+                .where(
+                    PeopleImportRow.import_id == record.id,
+                    PeopleImportRow.state == ImportRowState.VALID,
+                )
+                .order_by(col(PeopleImportRow.row_number))
+                .limit(1)
+            ).first()
+            if row is None:
+                record.state = ImportState.APPLIED
+                record.applied_at = self.clock()
+                session.add(record)
+                summary = _summary(record)
+                session.commit()
+                return summary
+
+            try:
+                person, was_created = self._upsert_person(
+                    session, organization_id, row.payload, teams, centres
+                )
+            except PeopleError as exc:
+                if exc.code != "identity_collision":
+                    session.rollback()
+                    raise
+                row.state = ImportRowState.INVALID
+                row.error_codes = [*row.error_codes, RowError.IDENTITY_COLLISION.value]
+                record.valid_count -= 1
+                record.invalid_count += 1
+            else:
+                row.person_id = person.id
+                row.state = (
+                    ImportRowState.CREATED
+                    if was_created
+                    else ImportRowState.UPDATED
+                )
+                record.created_count += 1 if was_created else 0
+                record.updated_count += 0 if was_created else 1
             session.add(row)
-            created += 1 if was_created else 0
-            updated += 0 if was_created else 1
-            # Counts are persisted as we go, not at the end: an apply that dies
-            # after row 900 should say 900, not zero.
-            record.created_count = created
-            record.updated_count = updated
             session.add(record)
-            session.flush()
-
-        record.state = ImportState.APPLIED
-        record.applied_at = self.clock()
-        session.add(record)
-        session.flush()
-        return _summary(record)
+            session.commit()
 
     def cancel_import(
         self, session: Session, organization_id: UUID, import_id: UUID
@@ -370,7 +426,7 @@ class PeopleService:
         import_id: UUID,
         *,
         only_invalid: bool = False,
-        limit: int = 500,
+        limit: int = 5_000,
     ) -> Sequence[PeopleImportRow]:
         self._own_import(session, organization_id, import_id)
         statement = select(PeopleImportRow).where(
@@ -386,28 +442,23 @@ class PeopleService:
 
     # --- internals ---------------------------------------------------------
 
-    def _upsert_person(
+    def _matching_person(
         self,
         session: Session,
         organization_id: UUID,
         payload: dict[str, object],
-        teams: dict[str, OrganizationTeam],
-        centres: dict[str, OrganizationCostCentre],
-    ) -> tuple[OrganizationPerson, bool]:
-        """Match on the same keys the database enforces, in priority order.
+    ) -> OrganizationPerson | None:
+        """Resolve every supplied identity, refusing a split identity.
 
-        Employee reference first: it is the identifier the customer controls and
-        the one that survives somebody changing their surname or their phone.
+        Priority ordering is unsafe here: if an employee reference belongs to
+        Ada while the email belongs to Ben, choosing the first silently merges
+        Ben into Ada and then collides at flush. The row is invalid instead.
         """
-        email = _text(payload.get("email"))
-        phone = _text(payload.get("phone_number"))
-        reference = _text(payload.get("external_reference"))
-
-        existing: OrganizationPerson | None = None
+        matches: dict[UUID, OrganizationPerson] = {}
         for field_name, value in (
-            ("external_reference", reference),
-            ("email", email),
-            ("phone_number", phone),
+            ("external_reference", _text(payload.get("external_reference"))),
+            ("email", _text(payload.get("email"))),
+            ("phone_number", _text(payload.get("phone_number"))),
         ):
             if not value:
                 continue
@@ -418,7 +469,25 @@ class PeopleService:
                 )
             ).first()
             if existing is not None:
-                break
+                matches[existing.id] = existing
+        if len(matches) > 1:
+            raise PeopleError("identity_collision")
+        return next(iter(matches.values()), None)
+
+    def _upsert_person(
+        self,
+        session: Session,
+        organization_id: UUID,
+        payload: dict[str, object],
+        teams: dict[str, OrganizationTeam],
+        centres: dict[str, OrganizationCostCentre],
+    ) -> tuple[OrganizationPerson, bool]:
+        """Match on every key the database enforces, or create one person."""
+        email = _text(payload.get("email"))
+        phone = _text(payload.get("phone_number"))
+        reference = _text(payload.get("external_reference"))
+
+        existing = self._matching_person(session, organization_id, payload)
 
         team = teams.get((_text(payload.get("team")) or "").casefold())
         centre = centres.get((_text(payload.get("cost_centre")) or "").casefold())

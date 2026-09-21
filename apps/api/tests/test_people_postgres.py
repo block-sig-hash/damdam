@@ -16,8 +16,9 @@ customer's dashboard to two thousand people.
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
@@ -34,6 +35,7 @@ from app.people.models import (
     ImportRowState,
     ImportState,
     OrganizationPerson,
+    PeopleImport,
     PersonStatus,
 )
 from app.people.service import PeopleError, PeopleService
@@ -298,6 +300,32 @@ class TestDuplicateAndReplayedImports:
         assert first.id == second.id
         assert parsed is None
 
+    def test_concurrent_uploads_of_the_same_file_converge(
+        self, session, engine, service
+    ):
+        organization = _organization(session)
+        organization_id = organization.id
+        session.commit()
+        content = csv_bytes("Full Name,Email", "Ada Obi,ada@example.test")
+
+        def upload() -> UUID:
+            with Session(engine) as concurrent_session:
+                record, _ = service.preview_import(
+                    concurrent_session,
+                    organization_id,
+                    filename="staff.csv",
+                    content=content,
+                    uploaded_by_user_id=None,
+                )
+                record_id = record.id
+                concurrent_session.commit()
+                return record_id
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first, second = pool.map(lambda _: upload(), range(2))
+
+        assert first == second
+
     def test_applying_the_same_import_twice_does_not_double_the_staff(
         self, session, service
     ):
@@ -431,6 +459,75 @@ class TestPreviewThenApply:
         summary = service.apply_import(session, organization.id, record.id)
         assert summary.created_count == record.valid_count
 
+    def test_the_preview_distinguishes_creates_from_updates(self, session, service):
+        organization = _organization(session)
+        session.add(
+            OrganizationPerson(
+                organization_id=organization.id,
+                full_name="Ada Obi",
+                email="ada@example.test",
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
+        session.flush()
+
+        record, _ = service.preview_import(
+            session,
+            organization.id,
+            filename="staff.csv",
+            content=csv_bytes(
+                "Full Name,Email",
+                "Ada Obi-Musa,ada@example.test",
+                "Ben Musa,ben@example.test",
+            ),
+            uploaded_by_user_id=None,
+        )
+
+        assert record.created_count == 1
+        assert record.updated_count == 1
+
+    def test_a_row_that_resolves_to_two_people_is_invalid(self, session, service):
+        organization = _organization(session)
+        session.add_all(
+            [
+                OrganizationPerson(
+                    organization_id=organization.id,
+                    full_name="Ada Obi",
+                    email="ada@example.test",
+                    external_reference="E-1",
+                    created_at=NOW,
+                    updated_at=NOW,
+                ),
+                OrganizationPerson(
+                    organization_id=organization.id,
+                    full_name="Ben Musa",
+                    email="ben@example.test",
+                    external_reference="E-2",
+                    created_at=NOW,
+                    updated_at=NOW,
+                ),
+            ]
+        )
+        session.flush()
+
+        record, _ = service.preview_import(
+            session,
+            organization.id,
+            filename="staff.csv",
+            content=csv_bytes(
+                "Full Name,Employee ID,Email",
+                "Wrong Merge,E-1,ben@example.test",
+            ),
+            uploaded_by_user_id=None,
+        )
+        rows = service.import_rows(session, organization.id, record.id)
+
+        assert record.valid_count == 0
+        assert record.invalid_count == 1
+        assert rows[0].state is ImportRowState.INVALID
+        assert rows[0].error_codes == ["identity_collision"]
+
     def test_invalid_rows_keep_their_reasons_for_the_administrator(
         self, session, service
     ):
@@ -498,11 +595,12 @@ class TestPreviewThenApply:
         assert record.rejection_code == "no_identifying_column"
         assert parsed is None
 
-    def test_an_apply_interrupted_halfway_resumes_where_it_stopped(
-        self, session, service
+    def test_an_apply_interrupted_halfway_resumes_after_a_new_session(
+        self, session, engine, service, monkeypatch
     ):
-        """The rows are the progress record, so there is nothing to remember."""
+        """Committed row outcomes survive the process transaction that dies."""
         organization = _organization(session)
+        organization_id = organization.id
         record, _ = service.preview_import(
             session,
             organization.id,
@@ -515,30 +613,34 @@ class TestPreviewThenApply:
             ),
             uploaded_by_user_id=None,
         )
-        rows = service.import_rows(session, organization.id, record.id)
-        # Simulate a worker that applied one row and died before the rest.
-        first_person = OrganizationPerson(
-            organization_id=organization.id,
-            full_name="Ada Obi",
-            email="ada@example.test",
-            created_at=NOW,
-            updated_at=NOW,
-        )
-        session.add(first_person)
-        session.flush()
-        rows[0].state = ImportRowState.CREATED
-        rows[0].person_id = first_person.id
-        record.state = ImportState.APPLYING
-        record.created_count = 1
-        session.add(rows[0])
-        session.add(record)
-        session.flush()
+        import_id = record.id
+        original = service._upsert_person
+        calls = 0
 
-        summary = service.apply_import(session, organization.id, record.id)
+        def crash_on_second(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError("simulated process death")
+            return original(*args, **kwargs)
 
-        assert len(service.people(session, organization.id)) == 3
-        assert summary.created_count == 3
-        assert summary.state is ImportState.APPLIED
+        monkeypatch.setattr(service, "_upsert_person", crash_on_second)
+        with pytest.raises(RuntimeError, match="simulated process death"):
+            service.apply_import(session, organization_id, import_id)
+        session.rollback()
+
+        with Session(engine) as resumed_session:
+            interrupted = resumed_session.get(PeopleImport, import_id)
+            assert interrupted is not None
+            assert interrupted.state is ImportState.APPLYING
+            assert interrupted.created_count == 1
+
+            summary = service.apply_import(
+                resumed_session, organization_id, import_id
+            )
+            assert len(service.people(resumed_session, organization_id)) == 3
+            assert summary.created_count == 3
+            assert summary.state is ImportState.APPLIED
 
 
 class TestTeamsAndCostCentres:
@@ -635,6 +737,26 @@ class TestLeaving:
 
 
 class TestExportsAreSafeToOpen:
+    def test_the_supported_import_size_is_not_truncated_on_read(
+        self, session, service
+    ):
+        organization = _organization(session)
+        session.add_all(
+            [
+                OrganizationPerson(
+                    organization_id=organization.id,
+                    full_name=f"Person {index:03d}",
+                    external_reference=f"E-{index:03d}",
+                    created_at=NOW,
+                    updated_at=NOW,
+                )
+                for index in range(501)
+            ]
+        )
+        session.flush()
+
+        assert len(service.people(session, organization.id)) == 501
+
     def test_a_formula_in_a_name_is_defused_on_the_way_out(self):
         """The name imported as written; the export is where it is neutralised."""
         assert csv_safe('=HYPERLINK("http://x","click")').startswith("'=")

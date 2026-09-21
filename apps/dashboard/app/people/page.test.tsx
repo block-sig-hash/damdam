@@ -30,6 +30,8 @@ vi.mock("@/lib/people", () => ({
   fetchPeople: vi.fn(),
   fetchTeams: vi.fn(),
   fetchCostCentres: vi.fn(),
+  fetchMembers: vi.fn(),
+  fetchInvitations: vi.fn(),
   createTeam: vi.fn(),
   createCostCentre: vi.fn(),
   uploadPeopleFile: vi.fn(),
@@ -44,6 +46,8 @@ const mocked = people as unknown as {
   fetchPeople: ReturnType<typeof vi.fn>;
   fetchTeams: ReturnType<typeof vi.fn>;
   fetchCostCentres: ReturnType<typeof vi.fn>;
+  fetchMembers: ReturnType<typeof vi.fn>;
+  fetchInvitations: ReturnType<typeof vi.fn>;
   uploadPeopleFile: ReturnType<typeof vi.fn>;
   applyPeopleImport: ReturnType<typeof vi.fn>;
   cancelPeopleImport: ReturnType<typeof vi.fn>;
@@ -98,6 +102,8 @@ describe("people page", () => {
     mocked.fetchPeople.mockResolvedValue([PERSON]);
     mocked.fetchTeams.mockResolvedValue([]);
     mocked.fetchCostCentres.mockResolvedValue([]);
+    mocked.fetchMembers.mockResolvedValue([]);
+    mocked.fetchInvitations.mockResolvedValue([]);
   });
 
   it("says plainly that adding somebody is not granting access", async () => {
@@ -124,8 +130,8 @@ describe("people page", () => {
         row_count: 3,
         valid_count: 2,
         invalid_count: 1,
-        created_count: 0,
-        updated_count: 0,
+        created_count: 1,
+        updated_count: 1,
         rejection_code: null,
         created_at: "2026-09-13T10:00:00Z",
         applied_at: null,
@@ -149,12 +155,40 @@ describe("people page", () => {
 
     const preview = await screen.findByTestId("import-preview");
     expect(preview).toBeTruthy();
-    expect(screen.getByTestId("import-valid").textContent).toContain("2");
+    expect(screen.getByTestId("import-valid").textContent).toContain("1");
+    expect(screen.getByTestId("import-updated").textContent).toContain("1");
     expect(screen.getByTestId("import-invalid").textContent).toContain("1");
     expect(screen.getByTestId("import-ignored").textContent).toContain(
       "Favourite Colour",
     );
     expect(mocked.applyPeopleImport).not.toHaveBeenCalled();
+  });
+
+  it("shows memberships separately from service recipients", async () => {
+    mocked.fetchMembers.mockResolvedValue([
+      {
+        user_id: "user-1",
+        role: "owner",
+        status: "active",
+        joined_at: "2026-09-13T10:00:00Z",
+      },
+    ]);
+    mocked.fetchInvitations.mockResolvedValue([
+      {
+        id: "invite-1",
+        invited_value: "admin@example.test",
+        role: "administrator",
+        status: "pending",
+        expires_at: null,
+      },
+    ]);
+
+    renderPage();
+    fireEvent.click(await screen.findByTestId("people-tab-access"));
+
+    expect(await screen.findByText(/user-1/)).toBeTruthy();
+    expect(screen.getByText(/admin@example.test/)).toBeTruthy();
+    expect(screen.getByTestId("people-no-privilege-notice")).toBeTruthy();
   });
 
   it("explains every reason a row cannot be used", async () => {
