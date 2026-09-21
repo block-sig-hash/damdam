@@ -3642,7 +3642,7 @@ pilgrim vocabulary are neither read nor altered here: generalizing the product's
 model of people is this chunk, and retiring the legacy tables is the removal
 sequence in `IMPLEMENTATION-PLAN.md` §7, with its own compatibility window.
 
-## 6.55 Amendment — Bulk Jobs, Per-Recipient Items and Activation Requests (US-40)
+## 6.58 Amendment — Bulk Jobs, Per-Recipient Items and Activation Requests (US-40)
 
 Chunk 23. Three tables, all additive, and the shape of all three follows from
 one fact: **a bulk order is fifty independent purchases that share a button.**

@@ -5431,6 +5431,17 @@ components:
         So this reports only what is *known* about each, and the app is built so
 
         that opening the dialer is guidance rather than an outcome.'
+    CancelRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Reason
+      type: object
+      required:
+      - reason
+      title: CancelRequest
     ChargeView:
       properties:
         amount:
@@ -5475,17 +5486,6 @@ components:
         \ amount as\nfinal would be making a promise this chunk cannot keep: V01 could\
         \ not\nestablish how many components a call bills, so a later correction is\
         \ an\nordinary event rather than a failure."
-    CancelRequest:
-      properties:
-        reason:
-          type: string
-          maxLength: 64
-          minLength: 1
-          title: Reason
-      type: object
-      required:
-      - reason
-      title: CancelRequest
     CheckoutOutcome:
       type: string
       enum:

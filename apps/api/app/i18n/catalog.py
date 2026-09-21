@@ -26,7 +26,7 @@ _API_EN = {
     "attempt_not_found": "We could not find that call.",
     "attempt_expired": "That call authorization has expired. Try calling again.",
     "attempt_not_startable": "That call has already finished.",
-    "idempotency_conflict": "That request was already used for a different call.",
+    "idempotency_conflict": "That request key was already used for different work.",
     "insufficient_funds": "You do not have enough credit for this call.",
     "reservation_failed": "We could not hold credit for this call. Please try again.",
     "device_not_authorized": "This device is not signed in for calling. Sign in again.",
@@ -244,7 +244,9 @@ _API_FR = {
     "attempt_not_found": "Nous n'avons pas trouvé cet appel.",
     "attempt_expired": "Cette autorisation d'appel a expiré. Rappelez pour continuer.",
     "attempt_not_startable": "Cet appel est déjà terminé.",
-    "idempotency_conflict": "Cette demande a déjà servi pour un autre appel.",
+    "idempotency_conflict": (
+        "Cette clé de requête a déjà servi pour une autre opération."
+    ),
     "insufficient_funds": "Votre crédit est insuffisant pour cet appel.",
     "reservation_failed": "Nous n'avons pas pu réserver le crédit de cet appel. Réessayez.",
     "device_not_authorized": "Cet appareil n'est pas connecté pour les appels. Reconnectez-vous.",

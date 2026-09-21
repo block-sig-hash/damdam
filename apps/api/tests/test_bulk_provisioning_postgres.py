@@ -21,8 +21,10 @@ somebody who already has one.
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from threading import Barrier
 from uuid import uuid4
 
 import pytest
@@ -34,6 +36,7 @@ from app.auth.models import Organization, OrganizationType, Platform, User
 from app.bulk.models import (
     ActivationRequestState,
     BulkItemState,
+    BulkJob,
     BulkJobState,
 )
 from app.bulk.service import BulkError, BulkProvisioningService
@@ -253,6 +256,158 @@ class TestPlanning:
         assert job.state is BulkJobState.PLANNED
         assert session.exec(select(Reservation)).all() == []
         assert session.exec(select(Order)).all() == []
+
+    def test_reusing_a_key_for_different_recipients_is_a_conflict(
+        self, session, service
+    ):
+        organization = _organization(session)
+        product = _product(session)
+        first = _person(session, organization, 1)
+        second = _person(session, organization, 2)
+        _plan(service, session, organization, product, [first], key="same-key")
+
+        with pytest.raises(BulkError) as excinfo:
+            _plan(
+                service,
+                session,
+                organization,
+                product,
+                [second],
+                key="same-key",
+            )
+
+        assert excinfo.value.code == "idempotency_conflict"
+
+
+class TestConcurrentCalls:
+    def test_identical_plans_converge_on_one_job(
+        self, session, engine, service, clock
+    ):
+        organization = _organization(session)
+        entity = _entity(session)
+        market = _market(session, entity)
+        product = _product(session)
+        people = [_person(session, organization, index) for index in range(2)]
+        organization_id = organization.id
+        market_id = market.id
+        product_id = product.id
+        person_ids = [person.id for person in people]
+        session.commit()
+        barrier = Barrier(2)
+
+        def plan() -> str:
+            with Session(engine) as concurrent_session:
+                concurrent_product = concurrent_session.get(Product, product_id)
+                assert concurrent_product is not None
+                barrier.wait()
+                job = BulkProvisioningService(
+                    LedgerService(clock=clock), clock=clock
+                ).plan(
+                    concurrent_session,
+                    organization_id,
+                    idempotency_key="concurrent-plan",
+                    product=concurrent_product,
+                    sales_market_id=market_id,
+                    person_ids=person_ids,
+                    currency="NGN",
+                    unit_amount=UNIT,
+                )
+                concurrent_session.commit()
+                return str(job.id)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            job_ids = list(pool.map(lambda _index: plan(), range(2)))
+
+        assert len(set(job_ids)) == 1
+        with Session(engine) as check:
+            jobs = check.exec(select(BulkJob)).all()
+            assert len(jobs) == 1
+
+    def test_concurrent_funding_takes_one_hold(
+        self, session, engine, service, ledger, clock
+    ):
+        organization = _organization(session)
+        _fund_organization(session, ledger, organization, "5000.00")
+        product = _product(session)
+        person = _person(session, organization, 1)
+        job = _plan(service, session, organization, product, [person])
+        job_id = job.id
+        session.commit()
+        barrier = Barrier(2)
+
+        def fund() -> int:
+            with Session(engine) as concurrent_session:
+                concurrent_job = concurrent_session.get(BulkJob, job_id)
+                assert concurrent_job is not None
+                barrier.wait()
+                progress = BulkProvisioningService(
+                    LedgerService(clock=clock), clock=clock
+                ).fund(concurrent_session, concurrent_job)
+                concurrent_session.commit()
+                return progress.reserved
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            reserved = list(pool.map(lambda _index: fund(), range(2)))
+
+        assert reserved == [1, 1]
+        with Session(engine) as check:
+            reservations = check.exec(select(Reservation)).all()
+            assert len(reservations) == 1
+            persisted = check.get(BulkJob, job_id)
+            assert persisted is not None
+            assert persisted.reserved_count == 1
+
+    def test_a_single_use_token_has_one_winner_under_concurrency(
+        self, session, engine, service, ledger, clock
+    ):
+        organization = _organization(session)
+        _fund_organization(session, ledger, organization, "5000.00")
+        entity = _entity(session)
+        product = _product(session)
+        person = _person(session, organization, 1)
+        job = _plan(service, session, organization, product, [person])
+        service.fund(session, job)
+        service.provision(session, job, seller_legal_entity_id=entity.id)
+        item = service.items(session, job)[0]
+        _request, token = service.issue_activation_request(session, job, item)
+        users = [
+            User(
+                phone_number=f"+2348{index}{uuid4().int % 10**8:08d}",
+                first_name=f"Claimer {index}",
+                platform=Platform.ANDROID,
+            )
+            for index in range(2)
+        ]
+        session.add_all(users)
+        session.flush()
+        user_ids = [user.id for user in users]
+        order_item_id = item.order_item_id
+        session.commit()
+        barrier = Barrier(2)
+
+        def redeem(user_id):
+            with Session(engine) as concurrent_session:
+                user = concurrent_session.get(User, user_id)
+                assert user is not None
+                barrier.wait()
+                try:
+                    BulkProvisioningService(
+                        LedgerService(clock=clock), clock=clock
+                    ).redeem_activation_request(concurrent_session, token, user)
+                    concurrent_session.commit()
+                    return "redeemed"
+                except BulkError as error:
+                    concurrent_session.rollback()
+                    return error.code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = list(pool.map(redeem, user_ids))
+
+        assert sorted(outcomes) == ["activation_request_spent", "redeemed"]
+        with Session(engine) as check:
+            order_item = check.get(OrderItem, order_item_id)
+            assert order_item is not None
+            assert order_item.recipient_user_id in user_ids
 
     def test_a_replayed_submission_is_the_same_job(
         self, session, service, ledger

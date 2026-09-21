@@ -1,7 +1,7 @@
 """Bulk jobs, per-recipient items and activation requests — US-40.
 
-Revision ID: 0039_bulk_provisioning
-Revises: 0038_organization_people
+Revision ID: 0042_bulk_provisioning
+Revises: 0041_organization_people
 
 **Purely additive.** Three new tables, no column added to an existing table, no
 row touched and nothing dropped. `orders`, `order_items` and
@@ -28,9 +28,9 @@ itself is returned once, to one recipient, and never stored: a table of live
 invitation tokens is a table of credentials, and this one is readable by every
 administrator of the tenant.
 
-**Numbering note.** `0039` is also taken by `0039_call_settlement` (V03) on an
-unmerged branch. This branch's `0038` is chunk 22's, which is merged underneath
-it here but not into `develop`. Whichever stack merges last renumbers.
+**Integration numbering.** The submitted migration was `0039`, based on chunk
+22's submitted `0038`. The accepted dependency chain already uses 0039–0041,
+so this integrated migration follows `0041_organization_people` as `0042`.
 """
 
 from collections.abc import Sequence
@@ -39,8 +39,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0039_bulk_provisioning"
-down_revision: str | None = "0038_organization_people"
+revision: str = "0042_bulk_provisioning"
+down_revision: str | None = "0041_organization_people"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

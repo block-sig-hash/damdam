@@ -25,7 +25,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.auth.models import Locale, Organization, OrganizationType, Platform, User
-from app.bulk.models import BulkJobItem
+from app.bulk.models import ActivationRequest, ActivationRequestState, BulkJobItem
 from app.catalog.market import PublicationStatus, SalesMarket
 from app.catalog.models import (
     LegalEntity,
@@ -295,6 +295,27 @@ class TestTheFlow:
         second = _plan(client, api, world, key="same-key")
         assert first.json()["job_id"] == second.json()["job_id"]
 
+    def test_reusing_a_key_for_a_different_request_is_a_conflict(
+        self, client, api, world
+    ):
+        first = _plan(client, api, world, key="conflicting-key")
+        assert first.status_code == 201
+
+        second = client.post(
+            f"/v1/organizations/{world['acme']}/bulk-jobs",
+            headers=_auth(api, world["owner"]),
+            json={
+                "idempotency_key": "conflicting-key",
+                "product_id": str(world["product"]),
+                "country": "NG",
+                "currency": "NGN",
+                "person_ids": [str(world["people"][0])],
+            },
+        )
+
+        assert second.status_code == 409
+        assert second.json()["error"] == "idempotency_conflict"
+
     def test_the_item_list_shows_each_recipients_own_state(
         self, client, api, world
     ):
@@ -434,6 +455,38 @@ class TestActivationHandoff:
 
         assert second.status_code == 409
         assert second.json()["error"] == "activation_request_spent"
+
+    def test_an_expired_token_is_durably_marked_expired(
+        self, client, api, world, session_factory
+    ):
+        job_id, item_id, headers = self._provisioned(client, api, world)
+        token = client.post(
+            f"/v1/organizations/{world['acme']}/bulk-jobs/{job_id}"
+            f"/items/{item_id}/activation-request",
+            headers=headers,
+        ).json()["token"]
+        with session_factory() as session:
+            request = session.exec(
+                select(ActivationRequest).where(
+                    ActivationRequest.bulk_job_item_id == UUID(item_id)
+                )
+            ).one()
+            request.expires_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+            session.add(request)
+            session.commit()
+            request_id = request.id
+
+        response = client.post(
+            "/v1/me/activation-requests/redeem",
+            headers=_auth(api, world["outsider"]),
+            json={"token": token},
+        )
+
+        assert response.status_code == 410
+        with session_factory() as session:
+            persisted = session.get(ActivationRequest, request_id)
+            assert persisted is not None
+            assert persisted.state is ActivationRequestState.EXPIRED
 
     def test_a_made_up_token_is_not_found(self, client, api, world):
         response = client.post(

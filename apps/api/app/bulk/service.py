@@ -42,6 +42,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlmodel import Session, col, select
 
 from app.auth.models import User, utc_now
@@ -131,6 +132,20 @@ class BulkProvisioningService:
         "buy for these fifty people" is one job, and without that it is a second
         fifty lines and a second fifty charges.
         """
+        bind = session.get_bind()
+        if bind.dialect.name == "postgresql":
+            # The unique constraint is the invariant; this transaction lock
+            # turns a concurrent read-then-insert into the same idempotent
+            # response instead of exposing the losing insert as a 500.
+            session.execute(
+                select(
+                    func.pg_advisory_xact_lock(
+                        func.hashtextextended(
+                            f"bulk:{organization_id}:{idempotency_key}", 0
+                        )
+                    )
+                )
+            )
         existing = session.exec(
             select(BulkJob).where(
                 BulkJob.organization_id == organization_id,
@@ -138,11 +153,30 @@ class BulkProvisioningService:
             )
         ).first()
         if existing is not None:
+            existing_people = set(
+                session.exec(
+                    select(BulkJobItem.person_id).where(
+                        BulkJobItem.job_id == existing.id
+                    )
+                ).all()
+            )
+            requested_people = set(person_ids)
+            requested_currency = currency.upper()
+            requested_amount = round_money(unit_amount, requested_currency)
+            if (
+                existing.product_id != product.id
+                or existing.sales_market_id != sales_market_id
+                or existing.currency != requested_currency
+                or existing.unit_amount != requested_amount
+                or existing_people != requested_people
+            ):
+                raise BulkError("idempotency_conflict")
             return existing
         if not person_ids:
             raise BulkError("no_recipients")
 
         now = self.clock()
+        normalized_currency = currency.upper()
         job = BulkJob(
             organization_id=organization_id,
             created_by_user_id=created_by_user_id,
@@ -150,8 +184,8 @@ class BulkProvisioningService:
             product_id=product.id,
             sales_market_id=sales_market_id,
             state=BulkJobState.PLANNED,
-            currency=currency,
-            unit_amount=round_money(unit_amount, currency),
+            currency=normalized_currency,
+            unit_amount=round_money(unit_amount, normalized_currency),
             recipient_count=len(set(person_ids)),
             created_at=now,
             updated_at=now,
@@ -208,6 +242,7 @@ class BulkProvisioningService:
         and the rest are marked, because an organization that can afford forty
         of fifty lines would rather have forty than an error message.
         """
+        self._lock_job(session, job)
         if job.state not in {BulkJobState.PLANNED, BulkJobState.FUNDED}:
             raise BulkError("job_not_fundable")
 
@@ -292,6 +327,7 @@ class BulkProvisioningService:
         are fifty order items, and each one can be cancelled, refunded and
         provisioned without touching the other forty-nine.
         """
+        self._lock_job(session, job)
         if job.state in {
             BulkJobState.COMPLETED,
             BulkJobState.PARTIALLY_COMPLETED,
@@ -381,6 +417,10 @@ class BulkProvisioningService:
         first — and until that happens this line is unfinished rather than
         failed, which is the difference between "ask again" and "buy again".
         """
+        self._lock_job(session, job)
+        self._lock_item(session, item)
+        if item.state is BulkItemState.UNKNOWN:
+            return item
         now = self.clock()
         item.state = BulkItemState.UNKNOWN
         item.error_code = reason[:64]
@@ -401,6 +441,10 @@ class BulkProvisioningService:
         self, session: Session, job: BulkJob, item: BulkJobItem, reason: str
     ) -> BulkJobItem:
         """The supplier refused, definitively. Safe to retry; hold released."""
+        self._lock_job(session, job)
+        self._lock_item(session, item)
+        if item.state is BulkItemState.FAILED:
+            return item
         now = self.clock()
         item.state = BulkItemState.FAILED
         item.error_code = reason[:64]
@@ -444,6 +488,7 @@ class BulkProvisioningService:
         `None` if it still cannot say — in which case the item **stays
         unknown** and keeps its hold. Silence is not permission.
         """
+        self._lock_job(session, job)
         to_reconcile, to_retry = self.resumable(session, job)
 
         for item in to_reconcile:
@@ -497,6 +542,8 @@ class BulkProvisioningService:
         unwinding it is a refund under chunk 14's policy, with a human and a
         reason — not a cancellation.
         """
+        self._lock_job(session, job)
+        self._lock_item(session, item)
         if item.state is BulkItemState.PROVISIONED:
             raise BulkError(
                 "item_already_provisioned",
@@ -534,6 +581,7 @@ class BulkProvisioningService:
         self, session: Session, job: BulkJob, *, reason: str
     ) -> JobProgress:
         """Stop everything that has not happened yet, and nothing that has."""
+        self._lock_job(session, job)
         for item in self._items(
             session,
             job,
@@ -561,6 +609,8 @@ class BulkProvisioningService:
         of live invitation tokens is a table of credentials, and this one is
         readable by every administrator of the tenant.
         """
+        self._lock_job(session, job)
+        self._lock_item(session, item)
         if item.state is not BulkItemState.PROVISIONED:
             raise BulkError(
                 "line_not_ready",
@@ -607,7 +657,9 @@ class BulkProvisioningService:
         """
         digest = hashlib.sha256(token.encode()).hexdigest()
         request = session.exec(
-            select(ActivationRequest).where(ActivationRequest.token_hash == digest)
+            select(ActivationRequest)
+            .where(ActivationRequest.token_hash == digest)
+            .with_for_update()
         ).first()
         if request is None:
             raise BulkError("activation_request_not_found")
@@ -691,6 +743,14 @@ class BulkProvisioningService:
         ).all()
 
     # --- internals ---------------------------------------------------------
+
+    def _lock_job(self, session: Session, job: BulkJob) -> None:
+        """Serialize every state and counter transition for one bulk job."""
+        session.refresh(job, with_for_update=True)
+
+    def _lock_item(self, session: Session, item: BulkJobItem) -> None:
+        """Refresh an item under a row lock before testing its transition."""
+        session.refresh(item, with_for_update=True)
 
     def _items(
         self, session: Session, job: BulkJob, *, states: set[BulkItemState]

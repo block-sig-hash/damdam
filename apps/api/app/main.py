@@ -19,6 +19,9 @@ from app.audit.service import AuditLogService
 from app.auth.hto import HTOAuthError, HTOService
 from app.auth.pin import PINService
 from app.auth.routes import router as auth_router
+from app.bulk.routes import recipient_router as bulk_recipient_router
+from app.bulk.routes import router as bulk_router
+from app.bulk.service import BulkError, BulkProvisioningService
 from app.calling import account_deletion as _calling_account_deletion  # noqa: F401
 from app.calling.charging import CallChargingService
 from app.calling.contract import CallingAdapter, CallingError
@@ -28,9 +31,6 @@ from app.calling.routes import webhook_router as calling_webhook_router
 from app.calling.service import CallAuthorizationError, CallAuthorizationService
 from app.calling.sessions import ClientSessionError, ClientSessionService
 from app.calling.telnyx import DisabledCallingAdapter, TelnyxCallingAdapter
-from app.bulk.routes import recipient_router as bulk_recipient_router
-from app.bulk.routes import router as bulk_router
-from app.bulk.service import BulkError, BulkProvisioningService
 from app.catalog.service import CatalogError, CatalogService
 from app.checkins.routes import router as checkin_router
 from app.checkout.catalog_view import CatalogViewService
@@ -671,6 +671,7 @@ def create_app(
             "line_not_ready": 409,
             "job_not_fundable": 409,
             "job_not_provisionable": 409,
+            "idempotency_conflict": 409,
             # 503: nothing is broken and an operator can act on it. D3 is open,
             # so a published market may genuinely have no seller recorded yet.
             "market_has_no_seller": 503,

@@ -373,7 +373,15 @@ def redeem_activation_request(
     """
     service = _service(request)
     with request.app.state.session_factory() as session:
-        record = service.redeem_activation_request(session, payload.token, user)
+        try:
+            record = service.redeem_activation_request(session, payload.token, user)
+        except BulkError as error:
+            # Expiry is a durable state transition as well as a refusal. If it
+            # rolled back with the 410, administrator views would keep showing
+            # a dead request as pending forever.
+            if error.code == "activation_request_expired":
+                session.commit()
+            raise
         view = _request_view(record)
         session.commit()
         return view

@@ -2207,7 +2207,7 @@ are flattened. These values are almost entirely text a customer typed and
 uploaded, and the file exists to be opened in a spreadsheet — which is precisely
 the combination formula injection needs.
 
-## 7.38 Amendment — Bulk Orders, Assignment and Activation (US-40)
+## 7.41 Amendment — Bulk Orders, Assignment and Activation (US-40)
 
 Chunk 23. Nine endpoints, split across two audiences and therefore two kinds of
 authority.
