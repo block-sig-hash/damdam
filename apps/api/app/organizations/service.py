@@ -374,6 +374,38 @@ class MembershipService:
         session.flush()
         return target
 
+    def revoke_for_offboarding(
+        self,
+        session: Session,
+        membership: OrganizationMember,
+        mfa: "MfaService | None" = None,
+    ) -> OrganizationMember:
+        """Revoke employment access without re-running an actor permission check.
+
+        The offboarding route has already required `member:revoke` with step-up,
+        but the target transition must still share the last-owner guard, MFA
+        invalidation and lifecycle listeners used by ordinary revocation.
+        """
+        target = self._target(
+            session, membership.organization_id, membership.user_id
+        )
+        self._refuse_if_last_owner(session, target)
+        now = self.clock()
+        target.status = MembershipStatus.REVOKED
+        target.revoked_at = now
+        target.updated_at = now
+        session.add(target)
+        if mfa is not None:
+            mfa.revoke_elevations(
+                session, target.user_id, target.organization_id, now
+            )
+        for listener in self.revocation_listeners:
+            listener.on_membership_revoked(
+                session, target.organization_id, target.user_id, now
+            )
+        session.flush()
+        return target
+
     def reinstate(
         self,
         session: Session,

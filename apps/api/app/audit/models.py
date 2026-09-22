@@ -37,6 +37,9 @@ class AuditOutcome(str, Enum):
     DEVICE_USER_LINK_STRIPPED = "device_user_link_stripped"
     DEVICE_LOG_DELETED = "device_log_deleted"
     TRANSACTION_DELETED = "transaction_deleted"
+    # Chunk 24 (US-40). A tenant's staff spend leaving on somebody's laptop is
+    # a fact worth being able to reconstruct later.
+    ENTERPRISE_REPORT_EXPORTED = "enterprise_report_exported"
 
 
 class AuditLog(SQLModel, table=True):

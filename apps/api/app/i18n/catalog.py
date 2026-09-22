@@ -83,6 +83,8 @@ _API_EN = {
     # Bulk provisioning (US-40, chunk 23). Said to an administrator mid-way
     # through buying for fifty people, so each one says what to do next.
     "job_not_found": "We could not find that bulk order on your account.",
+    # Enterprise offboarding (US-40, chunk 24).
+    "offboarding_not_found": "We could not find that offboarding record.",
     "item_not_found": "We could not find that line in this bulk order.",
     "market_has_no_seller": (
         "We cannot sell in that market yet. Please contact support."
@@ -97,6 +99,7 @@ _API_EN = {
     "item_not_awaiting_supplier": (
         "That line is not waiting for a supplier outcome."
     ),
+    "recipient_archived": "This recipient has left the organization.",
     "line_not_ready": "That line is not ready to be handed over yet.",
     "activation_request_exists": "That person already has an invitation waiting.",
     "activation_request_spent": "That invitation has already been used.",
@@ -312,6 +315,7 @@ _API_FR = {
     "market_not_verified": "Ce marché n'a pas été vérifié pour la vente.",
     "order_not_found": "Nous n'avons pas trouvé cette commande.",
     "job_not_found": "Nous n'avons pas trouvé cette commande groupée.",
+    "offboarding_not_found": "Nous n'avons pas trouvé cet enregistrement de départ.",
     "item_not_found": "Nous n'avons pas trouvé cette ligne dans cette commande.",
     "market_has_no_seller": (
         "Nous ne pouvons pas encore vendre sur ce marché. Contactez le support."
@@ -326,6 +330,7 @@ _API_FR = {
     "item_not_awaiting_supplier": (
         "Cette ligne n'attend pas de résultat du fournisseur."
     ),
+    "recipient_archived": "Ce destinataire a quitté l'organisation.",
     "line_not_ready": "Cette ligne n'est pas encore prête à être transmise.",
     "activation_request_exists": (
         "Cette personne a déjà une invitation en attente."

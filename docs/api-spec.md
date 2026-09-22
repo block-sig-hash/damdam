@@ -2303,3 +2303,90 @@ A claimed invitation says nothing about a profile reaching a handset or a
 network seeing it; those are separate facts on separate resources, and merging
 them here would let a dashboard report staff as connected on the strength of an
 email.
+
+## 7.42 Amendment — Enterprise Funding, Reports and Offboarding (US-40)
+
+Chunk 24. Six endpoints under `/v1/organizations/{organization_id}`, and the
+permissions are the point: *financial permissions and audited exports.*
+
+### Endpoints
+
+| Endpoint | Permission | Purpose |
+|---|---|---|
+| `GET /funding` | `billing:read` | Credit, holds and any recorded cap |
+| `GET /reports/departments` | `report:read` | Spend by team or cost centre |
+| `GET /reports/departments.csv` | `report:export` | The same, as an audited file |
+| `POST /offboardings` | `member:revoke` **(step-up)** | Somebody left |
+| `GET /offboardings` | `people:read` | Past departures |
+| `GET /offboardings/{id}` | `people:read` | Every action and its outcome |
+
+### Reading money, reading reports and exporting them are three rights
+
+Billing may read a report and may **not** export one: a download leaves the
+building. Offboarding is behind `member:revoke`, which chunk 07 puts behind a
+second factor — ending somebody's access is exactly what a stolen session must
+not be able to do. *Reading* a departure record is `people:read` instead: it
+names who left and why, which is people data, and requiring a second factor to
+look at a list nobody can act on trains administrators to step up for
+everything.
+
+### Three balances that are not the same number
+
+`GET /funding` returns `balance`, `held` and `available` from the ledger;
+`committed_this_period` for authorized or paid orders; and
+`spent_this_period` for paid orders only. A reservation is not called settled
+spend. `period_cap` and `headroom` come from recorded policy, with headroom
+reduced by commitments. `pooling` is **always `false` today** and is present so
+a client cannot render a shared bucket by assuming one.
+
+`period_cap: null` means **undecided**, not unlimited. A client that renders a
+missing cap as infinity is inventing a commitment nobody made.
+
+### A report says how fresh it is
+
+`observed_through` is the oldest of each work line's latest authoritative usage
+observations. **`null` means at least one line has never been observed**, which
+is not the same as zero used. One healthy line therefore cannot hide a stalled
+line behind a newer organization-wide maximum.
+
+Purchases and usage are reported **side by side, never summed**. An order is
+known the moment it is placed; usage is known when a supplier says so. Adding
+them produces a number that is neither.
+
+### The export is audited and safe to open
+
+Every cell passes through `csv_safe` — team and cost-centre names are text a
+customer typed, and the file exists to be opened in a spreadsheet. The download
+writes an audit entry naming who took what. And the freshness line is written
+**into the file**, because a CSV outlives the screen it came from and a total
+with no "as of" becomes a current figure the moment it is pasted into a deck.
+
+### Offboarding reports what is still pending
+
+`POST /offboardings` returns every action attempted with its own state:
+`confirmed` for what we did ourselves, `pending_carrier` for a suspension a
+carrier has not answered, `not_applicable` for what there was none of. A run
+with an unanswered request is `completed_with_pending` — **not** `completed`,
+because an administrator told "done" about a live line finds out from an invoice.
+A failed local action yields `completed_with_exceptions` and remains visible in
+the action list.
+
+Actions are recorded even when there was nothing to do, so the record answers
+"was their line suspended?" with "they had none" rather than with silence.
+
+The call is idempotent: a second request for somebody already offboarded returns
+the existing record rather than re-asking a carrier to suspend a line it is
+already suspending.
+
+The same transaction preserves the last-owner invariant, revokes MFA elevation,
+stops organization-funded internet calls through the shared calling lifecycle,
+expires local work entitlements, and cancels only safe requested/reserved
+top-ups. Paid top-ups require a refund; supplier-in-flight or unknown line and
+top-up outcomes remain held and `pending_carrier` until reconciled.
+
+### Personal service is untouched
+
+Offboarding reaches only what the organization paid for. A line the same person
+bought themselves is on an order with no `payer_organization_id`, and every
+query here joins through that column — so it is out of scope by construction
+rather than by a filter somebody remembered to add.

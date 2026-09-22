@@ -3729,3 +3729,72 @@ amendment, and the shared connectivity service grants that local entitlement.
 The per-line ledger rows are reservations, not captured charges or settlement.
 Consequently this amendment cannot perform a provisioned-line refund: that
 requires a captured payment and an approved refund policy/integration.
+
+## 6.59 Amendment — Offboarding Runs and Their Actions (US-40)
+
+Chunk 24. Two tables, both additive, and one deliberate absence: **funding,
+budgets and departmental reporting add no schema at all.**
+
+### Reporting owns no tables
+
+A departmental report is a read over the ledger, chunk 17's policies, chunk 22's
+teams and cost centres and chunk 16's usage records. Storing it would create a
+number that starts drifting from the books the moment it is written, and the one
+thing an enterprise report must be is reconcilable with the ledger. The
+freshness of the usage half travels with the report instead — see below.
+
+### Offboarding is not one action
+
+Somebody leaves, and what has to happen is: dashboard access and active work
+calls end, unclaimed invitations are withdrawn, safe pending lines and top-up
+holds are released, local work entitlements expire, live carrier lines are
+suspended — and their **personal** service is left completely alone.
+
+Some of that is ours and instant. Some is a request to a carrier whose answer
+arrives later or never. A boolean `offboarded` column would have to lie about
+the difference in both directions, so `offboarding_actions` records one row per
+attempt with its own outcome, including `pending_carrier`.
+Runs with a failed local action are `completed_with_exceptions`, rather than
+being labelled complete merely because no carrier request remains.
+
+`ux_organization_offboardings_open` allows one open run per person: pressing the
+button twice is the same departure, and two runs would race each other's
+suspensions. `ck_offboarding_actions_failure_reason` requires a failed action to
+say why — one that failed silently is indistinguishable from one never
+attempted.
+
+### Personal service survives, by construction
+
+Every query that finds a person's *work* lines joins through
+`orders.payer_organization_id`. A line the same person bought themselves is on
+an order with a `payer_user_id` and no organization, and it is not in the
+result — so "personal services survive work offboarding" is a property of the
+join rather than a filter somebody remembers to write.
+
+**Nothing reassigns a line.** *Do not silently transfer a live profile to
+another person*: an eSIM on a departing employee's handset is not moveable by
+updating a row, and reassignment is a suspension plus a new line for the new
+holder — two decisions with a person in the middle of them.
+
+### Three kinds of "balance" that are not the same thing
+
+- **Service credit** is money with us: a ledger balance, an amount held against
+  commitments, and what is left.
+- **A per-line allowance** is what one line may consume. Bytes and seconds
+  granted by a product; not money, and it does not move between lines.
+- **Pooling** is a carrier capability — several lines drawing from one bucket at
+  the network. **We do not have it.** No adapter advertises it and chunk 16
+  found no supplier evidence for it, so `FundingSummary.pooling` is a field that
+  says `false` rather than a silence a dashboard could fill with a shared bucket.
+
+Money committed to authorized orders and money settled on paid orders are also
+separate fields. Policy headroom subtracts both authorized and paid commitments,
+while `spent_this_period` contains paid orders only; a reservation is not
+reported as a charge.
+
+### Freshness is part of a usage number
+
+Usage arrives late and sometimes stops arriving. Every report carries
+`observed_through` — the **oldest of each line's latest authoritative
+observation**. `None` means at least one line has never been observed, which is
+not zero usage. A maximum would let one healthy line hide fifty stalled ones.

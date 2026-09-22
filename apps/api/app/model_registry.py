@@ -30,6 +30,7 @@ from app.catalog import tariffs as _catalog_tariffs
 from app.checkins import models as _checkins
 from app.connectivity import models as _connectivity
 from app.controls import models as _controls
+from app.enterprise import models as _enterprise
 from app.esim import models as _esim
 from app.fulfilment import models as _fulfilment
 from app.identity import models as _identity
