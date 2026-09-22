@@ -3812,13 +3812,13 @@ entries through §6.47's ledger.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` | PK |
-| `kind` | `operator_action_kind` | `confirm_supplier_success`, `confirm_supplier_failure`, `resolve_payment_discrepancy`, `dismiss_exception`, `view_sensitive_record` |
-| `subject_kind` | `operator_subject_kind` | `order_item`, `supplier_attempt`, `payment`, `exception_item`, `organization` |
+| `kind` | `operator_action_kind` | `confirm_supplier_success`, `confirm_supplier_failure`, `resolve_payment_discrepancy`, `correct_call_settlement`, `dismiss_exception`, `view_sensitive_record` |
+| `subject_kind` | `operator_subject_kind` | `order_item`, `supplier_attempt`, `payment`, `exception_item`, `organization`, `call_charge` |
 | `subject_reference` | `varchar(200)` | The thing acted on, as a stable string |
 | `actor_admin_id` | `uuid` | → `admin_users.id`, `RESTRICT` |
 | `reason` | `varchar(500)` | Non-blank, enforced by check |
 | `idempotency_key` | `varchar(200)` | The caller's key for *this decision* |
-| `exception_item_id` | `uuid \| null` | → `exception_items.id`, `SET NULL` |
+| `exception_item_id` | `uuid \| null` | → `exception_items.id`, `RESTRICT`; the evidence link is part of the immutable record |
 | `before_state` / `after_state` | `jsonb` | Copied, not referenced |
 | `ledger_entry_id` | `uuid \| null` | → `journal_entries.id`, `RESTRICT`; set only when money moved |
 | `created_at` | `timestamptz` | |
@@ -3857,33 +3857,40 @@ this change" without re-reading a table that has changed again since.
 
 ### Reconcile before resolving, enforced as a refusal
 
-An operator may not declare a supplier attempt successful or failed while its
-outcome is `outcome_unknown` and nobody has asked the supplier. The caller
-asserts reconciliation explicitly; without it the service raises
-`reconciliation_required` and writes nothing. §6.48's whole design rests on a
-lost response being *asked about* rather than guessed at, and an operations
-screen that let a human skip it would reintroduce the duplicate purchase that
-design exists to prevent.
+An operator may not declare a supplier attempt successful or failed unless its
+durable outcome is already `held_for_review`, the state written after automatic
+reconciliation could not establish a result. There is deliberately no
+`reconciled` request field: caller testimony cannot replace stored evidence.
+The attempt is row-locked and reloaded after the subject advisory lock, so two
+operators using different idempotency keys cannot both record a decision.
 
-A confirmed success additionally requires the supplier's own reference —
-`ck_supplier_attempts_accepted_reference` already refuses an accepted attempt
-without one, and it is right to: a success with nothing behind it is an
-operator's word.
+A confirmed success additionally requires the supplier's own reference and an
+already-adopted local carrier line with the same supplier and reference. A
+failure is refused when any such local service has already been adopted. These
+checks keep an operations decision from overwriting stronger provisioning
+evidence in either direction.
 
 ### Money moves only through balanced entries
 
 There is no balance column here and no balance-setting path. A payment
-discrepancy is settled by posting a compensating entry through §6.47's ledger,
-which refuses anything that does not balance, and the resulting
-`journal_entries.id` is recorded on the action. Cross-currency compensation is
-refused rather than converted: inventing an FX rate inside an exception queue is
-how one discrepancy becomes two.
+discrepancy must name an open `unmatched_bank_transfer` exception whose
+`bank:<receipt-id>` subject resolves to an immutable unmatched receipt. The
+caller chooses only a non-system customer `service_credit` account in the same
+currency; amount, currency, value date and settlement-clearing account all come
+from the receipt. The balanced journal entry id is recorded on the action and
+the receipt becomes matched in the same transaction.
+
+Call settlement correction delegates to §6.58's bounded replacement-charge
+path. It preserves the old charge, posts only the difference, cannot exceed the
+accepted reservation rules, and closes only the exact open call exception.
 
 ### A dismissal resolves; it never deletes
 
 `dismiss_exception` sets `exception_items.resolved_at` and records why. The row
 stays, because "somebody read this and decided it was fine" is information, and
-an empty queue is not evidence of a quiet week.
+an empty queue is not evidence of a quiet week. Financial, dispute, refund and
+calling-liability kinds cannot use dismissal; they require their bounded
+resolution workflow.
 
 ### Looking is an action
 

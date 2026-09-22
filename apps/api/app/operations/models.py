@@ -10,8 +10,8 @@ that failed. Somebody has to decide. The danger is not that they decide wrongly
 — it is that six months later nobody can tell what they decided, on what
 evidence, or whether the money moved twice.
 
-So every constrained action writes a row here **before** it is allowed to have
-an effect, carrying:
+So every constrained action and its domain effect are committed atomically,
+carrying:
 
 - **who** — an internal operator, not a customer and not an enterprise
   administrator. A different token audience entirely.
@@ -96,6 +96,8 @@ class OperatorActionKind(str, Enum):
     #: A payment arrived that our records cannot account for, resolved by a
     #: balanced compensating entry.
     RESOLVE_PAYMENT_DISCREPANCY = "resolve_payment_discrepancy"
+    #: Replace a call charge through V03's bounded correction path.
+    CORRECT_CALL_SETTLEMENT = "correct_call_settlement"
     #: An exception item a human has read and decided needs nothing.
     DISMISS_EXCEPTION = "dismiss_exception"
     #: Somebody looked at masked customer data. Recorded because looking is
@@ -111,6 +113,7 @@ class OperatorSubjectKind(str, Enum):
     PAYMENT = "payment"
     EXCEPTION_ITEM = "exception_item"
     ORGANIZATION = "organization"
+    CALL_CHARGE = "call_charge"
 
 
 class OperatorAction(SQLModel, table=True):
@@ -167,7 +170,7 @@ class OperatorAction(SQLModel, table=True):
     exception_item_id: UUID | None = Field(
         default=None,
         sa_column=Column(
-            ForeignKey("exception_items.id", ondelete="SET NULL"), nullable=True
+            ForeignKey("exception_items.id", ondelete="RESTRICT"), nullable=True
         ),
     )
     #: What the world looked like, copied. A reference to a row that has since

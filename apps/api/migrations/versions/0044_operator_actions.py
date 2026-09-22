@@ -50,13 +50,21 @@ _NEW_ENUMS = (
             "confirm_supplier_success",
             "confirm_supplier_failure",
             "resolve_payment_discrepancy",
+            "correct_call_settlement",
             "dismiss_exception",
             "view_sensitive_record",
         ),
     ),
     (
         "operator_subject_kind",
-        ("order_item", "supplier_attempt", "payment", "exception_item", "organization"),
+        (
+            "order_item",
+            "supplier_attempt",
+            "payment",
+            "exception_item",
+            "organization",
+            "call_charge",
+        ),
     ),
 )
 
@@ -106,7 +114,7 @@ def upgrade() -> None:
         sa.Column(
             "exception_item_id",
             postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("exception_items.id", ondelete="SET NULL"),
+            sa.ForeignKey("exception_items.id", ondelete="RESTRICT"),
             nullable=True,
         ),
         sa.Column(

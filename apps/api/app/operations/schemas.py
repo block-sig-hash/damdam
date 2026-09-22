@@ -20,7 +20,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.operations.models import OperatorActionKind, OperatorSubjectKind
 from app.refunds.models import ExceptionKind
@@ -28,6 +28,8 @@ from app.refunds.models import ExceptionKind
 
 class ActionRequest(BaseModel):
     """The two fields every constrained action needs from its caller."""
+
+    model_config = ConfigDict(extra="forbid")
 
     #: Why. Stored, immutable, and required by a database check as well as here
     #: — a form is one client release away from not asking.
@@ -40,15 +42,13 @@ class ActionRequest(BaseModel):
 class SupplierResolutionRequest(ActionRequest):
     """Settle a supplier attempt whose outcome we lost.
 
-    `reconciled` is a required assertion, not a flag with a convenient default.
-    The operator is stating that somebody asked the supplier what happened to
-    the original idempotency key. Chunk 11's entire duplicate-purchase defence
-    rests on that question being asked, so the API makes answering it explicit
-    and the service refuses when the answer is `false`.
+    The attempt itself must already be `held_for_review`, which is the durable
+    result of reconciling the original operation against the original supplier.
+    The request deliberately has no "reconciled" checkbox: caller testimony is
+    not evidence that the supplier was asked.
     """
 
     succeeded: bool
-    reconciled: bool
     #: Required when `succeeded` is true: the supplier's own reference for the
     #: work being confirmed. A confirmed success with nothing behind it is an
     #: operator's word, and the schema for supplier attempts already refuses it.
@@ -57,15 +57,19 @@ class SupplierResolutionRequest(ActionRequest):
 
 
 class PaymentDiscrepancyRequest(ActionRequest):
-    """Post a balanced compensating entry. There is no balance setter."""
+    """Match one reconciled bank receipt to a customer service-credit account."""
 
-    debit_account_id: UUID
-    credit_account_id: UUID
-    amount: Decimal = Field(gt=0)
-    #: What the discrepancy is about, as a support reference — the string an
-    #: operator can search for later.
-    subject_reference: str = Field(min_length=1, max_length=200)
-    exception_item_id: UUID | None = None
+    customer_account_id: UUID
+    exception_item_id: UUID
+
+
+class CallSettlementCorrectionRequest(ActionRequest):
+    """Replace one call charge through V03's bounded correction path."""
+
+    billable_seconds: int = Field(ge=0)
+    setup_amount: Decimal = Field(ge=0)
+    usage_amount: Decimal = Field(ge=0)
+    exception_item_id: UUID
 
 
 class LineLookupRequest(ActionRequest):

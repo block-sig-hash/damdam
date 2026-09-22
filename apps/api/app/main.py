@@ -658,6 +658,9 @@ def create_app(
             # Not 403. "Is not yours" and "does not exist" must be
             # indistinguishable, or the id becomes an oracle.
             "line_not_found": 404,
+            "bank_receipt_not_found": 404,
+            "call_charge_not_found": 404,
+            "call_attempt_not_found": 404,
             "profile_not_issued": 409,
             # 503, not 500: nothing is broken. The deployment has no activation
             # key, so no profile can be delivered, and that is a configuration
@@ -750,7 +753,16 @@ def create_app(
             # retrying the request unchanged must not succeed.
             "reconciliation_required": 409,
             "provider_reference_required": 409,
+            "supplier_success_not_adopted": 409,
+            "supplier_failure_has_adopted_service": 409,
             "attempt_already_settled": 409,
+            "idempotency_conflict": 409,
+            "exception_subject_mismatch": 409,
+            "exception_already_resolved": 409,
+            "exception_kind_mismatch": 409,
+            "exception_requires_resolution": 409,
+            "bank_receipt_not_unmatched": 409,
+            "invalid_customer_account": 409,
             "cross_currency_compensation": 409,
             # 400: the request itself is malformed, not the world.
             "one_identifier_required": 400,

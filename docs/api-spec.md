@@ -2393,7 +2393,7 @@ rather than by a filter somebody remembered to add.
 
 ## 7.43 Amendment — The Internal Operations Surface (US-41)
 
-Chunk 25. Seven endpoints under `/v1/operations`, and the first thing to say
+Chunk 25. Eight endpoints under `/v1/operations`, and the first thing to say
 about them is who cannot reach them.
 
 ### Endpoints
@@ -2403,7 +2403,8 @@ about them is who cannot reach them.
 | `GET /operations/exceptions` | The queue, filtered by kind and searched by support-reference prefix |
 | `GET /operations/actions` | Every operator decision, newest first |
 | `POST /operations/supplier-attempts/{attempt_id}/resolution` | Settle a lost supplier outcome, after reconciliation |
-| `POST /operations/payment-discrepancies` | Post a balanced compensating entry |
+| `POST /operations/payment-discrepancies` | Match an unmatched bank receipt to customer service credit |
+| `POST /operations/call-charges/{charge_id}/correction` | Replace a call charge through V03's bounded correction path |
 | `POST /operations/exceptions/{exception_id}/dismissal` | Close an item that needs nothing, with a reason |
 | `POST /operations/lines/lookup` | Confirm a line from a masked identifier |
 | `GET /operations/organizations/{organization_id}/lines.csv` | One tenant's lines, masked, audited |
@@ -2428,22 +2429,36 @@ posted twice.
 
 ### `409 reconciliation_required` is a refusal, not a warning
 
-`POST /supplier-attempts/{id}/resolution` takes `reconciled` as an explicit
-assertion that somebody asked the supplier what happened to the original
-operation reference. Without it the request fails with `409` and the attempt is
-unchanged. Confirming a *success* additionally requires `provider_reference`;
-omitting it fails with `409 provider_reference_required`.
+`POST /supplier-attempts/{id}/resolution` has no `reconciled` checkbox. The
+stored attempt must already be `held_for_review`, proving that reconciliation
+against the original supplier completed without a definitive answer. Otherwise
+the request fails with `409 reconciliation_required` and remains unchanged.
+Confirming success additionally requires `provider_reference` and a local
+adopted carrier line with that supplier reference. Confirming failure is refused
+when a local carrier line already proves that service was adopted.
 
 Related refusals: `409 attempt_already_settled`,
-`409 cross_currency_compensation`, `400 one_identifier_required`,
-`400 non_positive_amount`.
+`409 supplier_success_not_adopted`,
+`409 supplier_failure_has_adopted_service`, `400 one_identifier_required`.
 
 ### The one money path posts, it does not set
 
-`POST /operations/payment-discrepancies` names two ledger accounts and an
-amount, and the response carries the `ledger_entry_id` of a balanced entry. No
-endpoint on this surface accepts a balance, and no operations route is a `PUT`
-or `PATCH`.
+`POST /operations/payment-discrepancies` names an open unmatched-bank-transfer
+exception and a receiving customer service-credit account. The exception's
+immutable bank receipt supplies the amount, currency, value date and
+settlement-clearing account; the caller cannot choose them. The response carries
+the `ledger_entry_id` of the balanced entry. No endpoint accepts a balance, and
+no operations route is a `PUT` or `PATCH`.
+
+`POST /operations/call-charges/{id}/correction` delegates to V03's correction
+service. It preserves the original charge, posts only the bounded difference,
+requires the exact open call exception and records the replacement charge and
+journal entry in the immutable operator action.
+
+Exception dismissal is intentionally narrower than exception visibility.
+Unmatched payments, excess payments, refunds, disputes, settlement mismatches
+and all call-liability kinds cannot be dismissed; they must use a constrained
+resolution path.
 
 ### The lookup is a `POST` because it writes
 

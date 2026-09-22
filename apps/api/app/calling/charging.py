@@ -390,6 +390,7 @@ class CallChargingService:
         basis: ChargeBasis,
         detail: str,
         revenue_account: LedgerAccount | None = None,
+        record_manual_exception: bool = True,
     ) -> CallCharge:
         """Replace a charge with a corrected one, moving only the difference.
 
@@ -521,7 +522,7 @@ class CallChargingService:
 
         self._release_everything(session, self._reservation(session, attempt))
 
-        if basis is ChargeBasis.MANUAL_CORRECTION:
+        if basis is ChargeBasis.MANUAL_CORRECTION and record_manual_exception:
             # A human decided this amount. The queue keeps the reason beside the
             # money, so the correction can be answered later without asking who
             # remembers why.

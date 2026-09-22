@@ -2318,11 +2318,9 @@ paths:
       - Operations
       summary: Resolve Supplier Attempt
       description: "Settle a purchase whose outcome we lost \u2014 after asking the\
-        \ supplier.\n\nReturns `409 reconciliation_required` when the caller has not\
-        \ asserted that\nsomebody reconciled against the original operation reference.\
-        \ This is the\nsingle most important refusal in the chunk: an operations screen\
-        \ that let a\nhuman skip it would reintroduce exactly the duplicate purchase\
-        \ chunk 11's\ndesign exists to prevent."
+        \ supplier.\n\nReturns `409 reconciliation_required` unless the durable attempt\
+        \ state says\nthe original supplier reconciliation ran and ended held for\
+        \ human review."
       operationId: resolve_supplier_attempt_v1_operations_supplier_attempts__attempt_id__resolution_post
       security:
       - HTTPBearer: []
@@ -2361,12 +2359,9 @@ paths:
       description: 'The only money path here, and it is a balanced posting.
 
 
-        Both accounts are named by the caller and both must hold the same currency.
+        The reconciled bank receipt supplies the amount, currency, clearing account
 
-        Converting inside an exception queue would invent a rate nobody agreed, so
-        a
-
-        cross-currency compensation is refused rather than rounded.'
+        and value date. The caller can select only the receiving customer account.'
       operationId: resolve_payment_discrepancy_v1_operations_payment_discrepancies_post
       requestBody:
         content:
@@ -2389,6 +2384,43 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /v1/operations/call-charges/{charge_id}/correction:
+    post:
+      tags:
+      - Operations
+      summary: Correct Call Settlement
+      description: Replace a call charge without editing history or exceeding its
+        hold.
+      operationId: correct_call_settlement_v1_operations_call_charges__charge_id__correction_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: charge_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Charge Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallSettlementCorrectionRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorActionView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/operations/exceptions/{exception_id}/dismissal:
     post:
       tags:
@@ -5193,6 +5225,7 @@ components:
           maxLength: 200
           minLength: 1
           title: Idempotency Key
+      additionalProperties: false
       type: object
       required:
       - reason
@@ -5976,6 +6009,51 @@ components:
       - pstn_minutes_charged
       - started_at
       title: CallResponse
+    CallSettlementCorrectionRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+        idempotency_key:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Idempotency Key
+        billable_seconds:
+          type: integer
+          minimum: 0.0
+          title: Billable Seconds
+        setup_amount:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Setup Amount
+        usage_amount:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Usage Amount
+        exception_item_id:
+          type: string
+          format: uuid
+          title: Exception Item Id
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      - idempotency_key
+      - billable_seconds
+      - setup_amount
+      - usage_amount
+      - exception_item_id
+      title: CallSettlementCorrectionRequest
+      description: Replace one call charge through V03's bounded correction path.
     CallType:
       type: string
       enum:
@@ -7594,6 +7672,7 @@ components:
             maxLength: 16
           - type: 'null'
           title: E164
+      additionalProperties: false
       type: object
       required:
       - reason
@@ -8487,6 +8566,7 @@ components:
       - confirm_supplier_success
       - confirm_supplier_failure
       - resolve_payment_discrepancy
+      - correct_call_settlement
       - dismiss_exception
       - view_sensitive_record
       title: OperatorActionKind
@@ -8573,6 +8653,7 @@ components:
       - payment
       - exception_item
       - organization
+      - call_charge
       title: OperatorSubjectKind
       description: What an action was about.
     OrderItemResponse:
@@ -8831,42 +8912,24 @@ components:
           maxLength: 200
           minLength: 1
           title: Idempotency Key
-        debit_account_id:
+        customer_account_id:
           type: string
           format: uuid
-          title: Debit Account Id
-        credit_account_id:
-          type: string
-          format: uuid
-          title: Credit Account Id
-        amount:
-          anyOf:
-          - type: number
-            exclusiveMinimum: 0.0
-          - type: string
-            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-          title: Amount
-        subject_reference:
-          type: string
-          maxLength: 200
-          minLength: 1
-          title: Subject Reference
+          title: Customer Account Id
         exception_item_id:
-          anyOf:
-          - type: string
-            format: uuid
-          - type: 'null'
+          type: string
+          format: uuid
           title: Exception Item Id
+      additionalProperties: false
       type: object
       required:
       - reason
       - idempotency_key
-      - debit_account_id
-      - credit_account_id
-      - amount
-      - subject_reference
+      - customer_account_id
+      - exception_item_id
       title: PaymentDiscrepancyRequest
-      description: Post a balanced compensating entry. There is no balance setter.
+      description: Match one reconciled bank receipt to a customer service-credit
+        account.
     PaymentMethodKind:
       type: string
       enum:
@@ -10115,9 +10178,6 @@ components:
         succeeded:
           type: boolean
           title: Succeeded
-        reconciled:
-          type: boolean
-          title: Reconciled
         provider_reference:
           anyOf:
           - type: string
@@ -10130,25 +10190,23 @@ components:
             format: uuid
           - type: 'null'
           title: Exception Item Id
+      additionalProperties: false
       type: object
       required:
       - reason
       - idempotency_key
       - succeeded
-      - reconciled
       title: SupplierResolutionRequest
       description: 'Settle a supplier attempt whose outcome we lost.
 
 
-        `reconciled` is a required assertion, not a flag with a convenient default.
+        The attempt itself must already be `held_for_review`, which is the durable
 
-        The operator is stating that somebody asked the supplier what happened to
+        result of reconciling the original operation against the original supplier.
 
-        the original idempotency key. Chunk 11''s entire duplicate-purchase defence
+        The request deliberately has no "reconciled" checkbox: caller testimony is
 
-        rests on that question being asked, so the API makes answering it explicit
-
-        and the service refuses when the answer is `false`.'
+        not evidence that the supplier was asked.'
     SupportCategory:
       type: string
       enum:

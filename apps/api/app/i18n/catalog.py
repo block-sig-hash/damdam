@@ -122,6 +122,14 @@ _API_EN = {
         "Record the supplier's own reference for the success you are "
         "confirming."
     ),
+    "supplier_success_not_adopted": (
+        "That supplier reference is not attached to a local line yet. Reconcile "
+        "and adopt the service before marking it provisioned."
+    ),
+    "supplier_failure_has_adopted_service": (
+        "A local carrier line already proves this service was adopted. Resolve "
+        "that contradiction before marking the purchase failed."
+    ),
     "attempt_already_settled": (
         "That supplier attempt already has a definitive outcome."
     ),
@@ -135,8 +143,20 @@ _API_EN = {
     "non_positive_amount": "A compensating entry needs a positive amount.",
     "supplier_attempt_not_found": "We could not find that supplier attempt.",
     "exception_not_found": "We could not find that exception item.",
+    "exception_subject_mismatch": (
+        "That exception belongs to different work and cannot be closed by this action."
+    ),
+    "exception_already_resolved": "That exception has already been resolved.",
+    "exception_kind_mismatch": "That exception cannot be resolved by this action.",
+    "exception_requires_resolution": (
+        "That exception carries money or service liability and cannot be dismissed."
+    ),
+    "bank_receipt_not_found": "We could not find that bank receipt.",
+    "bank_receipt_not_unmatched": "That bank receipt has already been matched.",
+    "invalid_customer_account": "Choose a customer service-credit account.",
+    "call_charge_not_found": "We could not find that call charge.",
+    "call_attempt_not_found": "We could not find the call behind that charge.",
     "ledger_account_not_found": "We could not find that ledger account.",
-    "line_not_found": "We could not find a line with that identifier.",
     "merchant_not_found": "No payment account is set up for this seller.",
     "live_collection_disabled": "We cannot take payments yet. Nothing has been charged.",
     "no_merchant_account": "No payment account is set up for this currency.",
@@ -382,6 +402,14 @@ _API_FR = {
         "Enregistrez la référence du fournisseur pour le succès que vous "
         "confirmez."
     ),
+    "supplier_success_not_adopted": (
+        "Cette référence fournisseur n'est pas encore liée à une ligne locale. "
+        "Rapprochez et adoptez le service avant de le marquer provisionné."
+    ),
+    "supplier_failure_has_adopted_service": (
+        "Une ligne opérateur locale prouve déjà que ce service a été adopté. "
+        "Résolvez cette contradiction avant de marquer l'achat comme échoué."
+    ),
     "attempt_already_settled": (
         "Cette tentative fournisseur a déjà un résultat définitif."
     ),
@@ -400,8 +428,23 @@ _API_FR = {
         "Nous n'avons pas trouvé cette tentative fournisseur."
     ),
     "exception_not_found": "Nous n'avons pas trouvé cet élément d'exception.",
+    "exception_subject_mismatch": (
+        "Cette exception concerne une autre opération et ne peut pas être "
+        "fermée par cette action."
+    ),
+    "exception_already_resolved": "Cette exception a déjà été résolue.",
+    "exception_kind_mismatch": (
+        "Cette exception ne peut pas être résolue par cette action."
+    ),
+    "exception_requires_resolution": (
+        "Cette exception engage des fonds ou un service et ne peut pas être classée."
+    ),
+    "bank_receipt_not_found": "Nous n'avons pas trouvé ce reçu bancaire.",
+    "bank_receipt_not_unmatched": "Ce reçu bancaire a déjà été rapproché.",
+    "invalid_customer_account": "Choisissez un compte de crédit de service client.",
+    "call_charge_not_found": "Nous n'avons pas trouvé cette facturation d'appel.",
+    "call_attempt_not_found": "Nous n'avons pas trouvé l'appel lié à cette facturation.",
     "ledger_account_not_found": "Nous n'avons pas trouvé ce compte du grand livre.",
-    "line_not_found": "Nous n'avons pas trouvé de ligne avec cet identifiant.",
     "merchant_not_found": "Aucun compte de paiement n'est configuré pour ce vendeur.",
     "live_collection_disabled": "Nous ne pouvons pas encore accepter de paiements. Rien n'a été débité.",
     "no_merchant_account": "Aucun compte de paiement n'est configuré pour cette devise.",

@@ -41,12 +41,15 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import or_, text
 from sqlmodel import Session, col, select
 
 from app.auth.models import AdminUser, utc_now
+from app.calling.charging import CallChargingService, ChargingError
+from app.calling.models import CallAttempt, CallCharge, ChargeBasis
+from app.connectivity.models import CarrierLine, Entitlement
 from app.fulfilment.models import AttemptOutcome, SupplierAttempt
-from app.ledger.models import Direction, LedgerAccount
+from app.ledger.models import AccountKind, Direction, LedgerAccount, OwnerKind
 from app.ledger.service import LedgerService, Posting
 from app.money import round_money
 from app.operations.models import (
@@ -55,7 +58,12 @@ from app.operations.models import (
     OperatorSubjectKind,
 )
 from app.orders.models import OrderItem, ProvisioningState
-from app.refunds.models import ExceptionItem, ExceptionKind
+from app.refunds.models import (
+    BankFundingStatus,
+    BankTransferReceipt,
+    ExceptionItem,
+    ExceptionKind,
+)
 
 
 class OperationsError(Exception):
@@ -143,7 +151,7 @@ class OperationsService:
                 detail=item.detail,
                 raised_at=item.raised_at,
                 resolved_at=item.resolved_at,
-                action_count=self._action_count(session, item.subject_reference),
+                action_count=self._action_count(session, item),
             )
             for item in items
         ]
@@ -182,26 +190,51 @@ class OperationsService:
     ) -> OperatorAction:
         """Settle a purchase whose outcome we lost — **after** asking the supplier.
 
-        `reconciled` is passed by the caller because reconciliation talks to a
-        supplier and this module does not. It is a required, explicit assertion
-        that somebody went and looked: an operator who has not reconciled cannot
-        proceed by clicking harder, and the refusal names the reason.
+        The durable `held_for_review` outcome is the proof that the automatic
+        reconciler asked the original supplier and could not establish the
+        result. A request-body assertion is not evidence and cannot substitute
+        for that state transition.
 
         This is the single most important guard in the chunk. Chunk 11's whole
         design rests on a lost response being *asked about* rather than guessed
         at, and an operations screen that let a human skip it would reintroduce
         the duplicate purchase that design exists to prevent.
         """
-        self._lock(session, f"supplier-attempt:{attempt.id}")
+        cleaned_reason = self._clean_reason(reason)
+        subject_reference = f"supplier_attempt:{attempt.id}"
+        self._lock(session, subject_reference.replace("_", "-"))
+        current_attempt = session.exec(
+            select(SupplierAttempt)
+            .where(SupplierAttempt.id == attempt.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        if current_attempt is None:
+            raise OperationsError("supplier_attempt_not_found")
+        attempt = current_attempt
         existing = self._replayed(
             session,
             OperatorActionKind.CONFIRM_SUPPLIER_SUCCESS
             if succeeded
             else OperatorActionKind.CONFIRM_SUPPLIER_FAILURE,
-            f"supplier_attempt:{attempt.id}",
+            subject_reference,
             idempotency_key,
         )
         if existing is not None:
+            expected_outcome = (
+                AttemptOutcome.ACCEPTED.value
+                if succeeded
+                else AttemptOutcome.REJECTED.value
+            )
+            if (
+                existing.reason != cleaned_reason
+                or existing.exception_item_id
+                != (exception_item.id if exception_item else None)
+                or existing.after_state.get("attempt_outcome") != expected_outcome
+                or existing.after_state.get("provider_reference")
+                != (provider_reference if succeeded else attempt.provider_reference)
+            ):
+                raise OperationsError("idempotency_conflict")
             return existing
 
         if attempt.outcome in {AttemptOutcome.ACCEPTED, AttemptOutcome.REJECTED}:
@@ -210,13 +243,14 @@ class OperationsService:
                 "this attempt already has a definitive outcome; there is "
                 "nothing for an operator to decide",
             )
-        if not reconciled:
+        if attempt.outcome is not AttemptOutcome.HELD_FOR_REVIEW:
             raise OperationsError(
                 "reconciliation_required",
-                "ask the supplier what happened to this idempotency key before "
-                "recording an outcome; resolving without it is how a second "
-                "purchase gets made",
+                "the stored attempt must show that reconciliation against the "
+                "original supplier completed without a definitive answer",
             )
+        del reconciled  # Compatibility only; caller testimony is not trusted.
+        self._validate_exception(exception_item, subject_reference)
         if succeeded and not provider_reference:
             # Chunk 11's schema requires an accepted attempt to name what the
             # supplier said succeeded, and it is right to: confirming a success
@@ -229,6 +263,36 @@ class OperationsService:
             )
 
         item = session.get(OrderItem, attempt.order_item_id)
+        adopted_lines = session.exec(
+            select(CarrierLine)
+            .join(
+                Entitlement,
+                col(Entitlement.id) == col(CarrierLine.entitlement_id),
+            )
+            .where(Entitlement.order_item_id == attempt.order_item_id)
+            .where(CarrierLine.carrier == attempt.provider)
+        ).all()
+        if succeeded:
+            matching_line = next(
+                (
+                    line
+                    for line in adopted_lines
+                    if line.carrier_line_reference == provider_reference
+                ),
+                None,
+            )
+            if matching_line is None:
+                raise OperationsError(
+                    "supplier_success_not_adopted",
+                    "the supplier reference has not been adopted into a local "
+                    "line; do not label the order item provisioned until it has",
+                )
+        elif adopted_lines:
+            raise OperationsError(
+                "supplier_failure_has_adopted_service",
+                "a local carrier line already proves that service was adopted; "
+                "do not mark its purchase failed",
+            )
         before = {
             "attempt_outcome": attempt.outcome.value,
             "provisioning_state": item.provisioning_state.value if item else None,
@@ -262,9 +326,9 @@ class OperationsService:
                 else OperatorActionKind.CONFIRM_SUPPLIER_FAILURE
             ),
             subject_kind=OperatorSubjectKind.SUPPLIER_ATTEMPT,
-            subject_reference=f"supplier_attempt:{attempt.id}",
+            subject_reference=subject_reference,
             actor=actor,
-            reason=reason,
+            reason=cleaned_reason,
             idempotency_key=idempotency_key,
             before=before,
             after=after,
@@ -281,36 +345,29 @@ class OperationsService:
         session: Session,
         *,
         actor: AdminUser,
-        debit_account: LedgerAccount,
-        credit_account: LedgerAccount,
-        amount: Decimal,
+        customer_account: LedgerAccount,
         reason: str,
         idempotency_key: str,
-        subject_reference: str,
-        exception_item: ExceptionItem | None = None,
+        exception_item: ExceptionItem,
     ) -> OperatorAction:
-        """Settle a payment our records cannot account for.
+        """Match one reconciled bank-statement line to customer service credit.
 
-        The **only** money path on this surface, and it is a balanced posting
-        through chunk 10 rather than an adjustment to a balance. The ledger
-        refuses an entry that does not balance, which is a stronger guarantee
-        than any permission check on a "set balance" field — and the reason a
-        set-balance field does not exist here.
-
-        Both accounts are supplied by the caller and validated for currency.
-        Cross-currency compensation is refused rather than converted: inventing
-        an FX rate inside an exception queue is how a discrepancy becomes two.
+        The caller chooses only the receiving customer account. The immutable
+        bank receipt supplies the amount, currency, clearing account and event
+        date, so this endpoint cannot be used as a generic balance-transfer
+        primitive.
         """
-        if debit_account.currency != credit_account.currency:
-            raise OperationsError(
-                "cross_currency_compensation",
-                "a compensating entry moves one currency; converting here would "
-                "invent a rate nobody agreed",
-            )
-        rounded = round_money(amount, debit_account.currency)
-        if rounded <= 0:
-            raise OperationsError("non_positive_amount")
-
+        cleaned_reason = self._clean_reason(reason)
+        if exception_item.kind is not ExceptionKind.UNMATCHED_BANK_TRANSFER:
+            raise OperationsError("exception_kind_mismatch")
+        subject_reference = exception_item.subject_reference
+        prefix = "bank:"
+        if not subject_reference.startswith(prefix):
+            raise OperationsError("exception_subject_mismatch")
+        try:
+            receipt_id = UUID(subject_reference.removeprefix(prefix))
+        except ValueError as exc:
+            raise OperationsError("exception_subject_mismatch") from exc
         self._lock(session, f"payment-discrepancy:{subject_reference}")
         existing = self._replayed(
             session,
@@ -319,37 +376,179 @@ class OperationsService:
             idempotency_key,
         )
         if existing is not None:
+            if (
+                existing.reason != cleaned_reason
+                or existing.exception_item_id != exception_item.id
+                or existing.after_state.get("customer_account")
+                != str(customer_account.id)
+            ):
+                raise OperationsError("idempotency_conflict")
             return existing
+        self._validate_exception(exception_item, subject_reference)
+
+        receipt = session.exec(
+            select(BankTransferReceipt)
+            .where(BankTransferReceipt.id == receipt_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).first()
+        if receipt is None:
+            raise OperationsError("bank_receipt_not_found")
+        if receipt.status is not BankFundingStatus.UNMATCHED:
+            raise OperationsError("bank_receipt_not_unmatched")
+        if (
+            customer_account.kind is not AccountKind.SERVICE_CREDIT
+            or customer_account.owner_kind is OwnerKind.SYSTEM
+        ):
+            raise OperationsError("invalid_customer_account")
+        if customer_account.currency != receipt.currency:
+            raise OperationsError("cross_currency_compensation")
+
+        rounded = round_money(receipt.amount, receipt.currency)
+        clearing = self.ledger.account(
+            session, receipt.currency, AccountKind.SETTLEMENT_CLEARING
+        )
 
         entry = self.ledger.post(
             session,
-            f"operations:{idempotency_key}",
+            f"bank:{receipt.id}:funding",
             [
-                Posting(debit_account, Direction.DEBIT, rounded),
-                Posting(credit_account, Direction.CREDIT, rounded),
+                Posting(clearing, Direction.DEBIT, rounded),
+                Posting(customer_account, Direction.CREDIT, rounded),
             ],
-            occurred_at=self.clock(),
-            reference=f"operator compensation: {subject_reference}",
+            occurred_at=receipt.value_date,
+            reference=f"bank transfer {receipt.statement_reference}",
         )
+        receipt.status = BankFundingStatus.MATCHED
+        receipt.matched_ledger_account_id = customer_account.id
+        receipt.matched_by = f"operator:{actor.id}"
+        receipt.matched_at = self.clock()
+        session.add(receipt)
+        session.flush()
         action = self._record(
             session,
             kind=OperatorActionKind.RESOLVE_PAYMENT_DISCREPANCY,
             subject_kind=OperatorSubjectKind.PAYMENT,
             subject_reference=subject_reference,
             actor=actor,
-            reason=reason,
+            reason=cleaned_reason,
             idempotency_key=idempotency_key,
-            before={"unreconciled_amount": str(rounded)},
+            before={
+                "bank_receipt": str(receipt.id),
+                "status": BankFundingStatus.UNMATCHED.value,
+                "amount": str(rounded),
+                "currency": receipt.currency,
+            },
             after={
                 "compensating_entry": str(entry.id),
-                "debit_account": str(debit_account.id),
-                "credit_account": str(credit_account.id),
+                "clearing_account": str(clearing.id),
+                "customer_account": str(customer_account.id),
+                "status": receipt.status.value,
             },
             exception_item=exception_item,
             ledger_entry_id=entry.id,
         )
-        if exception_item is not None:
-            self._resolve_exception(session, exception_item)
+        self._resolve_exception(session, exception_item)
+        return action
+
+    # --- call settlement correction --------------------------------------
+
+    def correct_call_settlement(
+        self,
+        session: Session,
+        charge: CallCharge,
+        *,
+        charging: CallChargingService,
+        actor: AdminUser,
+        billable_seconds: int,
+        setup_amount: Decimal,
+        usage_amount: Decimal,
+        reason: str,
+        idempotency_key: str,
+        exception_item: ExceptionItem,
+    ) -> OperatorAction:
+        """Audit a bounded V03 charge correction and close its exact exception."""
+        cleaned_reason = self._clean_reason(reason)
+        if exception_item.kind not in {
+            ExceptionKind.CALL_SETTLEMENT_SHORTFALL,
+            ExceptionKind.SETTLEMENT_MISMATCH,
+        }:
+            raise OperationsError("exception_kind_mismatch")
+        attempt = session.get(CallAttempt, charge.attempt_id)
+        if attempt is None:  # pragma: no cover - FK guarantees this
+            raise OperationsError("call_attempt_not_found")
+        subject_reference = f"call:{attempt.id}"
+        self._lock(session, f"call-correction:{charge.id}")
+        normalized_setup = round_money(setup_amount, charge.currency)
+        normalized_usage = round_money(usage_amount, charge.currency)
+        existing = self._replayed(
+            session,
+            OperatorActionKind.CORRECT_CALL_SETTLEMENT,
+            subject_reference,
+            idempotency_key,
+        )
+        expected = {
+            "billable_seconds": billable_seconds,
+            "setup_amount": str(normalized_setup),
+            "usage_amount": str(normalized_usage),
+        }
+        if existing is not None:
+            if (
+                existing.reason != cleaned_reason
+                or existing.exception_item_id != exception_item.id
+                or any(
+                    existing.after_state.get(key) != value
+                    for key, value in expected.items()
+                )
+            ):
+                raise OperationsError("idempotency_conflict")
+            return existing
+        self._validate_exception(exception_item, subject_reference)
+
+        before = {
+            "charge_id": str(charge.id),
+            "billable_seconds": charge.billable_seconds,
+            "setup_amount": str(charge.setup_amount),
+            "usage_amount": str(charge.usage_amount),
+            "charged_amount": str(charge.charged_amount),
+            "state": charge.state.value,
+        }
+        try:
+            replacement = charging.correct(
+                session,
+                charge,
+                billable_seconds=billable_seconds,
+                setup_amount=normalized_setup,
+                usage_amount=normalized_usage,
+                basis=ChargeBasis.MANUAL_CORRECTION,
+                detail=cleaned_reason,
+                record_manual_exception=False,
+            )
+        except ChargingError as exc:
+            raise OperationsError(exc.code, exc.detail) from exc
+        after = {
+            "charge_id": str(replacement.id),
+            "corrects_id": str(charge.id),
+            "billable_seconds": replacement.billable_seconds,
+            "setup_amount": str(normalized_setup),
+            "usage_amount": str(normalized_usage),
+            "charged_amount": str(replacement.charged_amount),
+            "state": replacement.state.value,
+        }
+        action = self._record(
+            session,
+            kind=OperatorActionKind.CORRECT_CALL_SETTLEMENT,
+            subject_kind=OperatorSubjectKind.CALL_CHARGE,
+            subject_reference=subject_reference,
+            actor=actor,
+            reason=cleaned_reason,
+            idempotency_key=idempotency_key,
+            before=before,
+            after=after,
+            exception_item=exception_item,
+            ledger_entry_id=replacement.journal_entry_id,
+        )
+        self._resolve_exception(session, exception_item)
         return action
 
     # --- dismissal and access ---------------------------------------------
@@ -369,6 +568,21 @@ class OperationsService:
         "somebody looked at this and decided it was fine" is information and
         an empty queue is not evidence of a quiet week.
         """
+        cleaned_reason = self._clean_reason(reason)
+        non_dismissible = {
+            ExceptionKind.UNMATCHED_BANK_TRANSFER,
+            ExceptionKind.EXCESS_PAYMENT,
+            ExceptionKind.REFUND_UNKNOWN,
+            ExceptionKind.DISPUTE_OPENED,
+            ExceptionKind.SETTLEMENT_MISMATCH,
+            ExceptionKind.CALL_DUPLICATE_BILLABLE_LEG,
+            ExceptionKind.CALL_MISSING_TERMINAL_EVENT,
+            ExceptionKind.CALL_UNKNOWN_OUTCOME,
+            ExceptionKind.CALL_SETTLEMENT_SHORTFALL,
+            ExceptionKind.CALL_SUPPLIER_COST_UNMATCHED,
+        }
+        if exception_item.kind in non_dismissible:
+            raise OperationsError("exception_requires_resolution")
         self._lock(session, f"exception:{exception_item.id}")
         existing = self._replayed(
             session,
@@ -377,7 +591,11 @@ class OperationsService:
             idempotency_key,
         )
         if existing is not None:
+            if existing.reason != cleaned_reason:
+                raise OperationsError("idempotency_conflict")
             return existing
+        if exception_item.resolved_at is not None:
+            raise OperationsError("exception_already_resolved")
 
         before = {
             "resolved_at": (
@@ -393,7 +611,7 @@ class OperationsService:
             subject_kind=OperatorSubjectKind.EXCEPTION_ITEM,
             subject_reference=f"exception_item:{exception_item.id}",
             actor=actor,
-            reason=reason,
+            reason=cleaned_reason,
             idempotency_key=idempotency_key,
             before=before,
             after={"resolved_at": self.clock().isoformat()},
@@ -416,6 +634,7 @@ class OperationsService:
         always "who saw this", and a system that cannot answer it has to assume
         the worst about everybody with access.
         """
+        cleaned_reason = self._clean_reason(reason)
         existing = self._replayed(
             session,
             OperatorActionKind.VIEW_SENSITIVE_RECORD,
@@ -423,6 +642,8 @@ class OperationsService:
             idempotency_key,
         )
         if existing is not None:
+            if existing.reason != cleaned_reason:
+                raise OperationsError("idempotency_conflict")
             return existing
         return self._record(
             session,
@@ -430,7 +651,7 @@ class OperationsService:
             subject_kind=subject_kind,
             subject_reference=subject_reference,
             actor=actor,
-            reason=reason,
+            reason=cleaned_reason,
             idempotency_key=idempotency_key,
             before={},
             after={},
@@ -453,16 +674,7 @@ class OperationsService:
         exception_item: ExceptionItem | None = None,
         ledger_entry_id: UUID | None = None,
     ) -> OperatorAction:
-        cleaned = (reason or "").strip()
-        if not cleaned:
-            # The database refuses it too. Checking here as well means the
-            # caller gets a named error rather than an integrity error, and the
-            # rule survives somebody removing one of the two.
-            raise OperationsError(
-                "reason_required",
-                "a privileged action without a stated reason is one nobody can "
-                "review later",
-            )
+        cleaned = self._clean_reason(reason)
         action = OperatorAction(
             kind=kind,
             subject_kind=subject_kind,
@@ -479,6 +691,28 @@ class OperationsService:
         session.add(action)
         session.flush()
         return action
+
+    @staticmethod
+    def _clean_reason(reason: str) -> str:
+        cleaned = (reason or "").strip()
+        if not cleaned:
+            raise OperationsError(
+                "reason_required",
+                "a privileged action without a stated reason is one nobody can "
+                "review later",
+            )
+        return cleaned
+
+    @staticmethod
+    def _validate_exception(
+        item: ExceptionItem | None, subject_reference: str
+    ) -> None:
+        if item is None:
+            return
+        if item.subject_reference != subject_reference:
+            raise OperationsError("exception_subject_mismatch")
+        if item.resolved_at is not None:
+            raise OperationsError("exception_already_resolved")
 
     def _replayed(
         self,
@@ -501,11 +735,15 @@ class OperationsService:
             session.add(item)
             session.flush()
 
-    def _action_count(self, session: Session, subject_reference: str) -> int:
+    def _action_count(self, session: Session, item: ExceptionItem) -> int:
         return len(
             session.exec(
                 select(OperatorAction).where(
-                    OperatorAction.subject_reference == subject_reference
+                    or_(
+                        col(OperatorAction.exception_item_id) == item.id,
+                        col(OperatorAction.subject_reference)
+                        == item.subject_reference,
+                    )
                 )
             ).all()
         )

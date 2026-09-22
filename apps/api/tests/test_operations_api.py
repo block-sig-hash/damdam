@@ -49,7 +49,12 @@ from app.operations.models import OperatorAction, OperatorActionKind
 from app.orders.models import Order, OrderItem, PaymentState, ProvisioningState
 from app.organizations.models import OrganizationRole
 from app.organizations.service import MembershipService
-from app.refunds.models import ExceptionItem, ExceptionKind
+from app.refunds.models import (
+    BankFundingStatus,
+    BankTransferReceipt,
+    ExceptionItem,
+    ExceptionKind,
+)
 
 NOW = datetime(2026, 9, 13, 12, 0, tzinfo=timezone.utc)
 
@@ -164,7 +169,7 @@ def world(api, session_factory, clock):
             provider="telnyx",
             idempotency_key=f"item:{item.id}:1",
             attempt_number=1,
-            outcome=AttemptOutcome.OUTCOME_UNKNOWN,
+            outcome=AttemptOutcome.HELD_FOR_REVIEW,
             requested_at=NOW,
             created_at=NOW,
         )
@@ -176,21 +181,39 @@ def world(api, session_factory, clock):
             voice_seconds_total=0,
             granted_at=NOW,
         )
+        receipt = BankTransferReceipt(
+            bank_account_reference="bank-ngn-1",
+            statement_reference=f"stmt-{uuid4().hex}",
+            currency="NGN",
+            amount=Decimal("2500.00"),
+            payer_reference=order.reference,
+            value_date=NOW,
+            status=BankFundingStatus.UNMATCHED,
+            imported_at=NOW,
+        )
+        session.add(receipt)
+        session.flush()
         exception = ExceptionItem(
-            kind=ExceptionKind.SETTLEMENT_MISMATCH,
-            subject_reference=f"payment:{order.reference}",
-            detail="a payment we cannot account for",
+            kind=ExceptionKind.UNMATCHED_BANK_TRANSFER,
+            subject_reference=f"bank:{receipt.id}",
+            detail="a reconciled bank line with no customer match",
             raised_at=NOW,
         )
-        session.add_all([attempt, entitlement, exception])
+        dismissible_exception = ExceptionItem(
+            kind=ExceptionKind.USAGE_DISCREPANCY,
+            subject_reference="line:manual-review",
+            detail="usage evidence was reviewed and found to be a duplicate",
+            raised_at=NOW,
+        )
+        session.add_all([attempt, entitlement, exception, dismissible_exception])
         session.commit()
-        for obj in (attempt, entitlement, exception):
+        for obj in (attempt, entitlement, exception, dismissible_exception):
             session.refresh(obj)
 
         line = CarrierLine(
             entitlement_id=entitlement.id,
             carrier="telnyx",
-            carrier_line_reference=f"line-{uuid4().hex[:8]}",
+            carrier_line_reference="SUP-REF-0001",
             iccid=ICCID,
             activation_state=ActivationState.ACTIVE,
             network_state=NetworkState.ATTACHED,
@@ -208,24 +231,15 @@ def world(api, session_factory, clock):
             )
         )
 
-        # A correction account and the organization's own credit. `ADJUSTMENT`
-        # is chunk 10's name for exactly this: a correction is a new, opposite
-        # entry, never an edit to the entry that was wrong.
-        debit = LedgerAccount(
-            owner_kind=OwnerKind.SYSTEM,
-            kind=AccountKind.ADJUSTMENT,
-            currency="NGN",
-        )
         credit = LedgerAccount(
             owner_kind=OwnerKind.ORGANIZATION,
             owner_organization_id=organization.id,
             kind=AccountKind.SERVICE_CREDIT,
             currency="NGN",
         )
-        session.add_all([debit, credit])
+        session.add(credit)
         session.commit()
-        for obj in (debit, credit):
-            session.refresh(obj)
+        session.refresh(credit)
 
         return {
             "admin_id": admin.id,
@@ -236,8 +250,9 @@ def world(api, session_factory, clock):
             "item_id": item.id,
             "attempt_id": attempt.id,
             "exception_id": exception.id,
+            "dismissible_exception_id": dismissible_exception.id,
+            "receipt_id": receipt.id,
             "line_id": line.id,
-            "debit_id": debit.id,
             "credit_id": credit.id,
         }
 
@@ -269,7 +284,6 @@ class TestEnterpriseVersusInternal:
             headers=_tenant_headers(api, world["owner_id"]),
             json={
                 "succeeded": True,
-                "reconciled": True,
                 "provider_reference": "SUP-REF-0001",
                 "reason": "it is our own line",
                 "idempotency_key": "owner-1",
@@ -296,7 +310,7 @@ class TestEnterpriseVersusInternal:
         assert client.get("/v1/operations/exceptions").status_code == 401
         assert (
             client.post(
-                f"/v1/operations/exceptions/{world['exception_id']}/dismissal",
+                f"/v1/operations/exceptions/{world['dismissible_exception_id']}/dismissal",
                 json={"reason": "no", "idempotency_key": "anon"},
             ).status_code
             == 401
@@ -312,12 +326,17 @@ class TestThePaidUnknownSupplierCase:
         A `409` and an unchanged attempt, not a `200` with a warning field a
         client is free to ignore.
         """
+        with session_factory() as session:
+            attempt = session.get(SupplierAttempt, world["attempt_id"])
+            attempt.outcome = AttemptOutcome.OUTCOME_UNKNOWN
+            session.add(attempt)
+            session.commit()
+
         response = client.post(
             f"/v1/operations/supplier-attempts/{world['attempt_id']}/resolution",
             headers=_admin_headers(settings, clock, world["admin_id"]),
             json={
                 "succeeded": True,
-                "reconciled": False,
                 "provider_reference": "SUP-REF-0001",
                 "reason": "the customer says it works",
                 "idempotency_key": "ops-1",
@@ -339,7 +358,6 @@ class TestThePaidUnknownSupplierCase:
             headers=_admin_headers(settings, clock, world["admin_id"]),
             json={
                 "succeeded": True,
-                "reconciled": True,
                 "reason": "supplier confirmed by email",
                 "idempotency_key": "ops-2",
             },
@@ -357,11 +375,9 @@ class TestThePaidUnknownSupplierCase:
             headers=_admin_headers(settings, clock, world["admin_id"]),
             json={
                 "succeeded": True,
-                "reconciled": True,
                 "provider_reference": "SUP-REF-0001",
                 "reason": "reconciled against telnyx, profile exists",
                 "idempotency_key": "ops-3",
-                "exception_item_id": str(world["exception_id"]),
             },
         )
 
@@ -370,7 +386,7 @@ class TestThePaidUnknownSupplierCase:
         assert body["kind"] == OperatorActionKind.CONFIRM_SUPPLIER_SUCCESS.value
         assert body["actor_admin_id"] == str(world["admin_id"])
         assert body["reason"].startswith("reconciled against telnyx")
-        assert body["before_state"]["attempt_outcome"] == "outcome_unknown"
+        assert body["before_state"]["attempt_outcome"] == "held_for_review"
         assert body["after_state"]["provider_reference"] == "SUP-REF-0001"
         # No money moved, so no entry is claimed. A populated field here would
         # be worse than an empty one: it would imply a posting nobody made.
@@ -379,7 +395,6 @@ class TestThePaidUnknownSupplierCase:
         with session_factory() as session:
             item = session.get(OrderItem, world["item_id"])
             assert item.provisioning_state is ProvisioningState.PROVISIONED
-            assert session.get(ExceptionItem, world["exception_id"]).resolved_at
 
     def test_a_replayed_resolution_is_the_same_resolution(
         self, client, settings, clock, world, session_factory
@@ -392,7 +407,6 @@ class TestThePaidUnknownSupplierCase:
         headers = _admin_headers(settings, clock, world["admin_id"])
         payload = {
             "succeeded": True,
-            "reconciled": True,
             "provider_reference": "SUP-REF-0001",
             "reason": "reconciled against telnyx",
             "idempotency_key": "ops-replay",
@@ -419,7 +433,6 @@ class TestThePaidUnknownSupplierCase:
             headers=_admin_headers(settings, clock, world["admin_id"]),
             json={
                 "succeeded": False,
-                "reconciled": True,
                 "reason": "",
                 "idempotency_key": "ops-4",
             },
@@ -442,10 +455,7 @@ class TestThePaymentDiscrepancyCase:
             "/v1/operations/payment-discrepancies",
             headers=_admin_headers(settings, clock, world["admin_id"]),
             json={
-                "debit_account_id": str(world["debit_id"]),
-                "credit_account_id": str(world["credit_id"]),
-                "amount": "2500.00",
-                "subject_reference": f"payment:{world['order_reference']}",
+                "customer_account_id": str(world["credit_id"]),
                 "reason": "bank credit matched to order by statement line 44",
                 "idempotency_key": "disc-1",
                 "exception_item_id": str(world["exception_id"]),
@@ -464,12 +474,10 @@ class TestThePaymentDiscrepancyCase:
     ):
         headers = _admin_headers(settings, clock, world["admin_id"])
         payload = {
-            "debit_account_id": str(world["debit_id"]),
-            "credit_account_id": str(world["credit_id"]),
-            "amount": "2500.00",
-            "subject_reference": f"payment:{world['order_reference']}",
+            "customer_account_id": str(world["credit_id"]),
             "reason": "bank credit matched to order",
             "idempotency_key": "disc-replay",
+            "exception_item_id": str(world["exception_id"]),
         }
 
         first = client.post(
@@ -630,16 +638,31 @@ class TestTenantScopedExport:
 
 
 class TestTheQueueOverHttp:
+    def test_a_financial_exception_cannot_be_dismissed(
+        self, client, settings, clock, world
+    ):
+        response = client.post(
+            f"/v1/operations/exceptions/{world['exception_id']}/dismissal",
+            headers=_admin_headers(settings, clock, world["admin_id"]),
+            json={
+                "reason": "ignore the unmatched money",
+                "idempotency_key": "unsafe-dismissal",
+            },
+        )
+
+        assert response.status_code == 409
+        assert response.json()["error"] == "exception_requires_resolution"
+
     def test_the_queue_is_searchable_by_support_reference(
         self, client, settings, clock, world
     ):
         headers = _admin_headers(settings, clock, world["admin_id"])
-        reference = f"payment:{world['order_reference']}"
+        reference = f"bank:{world['receipt_id']}"
 
         matched = client.get(
             "/v1/operations/exceptions",
             headers=headers,
-            params={"reference": "payment"},
+            params={"reference": "bank:"},
         )
         missed = client.get(
             "/v1/operations/exceptions",
@@ -664,7 +687,7 @@ class TestTheQueueOverHttp:
         """
         headers = _admin_headers(settings, clock, world["admin_id"])
         response = client.post(
-            f"/v1/operations/exceptions/{world['exception_id']}/dismissal",
+            f"/v1/operations/exceptions/{world['dismissible_exception_id']}/dismissal",
             headers=headers,
             json={
                 "reason": "duplicate of ticket 40, already settled",
@@ -674,25 +697,26 @@ class TestTheQueueOverHttp:
 
         assert response.status_code == 201, response.text
         with session_factory() as session:
-            item = session.get(ExceptionItem, world["exception_id"])
+            item = session.get(ExceptionItem, world["dismissible_exception_id"])
             assert item is not None
             assert item.resolved_at is not None
 
         still_there = client.get(
             "/v1/operations/exceptions",
             headers=headers,
-            params={"include_resolved": True},
+            params={"include_resolved": True, "reference": "line:manual-review"},
         )
         assert [
             entry["exception_id"] for entry in still_there.json()["entries"]
-        ] == [str(world["exception_id"])]
+        ] == [str(world["dismissible_exception_id"])]
+        assert still_there.json()["entries"][0]["action_count"] == 1
 
     def test_history_carries_every_mandatory_audit_field(
         self, client, settings, clock, world
     ):
         headers = _admin_headers(settings, clock, world["admin_id"])
         client.post(
-            f"/v1/operations/exceptions/{world['exception_id']}/dismissal",
+            f"/v1/operations/exceptions/{world['dismissible_exception_id']}/dismissal",
             headers=headers,
             json={"reason": "already settled", "idempotency_key": "dis-2"},
         )

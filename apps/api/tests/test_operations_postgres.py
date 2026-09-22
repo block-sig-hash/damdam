@@ -34,6 +34,12 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from app import model_registry  # noqa: F401
 from app.auth.models import AdminRole, AdminUser, Locale, Platform, User
 from app.catalog.models import LegalEntity, Product, ProductKind
+from app.connectivity.models import (
+    ActivationState,
+    CarrierLine,
+    Entitlement,
+    NetworkState,
+)
 from app.fulfilment.models import AttemptOutcome, SupplierAttempt
 from app.ledger.models import AccountKind, Direction, JournalLine, OwnerKind
 from app.ledger.service import LedgerService
@@ -44,7 +50,12 @@ from app.operations.models import (
 )
 from app.operations.service import OperationsError, OperationsService, mask
 from app.orders.models import Order, OrderItem, PaymentState, ProvisioningState
-from app.refunds.models import ExceptionItem, ExceptionKind
+from app.refunds.models import (
+    BankFundingStatus,
+    BankTransferReceipt,
+    ExceptionItem,
+    ExceptionKind,
+)
 
 pytestmark = pytest.mark.skipif(
     "TEST_DATABASE_URL" not in os.environ,
@@ -53,7 +64,9 @@ pytestmark = pytest.mark.skipif(
 
 NOW = datetime(2026, 9, 13, 12, 0, tzinfo=timezone.utc)
 TABLES = (
-    "operator_actions, exception_items, supplier_attempts, order_items, orders, "
+    "operator_actions, exception_items, carrier_lines, entitlements, "
+    "bank_transfer_receipts, "
+    "supplier_attempts, order_items, orders, "
     "products, legal_entities, journal_lines, journal_entries, "
     "ledger_reservations, ledger_accounts, admin_users, users"
 )
@@ -114,7 +127,7 @@ def _operator(session: Session, label: str = "ops") -> AdminUser:
 
 
 def _paid_order_item(
-    session: Session, clock: Clock
+    session: Session, clock: Clock, *, adopted: bool = False
 ) -> tuple[OrderItem, SupplierAttempt]:
     """A customer who paid, and a supplier that never told us what happened."""
     entity = LegalEntity(code=f"E{uuid4().hex[:6]}", name="Seller", country="NG")
@@ -157,12 +170,34 @@ def _paid_order_item(
         provider="telnyx",
         idempotency_key=f"item:{item.id}:1",
         attempt_number=1,
-        outcome=AttemptOutcome.OUTCOME_UNKNOWN,
+        outcome=AttemptOutcome.HELD_FOR_REVIEW,
         requested_at=NOW,
         created_at=NOW,
     )
     session.add(attempt)
     session.flush()
+    if adopted:
+        entitlement = Entitlement(
+            order_item_id=item.id,
+            holder_user_id=payer.id,
+            product_id=product.id,
+            data_bytes_total=5_368_709_120,
+            voice_seconds_total=0,
+            granted_at=NOW,
+        )
+        session.add(entitlement)
+        session.flush()
+        session.add(
+            CarrierLine(
+                entitlement_id=entitlement.id,
+                carrier="telnyx",
+                carrier_line_reference="SUP-REF-0001",
+                activation_state=ActivationState.ACTIVE,
+                network_state=NetworkState.ATTACHED,
+                provider_status="active",
+            )
+        )
+        session.flush()
     return item, attempt
 
 
@@ -179,6 +214,31 @@ def _exception(session: Session, clock: Clock, reference: str) -> ExceptionItem:
 
 
 class TestReconcileBeforeResolving:
+    def test_a_checkbox_cannot_stand_in_for_reconciler_state(
+        self, session, operations, clock
+    ):
+        operator = _operator(session)
+        item, attempt = _paid_order_item(session, clock)
+        attempt.outcome = AttemptOutcome.OUTCOME_UNKNOWN
+        session.add(attempt)
+        session.flush()
+
+        with pytest.raises(OperationsError) as excinfo:
+            operations.resolve_supplier_attempt(
+                session,
+                attempt,
+                actor=operator,
+                succeeded=True,
+                reason="operator ticked reconciled without stored evidence",
+                idempotency_key="assertion-is-not-evidence",
+                reconciled=True,
+                provider_reference="SUP-REF-CLAIMED",
+            )
+
+        assert excinfo.value.code == "reconciliation_required"
+        assert attempt.outcome is AttemptOutcome.OUTCOME_UNKNOWN
+        assert item.provisioning_state is ProvisioningState.OUTCOME_UNKNOWN
+
     def test_an_unreconciled_attempt_cannot_be_resolved(
         self, session, operations, clock
     ):
@@ -190,6 +250,9 @@ class TestReconcileBeforeResolving:
         """
         operator = _operator(session)
         item, attempt = _paid_order_item(session, clock)
+        attempt.outcome = AttemptOutcome.OUTCOME_UNKNOWN
+        session.add(attempt)
+        session.flush()
 
         with pytest.raises(OperationsError) as excinfo:
             operations.resolve_supplier_attempt(
@@ -210,6 +273,9 @@ class TestReconcileBeforeResolving:
         """A refusal is not a decision, so there is nothing to audit."""
         operator = _operator(session)
         _item, attempt = _paid_order_item(session, clock)
+        attempt.outcome = AttemptOutcome.OUTCOME_UNKNOWN
+        session.add(attempt)
+        session.flush()
 
         with pytest.raises(OperationsError):
             operations.resolve_supplier_attempt(
@@ -250,11 +316,33 @@ class TestReconcileBeforeResolving:
 class TestThePaidUnknownSupplierCase:
     """The first scenario the assignment names, end to end."""
 
-    def test_a_reconciled_success_provisions_without_a_second_purchase(
+    def test_a_reference_alone_cannot_claim_that_service_was_provisioned(
         self, session, operations, clock
     ):
         operator = _operator(session)
         item, attempt = _paid_order_item(session, clock)
+
+        with pytest.raises(OperationsError) as excinfo:
+            operations.resolve_supplier_attempt(
+                session,
+                attempt,
+                actor=operator,
+                succeeded=True,
+                reason="supplier reference copied from an email",
+                idempotency_key="reference-without-service",
+                reconciled=True,
+                provider_reference="SUP-REF-0001",
+            )
+
+        assert excinfo.value.code == "supplier_success_not_adopted"
+        assert item.provisioning_state is ProvisioningState.OUTCOME_UNKNOWN
+        assert attempt.outcome is AttemptOutcome.HELD_FOR_REVIEW
+
+    def test_a_reconciled_success_provisions_without_a_second_purchase(
+        self, session, operations, clock
+    ):
+        operator = _operator(session)
+        item, attempt = _paid_order_item(session, clock, adopted=True)
         queue_item = _exception(
             session, clock, f"supplier_attempt:{attempt.id}"
         )
@@ -276,7 +364,7 @@ class TestThePaidUnknownSupplierCase:
         # One attempt row, still. Nothing bought a second time.
         assert len(session.exec(select(SupplierAttempt)).all()) == 1
         # The decision is on the record with its before and after.
-        assert action.before_state["attempt_outcome"] == "outcome_unknown"
+        assert action.before_state["attempt_outcome"] == "held_for_review"
         assert action.after_state["attempt_outcome"] == "accepted"
         assert queue_item.resolved_at is not None
 
@@ -297,12 +385,33 @@ class TestThePaidUnknownSupplierCase:
         assert attempt.outcome is AttemptOutcome.REJECTED
         assert item.provisioning_state is ProvisioningState.FAILED
 
+    def test_a_failure_cannot_overwrite_an_already_adopted_service(
+        self, session, operations, clock
+    ):
+        operator = _operator(session)
+        item, attempt = _paid_order_item(session, clock, adopted=True)
+
+        with pytest.raises(OperationsError) as excinfo:
+            operations.resolve_supplier_attempt(
+                session,
+                attempt,
+                actor=operator,
+                succeeded=False,
+                reason="supplier search did not find it",
+                idempotency_key="failure-contradicts-local-line",
+                reconciled=True,
+            )
+
+        assert excinfo.value.code == "supplier_failure_has_adopted_service"
+        assert attempt.outcome is AttemptOutcome.HELD_FOR_REVIEW
+        assert item.provisioning_state is ProvisioningState.OUTCOME_UNKNOWN
+
     def test_replaying_a_resolution_is_the_same_resolution(
         self, session, operations, clock
     ):
         """An operator who lost the response and clicked again."""
         operator = _operator(session)
-        _item, attempt = _paid_order_item(session, clock)
+        _item, attempt = _paid_order_item(session, clock, adopted=True)
 
         first = operations.resolve_supplier_attempt(
             session,
@@ -328,11 +437,66 @@ class TestThePaidUnknownSupplierCase:
         assert first.id == second.id
         assert len(session.exec(select(OperatorAction)).all()) == 1
 
+    def test_a_replay_with_different_evidence_is_a_conflict(
+        self, session, operations, clock
+    ):
+        operator = _operator(session)
+        _item, attempt = _paid_order_item(session, clock, adopted=True)
+        attempt.outcome = AttemptOutcome.HELD_FOR_REVIEW
+        session.add(attempt)
+        session.flush()
+
+        operations.resolve_supplier_attempt(
+            session,
+            attempt,
+            actor=operator,
+            succeeded=True,
+            reason="supplier confirmed",
+            idempotency_key="same-key-different-evidence",
+            reconciled=True,
+            provider_reference="SUP-REF-0001",
+        )
+
+        with pytest.raises(OperationsError) as excinfo:
+            operations.resolve_supplier_attempt(
+                session,
+                attempt,
+                actor=operator,
+                succeeded=True,
+                reason="supplier confirmed",
+                idempotency_key="same-key-different-evidence",
+                reconciled=True,
+                provider_reference="SUP-REF-0002",
+            )
+        assert excinfo.value.code == "idempotency_conflict"
+
+    def test_an_action_cannot_close_an_unrelated_exception(
+        self, session, operations, clock
+    ):
+        operator = _operator(session)
+        _item, attempt = _paid_order_item(session, clock)
+        attempt.outcome = AttemptOutcome.HELD_FOR_REVIEW
+        unrelated = _exception(session, clock, "payment:somebody-else")
+
+        with pytest.raises(OperationsError) as excinfo:
+            operations.resolve_supplier_attempt(
+                session,
+                attempt,
+                actor=operator,
+                succeeded=False,
+                reason="supplier found no record",
+                idempotency_key="wrong-exception",
+                reconciled=True,
+                exception_item=unrelated,
+            )
+        assert excinfo.value.code == "exception_subject_mismatch"
+        assert unrelated.resolved_at is None
+
 
 class TestThePaymentDiscrepancyCase:
     """The second scenario: money settled without an unbalanced entry."""
 
-    def _accounts(self, session, ledger):
+    def _customer_account(self, session, ledger, currency="NGN"):
         customer = User(
             phone_number=f"+23489{uuid4().int % 10**8:08d}",
             first_name="Customer",
@@ -342,30 +506,49 @@ class TestThePaymentDiscrepancyCase:
         session.flush()
         credit = ledger.account(
             session,
-            "NGN",
+            currency,
             AccountKind.SERVICE_CREDIT,
             OwnerKind.USER,
             owner_user_id=customer.id,
         )
-        clearing = ledger.account(session, "NGN", AccountKind.SETTLEMENT_CLEARING)
-        return clearing, credit
+        return credit
+
+    def _case(self, session, ledger):
+        credit = self._customer_account(session, ledger)
+        receipt = BankTransferReceipt(
+            bank_account_reference="bank-ngn-1",
+            statement_reference=f"stmt-{uuid4().hex}",
+            currency="NGN",
+            amount=Decimal("2500.00"),
+            payer_reference="customer reference",
+            value_date=NOW,
+            status=BankFundingStatus.UNMATCHED,
+            imported_at=NOW,
+        )
+        session.add(receipt)
+        session.flush()
+        queue_item = ExceptionItem(
+            kind=ExceptionKind.UNMATCHED_BANK_TRANSFER,
+            subject_reference=f"bank:{receipt.id}",
+            detail="a reconciled bank line with no customer match",
+            raised_at=NOW,
+        )
+        session.add(queue_item)
+        session.flush()
+        return credit, receipt, queue_item
 
     def test_a_discrepancy_is_settled_by_a_balanced_entry(
         self, session, operations, ledger, clock
     ):
         operator = _operator(session)
-        clearing, credit = self._accounts(session, ledger)
-        queue_item = _exception(session, clock, "payment:unmatched-1")
+        credit, receipt, queue_item = self._case(session, ledger)
 
         action = operations.resolve_payment_discrepancy(
             session,
             actor=operator,
-            debit_account=clearing,
-            credit_account=credit,
-            amount=Decimal("2500.00"),
+            customer_account=credit,
             reason="bank transfer matched to the customer by reference",
             idempotency_key="pay-1",
-            subject_reference="payment:unmatched-1",
             exception_item=queue_item,
         )
 
@@ -381,6 +564,7 @@ class TestThePaymentDiscrepancyCase:
         )
         assert debits == credits == Decimal("2500.00")
         assert ledger.balance(session, credit) == Decimal("2500.00")
+        assert receipt.status is BankFundingStatus.MATCHED
         assert queue_item.resolved_at is not None
 
     def test_replaying_a_discrepancy_does_not_post_twice(
@@ -388,27 +572,23 @@ class TestThePaymentDiscrepancyCase:
     ):
         """The failure this guard exists for: money moving twice on one click."""
         operator = _operator(session)
-        clearing, credit = self._accounts(session, ledger)
+        credit, _receipt, queue_item = self._case(session, ledger)
 
         first = operations.resolve_payment_discrepancy(
             session,
             actor=operator,
-            debit_account=clearing,
-            credit_account=credit,
-            amount=Decimal("2500.00"),
+            customer_account=credit,
             reason="matched by reference",
             idempotency_key="pay-same",
-            subject_reference="payment:unmatched-2",
+            exception_item=queue_item,
         )
         second = operations.resolve_payment_discrepancy(
             session,
             actor=operator,
-            debit_account=clearing,
-            credit_account=credit,
-            amount=Decimal("2500.00"),
+            customer_account=credit,
             reason="matched by reference",
             idempotency_key="pay-same",
-            subject_reference="payment:unmatched-2",
+            exception_item=queue_item,
         )
 
         assert first.id == second.id
@@ -419,23 +599,39 @@ class TestThePaymentDiscrepancyCase:
     ):
         """Inventing an FX rate inside an exception queue makes two problems."""
         operator = _operator(session)
-        clearing, credit = self._accounts(session, ledger)
-        usd_clearing = ledger.account(
-            session, "USD", AccountKind.SETTLEMENT_CLEARING
-        )
+        _credit, _receipt, queue_item = self._case(session, ledger)
+        usd_credit = self._customer_account(session, ledger, "USD")
 
         with pytest.raises(OperationsError) as excinfo:
             operations.resolve_payment_discrepancy(
                 session,
                 actor=operator,
-                debit_account=usd_clearing,
-                credit_account=credit,
-                amount=Decimal("10.00"),
+                customer_account=usd_credit,
                 reason="close enough",
                 idempotency_key="pay-fx",
-                subject_reference="payment:unmatched-3",
+                exception_item=queue_item,
             )
         assert excinfo.value.code == "cross_currency_compensation"
+
+    def test_an_operator_cannot_choose_an_arbitrary_account_or_amount(
+        self, session, operations, ledger, clock
+    ):
+        operator = _operator(session)
+        _credit, receipt, queue_item = self._case(session, ledger)
+        arbitrary = ledger.account(session, "NGN", AccountKind.ADJUSTMENT)
+
+        with pytest.raises(OperationsError) as excinfo:
+            operations.resolve_payment_discrepancy(
+                session,
+                actor=operator,
+                customer_account=arbitrary,
+                reason="move money between accounts",
+                idempotency_key="not-a-balance-editor",
+                exception_item=queue_item,
+            )
+
+        assert excinfo.value.code == "invalid_customer_account"
+        assert receipt.status is BankFundingStatus.UNMATCHED
 
     def test_there_is_no_way_to_set_a_balance(self, session, operations):
         """Asserted as an absence, because that is the requirement.
@@ -455,7 +651,7 @@ class TestTheAuditTrailIsImmutable:
     def test_an_action_cannot_be_updated(self, session, operations, clock):
         """Enforced by trigger. An editable audit trail records only intentions."""
         operator = _operator(session)
-        _item, attempt = _paid_order_item(session, clock)
+        _item, attempt = _paid_order_item(session, clock, adopted=True)
         action = operations.resolve_supplier_attempt(
             session,
             attempt,
@@ -477,7 +673,7 @@ class TestTheAuditTrailIsImmutable:
 
     def test_an_action_cannot_be_deleted(self, session, operations, clock):
         operator = _operator(session)
-        _item, attempt = _paid_order_item(session, clock)
+        _item, attempt = _paid_order_item(session, clock, adopted=True)
         action = operations.resolve_supplier_attempt(
             session,
             attempt,
@@ -533,14 +729,63 @@ class TestTheAuditTrailIsImmutable:
                 idempotency_key="blank-2",
             )
         assert excinfo.value.code == "reason_required"
+        session.commit()
+        session.refresh(queue_item)
+        assert queue_item.resolved_at is None
+        assert session.exec(select(OperatorAction)).all() == []
 
 
 class TestConcurrentOperators:
+    def test_different_keys_cannot_record_two_decisions_for_one_attempt(
+        self, engine, session, clock
+    ):
+        _item, attempt = _paid_order_item(session, clock, adopted=True)
+        operator = _operator(session)
+        session.commit()
+        attempt_id, operator_id = attempt.id, operator.id
+        barrier = Barrier(2)
+
+        def resolve(key: str):
+            with Session(engine) as worker:
+                service = OperationsService(LedgerService(clock=clock), clock=clock)
+                subject = worker.get(SupplierAttempt, attempt_id)
+                actor = worker.get(AdminUser, operator_id)
+                barrier.wait(timeout=10)
+                try:
+                    action = service.resolve_supplier_attempt(
+                        worker,
+                        subject,
+                        actor=actor,
+                        succeeded=True,
+                        reason="supplier confirmed",
+                        idempotency_key=key,
+                        reconciled=True,
+                        provider_reference="SUP-REF-0001",
+                    )
+                    worker.commit()
+                    return str(action.id)
+                except OperationsError as error:
+                    worker.rollback()
+                    return error.code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = {
+                future.result(timeout=30)
+                for future in (
+                    pool.submit(resolve, "decision-a"),
+                    pool.submit(resolve, "decision-b"),
+                )
+            }
+
+        assert "attempt_already_settled" in outcomes
+        with Session(engine) as check:
+            assert len(check.exec(select(OperatorAction)).all()) == 1
+
     def test_two_operators_resolving_at_once_produce_one_decision(
         self, engine, session, operations, clock
     ):
         """A busy morning, not an edge case."""
-        _item, attempt = _paid_order_item(session, clock)
+        _item, attempt = _paid_order_item(session, clock, adopted=True)
         operator = _operator(session)
         session.commit()
         attempt_id, operator_id = attempt.id, operator.id
@@ -600,6 +845,9 @@ class TestTheQueue:
         """A dismissal is not a delete: an empty queue is not a quiet week."""
         operator = _operator(session)
         queue_item = _exception(session, clock, "payment:unmatched-78")
+        queue_item.kind = ExceptionKind.USAGE_DISCREPANCY
+        session.add(queue_item)
+        session.flush()
 
         operations.dismiss_exception(
             session,

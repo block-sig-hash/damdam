@@ -11,10 +11,10 @@ not expressed in the tenant permission matrix at all.
 
 **What this surface deliberately cannot do.** There is no query endpoint, no
 balance field, no exception delete and no unmasked read of a line. Money moves
-only through `POST /operations/payment-discrepancies`, which posts a balanced
-entry through chunk 10's ledger and refuses anything that does not balance. A
-supplier attempt is resolved only after the caller asserts reconciliation, which
-chunk 11 requires so that a lost response is asked about rather than guessed at.
+only through bounded domain operations. Payment discrepancy resolution derives
+its amount, currency and clearing account from an immutable bank receipt. A
+supplier attempt is resolved only after its durable state records an inconclusive
+reconciliation, so a request-body assertion cannot replace supplier evidence.
 
 **Reading is an action too.** The line lookup is a `POST` rather than a `GET`,
 because it writes an audit row. A `GET` that records who looked is a `GET` that
@@ -35,12 +35,14 @@ from sqlmodel import Session
 
 from app.admin.routes import current_admin
 from app.auth.models import AdminUser
+from app.calling.models import CallCharge
 from app.csv_export import csv_safe
 from app.fulfilment.models import SupplierAttempt
 from app.ledger.models import LedgerAccount
 from app.operations.models import OperatorAction, OperatorSubjectKind
 from app.operations.schemas import (
     ActionRequest,
+    CallSettlementCorrectionRequest,
     LineLookupRequest,
     LineSupportView,
     OperatorActionListResponse,
@@ -163,11 +165,8 @@ def resolve_supplier_attempt(
 ) -> OperatorActionView:
     """Settle a purchase whose outcome we lost — after asking the supplier.
 
-    Returns `409 reconciliation_required` when the caller has not asserted that
-    somebody reconciled against the original operation reference. This is the
-    single most important refusal in the chunk: an operations screen that let a
-    human skip it would reintroduce exactly the duplicate purchase chunk 11's
-    design exists to prevent.
+    Returns `409 reconciliation_required` unless the durable attempt state says
+    the original supplier reconciliation ran and ended held for human review.
     """
     with request.app.state.session_factory() as session:
         attempt = session.get(SupplierAttempt, attempt_id)
@@ -180,7 +179,6 @@ def resolve_supplier_attempt(
             succeeded=payload.succeeded,
             reason=payload.reason,
             idempotency_key=payload.idempotency_key,
-            reconciled=payload.reconciled,
             provider_reference=payload.provider_reference,
             exception_item=_exception(session, payload.exception_item_id),
         )
@@ -199,25 +197,59 @@ def resolve_payment_discrepancy(
 ) -> OperatorActionView:
     """The only money path here, and it is a balanced posting.
 
-    Both accounts are named by the caller and both must hold the same currency.
-    Converting inside an exception queue would invent a rate nobody agreed, so a
-    cross-currency compensation is refused rather than rounded.
+    The reconciled bank receipt supplies the amount, currency, clearing account
+    and value date. The caller can select only the receiving customer account.
     """
     with request.app.state.session_factory() as session:
-        debit = session.get(LedgerAccount, payload.debit_account_id)
-        credit = session.get(LedgerAccount, payload.credit_account_id)
-        if debit is None or credit is None:
+        customer_account = session.get(LedgerAccount, payload.customer_account_id)
+        if customer_account is None:
             raise OperationsError("ledger_account_not_found")
+        exception_item = _exception(session, payload.exception_item_id)
+        if exception_item is None:  # schema requires it
+            raise OperationsError("exception_not_found")
         action = _operations(request).resolve_payment_discrepancy(
             session,
             actor=admin,
-            debit_account=debit,
-            credit_account=credit,
-            amount=payload.amount,
+            customer_account=customer_account,
             reason=payload.reason,
             idempotency_key=payload.idempotency_key,
-            subject_reference=payload.subject_reference,
-            exception_item=_exception(session, payload.exception_item_id),
+            exception_item=exception_item,
+        )
+        view = _view(action)
+        session.commit()
+        return view
+
+
+@router.post(
+    "/call-charges/{charge_id}/correction",
+    response_model=OperatorActionView,
+    status_code=201,
+)
+def correct_call_settlement(
+    request: Request,
+    charge_id: UUID,
+    payload: CallSettlementCorrectionRequest,
+    admin: Annotated[AdminUser, Depends(current_admin)],
+) -> OperatorActionView:
+    """Replace a call charge without editing history or exceeding its hold."""
+    with request.app.state.session_factory() as session:
+        charge = session.get(CallCharge, charge_id)
+        if charge is None:
+            raise OperationsError("call_charge_not_found")
+        exception_item = _exception(session, payload.exception_item_id)
+        if exception_item is None:  # schema requires it
+            raise OperationsError("exception_not_found")
+        action = _operations(request).correct_call_settlement(
+            session,
+            charge,
+            charging=request.app.state.call_charging_service,
+            actor=admin,
+            billable_seconds=payload.billable_seconds,
+            setup_amount=payload.setup_amount,
+            usage_amount=payload.usage_amount,
+            reason=payload.reason,
+            idempotency_key=payload.idempotency_key,
+            exception_item=exception_item,
         )
         view = _view(action)
         session.commit()
