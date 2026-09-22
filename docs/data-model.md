@@ -3745,15 +3745,17 @@ freshness of the usage half travels with the report instead — see below.
 
 ### Offboarding is not one action
 
-Somebody leaves, and what has to happen is: dashboard access ends, the ability
-to spend the organization's money ends, unclaimed invitations are withdrawn,
-funded-but-unprovisioned lines are cancelled and their holds released, live work
-lines are suspended — and their **personal** service is left completely alone.
+Somebody leaves, and what has to happen is: dashboard access and active work
+calls end, unclaimed invitations are withdrawn, safe pending lines and top-up
+holds are released, local work entitlements expire, live carrier lines are
+suspended — and their **personal** service is left completely alone.
 
 Some of that is ours and instant. Some is a request to a carrier whose answer
 arrives later or never. A boolean `offboarded` column would have to lie about
 the difference in both directions, so `offboarding_actions` records one row per
 attempt with its own outcome, including `pending_carrier`.
+Runs with a failed local action are `completed_with_exceptions`, rather than
+being labelled complete merely because no carrier request remains.
 
 `ux_organization_offboardings_open` allows one open run per person: pressing the
 button twice is the same departure, and two runs would race each other's
@@ -3785,13 +3787,14 @@ holder — two decisions with a person in the middle of them.
   found no supplier evidence for it, so `FundingSummary.pooling` is a field that
   says `false` rather than a silence a dashboard could fill with a shared bucket.
 
+Money committed to authorized orders and money settled on paid orders are also
+separate fields. Policy headroom subtracts both authorized and paid commitments,
+while `spent_this_period` contains paid orders only; a reservation is not
+reported as a charge.
+
 ### Freshness is part of a usage number
 
 Usage arrives late and sometimes stops arriving. Every report carries
-`observed_through` — the latest usage its lines have actually been observed to —
-and `None` means nothing has been observed, which is **not** zero used. Without
-it, a stalled poller and an unused line look identical, and an administrator
-plans around a figure that stopped moving last Tuesday.
-
-It is the maximum of what has arrived rather than a poller's own watermark: a
-cursor can claim to be current while the supplier has sent nothing.
+`observed_through` — the **oldest of each line's latest authoritative
+observation**. `None` means at least one line has never been observed, which is
+not zero usage. A maximum would let one healthy line hide fifty stalled ones.

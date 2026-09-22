@@ -2332,20 +2332,22 @@ everything.
 
 ### Three balances that are not the same number
 
-`GET /funding` returns `balance`, `held` and `available` from the ledger, plus
-`period_cap` and `headroom` from a recorded policy — and `pooling`, which is
-**always `false` today** and is present so a client cannot render a shared
-bucket by assuming one. No supplier pooling capability exists or is claimed.
+`GET /funding` returns `balance`, `held` and `available` from the ledger;
+`committed_this_period` for authorized or paid orders; and
+`spent_this_period` for paid orders only. A reservation is not called settled
+spend. `period_cap` and `headroom` come from recorded policy, with headroom
+reduced by commitments. `pooling` is **always `false` today** and is present so
+a client cannot render a shared bucket by assuming one.
 
 `period_cap: null` means **undecided**, not unlimited. A client that renders a
 missing cap as infinity is inventing a commitment nobody made.
 
 ### A report says how fresh it is
 
-`observed_through` is the latest usage the organization's lines have actually
-been observed to. **`null` means nothing has been observed**, which is not the
-same as zero used — without the distinction, a stalled usage poller and an
-unused line look identical on a screen.
+`observed_through` is the oldest of each work line's latest authoritative usage
+observations. **`null` means at least one line has never been observed**, which
+is not the same as zero used. One healthy line therefore cannot hide a stalled
+line behind a newer organization-wide maximum.
 
 Purchases and usage are reported **side by side, never summed**. An order is
 known the moment it is placed; usage is known when a supplier says so. Adding
@@ -2366,6 +2368,8 @@ with no "as of" becomes a current figure the moment it is pasted into a deck.
 carrier has not answered, `not_applicable` for what there was none of. A run
 with an unanswered request is `completed_with_pending` — **not** `completed`,
 because an administrator told "done" about a live line finds out from an invoice.
+A failed local action yields `completed_with_exceptions` and remains visible in
+the action list.
 
 Actions are recorded even when there was nothing to do, so the record answers
 "was their line suspended?" with "they had none" rather than with silence.
@@ -2373,6 +2377,12 @@ Actions are recorded even when there was nothing to do, so the record answers
 The call is idempotent: a second request for somebody already offboarded returns
 the existing record rather than re-asking a carrier to suspend a line it is
 already suspending.
+
+The same transaction preserves the last-owner invariant, revokes MFA elevation,
+stops organization-funded internet calls through the shared calling lifecycle,
+expires local work entitlements, and cancels only safe requested/reserved
+top-ups. Paid top-ups require a refund; supplier-in-flight or unknown line and
+top-up outcomes remain held and `pending_carrier` until reconciled.
 
 ### Personal service is untouched
 
