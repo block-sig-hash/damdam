@@ -2207,6 +2207,344 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /v1/operations/exceptions:
+    get:
+      tags:
+      - Operations
+      summary: Exception Queue
+      description: "What is waiting for a human, searchable by support reference.\n\
+        \n`reference` is a prefix match because the references in this queue are\n\
+        structured \u2014 `refund:<id>`, `payment:<id>` \u2014 and an operator with\
+        \ a ticket\nin front of them holds the whole string, never the middle of it."
+      operationId: exception_queue_v1_operations_exceptions_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: kind
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/ExceptionKind'
+          - type: 'null'
+          title: Kind
+      - name: reference
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Reference
+      - name: include_resolved
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Resolved
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/operations/actions:
+    get:
+      tags:
+      - Operations
+      summary: Action History
+      description: 'Every decision taken on this surface, newest first.
+
+
+        Append-only by database trigger, so this is the whole history rather than
+
+        the history as of the last person who wanted to change it.'
+      operationId: action_history_v1_operations_actions_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: subject_reference
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Subject Reference
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorActionListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/operations/supplier-attempts/{attempt_id}/resolution:
+    post:
+      tags:
+      - Operations
+      summary: Resolve Supplier Attempt
+      description: "Settle a purchase whose outcome we lost \u2014 after asking the\
+        \ supplier.\n\nReturns `409 reconciliation_required` unless the durable attempt\
+        \ state says\nthe original supplier reconciliation ran and ended held for\
+        \ human review."
+      operationId: resolve_supplier_attempt_v1_operations_supplier_attempts__attempt_id__resolution_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: attempt_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Attempt Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierResolutionRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorActionView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/operations/payment-discrepancies:
+    post:
+      tags:
+      - Operations
+      summary: Resolve Payment Discrepancy
+      description: 'The only money path here, and it is a balanced posting.
+
+
+        The reconciled bank receipt supplies the amount, currency, clearing account
+
+        and value date. The caller can select only the receiving customer account.'
+      operationId: resolve_payment_discrepancy_v1_operations_payment_discrepancies_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentDiscrepancyRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorActionView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/operations/call-charges/{charge_id}/correction:
+    post:
+      tags:
+      - Operations
+      summary: Correct Call Settlement
+      description: Replace a call charge without editing history or exceeding its
+        hold.
+      operationId: correct_call_settlement_v1_operations_call_charges__charge_id__correction_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: charge_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Charge Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallSettlementCorrectionRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorActionView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/operations/exceptions/{exception_id}/dismissal:
+    post:
+      tags:
+      - Operations
+      summary: Dismiss Exception
+      description: 'Close an item that needs nothing, with a reason on the record.
+
+
+        Not a delete. The entry stays, resolved, because "somebody read this and
+
+        decided it was fine" is information, and an empty queue is not evidence of
+
+        a quiet week.'
+      operationId: dismiss_exception_v1_operations_exceptions__exception_id__dismissal_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: exception_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Exception Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatorActionView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/operations/lines/lookup:
+    post:
+      tags:
+      - Operations
+      summary: Lookup Line
+      description: "Confirm a line from what a customer can read out. Masked, and\
+        \ recorded.\n\n`201` rather than `200` because this writes: the audit row\
+        \ naming who looked\nis created before the view is built. There is no unmasked\
+        \ variant and no\nroute that returns installation credentials \u2014 chunk\
+        \ 15's activation material\nis not readable from this surface by anyone."
+      operationId: lookup_line_v1_operations_lines_lookup_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LineLookupRequest'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LineSupportView'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /v1/operations/organizations/{organization_id}/lines.csv:
+    get:
+      tags:
+      - Operations
+      summary: Export Organization Lines
+      description: "One organization's lines, masked, as a file \u2014 and the export\
+        \ is recorded.\n\nThe tenant scope is a join through the order that paid,\
+        \ not a filter the\ncaller passes, so there is no parameter an operator could\
+        \ widen. Every cell\ngoes through `csv_safe`: carrier names and provider status\
+        \ strings are text\na supplier chose, and this file is opened in a spreadsheet."
+      operationId: export_organization_lines_v1_operations_organizations__organization_id__lines_csv_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: organization_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Organization Id
+      - name: reason
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 500
+          title: Reason
+      - name: idempotency_key
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
+          title: Idempotency Key
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v1/invitations:
     get:
       tags:
@@ -4875,6 +5213,25 @@ components:
       required:
       - deletion_scheduled_for
       title: AccountDeletionResponse
+    ActionRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+        idempotency_key:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Idempotency Key
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      - idempotency_key
+      title: ActionRequest
+      description: The two fields every constrained action needs from its caller.
     ActivationPreviewResponse:
       properties:
         valid:
@@ -5652,6 +6009,51 @@ components:
       - pstn_minutes_charged
       - started_at
       title: CallResponse
+    CallSettlementCorrectionRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+        idempotency_key:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Idempotency Key
+        billable_seconds:
+          type: integer
+          minimum: 0.0
+          title: Billable Seconds
+        setup_amount:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Setup Amount
+        usage_amount:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: string
+            pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Usage Amount
+        exception_item_id:
+          type: string
+          format: uuid
+          title: Exception Item Id
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      - idempotency_key
+      - billable_seconds
+      - setup_amount
+      - usage_amount
+      - exception_item_id
+      title: CallSettlementCorrectionRequest
+      description: Replace one call charge through V03's bounded correction path.
     CallType:
       type: string
       enum:
@@ -6309,6 +6711,23 @@ components:
       - qr_code_url
       - status
       title: EsimProfileResponse
+    ExceptionKind:
+      type: string
+      enum:
+      - unmatched_bank_transfer
+      - excess_payment
+      - refund_unknown
+      - dispute_opened
+      - settlement_mismatch
+      - usage_counter_reset
+      - usage_discrepancy
+      - usage_polling_stalled
+      - call_duplicate_billable_leg
+      - call_missing_terminal_event
+      - call_unknown_outcome
+      - call_settlement_shortfall
+      - call_supplier_cost_unmatched
+      title: ExceptionKind
     ExportJobView:
       properties:
         export_id:
@@ -7223,6 +7642,48 @@ components:
       required:
       - lines
       title: LineListResponse
+    LineLookupRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+        idempotency_key:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Idempotency Key
+        line_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Line Id
+        iccid:
+          anyOf:
+          - type: string
+            maxLength: 22
+          - type: 'null'
+          title: Iccid
+        e164:
+          anyOf:
+          - type: string
+            maxLength: 16
+          - type: 'null'
+          title: E164
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      - idempotency_key
+      title: LineLookupRequest
+      description: 'Find a line from what a customer can read out loud.
+
+
+        Exactly one identifier, because a lookup that accepts several and quietly
+
+        prefers one is a lookup whose result nobody can explain.'
     LineStateView:
       properties:
         carrier:
@@ -7333,6 +7794,75 @@ components:
       - expires_at
       - expired
       title: LineSummary
+    LineSupportView:
+      properties:
+        line_id:
+          type: string
+          format: uuid
+          title: Line Id
+        carrier:
+          type: string
+          title: Carrier
+        iccid_masked:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Iccid Masked
+        e164_masked:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: E164 Masked
+        activation_state:
+          type: string
+          title: Activation State
+        network_state:
+          type: string
+          title: Network State
+        provider_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Provider Status
+        voice_enabled:
+          type: boolean
+          title: Voice Enabled
+        organization_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Organization Id
+        holder_user_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Holder User Id
+        access_action_id:
+          type: string
+          format: uuid
+          title: Access Action Id
+      type: object
+      required:
+      - line_id
+      - carrier
+      - activation_state
+      - network_state
+      - voice_enabled
+      - access_action_id
+      title: LineSupportView
+      description: 'Enough to confirm a line is the right one. Never enough to use
+        it.
+
+
+        `iccid_masked` and `e164_masked` show trailing digits only. There is no
+
+        unmasked variant of this view and no endpoint that returns one: the
+
+        activation credential chunk 15 stores is not readable from this surface at
+
+        all, by any operator, for any reason.'
     LivenessResponse:
       properties:
         status:
@@ -8030,6 +8560,102 @@ components:
       - requested_at
       title: OffboardingView
       description: A departure, including what is still outstanding with a carrier.
+    OperatorActionKind:
+      type: string
+      enum:
+      - confirm_supplier_success
+      - confirm_supplier_failure
+      - resolve_payment_discrepancy
+      - correct_call_settlement
+      - dismiss_exception
+      - view_sensitive_record
+      title: OperatorActionKind
+      description: 'The constrained set of things an operator may do.
+
+
+        A closed vocabulary rather than free-form: the assignment forbids an
+
+        arbitrary SQL editor, and a list of named actions is what "constrained"
+
+        means in practice. Adding one is a code change with a review, which is the
+
+        point.'
+    OperatorActionListResponse:
+      properties:
+        actions:
+          items:
+            $ref: '#/components/schemas/OperatorActionView'
+          type: array
+          title: Actions
+      type: object
+      required:
+      - actions
+      title: OperatorActionListResponse
+    OperatorActionView:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        kind:
+          $ref: '#/components/schemas/OperatorActionKind'
+        subject_kind:
+          $ref: '#/components/schemas/OperatorSubjectKind'
+        subject_reference:
+          type: string
+          title: Subject Reference
+        actor_admin_id:
+          type: string
+          format: uuid
+          title: Actor Admin Id
+        reason:
+          type: string
+          title: Reason
+        idempotency_key:
+          type: string
+          title: Idempotency Key
+        before_state:
+          additionalProperties: true
+          type: object
+          title: Before State
+        after_state:
+          additionalProperties: true
+          type: object
+          title: After State
+        ledger_entry_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Ledger Entry Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - kind
+      - subject_kind
+      - subject_reference
+      - actor_admin_id
+      - reason
+      - idempotency_key
+      - before_state
+      - after_state
+      - created_at
+      title: OperatorActionView
+    OperatorSubjectKind:
+      type: string
+      enum:
+      - order_item
+      - supplier_attempt
+      - payment
+      - exception_item
+      - organization
+      - call_charge
+      title: OperatorSubjectKind
+      description: What an action was about.
     OrderItemResponse:
       properties:
         order_item_id:
@@ -8274,6 +8900,36 @@ components:
       required:
       - status
       title: PaymentConfirmationResponse
+    PaymentDiscrepancyRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+        idempotency_key:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Idempotency Key
+        customer_account_id:
+          type: string
+          format: uuid
+          title: Customer Account Id
+        exception_item_id:
+          type: string
+          format: uuid
+          title: Exception Item Id
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      - idempotency_key
+      - customer_account_id
+      - exception_item_id
+      title: PaymentDiscrepancyRequest
+      description: Match one reconciled bank receipt to a customer service-credit
+        account.
     PaymentMethodKind:
       type: string
       enum:
@@ -8694,6 +9350,53 @@ components:
       - processor_reference
       - checkout_url
       title: PurchaseResponse
+    QueueEntryView:
+      properties:
+        exception_id:
+          type: string
+          format: uuid
+          title: Exception Id
+        kind:
+          $ref: '#/components/schemas/ExceptionKind'
+        subject_reference:
+          type: string
+          title: Subject Reference
+        detail:
+          type: string
+          title: Detail
+        raised_at:
+          type: string
+          format: date-time
+          title: Raised At
+        resolved_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Resolved At
+        action_count:
+          type: integer
+          title: Action Count
+          default: 0
+      type: object
+      required:
+      - exception_id
+      - kind
+      - subject_reference
+      - detail
+      - raised_at
+      title: QueueEntryView
+    QueueResponse:
+      properties:
+        entries:
+          items:
+            $ref: '#/components/schemas/QueueEntryView'
+          type: array
+          title: Entries
+      type: object
+      required:
+      - entries
+      title: QueueResponse
     QuoteItemResponse:
       properties:
         product_id:
@@ -9460,6 +10163,50 @@ components:
           title: Reason
       type: object
       title: StopRequest
+    SupplierResolutionRequest:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+        idempotency_key:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Idempotency Key
+        succeeded:
+          type: boolean
+          title: Succeeded
+        provider_reference:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Provider Reference
+        exception_item_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Exception Item Id
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      - idempotency_key
+      - succeeded
+      title: SupplierResolutionRequest
+      description: 'Settle a supplier attempt whose outcome we lost.
+
+
+        The attempt itself must already be `held_for_review`, which is the durable
+
+        result of reconciling the original operation against the original supplier.
+
+        The request deliberately has no "reconciled" checkbox: caller testimony is
+
+        not evidence that the supplier was asked.'
     SupportCategory:
       type: string
       enum:

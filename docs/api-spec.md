@@ -2390,3 +2390,91 @@ Offboarding reaches only what the organization paid for. A line the same person
 bought themselves is on an order with no `payer_organization_id`, and every
 query here joins through that column — so it is out of scope by construction
 rather than by a filter somebody remembered to add.
+
+## 7.43 Amendment — The Internal Operations Surface (US-41)
+
+Chunk 25. Eight endpoints under `/v1/operations`, and the first thing to say
+about them is who cannot reach them.
+
+### Endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /operations/exceptions` | The queue, filtered by kind and searched by support-reference prefix |
+| `GET /operations/actions` | Every operator decision, newest first |
+| `POST /operations/supplier-attempts/{attempt_id}/resolution` | Settle a lost supplier outcome, after reconciliation |
+| `POST /operations/payment-discrepancies` | Match an unmatched bank receipt to customer service credit |
+| `POST /operations/call-charges/{charge_id}/correction` | Replace a call charge through V03's bounded correction path |
+| `POST /operations/exceptions/{exception_id}/dismissal` | Close an item that needs nothing, with a reason |
+| `POST /operations/lines/lookup` | Confirm a line from a masked identifier |
+| `GET /operations/organizations/{organization_id}/lines.csv` | One tenant's lines, masked, audited |
+
+### A separate audience, not a separate permission
+
+Every route verifies a token minted for the `admin` audience. An enterprise
+administrator — however senior inside their own organization, holding every
+permission §7.34's matrix can grant — holds a token for a different audience and
+receives `401`. There is no operations permission an organization could be
+granted, because operations privileges are not expressed in the tenant matrix at
+all. That is the strongest form the separation can take: not a check somebody
+could widen, but an absence of any path to widen.
+
+### Every action carries a reason and an idempotency key
+
+Both are required by the request schema and the reason is required again by a
+database check. A default reason is no reason, and a server-generated
+idempotency key would make a replay a second action. Replaying a key returns the
+decision that already exists — same action id, same `ledger_entry_id`, nothing
+posted twice.
+
+### `409 reconciliation_required` is a refusal, not a warning
+
+`POST /supplier-attempts/{id}/resolution` has no `reconciled` checkbox. The
+stored attempt must already be `held_for_review`, proving that reconciliation
+against the original supplier completed without a definitive answer. Otherwise
+the request fails with `409 reconciliation_required` and remains unchanged.
+Confirming success additionally requires `provider_reference` and a local
+adopted carrier line with that supplier reference. Confirming failure is refused
+when a local carrier line already proves that service was adopted.
+
+Related refusals: `409 attempt_already_settled`,
+`409 supplier_success_not_adopted`,
+`409 supplier_failure_has_adopted_service`, `400 one_identifier_required`.
+
+### The one money path posts, it does not set
+
+`POST /operations/payment-discrepancies` names an open unmatched-bank-transfer
+exception and a receiving customer service-credit account. The exception's
+immutable bank receipt supplies the amount, currency, value date and
+settlement-clearing account; the caller cannot choose them. The response carries
+the `ledger_entry_id` of the balanced entry. No endpoint accepts a balance, and
+no operations route is a `PUT` or `PATCH`.
+
+`POST /operations/call-charges/{id}/correction` delegates to V03's correction
+service. It preserves the original charge, posts only the bounded difference,
+requires the exact open call exception and records the replacement charge and
+journal entry in the immutable operator action.
+
+Exception dismissal is intentionally narrower than exception visibility.
+Unmatched payments, excess payments, refunds, disputes, settlement mismatches
+and all call-liability kinds cannot be dismissed; they must use a constrained
+resolution path.
+
+### The lookup is a `POST` because it writes
+
+`POST /operations/lines/lookup` records who looked before it returns the view. A
+`GET` that writes an audit row is a `GET` that lies about being safe to retry,
+and a caching layer would eventually make the record wrong. The response carries
+`access_action_id` so the operator can see that looking was recorded.
+
+It takes exactly one identifier — line id, ICCID or E.164 — and returns trailing
+digits only. Accepting a whole ICCID is not disclosure: it is what the customer
+read out. Returning one they had not is. §6.51's sealed activation material has
+no field in any response shape here.
+
+### The export's tenant scope is a join
+
+`GET /operations/organizations/{organization_id}/lines.csv` reaches a line only
+through an order whose payer *is* that organization, so there is no filter
+parameter an operator could widen. Every cell passes `csv_safe`, and the export
+writes its own `view_sensitive_record` row.

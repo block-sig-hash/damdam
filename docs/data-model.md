@@ -3798,3 +3798,104 @@ Usage arrives late and sometimes stops arriving. Every report carries
 `observed_through` — the **oldest of each line's latest authoritative
 observation**. `None` means at least one line has never been observed, which is
 not zero usage. A maximum would let one healthy line hide fifty stalled ones.
+
+## 6.60 Amendment — Operator Actions: the Record of Privileged Decisions (US-41)
+
+Chunk 25 adds **one table**, `operator_actions`, and adds no column to any
+existing one. That proportion is the point: an internal operations surface
+changes supplier attempts, order items and exception items at runtime, but it
+alters none of their shapes, and it reaches money only by posting balanced
+entries through §6.47's ledger.
+
+### `operator_actions`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `uuid` | PK |
+| `kind` | `operator_action_kind` | `confirm_supplier_success`, `confirm_supplier_failure`, `resolve_payment_discrepancy`, `correct_call_settlement`, `dismiss_exception`, `view_sensitive_record` |
+| `subject_kind` | `operator_subject_kind` | `order_item`, `supplier_attempt`, `payment`, `exception_item`, `organization`, `call_charge` |
+| `subject_reference` | `varchar(200)` | The thing acted on, as a stable string |
+| `actor_admin_id` | `uuid` | → `admin_users.id`, `RESTRICT` |
+| `reason` | `varchar(500)` | Non-blank, enforced by check |
+| `idempotency_key` | `varchar(200)` | The caller's key for *this decision* |
+| `exception_item_id` | `uuid \| null` | → `exception_items.id`, `RESTRICT`; the evidence link is part of the immutable record |
+| `before_state` / `after_state` | `jsonb` | Copied, not referenced |
+| `ledger_entry_id` | `uuid \| null` | → `journal_entries.id`, `RESTRICT`; set only when money moved |
+| `created_at` | `timestamptz` | |
+
+Constraints and indexes: `uq_operator_actions_idempotency`
+(`kind`, `subject_reference`, `idempotency_key`),
+`ck_operator_actions_reason` (`length(btrim(reason)) > 0`, PostgreSQL DDL),
+`ix_operator_actions_subject`, `ix_operator_actions_actor`,
+`ix_operator_actions_created`, and the trigger
+`trg_operator_action_immutable`.
+
+### The audit trail is immutable in the database, not in the service
+
+`trg_operator_action_immutable` refuses `UPDATE` and `DELETE` outright — the
+same mechanism §6.48 used for supplier attempt history, for the same reason. An
+audit trail an operator can edit is an audit trail of whatever the last operator
+wanted it to say, and application-level immutability is one migration away from
+not being immutable.
+
+`actor_admin_id` is `RESTRICT` for the matching reason: deleting the operator
+would leave a decision nobody made.
+
+### `subject_reference` is a string, deliberately not a foreign key
+
+The five subject kinds live in five tables, and an audit row has to outlive
+whatever it points at. A structured string — `supplier_attempt:<id>`,
+`payment:<reference>`, `organization:<id>` — is also the thing an operator holds
+when a ticket arrives, which is why the queue searches it by prefix.
+
+### `before_state` and `after_state` are copies
+
+A reference to a row that has since moved on explains nothing six months later.
+The supplier resolution records the attempt's outcome, the item's provisioning
+state and the provider reference on both sides, so the record answers "what did
+this change" without re-reading a table that has changed again since.
+
+### Reconcile before resolving, enforced as a refusal
+
+An operator may not declare a supplier attempt successful or failed unless its
+durable outcome is already `held_for_review`, the state written after automatic
+reconciliation could not establish a result. There is deliberately no
+`reconciled` request field: caller testimony cannot replace stored evidence.
+The attempt is row-locked and reloaded after the subject advisory lock, so two
+operators using different idempotency keys cannot both record a decision.
+
+A confirmed success additionally requires the supplier's own reference and an
+already-adopted local carrier line with the same supplier and reference. A
+failure is refused when any such local service has already been adopted. These
+checks keep an operations decision from overwriting stronger provisioning
+evidence in either direction.
+
+### Money moves only through balanced entries
+
+There is no balance column here and no balance-setting path. A payment
+discrepancy must name an open `unmatched_bank_transfer` exception whose
+`bank:<receipt-id>` subject resolves to an immutable unmatched receipt. The
+caller chooses only a non-system customer `service_credit` account in the same
+currency; amount, currency, value date and settlement-clearing account all come
+from the receipt. The balanced journal entry id is recorded on the action and
+the receipt becomes matched in the same transaction.
+
+Call settlement correction delegates to §6.58's bounded replacement-charge
+path. It preserves the old charge, posts only the difference, cannot exceed the
+accepted reservation rules, and closes only the exact open call exception.
+
+### A dismissal resolves; it never deletes
+
+`dismiss_exception` sets `exception_items.resolved_at` and records why. The row
+stays, because "somebody read this and decided it was fine" is information, and
+an empty queue is not evidence of a quiet week. Financial, dispute, refund and
+calling-liability kinds cannot use dismissal; they require their bounded
+resolution workflow.
+
+### Looking is an action
+
+`view_sensitive_record` exists because the question after an incident is always
+"who saw this". A masked line lookup writes the audit row before it returns the
+view. What it returns is trailing digits only, and **§6.51's sealed activation
+material is not readable from this surface at all** — not masked, not joined,
+absent from every response shape.

@@ -24,7 +24,15 @@ from sqlalchemy import text
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from app import model_registry  # noqa: F401
-from app.auth.models import Organization, OrganizationType, Platform, User
+from app.auth.models import (
+    AdminRole,
+    AdminUser,
+    Locale,
+    Organization,
+    OrganizationType,
+    Platform,
+    User,
+)
 from app.calling.charging import (
     CallChargingService,
     ChargingError,
@@ -59,6 +67,8 @@ from app.ledger.models import (
     ReservationState,
 )
 from app.ledger.service import LedgerService, Posting
+from app.operations.models import OperatorActionKind
+from app.operations.service import OperationsService
 from app.refunds.models import ExceptionItem, ExceptionKind
 from app.worker import _resolve_deadline
 
@@ -69,11 +79,11 @@ pytestmark = pytest.mark.skipif(
 
 NOW = datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc)
 TABLES = (
-    "call_deadlines, call_supplier_costs, call_charges, call_events, "
+    "operator_actions, call_deadlines, call_supplier_costs, call_charges, call_events, "
     "call_operations, call_legs, call_attempts, calling_client_credentials, "
     "exception_items, journal_lines, journal_entries, ledger_reservations, "
     "ledger_accounts, tariff_rates, tariffs, products, organization_members, "
-    "organizations, users"
+    "organizations, admin_users, users"
 )
 
 #: NGN 30.00 per minute, 60-second increments, no minimum and no setup fee.
@@ -613,6 +623,68 @@ class TestTheAuthorizedMaximumBindsBothSides:
 
 
 class TestCorrectionsMoveOnlyTheDifference:
+    def test_an_operator_correction_reuses_the_bounded_call_path(
+        self, session, authorization, charging, ledger, clock
+    ):
+        """The operations surface cannot invent accounts or exceed the call hold."""
+        _, credit, attempt = _ready_call(
+            session, authorization, charging, ledger, clock
+        )
+        original = charging.settle(session, attempt).charge
+        operator = AdminUser(
+            email=f"ops-{uuid4().hex[:8]}@example.test",
+            password_hash="x",
+            locale=Locale.EN,
+            role=AdminRole.ADMIN,
+        )
+        exception = ExceptionItem(
+            kind=ExceptionKind.CALL_SETTLEMENT_SHORTFALL,
+            subject_reference=f"call:{attempt.id}",
+            detail="supplier CDR differs from the event-derived charge",
+            raised_at=clock(),
+        )
+        session.add_all([operator, exception])
+        session.flush()
+
+        operations = OperationsService(ledger, clock=clock)
+        action = operations.correct_call_settlement(
+            session,
+            original,
+            charging=charging,
+            actor=operator,
+            billable_seconds=180,
+            setup_amount=Decimal("0.00"),
+            usage_amount=Decimal("90.00"),
+            reason="supplier CDR reviewed against the original call",
+            idempotency_key="call-correction-1",
+            exception_item=exception,
+        )
+        replay = operations.correct_call_settlement(
+            session,
+            original,
+            charging=charging,
+            actor=operator,
+            billable_seconds=180,
+            setup_amount=Decimal("0.0"),
+            usage_amount=Decimal("90.0"),
+            reason="supplier CDR reviewed against the original call",
+            idempotency_key="call-correction-1",
+            exception_item=exception,
+        )
+
+        assert action.kind is OperatorActionKind.CORRECT_CALL_SETTLEMENT
+        assert replay.id == action.id
+        assert action.ledger_entry_id is not None
+        assert session.get(CallCharge, original.id).state is ChargeState.SUPERSEDED
+        assert ledger.balance(session, credit) == Decimal("9910.00")
+        assert exception.resolved_at is not None
+        assert session.exec(
+            select(ExceptionItem).where(
+                ExceptionItem.kind == ExceptionKind.SETTLEMENT_MISMATCH,
+                ExceptionItem.resolved_at.is_(None),
+            )
+        ).all() == []
+
     def test_a_higher_supplier_record_posts_the_difference_only(
         self, session, authorization, charging, ledger, clock
     ):
