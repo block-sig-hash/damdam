@@ -18,8 +18,10 @@ class TestNoWorkIsLostWhenAWorkerDies:
     def test_tasks_are_acknowledged_after_the_work_not_on_receipt(self) -> None:
         """Celery's default acks on pickup, so `kill -9` loses the task.
 
-        Everything in this worker provisions eSIMs, settles calls or moves
-        money. None of it is work that may vanish without a trace.
+        Work in this worker includes provisioning, settlement, expiry and
+        notifications. None of it may vanish without a trace; external
+        notification delivery remains at-least-once until providers accept an
+        idempotency key or a durable dispatch receipt closes its crash window.
         """
         assert celery_app.conf.task_acks_late is True
 

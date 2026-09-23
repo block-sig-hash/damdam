@@ -115,13 +115,19 @@ def redact_mapping(values: dict[str, Any]) -> dict[str, Any]:
     for key, value in values.items():
         if SENSITIVE_KEY_PATTERN.search(key):
             cleaned[key] = _REDACTED
-        elif isinstance(value, dict):
-            cleaned[key] = redact_mapping(value)
-        elif isinstance(value, str):
-            cleaned[key] = redact(value)
         else:
-            cleaned[key] = value
+            cleaned[key] = _redact_value(value)
     return cleaned
+
+
+def _redact_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return redact_mapping(value)
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_value(item) for item in value)
+    return redact(value) if isinstance(value, str) else value
 
 
 def correlation_id() -> str | None:
@@ -141,9 +147,9 @@ class RedactingFilter(logging.Filter):
     """Redacts every record, including ones from libraries we did not write.
 
     A `Filter` rather than a `Formatter` because it must apply no matter which
-    handler or formatter a deployment configures. Attached to the root logger,
-    it is the last thing between a third-party library's debug line and a log
-    aggregator.
+    handler or formatter a deployment configures. Attached to every handler
+    present when logging is configured, it is the last thing between a
+    third-party library's debug line and a log aggregator.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -157,6 +163,17 @@ class RedactingFilter(logging.Filter):
             # undo the redaction we just did.
             record.msg = cleaned
             record.args = ()
+        if record.exc_info:
+            # Standard formatters append ``exc_info`` *after* formatting the
+            # message. Redacting only ``getMessage()`` therefore leaves a
+            # secret carried by an exception untouched on foreign handlers.
+            # Materialise a safe traceback and clear the original tuple so no
+            # later formatter can reconstruct the unsafe version.
+            traceback = logging.Formatter().formatException(record.exc_info)
+            record.exc_text = redact(traceback)
+            record.exc_info = None
+        if record.stack_info:
+            record.stack_info = redact(record.stack_info)
         return True
 
 
@@ -179,6 +196,11 @@ class JsonLogFormatter(logging.Formatter):
                 payload[key] = value
         if record.exc_info:
             payload["exception"] = redact(self.formatException(record.exc_info))
+        elif record.exc_text:
+            # A handler filter may already have materialised and sanitised the
+            # traceback so a different formatter cannot reconstruct the unsafe
+            # original. Preserve that safe traceback in structured output.
+            payload["exception"] = redact(record.exc_text)
         return json.dumps(payload, ensure_ascii=False, default=str)
 
 
@@ -204,19 +226,27 @@ def configure_logging(level: int = logging.INFO, *, json_output: bool = True) ->
     """
     root = logging.getLogger()
     root.setLevel(level)
+    redactor = RedactingFilter()
     for existing in list(root.handlers):
         if getattr(existing, _OURS, False):
             root.removeHandler(existing)
+        elif not any(
+            isinstance(installed, RedactingFilter) for installed in existing.filters
+        ):
+            # Logger filters are not inherited by descendant loggers. The
+            # handler is the shared point every propagated library record
+            # actually crosses, so pre-existing shipper/capture handlers must
+            # be protected here too.
+            existing.addFilter(redactor)
     handler = logging.StreamHandler()
     setattr(handler, _OURS, True)
     handler.setFormatter(
         JsonLogFormatter() if json_output else logging.Formatter("%(message)s")
     )
-    handler.addFilter(RedactingFilter())
+    handler.addFilter(redactor)
     root.addHandler(handler)
-    # Belt and braces: a handler added later by a library still gets filtered,
-    # because the filter is on the logger as well as on our own handler. Added
-    # once — a second call must not stack a second filter.
+    # Also protect records emitted directly on root. Logger filters are not
+    # inherited, which is why every existing handler is covered above.
     if not any(isinstance(existing, RedactingFilter) for existing in root.filters):
         root.addFilter(RedactingFilter())
 

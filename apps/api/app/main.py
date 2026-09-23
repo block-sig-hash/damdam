@@ -86,10 +86,10 @@ from app.manifests.service import ManifestError, ManifestService
 from app.mfa.service import MfaError, MfaService
 from app.monitoring import PostHogExceptionMiddleware, build_exception_tracker
 from app.notifications.service import EmailSender, WhatsAppSender
+from app.observability import CORRELATION_HEADER, CorrelationIdMiddleware
 from app.operations.routes import router as operations_router
 from app.operations.service import OperationsError, OperationsService
 from app.operations.support import SupportDirectory
-from app.observability import CORRELATION_HEADER, CorrelationIdMiddleware
 from app.organizations.invitations import InvitationError, InvitationService
 from app.organizations.routes import invitation_router
 from app.organizations.routes import mfa_router as organization_mfa_router

@@ -224,15 +224,16 @@ class CredentialVault:
             )
         return retired
 
-    def fingerprint(self, secret: str) -> str:
+    def fingerprint(self, secret: str, key_reference: str | None = None) -> str:
         """Keyed, so it cannot be brute-forced from a stolen database alone.
 
         An unkeyed hash of an activation code would be reversible by anyone who
         could guess the code space, which for a structured LPA string is not a
         large space.
         """
+        key = self._key if key_reference is None else self._key_for(key_reference)
         return hashlib.blake2b(
-            secret.encode("utf-8"), key=self._key, digest_size=32
+            secret.encode("utf-8"), key=key, digest_size=32
         ).hexdigest()
 
     # --- storage ----------------------------------------------------------
@@ -258,7 +259,7 @@ class CredentialVault:
             )
         ).first()
         if existing is not None:
-            if existing.fingerprint != self.fingerprint(secret):
+            if existing.fingerprint != self.fingerprint(secret, existing.key_reference):
                 raise CredentialError(
                     "credential_conflict",
                     f"installation {installation.id} already holds a different "
@@ -305,8 +306,12 @@ class CredentialVault:
         return IssuedGrant(grant=grant, token=token)
 
     def redeem(
-        self, session: Session, token: str, subject_user_id: UUID,
-        *, expected_credential_id: UUID | None = None,
+        self,
+        session: Session,
+        token: str,
+        subject_user_id: UUID,
+        *,
+        expected_credential_id: UUID | None = None,
     ) -> str:
         """Spend a grant and return the profile. Once, by the right person.
 
@@ -315,10 +320,13 @@ class CredentialVault:
         whole meaning of single-use, and is not something a read-then-write
         would give.
         """
-        fingerprint = self._token_fingerprint(token)
+        fingerprints = [
+            self._token_fingerprint(token, reference)
+            for reference in self.known_key_references
+        ]
         grant = session.exec(
             select(CredentialGrant)
-            .where(CredentialGrant.token_fingerprint == fingerprint)
+            .where(col(CredentialGrant.token_fingerprint).in_(fingerprints))
             .with_for_update()
             .execution_options(populate_existing=True)
         ).first()
@@ -385,9 +393,10 @@ class CredentialVault:
         session.flush()
         return len(open_grants)
 
-    def _token_fingerprint(self, token: str) -> str:
+    def _token_fingerprint(self, token: str, key_reference: str | None = None) -> str:
+        key = self._key if key_reference is None else self._key_for(key_reference)
         return hashlib.blake2b(
-            token.encode("utf-8"), key=self._key, digest_size=32
+            token.encode("utf-8"), key=key, digest_size=32
         ).hexdigest()
 
     @staticmethod
@@ -396,16 +405,11 @@ class CredentialVault:
         credential: EsimActivationCredential,
         subject_user_id: UUID,
     ) -> bool:
-        installation = session.get(
-            EsimInstallation, credential.esim_installation_id
-        )
+        installation = session.get(EsimInstallation, credential.esim_installation_id)
         if installation is None:  # pragma: no cover - FK guarantees this
             return False
         entitlement = session.get(Entitlement, installation.entitlement_id)
-        return (
-            entitlement is not None
-            and entitlement.holder_user_id == subject_user_id
-        )
+        return entitlement is not None and entitlement.holder_user_id == subject_user_id
 
 
 def _aad(installation_id: UUID) -> bytes:

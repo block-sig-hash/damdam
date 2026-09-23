@@ -1,3 +1,5 @@
+from base64 import b64encode
+
 import pytest
 from pydantic import ValidationError
 
@@ -72,6 +74,29 @@ def test_esim_access_package_codes_accepts_new_format_from_real_env_var(
     monkeypatch.setenv("ESIM_ACCESS_PACKAGE_CODES", '{"SA:5":"SA_5GB"}')
     settings = Settings(**_BASE_SETTINGS)
     assert settings.esim_access_package_codes == {"SA:5": "SA_5GB"}
+
+
+class TestActivationKeyRotationConfiguration:
+    def test_a_retired_reference_cannot_be_repeated(self) -> None:
+        encoded = b64encode(b"o" * 32).decode()
+
+        with pytest.raises(ValidationError, match="repeats key reference"):
+            Settings(
+                **_BASE_SETTINGS,
+                activation_material_retired_keys=(
+                    f"material-v1:{encoded},material-v1:{encoded}"
+                ),
+            )
+
+    @pytest.mark.parametrize("reference", ["", "has:colon", "has space"])
+    def test_key_references_must_survive_the_rotation_list_format(
+        self, reference: str
+    ) -> None:
+        with pytest.raises(ValidationError, match="KEY_REFERENCE"):
+            Settings(
+                **_BASE_SETTINGS,
+                activation_material_key_reference=reference,
+            )
 
 
 class TestProductionRejectsDeveloperDefaults:

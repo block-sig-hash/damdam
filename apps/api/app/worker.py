@@ -66,10 +66,14 @@ celery_app.conf.update(
     # when the worker picks it up, so `kill -9` mid-provisioning loses it with
     # no trace. Late acks mean a lost worker's task is redelivered.
     #
-    # This requires tasks to tolerate redelivery, and they do: the provisioning
-    # and charging paths write through an idempotency key (chunks 10, 11, V03),
-    # and the retention sweeps are delete-what-expired, which converges. A task
-    # that cannot tolerate redelivery must not be added without revisiting this.
+    # This makes delivery at-least-once, not magically exactly-once. The
+    # financial and supplier-purchase paths write through idempotency keys
+    # (chunks 10, 11, V03), and retention sweeps converge. Notification sends
+    # still have the classic crash window between the provider accepting a
+    # message and our recording that acceptance; a redelivery can repeat that
+    # message. That limitation is recorded in the chunk handoff and requires a
+    # provider idempotency key or transactional dispatch receipt to close.
+    # Silently losing the task on worker death is not a safer fallback.
     task_acks_late=True,
     # A task whose worker vanished is requeued rather than quietly discarded.
     task_reject_on_worker_lost=True,

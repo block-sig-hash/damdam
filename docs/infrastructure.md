@@ -1153,14 +1153,19 @@ The application must not connect as the database owner. Three roles, created by
   compromised application credential cannot drop a table or, more insidiously,
   truncate one and leave the schema looking intact.
 - **`damdam_migrate`** — owns the schema and runs Alembic. Used by the migration
-  step of a deploy and by nothing that serves a request.
+  step of a deploy and by nothing that serves a request. The bootstrap also
+  transfers existing public tables, sequences, views, enums and domains, so an
+  established environment can adopt the split without leaving its next
+  migration unable to alter objects owned by the former deploy role.
 - **`damdam_readonly`** — `SELECT` only, with no access to
   `esim_activation_credentials`. For metrics scraping and support reads. It is
   explicitly denied the one table whose contents are one-time-use customer
   property, because a read-only credential is the one most likely to be shared.
 
 Separating `app` from `migrate` is what makes "no DDL at runtime" structural
-rather than a code review habit.
+rather than a code review habit. Read-only grants are intentionally not default
+privileges: rerun the reviewed script after migrations when support needs new
+tables; until then those tables fail closed.
 
 ### Secret rotation
 

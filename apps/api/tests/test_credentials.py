@@ -18,6 +18,7 @@ from app.connectivity.models import EsimActivationCredential
 #: nothing; it exists to be sealed and read back.
 HARNESS_SECRET = "LPA:1$smdp.example.invalid$HARNESSMATCHING000"
 
+
 class TestKeyRotation:
     """US-42, chunk 26D — rotating the key must not destroy what it sealed.
 
@@ -45,6 +46,23 @@ class TestKeyRotation:
         )
 
         assert after.unseal(credential) == HARNESS_SECRET
+
+    def test_rotation_preserves_existing_credential_and_grant_fingerprints(
+        self,
+    ) -> None:
+        old_key, new_key = b"o" * 32, b"n" * 32
+        before = self._vault(old_key, "material-v1")
+        after = self._vault(new_key, "material-v2", {"material-v1": old_key})
+
+        assert after.fingerprint(HARNESS_SECRET, "material-v1") == before.fingerprint(
+            HARNESS_SECRET
+        )
+        old_grant = before._token_fingerprint("still-open-grant")
+        candidates = {
+            after._token_fingerprint("still-open-grant", reference)
+            for reference in after.known_key_references
+        }
+        assert old_grant in candidates
 
     def test_new_material_is_sealed_under_the_current_key(self) -> None:
         old_key, new_key = b"o" * 32, b"n" * 32

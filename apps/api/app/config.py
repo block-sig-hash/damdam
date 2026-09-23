@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     #: `*` with `allow_credentials` is refused by every browser anyway and
     #: reads, wrongly, like it works.
     additional_browser_origins: str = ""
-    #: A bearer token that may read `/v1/ops/metrics` without an admin session.
+    #: A bearer token that may read `/v1/admin/metrics` without an admin session.
     #:
     #: A metrics scraper is a process, not a person, and giving one an operator
     #: login would mean an operator credential living in a scrape config. Empty
@@ -226,12 +226,18 @@ class Settings(BaseSettings):
             if not entry:
                 continue
             reference, _, encoded = entry.partition(":")
+            reference = reference.strip()
             if not reference or not encoded:
                 raise ValueError(
                     "ACTIVATION_MATERIAL_RETIRED_KEYS entries must be "
                     f"`reference:base64key`; got {entry!r}"
                 )
-            parsed[reference.strip()] = b64decode(encoded.strip(), validate=True)
+            if reference in parsed:
+                raise ValueError(
+                    "ACTIVATION_MATERIAL_RETIRED_KEYS repeats key reference "
+                    f"{reference!r}"
+                )
+            parsed[reference] = b64decode(encoded.strip(), validate=True)
         return parsed
 
     # The approved calling amendment assigns the outbound internet dialer to
@@ -313,8 +319,7 @@ class Settings(BaseSettings):
             )
         if problems:
             raise ValueError(
-                "APP_ENV=production refuses this configuration: "
-                + "; ".join(problems)
+                "APP_ENV=production refuses this configuration: " + "; ".join(problems)
             )
         return self
 
@@ -345,6 +350,11 @@ class Settings(BaseSettings):
         except Exception as exc:
             raise ValueError(str(exc)) from exc
         for reference, key in retired.items():
+            if not re.fullmatch(r"[A-Za-z0-9._-]+", reference):
+                raise ValueError(
+                    f"retired activation-material key reference {reference!r} "
+                    "must contain only letters, digits, dot, underscore or hyphen"
+                )
             if len(key) != 32:
                 raise ValueError(
                     f"retired activation-material key {reference!r} is "
@@ -355,6 +365,11 @@ class Settings(BaseSettings):
                 f"{self.activation_material_key_reference!r} is both the "
                 "current and a retired key reference; a reference must name "
                 "exactly one key"
+            )
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", self.activation_material_key_reference):
+            raise ValueError(
+                "ACTIVATION_MATERIAL_KEY_REFERENCE must contain only letters, "
+                "digits, dot, underscore or hyphen"
             )
         return self
 

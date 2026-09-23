@@ -231,6 +231,28 @@ def test_distinct_grants_refresh_a_preloaded_delivery_count(engine, session, vau
     assert session.get(EsimActivationCredential, credential_id).delivery_count == 2
 
 
+def test_rotation_preserves_idempotent_storage_and_an_open_grant(
+    session: Session, vault: CredentialVault, clock: Clock
+) -> None:
+    """A deploy between issuing and redeeming a grant must not strand it."""
+    holder = _user(session, "+2348010000110")
+    installation = _installation(session, holder)
+    credential = vault.store(session, installation, LPA)
+    issued = vault.issue_grant(session, credential, holder.id)
+    session.commit()
+
+    rotated = CredentialVault(
+        os.urandom(32),
+        "rotated-key",
+        clock=clock,
+        retired_keys={"test-key": vault._key},  # noqa: SLF001
+    )
+
+    assert rotated.store(session, installation, LPA).id == credential.id
+    assert rotated.redeem(session, issued.token, holder.id) == LPA
+    session.commit()
+
+
 def test_a_second_grant_is_a_second_delivery_not_a_second_profile(
     session: Session, vault: CredentialVault
 ) -> None:

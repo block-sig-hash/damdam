@@ -9,6 +9,7 @@ library, a dict dumped into a message, an exception traceback.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 from collections.abc import Iterator
@@ -92,9 +93,11 @@ class TestNothingSensitiveSurvives:
             import sys
 
             record.exc_info = sys.exc_info()
+            RedactingFilter().filter(record)
             rendered = formatter.format(record)
 
         assert "TESTMATCHINGID0000" not in rendered
+        assert "exception" in json.loads(rendered)
 
     def test_mapping_redaction_is_by_key_and_recursive(self) -> None:
         cleaned = redact_mapping(
@@ -102,6 +105,7 @@ class TestNothingSensitiveSurvives:
                 "order_id": "abc",
                 "authorization": "Bearer xyz",
                 "nested": {"refresh_token": "r0", "safe": "kept"},
+                "items": [{"activation_code": LPA}],
             }
         )
 
@@ -109,6 +113,7 @@ class TestNothingSensitiveSurvives:
         assert cleaned["authorization"] == "[redacted]"
         assert cleaned["nested"]["refresh_token"] == "[redacted]"
         assert cleaned["nested"]["safe"] == "kept"
+        assert cleaned["items"] == [{"activation_code": "[redacted]"}]
 
 
 class TestStructuredOutput:
@@ -158,12 +163,38 @@ class TestStructuredOutput:
         or a supervisor's handler would have gone the same way.
         """
         root = logging.getLogger()
-        foreign = logging.NullHandler()
+        output = io.StringIO()
+        foreign = logging.StreamHandler(output)
         root.addHandler(foreign)
         try:
             configure_logging()
 
             assert foreign in root.handlers
+            logging.getLogger("some.unmodified.library").warning(
+                "authorization=Bearer should-not-leak"
+            )
+            assert "should-not-leak" not in output.getvalue()
+            assert "[redacted]" in output.getvalue()
+        finally:
+            root.removeHandler(foreign)
+            for handler in list(root.handlers):
+                if getattr(handler, "_damdam_observability", False):
+                    root.removeHandler(handler)
+
+    def test_a_foreign_formatter_cannot_append_an_unredacted_traceback(self) -> None:
+        root = logging.getLogger()
+        output = io.StringIO()
+        foreign = logging.StreamHandler(output)
+        root.addHandler(foreign)
+        try:
+            configure_logging()
+            try:
+                raise ValueError(f"failed to install {LPA}")
+            except ValueError:
+                logging.getLogger("some.unmodified.library").exception("failed")
+
+            assert "TESTMATCHINGID0000" not in output.getvalue()
+            assert "[redacted]" in output.getvalue()
         finally:
             root.removeHandler(foreign)
             for handler in list(root.handlers):
