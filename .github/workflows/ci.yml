@@ -538,6 +538,10 @@ jobs:
           DEVICE_ID=$(xcrun simctl create DamDamScreenshotCI "iPhone 16" 2>/dev/null || xcrun simctl list devices | grep DamDamScreenshotCI | grep -oE '[0-9A-F-]{36}')
           echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
           xcrun simctl boot "$DEVICE_ID"
+          # A boot request returns before SpringBoard and XCTest are ready.
+          # The previous on-demand run built/installed but Maestro's iOS
+          # driver never became ready and produced zero screenshots.
+          xcrun simctl bootstatus "$DEVICE_ID" -b
           xcrun simctl install "$DEVICE_ID" "ios/build/Build/Products/Debug-iphonesimulator/DamDam.app"
       # The 2026-09-07 nightly failed here with
       # `xcuitest.installer.LocalXCTestInstaller$IOSDriverTimeoutException:

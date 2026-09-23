@@ -24,6 +24,7 @@ class IOSReleaseGuardTests(unittest.TestCase):
         self.assertIn("-configuration Debug", ios_job)
         self.assertIn('FORCE_BUNDLING: "true"', ios_job)
         self.assertIn("Debug-iphonesimulator/DamDam.app", ios_job)
+        self.assertIn('xcrun simctl bootstatus "$DEVICE_ID" -b', ios_job)
         self.assertNotIn("Release-iphonesimulator/DamDam.app", ios_job)
 
     def test_release_bundle_rejects_fixture_harness(self) -> None:
