@@ -37,7 +37,9 @@ iOS Release references `DamDamRelease.entitlements`, which requests production
 APNs and the same associated domains as Debug. Its React Native bundle phase
 also refuses `SCREENSHOT_HARNESS_MODE=true`, preventing fixture UI from entering
 a production archive. A Linux regression executes that guard, but only a macOS
-archive verifies the entire iOS build. It needs an Apple developer
+archive verifies the entire iOS build. The iOS screenshot CI path is a
+non-distribution Debug simulator build with a forced embedded JS bundle; it
+cannot be repurposed as a signed Release artifact. It needs an Apple developer
 team, an approved distribution certificate/profile, a macOS/Xcode environment
 and verified AASA domains; none is configured here (D6). The repeatable
 archive command once those inputs exist is:

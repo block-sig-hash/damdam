@@ -5,7 +5,8 @@ Testing infrastructure only — see `docs/testing-qa.md`'s
 directory is never imported by production code; it's only reachable
 when `index.js` sees `SCREENSHOT_HARNESS_MODE=true` inlined at build
 time, which only CI's `screenshot-mobile-android`/`screenshot-mobile-ios`
-jobs (`.github/workflows/ci.yml`) ever set.
+jobs (`.github/workflows/ci.yml`) should set. Android and iOS production
+builds explicitly reject this mode even if their environment is misconfigured.
 
 ## Why this exists
 

@@ -513,15 +513,18 @@ jobs:
       # Xcode's fixed device-*type* catalog rather than depending on
       # what instances already happen to exist -- a more reliable
       # operation than destination-matching proved to be.
-      - name: Build harness-mode Release app for the simulator
+      - name: Build harness-mode Debug app for the simulator
         working-directory: apps/mobile/ios
         env:
           SCREENSHOT_HARNESS_MODE: "true"
+          # Debug is non-distribution, but still needs an embedded JS bundle
+          # because CI runs Maestro without a Metro server.
+          FORCE_BUNDLING: "true"
         run: |
           xcodebuild \
             -workspace DamDam.xcworkspace \
             -scheme DamDam \
-            -configuration Release \
+            -configuration Debug \
             -sdk iphonesimulator \
             -derivedDataPath build \
             -destination 'generic/platform=iOS Simulator' \
@@ -535,7 +538,7 @@ jobs:
           DEVICE_ID=$(xcrun simctl create DamDamScreenshotCI "iPhone 16" 2>/dev/null || xcrun simctl list devices | grep DamDamScreenshotCI | grep -oE '[0-9A-F-]{36}')
           echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
           xcrun simctl boot "$DEVICE_ID"
-          xcrun simctl install "$DEVICE_ID" "ios/build/Build/Products/Release-iphonesimulator/DamDam.app"
+          xcrun simctl install "$DEVICE_ID" "ios/build/Build/Products/Debug-iphonesimulator/DamDam.app"
       # The 2026-09-07 nightly failed here with
       # `xcuitest.installer.LocalXCTestInstaller$IOSDriverTimeoutException:
       # iOS driver not ready in time` after ~2m36s, producing 0 screenshots,
