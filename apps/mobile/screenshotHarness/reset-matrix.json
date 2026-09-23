@@ -104,6 +104,19 @@
         "ios",
         "android"
       ]
+    },
+    "consumerCalls": {
+      "owner": "chunk V04",
+      "screens": [
+        "call-setup",
+        "call-active",
+        "call-history"
+      ],
+      "why": "US-47's internet-calling surface. Captured with `backgroundCall` reported as unavailable, which is the honest setting today and the one whose copy matters most: no adapter has proven that audio survives the app going to background, and the disclosure is the whole mitigation. The history capture includes a settled call, one still being metered and one nobody answered, because \"no charge yet\" and \"no charge\" must not look alike. V05's browser surface is the dashboard's matrix, not this one.",
+      "platforms": [
+        "ios",
+        "android"
+      ]
     }
   },
   "pending": {
@@ -129,15 +142,6 @@
         "budgets",
         "offboarding"
       ]
-    },
-    "calls": {
-      "owner": "chunks V04, V05",
-      "screens": [
-        "call-setup",
-        "call-active",
-        "call-history"
-      ],
-      "why": "Chunk 08 defines these states and captures them in `gallery-calls`. A real call surface needs the microphone permission and a call client, neither of which this chunk ships."
     },
     "internalOperations": {
       "owner": "chunk 25",

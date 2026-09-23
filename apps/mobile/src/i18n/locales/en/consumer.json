@@ -5,7 +5,8 @@
     "myLine": "My Line",
     "account": "Account",
     "accountWithInvitations_one": "Account, {{count}} invitation waiting",
-    "accountWithInvitations_other": "Account, {{count}} invitations waiting"
+    "accountWithInvitations_other": "Account, {{count}} invitations waiting",
+    "calls": "Calls"
   },
   "errors": {
     "temporary": "Something went wrong. Check your connection and try again."

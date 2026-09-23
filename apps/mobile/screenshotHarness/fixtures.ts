@@ -3,6 +3,11 @@
  * None of this is real user data -- it exists only to give network- or
  * storage-dependent screens something to render without a live API.
  */
+import type {
+  AttemptView as CallAttempt,
+  EligibilityView as CallEligibility,
+} from '../src/api/callingClient';
+import type { CallSnapshot } from '../src/services/calling/callSession';
 import type { PricingTier } from '../src/api/pricingClient';
 import type { EsimProfile } from '../src/api/esimClient';
 import type { ActivationRedemption } from '../src/api/activationClient';
@@ -371,4 +376,121 @@ export const FIXTURE_INSTALLATION_CREDENTIAL: InstallationCredential = {
   one_time_use: true,
   delivery_count: 1,
   reinstall_available: false,
+};
+
+/* --- Chunk V04 (US-47): the internet calling surface ---------------------
+ *
+ * The destination is a UK reserved-for-drama number (Ofcom's +44 1632 960xxx
+ * range) and the outbound identity is a Nigerian number from the same kind of
+ * reserved block. Neither can ring anybody, which is the point: a screenshot
+ * fixture is published evidence, and a real number in one is a real number
+ * strangers can call.
+ */
+
+export const FIXTURE_CALL_ELIGIBILITY: CallEligibility = {
+  destination_e164: '+441632960011',
+  destination_country: 'GB',
+  destination_kind: 'fixed',
+  identity_e164: '+2348000000001',
+  currency: 'NGN',
+  max_seconds: 600,
+  max_charge_amount: '1200.00',
+  rate_per_minute_amount: '120.00',
+  setup_amount: '0.00',
+  available_amount: '5000.00',
+  fundable: true,
+  route_enabled: true,
+};
+
+/** One settled call, one still being metered, one nobody answered. */
+export const FIXTURE_CALL_HISTORY: CallAttempt[] = [
+  {
+    attempt_id: 'harness-call-settled',
+    state: 'ended',
+    destination_e164: '+441632960011',
+    destination_country: 'GB',
+    identity_e164: '+2348000000001',
+    currency: 'NGN',
+    max_seconds: 600,
+    max_charge_amount: '1200.00',
+    expires_at: '2026-09-13T12:10:00Z',
+    created_at: '2026-09-13T12:00:00Z',
+    answered_at: '2026-09-13T12:00:12Z',
+    ended_at: '2026-09-13T12:04:12Z',
+    end_reason: 'remote_hangup',
+    organization_id: null,
+    charge: {
+      amount: '480.00',
+      currency: 'NGN',
+      billable_seconds: 240,
+      setup_amount: '0.00',
+      usage_amount: '480.00',
+      is_final: true,
+      settled_at: '2026-09-13T12:05:00Z',
+    },
+  },
+  {
+    attempt_id: 'harness-call-pending',
+    state: 'ended',
+    destination_e164: '+441632960044',
+    destination_country: 'GB',
+    identity_e164: '+2348000000001',
+    currency: 'NGN',
+    max_seconds: 600,
+    max_charge_amount: '1200.00',
+    expires_at: '2026-09-13T11:10:00Z',
+    created_at: '2026-09-13T11:00:00Z',
+    answered_at: '2026-09-13T11:00:08Z',
+    ended_at: '2026-09-13T11:02:08Z',
+    end_reason: 'local_hangup',
+    organization_id: null,
+    charge: null,
+  },
+  {
+    attempt_id: 'harness-call-unanswered',
+    state: 'ended',
+    destination_e164: '+441632960077',
+    destination_country: 'GB',
+    identity_e164: '+2348000000001',
+    currency: 'NGN',
+    max_seconds: 600,
+    max_charge_amount: '1200.00',
+    expires_at: '2026-09-12T18:10:00Z',
+    created_at: '2026-09-12T18:00:00Z',
+    answered_at: null,
+    ended_at: '2026-09-12T18:00:30Z',
+    end_reason: 'no_answer',
+    organization_id: null,
+    charge: null,
+  },
+];
+
+/** Answered, with every in-call control available. */
+export const FIXTURE_CALL_ACTIVE: CallSnapshot = {
+  phase: 'answered',
+  attemptId: 'harness-call-live',
+  destinationE164: '+441632960011',
+  identityE164: '+2348000000001',
+  organizationId: null,
+  currency: 'NGN',
+  maxSeconds: 600,
+  maxChargeAmount: '1200.00',
+  startedAt: 0,
+  answeredAt: 0,
+  muted: false,
+  audioRoute: 'earpiece',
+  failureCode: null,
+  endReason: null,
+  charge: null,
+  capabilities: { mute: true, dtmf: true, audioRoute: true, backgroundCall: false },
+};
+
+export const FIXTURE_CALL_IDLE: CallSnapshot = {
+  ...FIXTURE_CALL_ACTIVE,
+  phase: 'idle',
+  attemptId: null,
+  destinationE164: null,
+  identityE164: null,
+  answeredAt: null,
+  startedAt: null,
 };

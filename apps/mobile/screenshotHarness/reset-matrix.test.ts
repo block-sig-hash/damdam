@@ -161,6 +161,9 @@ describe('the re-cut screenshot matrix', () => {
     ['my-line-installation.yaml', 'harness-target-my-line-installation'],
     ['my-line-suspended.yaml', 'harness-target-my-line-suspended'],
     ['my-line-usage-unmeasured.yaml', 'harness-target-my-line-usage-unmeasured'],
+    ['call-setup.yaml', 'harness-target-call-setup'],
+    ['call-active.yaml', 'harness-target-call-active'],
+    ['call-history.yaml', 'harness-target-call-history'],
   ])('scrolls each below-fold target into view in both locales: %s', (flow, target) => {
     const contents = readFileSync(join(FLOWS, flow), 'utf8');
     const marker = `- scrollUntilVisible:\n    element:\n      id: "${target}"\n    direction: DOWN`;

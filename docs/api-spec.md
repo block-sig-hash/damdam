@@ -1963,6 +1963,10 @@ id.
 with no route is a quote for something that cannot be bought, and a client that
 cannot tell the difference will render a working call button.
 
+It also returns `identity_e164`, the server-selected outbound identity. The
+client may display that identity before a hold is taken but cannot nominate or
+override it; identity selection remains server authority.
+
 ### The cost of a call appears when it has been metered (US-46, V03)
 
 `GET /calls/{id}` and `GET /calls` carry a `charge` object once the call has been
@@ -2541,3 +2545,12 @@ either half was on fire.
 `quarantined_events` is likewise kept apart from `unmatched_events`. An
 unmatched event arrived early and is ordinary; a quarantined one contradicted
 our records and is a security signal.
+
+## 7.45 Amendment — Mobile Outbound Identity Preview (US-47)
+
+V04 adds `identity_e164` to `GET /v1/calls/eligibility`. It is the same
+server-selected outbound identity later pinned to an authorized attempt, so the
+mobile client can show the recipient-visible number before reserving money.
+
+The field is response-only. The client still cannot nominate an identity, and
+the preview remains non-mutating: it writes no attempt and holds no balance.

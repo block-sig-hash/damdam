@@ -1,0 +1,103 @@
+{
+  "tab": "Appels",
+  "title": "Appels par internet",
+  "subtitle": "Appels passés dans DamDam. Aucune eSIM nécessaire.",
+  "deviceIdentity": {
+    "preparingTitle": "Préparation des appels",
+    "preparingBody": "Vérification de cette installation avant de créer un identifiant d'appel.",
+    "unavailableTitle": "Les appels sont indisponibles sur cette installation",
+    "unavailableBody": "DamDam n'a pas pu identifier cette installation de manière sûre. Fermez puis rouvrez l'application avant de réessayer."
+  },
+  "mode": {
+    "internet": "Appel par internet",
+    "carrier": "Appel opérateur",
+    "internetExplainer": "Passé dans DamDam via votre connexion internet. Nécessite le microphone. Facturé sur votre solde DamDam.",
+    "carrierExplainer": "Passé par le téléphone lui-même sur votre eSIM. Facturé par l'opérateur, pas par DamDam. DamDam ne peut pas le lancer pour vous."
+  },
+  "destination": {
+    "label": "Numéro à appeler",
+    "hint": "Indiquez l'indicatif du pays, par exemple +44 20 7946 0011",
+    "invalid": "Saisissez un numéro au format international, commençant par +.",
+    "clear": "Effacer le dernier chiffre"
+  },
+  "payer": {
+    "label": "Qui paie",
+    "personal": "Personnel",
+    "work": "Professionnel — {{organization}}",
+    "workDisclosure": "Votre organisation peut voir que cet appel a eu lieu, sa durée et son coût. Elle ne peut pas l'écouter.",
+    "personalDisclosure": "Facturé sur votre propre solde DamDam."
+  },
+  "preview": {
+    "heading": "Avant d'appeler",
+    "rate": "{{amount}} {{currency}} par minute",
+    "maximum": "Jusqu'à {{amount}} {{currency}} pour {{minutes}} minutes",
+    "identity": "Ils verront {{number}}",
+    "identityUnknown": "Nous ne pouvons pas confirmer le numéro qu'ils verront",
+    "available": "{{amount}} {{currency}} disponibles",
+    "checking": "Calcul du tarif…",
+    "unavailable": "Aucun tarif pour cette destination",
+    "routeDisabled": "Les appels par internet sont désactivés pour le moment. Rien n'a été débité.",
+    "notFundable": "Solde DamDam insuffisant pour cet appel."
+  },
+  "action": {
+    "call": "Appeler",
+    "hangUp": "Raccrocher",
+    "mute": "Couper le micro",
+    "unmute": "Réactiver le micro",
+    "keypad": "Clavier",
+    "speaker": "Haut-parleur",
+    "retry": "Réessayer",
+    "dismiss": "Fermer"
+  },
+  "phase": {
+    "preparing": "Préparation…",
+    "connecting": "Connexion…",
+    "ringing": "Sonnerie…",
+    "answered": "En communication",
+    "ended": "Appel terminé",
+    "failed": "Échec de l'appel"
+  },
+  "elapsed": {
+    "label": "{{minutes}}:{{seconds}}",
+    "estimate": "Estimation. Le coût final provient de nos enregistrements, pas de ce compteur."
+  },
+  "unsupported": {
+    "mute": "Cette version ne peut pas couper le micro.",
+    "dtmf": "Cette version ne peut pas envoyer de tonalités.",
+    "audioRoute": "Cette version ne peut pas changer la sortie audio.",
+    "background": "Le son peut s'arrêter si vous quittez DamDam ou verrouillez l'écran."
+  },
+  "failure": {
+    "calling_unavailable": "Les appels par internet ne sont pas disponibles dans cette version de l'application.",
+    "microphone_denied": "DamDam a besoin du microphone pour appeler. Rien n'a été débité.",
+    "microphone_blocked": "L'accès au microphone est désactivé pour DamDam. Activez-le dans les Réglages pour appeler.",
+    "session_expired": "Votre session a expiré. Reconnectez-vous pour appeler.",
+    "offline": "Vous semblez hors ligne. Rien n'a été débité.",
+    "not_permitted": "Vous ne pouvez plus passer d'appels sur le compte de cette organisation.",
+    "insufficient_funds": "Solde DamDam insuffisant pour cet appel.",
+    "insufficient_available_balance": "Solde disponible insuffisant — une partie est retenue pour un autre appel.",
+    "calling_route_disabled": "Les appels par internet sont désactivés pour le moment. Rien n'a été débité.",
+    "attempt_expired": "Cet appel n'a pas été lancé à temps. Rien n'a été débité.",
+    "device_not_authorized": "Cet appareil n'est pas configuré pour les appels. Reconnectez-vous.",
+    "rate_unavailable": "Nous n'avons aucun tarif pour cette destination, l'appel est impossible.",
+    "entitlement_not_available": "Vous n'avez aucun forfait d'appel sur ce compte.",
+    "sdk_unavailable": "Les appels par internet ne sont pas disponibles dans cette version de l'application.",
+    "generic": "L'appel n'a pas pu être passé. Rien n'a été débité sauf si un coût est indiqué ci-dessous."
+  },
+  "history": {
+    "heading": "Appels récents",
+    "empty": "Aucun appel pour le moment.",
+    "loading": "Chargement de vos appels…",
+    "error": "Nous n'avons pas pu charger vos appels.",
+    "duration_one": "{{count}} seconde",
+    "duration_other": "{{count}} secondes",
+    "cost": "{{amount}} {{currency}}",
+    "costPending": "Coût en cours de calcul",
+    "costProvisional": "{{amount}} {{currency}} jusqu'ici — peut changer",
+    "unanswered": "Sans réponse",
+    "scope": {
+      "personal": "Personnel",
+      "work": "Professionnel"
+    }
+  }
+}

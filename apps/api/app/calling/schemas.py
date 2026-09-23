@@ -32,6 +32,9 @@ class EligibilityResponse(BaseModel):
     destination_e164: str
     destination_country: str
     destination_kind: str
+    #: Server-selected presentation identity. Previewed before any hold so a
+    #: caller knows which number the recipient will see before committing.
+    identity_e164: str
     currency: str
     max_seconds: int
     max_charge_amount: Decimal
