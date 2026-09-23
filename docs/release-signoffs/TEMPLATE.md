@@ -95,7 +95,10 @@ This template is not a launch approval, and it must not be filled with fixture
 or sandbox evidence in place of a carrier, merchant or physical test.
 Before promotion, an administrator must install the trusted
 `pull_request_target` workflow on `main`, require its
-`release-signoff/trusted` status, enable strict up-to-date checks and restrict
-who can change the trusted public key and branch rules. The existing legacy
-status check is not a substitute. Until that bootstrap and D1–D6 approval,
+`release-signoff/trusted` status, and require a merge queue that revalidates
+the merge-group SHA against current staging and UTC time just before merge.
+Strict up-to-date checks and restrictions on the trusted public key, workflow
+and branch rules are also required. Staging must be frozen during the queued
+promotion; a status cannot monitor a changing external branch continuously.
+The existing legacy status check is not a substitute. Until that bootstrap and D1–D6 approval,
 promotion remains blocked even if local validator tests pass.

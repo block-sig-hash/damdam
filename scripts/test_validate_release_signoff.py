@@ -135,6 +135,13 @@ class ReleaseSignoffTests(unittest.TestCase):
         head = self.promote(self.body())
         self.assertIn(self.candidate, gate.validate(head, TODAY))
 
+    def test_merge_queue_commit_revalidates_same_signoff(self) -> None:
+        head = self.promote(self.body())
+        self.run_git("switch", "main")
+        self.run_git("merge", "--no-ff", head, "-m", "queue candidate")
+        group_head = self.run_git("rev-parse", "HEAD")
+        self.assertIn(self.candidate, gate.validate(group_head, TODAY))
+
     def test_untrusted_evidence_edit_blocks(self) -> None:
         head = self.promote(self.body().replace("physical-ios-001", "fabricated-record"), signed_body=self.body())
         with self.assertRaisesRegex(gate.SignoffError, "signature verification failed"):

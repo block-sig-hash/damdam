@@ -7,6 +7,9 @@ on:
   pull_request_target:
     branches: [main]
     types: [opened, reopened, synchronize]
+  workflow_run:
+    workflows: [Release Merge Group Probe]
+    types: [completed]
 
 permissions:
   contents: read
@@ -15,6 +18,7 @@ permissions:
 jobs:
   validate-release-signoff:
     name: Validate release signoff artifact
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,4 +58,47 @@ jobs:
             -f state="$state" \
             -f context='release-signoff/trusted' \
             -f description="Trusted release signoff validation: $state"
+          test "$state" = success
+  validate-merge-group:
+    name: Validate release merge group
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'merge_group'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch exact merge-group and staging commits as data
+        env:
+          GROUP_HEAD: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git fetch origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/heads/staging:refs/remotes/origin/staging
+          git fetch origin "$GROUP_HEAD"
+      - name: Revalidate at merge queue entry using trusted main code
+        id: validation
+        continue-on-error: true
+        env:
+          GROUP_HEAD: ${{ github.event.workflow_run.head_sha }}
+          DAMDAM_RELEASE_PUBLIC_KEY_B64: ${{ vars.DAMDAM_RELEASE_PUBLIC_KEY_B64 }}
+        run: scripts/validate-release-signoff.sh "$GROUP_HEAD"
+      - name: Report merge-group result on exact queue SHA
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GROUP_HEAD: ${{ github.event.workflow_run.head_sha }}
+          RESULT: ${{ steps.validation.outcome }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ "$RESULT" = success ]; then
+            state=success
+          else
+            state=failure
+          fi
+          gh api "repos/$GH_REPOSITORY/statuses/$GROUP_HEAD" \
+            -f state="$state" \
+            -f context='release-signoff/trusted' \
+            -f description="Trusted merge-group signoff validation: $state"
           test "$state" = success

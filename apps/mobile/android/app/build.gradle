@@ -134,9 +134,11 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+            manifestPlaceholders = [usesCleartextTraffic: 'true']
         }
         release {
             signingConfig signingConfigs.release
+            manifestPlaceholders = [usesCleartextTraffic: 'false']
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
@@ -144,6 +146,7 @@ android {
             // Offline-bundled Maestro fixture; never a production artifact.
             initWith release
             signingConfig signingConfigs.debug
+            manifestPlaceholders = [usesCleartextTraffic: 'true']
             matchingFallbacks = ['release']
         }
     }

@@ -1212,7 +1212,11 @@ release-owner Ed25519 public key using trusted base-branch workflow code. The
 tested commit must be the current `staging` head. This does not make arbitrary
 evidence IDs true: the signer verifies them and accepts accountability. The
 trusted workflow, public key and strict required status must be installed by a
-repository administrator before any promotion; absent bootstrap fails closed.
+repository administrator before any promotion. A required merge queue invokes
+a trusted revalidation on the merge-group SHA against current staging and UTC
+time, preventing an old green PR-head status from authorizing promotion.
+Staging must be frozen during the short queue window; absent bootstrap fails
+closed.
 
 Android production release no longer inherits the debug key; the fixture
 screenshot APK has a separate build type. iOS Release selects production APNs

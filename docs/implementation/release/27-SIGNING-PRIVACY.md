@@ -134,7 +134,12 @@ On 23 September 2026, the GitHub API returned `main` branch protection with
 workflow runs PR-head code and is not an adequate trust boundary. D6 therefore
 also requires an administrator to install the new base-branch workflow on
 `main`, require its `release-signoff/trusted` status on the PR head, enable
-strict up-to-date checks and restrict public-key/branch-rule administration.
+strict up-to-date checks and a required merge queue, and restrict
+public-key/workflow/branch-rule administration. A default-branch trusted
+`workflow_run` consumer revalidates the merge-group SHA when the queue forms,
+so an old green PR-head status cannot mask staging drift or signoff expiry.
+The release owner must freeze staging while the promotion is queued and verify
+its SHA again at merge; no status can continuously track external state.
 The new workflow will fail closed until the public key is provisioned. These
 are **not** performed or approved by this implementation. Recheck the server
 settings and current staging SHA immediately before any promotion.
