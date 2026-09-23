@@ -13,14 +13,20 @@ on:
 
 permissions:
   contents: read
-  statuses: write
 
 jobs:
   validate-release-signoff:
     name: Validate release signoff artifact
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
+    environment: release-signoff
     steps:
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ vars.DAMDAM_RELEASE_STATUS_APP_ID }}
+          private-key: ${{ secrets.DAMDAM_RELEASE_STATUS_APP_PRIVATE_KEY }}
+          permission-statuses: write
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
@@ -44,7 +50,7 @@ jobs:
       - name: Report trusted result on exact PR head
         if: always()
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           RESULT: ${{ steps.validation.outcome }}
           GH_REPOSITORY: ${{ github.repository }}
@@ -63,7 +69,14 @@ jobs:
     name: Validate release merge group
     if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'merge_group'
     runs-on: ubuntu-latest
+    environment: release-signoff
     steps:
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ vars.DAMDAM_RELEASE_STATUS_APP_ID }}
+          private-key: ${{ secrets.DAMDAM_RELEASE_STATUS_APP_PRIVATE_KEY }}
+          permission-statuses: write
       - uses: actions/checkout@v4
         with:
           ref: main
@@ -87,7 +100,7 @@ jobs:
       - name: Report merge-group result on exact queue SHA
         if: always()
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GROUP_HEAD: ${{ github.event.workflow_run.head_sha }}
           RESULT: ${{ steps.validation.outcome }}
           GH_REPOSITORY: ${{ github.repository }}

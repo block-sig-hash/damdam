@@ -1215,6 +1215,9 @@ trusted workflow, public key and strict required status must be installed by a
 repository administrator before any promotion. A required merge queue invokes
 a trusted revalidation on the merge-group SHA against current staging and UTC
 time, preventing an old green PR-head status from authorizing promotion.
+The status must come from a dedicated release GitHub App, configured as the
+required check's expected source; its status-only credential and release key
+live in a protected environment inaccessible to ordinary PR workflows.
 Staging must be frozen during the short queue window; absent bootstrap fails
 closed.
 

@@ -35,7 +35,9 @@ the debug key. An emulator screenshot build is not a signed-store build.
 
 iOS Release references `DamDamRelease.entitlements`, which requests production
 APNs and the same associated domains as Debug. Its React Native bundle phase
-also refuses `SCREENSHOT_HARNESS_MODE=true`, preventing fixture UI from entering
+calls `release-bundle-guard.sh` **after** `.xcode.env` and `.xcode.env.local`
+are sourced and refuses `SCREENSHOT_HARNESS_MODE=true` for Release, preventing
+late environment overrides from putting fixture UI in
 a production archive. A Linux regression executes that guard, but only a macOS
 archive verifies the entire iOS build. The iOS screenshot CI path is a
 non-distribution Debug simulator build with a forced embedded JS bundle; it
@@ -140,7 +142,14 @@ workflow runs PR-head code and is not an adequate trust boundary. D6 therefore
 also requires an administrator to install the new base-branch workflow on
 `main`, require its `release-signoff/trusted` status on the PR head, enable
 strict up-to-date checks and a required merge queue, and restrict
-public-key/workflow/branch-rule administration. A default-branch trusted
+public-key/workflow/branch-rule administration. The status must be pinned to
+the dedicated release GitHub App as its expected source: a normal
+`GITHUB_TOKEN` status is forgeable by another same-repository workflow. Store
+the App's status-only private key, ID and release-owner public key in a
+protected `release-signoff` environment restricted to protected `main` and
+`develop`, with required release-owner review and self-approval disabled.
+Neither that App nor the environment exists yet, so no trusted status can be
+posted. A default-branch trusted
 `workflow_run` consumer revalidates the merge-group SHA when the queue forms,
 so an old green PR-head status cannot mask staging drift or signoff expiry.
 The release owner must freeze staging while the promotion is queued and verify

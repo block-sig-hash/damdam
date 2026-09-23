@@ -97,8 +97,14 @@ Before promotion, an administrator must install the trusted
 `pull_request_target` workflow on `main`, require its
 `release-signoff/trusted` status, and require a merge queue that revalidates
 the merge-group SHA against current staging and UTC time just before merge.
-Strict up-to-date checks and restrictions on the trusted public key, workflow
-and branch rules are also required. Staging must be frozen during the queued
+The `release-signoff/trusted` context must be pinned to a dedicated release
+GitHub App as its expected source, not the GitHub Actions App. Its status-only
+private key and the release-owner public key must live in a protected
+`release-signoff` environment restricted to protected `main`/`develop` refs,
+with required release-owner approval and no self-approval. Ordinary PR jobs
+must not be able to read those values. Strict up-to-date checks and
+restrictions on the trusted workflow, environment and branch rules are also
+required. Staging must be frozen during the queued
 promotion; a status cannot monitor a changing external branch continuously.
 The existing legacy status check is not a substitute. Until that bootstrap and D1–D6 approval,
 promotion remains blocked even if local validator tests pass.
