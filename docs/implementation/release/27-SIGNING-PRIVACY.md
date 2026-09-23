@@ -131,8 +131,15 @@ The mobile manifest derives its exact English/French images from Maestro
 flows. Chunk 27 adds Home, Account and Receipts, including a nonempty receipt,
 on both platforms. Calls setup/active/history are fixture-only captures and
 cannot certify live media. Android runs on each affected PR; iOS runs nightly
-or on demand. The final mobile images must be visually inspected on the exact
-candidate, including clipped French text and activation-secret handling.
+or on demand. On the `ab5ac44` candidate, [PR CI](https://github.com/block-sig-hash/damdam/actions/runs/35913988787)
+and [on-demand native CI](https://github.com/block-sig-hash/damdam/actions/runs/35914020227)
+passed. The retained artifacts contain 72 validated Android and 72 validated
+iOS images. English/French Home, Account, Receipts and the previously failing
+activation/error screens were visually inspected without a blocking layout or
+Debug-overlay defect. This is simulator/emulator fixture evidence only; the
+fixture seller, plan text and installation art are not approved release copy.
+Reinspect images on any later code candidate, including clipped French text and
+activation-secret handling.
 
 The dashboard gallery checks English/French, widths 320/768/1280 and 200%
 text, but it is **not** an enterprise journey capture. Actual people/import,
