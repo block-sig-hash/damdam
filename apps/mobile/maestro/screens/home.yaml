@@ -7,16 +7,16 @@ appId: com.damdam.app
     id: "harness-locale-active-en"
 - scrollUntilVisible:
     element:
-      id: "harness-target-consumer-home-error"
+      id: "harness-target-home"
     direction: DOWN
     centerElement: true
     speed: 20
     timeout: 60000
 - tapOn:
-    id: "harness-target-consumer-home-error"
+    id: "harness-target-home"
 - assertVisible:
-    id: "home-error"
-- takeScreenshot: consumer-home-error-en
+    id: "consumer-home"
+- takeScreenshot: home-en
 - stopApp
 - launchApp
 - tapOn:
@@ -25,13 +25,13 @@ appId: com.damdam.app
     id: "harness-locale-active-fr"
 - scrollUntilVisible:
     element:
-      id: "harness-target-consumer-home-error"
+      id: "harness-target-home"
     direction: DOWN
     centerElement: true
     speed: 20
     timeout: 60000
 - tapOn:
-    id: "harness-target-consumer-home-error"
+    id: "harness-target-home"
 - assertVisible:
-    id: "home-error"
-- takeScreenshot: consumer-home-error-fr
+    id: "consumer-home"
+- takeScreenshot: home-fr

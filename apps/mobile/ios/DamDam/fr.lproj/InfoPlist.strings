@@ -1,2 +1,2 @@
-"NSLocationWhenInUseUsageDescription" = "DamDam utilise votre position pour l'ajouter à un pointage et détecter votre arrivée en Arabie saoudite afin d'activer automatiquement votre eSIM.";
-"NSLocationAlwaysAndWhenInUseUsageDescription" = "DamDam utilise votre position en arrière-plan pour détecter votre arrivée en Arabie saoudite et activer automatiquement votre eSIM, même lorsque l'application n'est pas ouverte.";
+/* Aucun texte d'autorisation natif n'est requis par la version actuelle.
+   Ajouter une explication en anglais et en français avec toute nouvelle capacité. */

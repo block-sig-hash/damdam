@@ -60,7 +60,7 @@ Recommended reading order:
 | [`pre-pilot-checklist.md`](./pre-pilot-checklist.md) | **Superseded as a gate**, retained as history. Its pilot feature freeze is lifted; see its closing amendment |
 | [`i18n-scoping.md`](./i18n-scoping.md) | §10 (shipped English/French architecture) is current; §§1–9 are historical scoping |
 | [`verified-cli-scoping.md`](./verified-cli-scoping.md) | **Deferred in full.** Retained as the record of a deferred commercial question |
-| [`release-signoffs/`](./release-signoffs/) | Release signoff artifacts and `TEMPLATE.md`. Chunk 04 removed obsolete scenarios; chunk 27 must add the current capability matrix before release |
+| [`release-signoffs/`](./release-signoffs/) | Historical signoffs and the reset-product `TEMPLATE.md`; chunk 27's validator requires channel-specific evidence and rejects retired SOS/check-in gates |
 | [`implementation/damdam-product-shape.md`](./implementation/damdam-product-shape.md) | Earlier product discussion, superseded by the implementation plan |
 | [`implementation/damdam-payment-provider-enquiry.md`](./implementation/damdam-payment-provider-enquiry.md) | **Unsent draft.** Revise for the D3 entity before any authorized outreach |
 

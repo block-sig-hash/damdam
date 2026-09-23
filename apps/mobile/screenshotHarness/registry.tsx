@@ -26,6 +26,8 @@ import { MyLineScreen } from '../src/screens/MyLine/MyLineScreen';
 import { InstallProfileScreen } from '../src/screens/MyLine/InstallProfileScreen';
 import { CallingGuideScreen } from '../src/screens/MyLine/CallingGuideScreen';
 import { CallsScreen } from '../src/screens/Calls/CallsScreen';
+import { AccountScreen } from '../src/screens/Account/AccountScreen';
+import { ReceiptsScreen } from '../src/screens/Account/ReceiptsScreen';
 import { activationGuideFor } from '../src/screens/EsimActivation/activationGuides';
 import { savePinLocally } from '../src/utils/pinLocalStore';
 import {
@@ -64,6 +66,21 @@ const noop = () => undefined;
  * than 'no-local-pin' (a fresh install has no locally-stored PIN).
  */
 const FIXTURE_USER_ID = 'fixture-0000-4000-8000-000000000001';
+const FIXTURE_RECEIPT = {
+  order_id: 'fixture-order-1',
+  reference: 'FIXTURE-ORDER-1',
+  placed_at: '2026-09-01T09:00:00Z',
+  currency: 'NGN',
+  total_amount: '5000.000000',
+  payment_state: 'paid',
+  lines: [{
+    description: 'Example connectivity plan',
+    quantity: 1,
+    unit_amount: '5000.000000',
+    total_amount: '5000.000000',
+  }],
+  organization_id: null,
+};
 
 function PinUnlockTarget(): React.JSX.Element {
   const [seeded, setSeeded] = useState(false);
@@ -94,6 +111,20 @@ function ConsumerHomeErrorTarget(): React.JSX.Element {
       onOpenOrder={noop}
     />
   );
+}
+
+function ReceiptsTarget(): React.JSX.Element {
+  const { i18n } = useTranslation();
+  // The backend stores a purchase-time description snapshot. Use two fixture
+  // snapshots to exercise layout in each locale; never rewrite real receipts.
+  const description = i18n.language.startsWith('fr')
+    ? 'Forfait de connectivité exemple'
+    : 'Example connectivity plan';
+  const receipt = {
+    ...FIXTURE_RECEIPT,
+    lines: FIXTURE_RECEIPT.lines.map(line => ({ ...line, description })),
+  };
+  return <ReceiptsScreen receipts={[receipt]} fromCache={false} onBack={noop} />;
 }
 
 export interface HarnessTarget {
@@ -215,6 +246,64 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
   'consumer-home-error': {
     label: 'Consumer Home — load error',
     render: () => <ConsumerHomeErrorTarget />,
+  },
+  home: {
+    label: 'Consumer Home — provisioned service',
+    render: () => (
+      <ConsumerHomeScreen
+        serviceState="active"
+        services={[{
+          order_item_id: 'fixture-item-1',
+          entitlement_id: 'fixture-entitlement-1',
+          order_id: 'fixture-order-1',
+          order_reference: 'FIXTURE-ORDER-1',
+          product_name: 'Example connectivity plan',
+          delivery: 'carrier_esim',
+          owner: 'personal',
+          organization_id: null,
+          organization_name: null,
+          payment_state: 'paid',
+          provisioning_state: 'provisioned',
+          installation_state: 'installed',
+          activation_state: 'active',
+          requires_installation: true,
+          ready_to_use: true,
+          granted_at: '2026-09-01T09:00:00Z',
+          expires_at: '2026-10-01T09:00:00Z',
+          expired: false,
+        }]}
+        loading={false}
+        errorMessage={null}
+        onRetry={noop}
+        onBrowsePlans={noop}
+        onOpenMyLine={noop}
+        onOpenOrder={noop}
+      />
+    ),
+  },
+  account: {
+    label: 'Account — profile and actions',
+    render: () => (
+      <AccountScreen
+        displayName="Fixture Holder"
+        phoneNumber={null}
+        email="holder@example.test"
+        sessions={[]}
+        receipts={[FIXTURE_RECEIPT]}
+        supportRequests={[]}
+        observedAt="2026-09-01T09:00:00Z"
+        offline={false}
+        onOpenDevices={noop}
+        onOpenReceipts={noop}
+        onOpenSupport={noop}
+        onOpenNotifications={noop}
+        onOpenPrivacy={noop}
+      />
+    ),
+  },
+  receipts: {
+    label: 'Account — receipts',
+    render: () => <ReceiptsTarget />,
   },
 
   /*

@@ -9,6 +9,9 @@ appId: com.damdam.app
     element:
       id: "harness-target-plans-device-unsupported"
     direction: DOWN
+    centerElement: true
+    speed: 20
+    timeout: 60000
 - tapOn:
     id: "harness-target-plans-device-unsupported"
 - assertVisible:
@@ -24,6 +27,9 @@ appId: com.damdam.app
     element:
       id: "harness-target-plans-device-unsupported"
     direction: DOWN
+    centerElement: true
+    speed: 20
+    timeout: 60000
 - tapOn:
     id: "harness-target-plans-device-unsupported"
 - assertVisible:

@@ -18,11 +18,18 @@ Require V01 live route evidence for internet offers and chunk03 carrier evidence
 3. Record device/OS, visited network, origin/destination, assigned identity, rate version, observed charges, data usage lag, top-up and spending-limit behavior.
 4. Test dual-SIM selection, DTMF/audio quality, failed installation, poor connectivity and customer recovery.
 5. Run a representative enterprise administrator pilot through import, funding, partial failures, employee installation, spend reporting and offboarding. Record consented findings without leaking customer data.
+6. With the release owner's distribution approval, arrange TestFlight and an
+   approved Android internal-testing track with consenting people on supported
+   physical devices; record build/version, invitation, install and findings.
+   No invitation or upload is implied by preparing the checklist.
 
 ## Acceptance and evidence
 
 - Compare observed supplier charges and settlement with the ledger; close discrepancies and document call/data quality measurements against founder-approved thresholds.
 - If credentials, devices, approvals or spending authorization are absent, return runnable procedures and mark live evidence blocked. Do not fabricate tests or claim launch readiness.
+- EAS cloud builds, generic device labs and simulator/emulator checks are
+  preparatory only. They cannot close real eSIM, cellular-data and native-call
+  evidence gates for the advertised carrier/market/device combinations.
 
 Also satisfy the common handoff and affected repository checks below. External prerequisites cannot be replaced by passing mocks. If only a preparatory subset can be completed, identify it and leave the remainder explicitly open.
 

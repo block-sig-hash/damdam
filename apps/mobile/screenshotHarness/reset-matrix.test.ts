@@ -147,6 +147,8 @@ describe('the re-cut screenshot matrix', () => {
     ['esim-activation-android.yaml', 'harness-target-esim-activation-prompt-android'],
     ['esim-activation-ios.yaml', 'harness-target-esim-activation-guide-ios'],
     ['activation-success.yaml', 'harness-target-activation-success'],
+    ['activation-code-entry.yaml', 'harness-target-activation-code-entry'],
+    ['package-selection.yaml', 'harness-target-package-selection'],
     ['plans.yaml', 'harness-target-plans'],
     ['plans-device-unsupported.yaml', 'harness-target-plans-device-unsupported'],
     ['checkout.yaml', 'harness-target-checkout-review'],
@@ -164,9 +166,12 @@ describe('the re-cut screenshot matrix', () => {
     ['call-setup.yaml', 'harness-target-call-setup'],
     ['call-active.yaml', 'harness-target-call-active'],
     ['call-history.yaml', 'harness-target-call-history'],
-  ])('scrolls each below-fold target into view in both locales: %s', (flow, target) => {
+    ['home.yaml', 'harness-target-home'],
+    ['account.yaml', 'harness-target-account'],
+    ['receipts.yaml', 'harness-target-receipts'],
+  ])('centers each below-fold target in both locales: %s', (flow, target) => {
     const contents = readFileSync(join(FLOWS, flow), 'utf8');
-    const marker = `- scrollUntilVisible:\n    element:\n      id: "${target}"\n    direction: DOWN`;
+    const marker = `- scrollUntilVisible:\n    element:\n      id: "${target}"\n    direction: DOWN\n    centerElement: true\n    speed: 20\n    timeout: 60000`;
     expect(contents.split(marker)).toHaveLength(3);
   });
 
@@ -176,10 +181,8 @@ describe('the re-cut screenshot matrix', () => {
     expect(FIXTURE_QUOTE.expires_at).not.toBe(createActiveFixtureQuote(now).expires_at);
   });
 
-  it('still owes the reset product its own screens', () => {
-    // A guard against this file being "completed" by deleting the pending list.
-    // The reset journeys are the point of the redesign; until 18-24 land, the
-    // matrix is deliberately incomplete and says so.
+  it('keeps the dashboard and internal release-image debt visible', () => {
+    // These are cross-platform release obligations, not missing mobile targets.
     expect(pendingScreens.length).toBeGreaterThan(0);
   });
 });

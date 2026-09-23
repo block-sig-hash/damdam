@@ -44,6 +44,7 @@ jobs:
       mobile: ${{ steps.filter.outputs.mobile }}
       docker: ${{ steps.filter.outputs.docker }}
       docs: ${{ steps.filter.outputs.docs }}
+      release: ${{ steps.filter.outputs.release }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -75,6 +76,25 @@ jobs:
               - 'docs/**'
               - '**/*.md'
               - '.github/workflows/ci.yml'
+            release:
+              - 'scripts/validate-release-signoff.sh'
+              - 'scripts/validate_release_signoff.py'
+              - 'scripts/test_validate_release_signoff.py'
+              - 'docs/release-signoffs/**'
+              - '.github/workflows/release-promotion.yml'
+              - '.github/workflows/ci.yml'
+
+  release-validator-tests:
+    name: Release — Signoff validator tests
+    needs: changes
+    if: needs.changes.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test release signoff acceptance and refusal cases
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_validate_release_signoff.py' -v
+          python3 -m unittest discover -s scripts -p 'test_release_build_guards.py' -v
 
   # US-42 / AC-27.7: the specification suite is now a working artifact --
   # docs/implementation/ routes every build chunk through relative links
@@ -249,6 +269,45 @@ jobs:
         if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
         working-directory: apps/mobile/android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: Reject Android production bundle without distribution signing
+        if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
+        working-directory: apps/mobile/android
+        run: |
+          set +e
+          output=$(./gradlew bundleRelease --dry-run --no-daemon 2>&1)
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo 'Unsigned or debug-signed production bundle was accepted' >&2
+            exit 1
+          fi
+          case "$output" in
+            *'Production Android release requires a non-debug keystore'*) ;;
+            *) echo "$output" >&2; exit 1 ;;
+          esac
+      - name: Reject copied debug certificate even with an external path
+        if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
+        working-directory: apps/mobile/android
+        run: |
+          temp_dir=$(mktemp -d)
+          cp app/debug.keystore "$temp_dir/copied.keystore"
+          set +e
+          output=$(DAMDAM_RELEASE_KEYSTORE_PATH="$temp_dir/copied.keystore" \
+            DAMDAM_RELEASE_STORE_PASSWORD=android \
+            DAMDAM_RELEASE_KEY_ALIAS=androiddebugkey \
+            DAMDAM_RELEASE_KEY_PASSWORD=android \
+            DAMDAM_RELEASE_CERT_SHA256=0000000000000000000000000000000000000000000000000000000000000000 \
+            ./gradlew bundleRelease --dry-run --no-daemon 2>&1)
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo 'Copied debug certificate was accepted for production' >&2
+            exit 1
+          fi
+          case "$output" in
+            *'matches the checked-in debug certificate'*) ;;
+            *) echo "$output" >&2; exit 1 ;;
+          esac
 
   # Renders real screens on a real Android emulator via the screenshot
   # harness (apps/mobile/screenshotHarness/README.md) and Maestro flows
@@ -287,20 +346,13 @@ jobs:
         run: |
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
-      # Debug builds load JS from a live Metro server rather than bundling
-      # it (android/app/build.gradle's react{} block defaults
-      # debuggableVariants to ["debug", "debugOptimized"]), so a debug
-      # APK alone wouldn't pick up SCREENSHOT_HARNESS_MODE. The release
-      # build type bundles JS offline at build time and, per this repo's
-      # current android/app/build.gradle, is signed with the same
-      # checked-in debug keystore as the debug build (no release signing
-      # secret needed) -- so building "release" here gets us an
-      # offline-bundled, installable APK with the harness baked in.
-      - name: Build harness-mode release APK
+      # A separate non-production build type bundles the harness offline and
+      # uses the debug key. Real release fails closed without external signing.
+      - name: Build harness-mode screenshot APK
         working-directory: apps/mobile/android
         env:
           SCREENSHOT_HARNESS_MODE: "true"
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: ./gradlew assembleScreenshot --no-daemon --stacktrace
       - name: Enable KVM for the Android emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -335,7 +387,7 @@ jobs:
           # from sdkmanager before the emulator could even boot.
           emulator-build: 15507667
           script: |
-            adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            adb install -r apps/mobile/android/app/build/outputs/apk/screenshot/app-screenshot.apk
             apps/mobile/scripts/run-maestro-android-ci.sh
       - name: Collect screenshots
         if: always()
@@ -461,15 +513,18 @@ jobs:
       # Xcode's fixed device-*type* catalog rather than depending on
       # what instances already happen to exist -- a more reliable
       # operation than destination-matching proved to be.
-      - name: Build harness-mode Release app for the simulator
+      - name: Build harness-mode Debug app for the simulator
         working-directory: apps/mobile/ios
         env:
           SCREENSHOT_HARNESS_MODE: "true"
+          # Debug is non-distribution, but still needs an embedded JS bundle
+          # because CI runs Maestro without a Metro server.
+          FORCE_BUNDLING: "true"
         run: |
           xcodebuild \
             -workspace DamDam.xcworkspace \
             -scheme DamDam \
-            -configuration Release \
+            -configuration Debug \
             -sdk iphonesimulator \
             -derivedDataPath build \
             -destination 'generic/platform=iOS Simulator' \
@@ -483,7 +538,11 @@ jobs:
           DEVICE_ID=$(xcrun simctl create DamDamScreenshotCI "iPhone 16" 2>/dev/null || xcrun simctl list devices | grep DamDamScreenshotCI | grep -oE '[0-9A-F-]{36}')
           echo "DEVICE_ID=$DEVICE_ID" >> "$GITHUB_ENV"
           xcrun simctl boot "$DEVICE_ID"
-          xcrun simctl install "$DEVICE_ID" "ios/build/Build/Products/Release-iphonesimulator/DamDam.app"
+          # A boot request returns before SpringBoard and XCTest are ready.
+          # The previous on-demand run built/installed but Maestro's iOS
+          # driver never became ready and produced zero screenshots.
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl install "$DEVICE_ID" "ios/build/Build/Products/Debug-iphonesimulator/DamDam.app"
       # The 2026-09-07 nightly failed here with
       # `xcuitest.installer.LocalXCTestInstaller$IOSDriverTimeoutException:
       # iOS driver not ready in time` after ~2m36s, producing 0 screenshots,

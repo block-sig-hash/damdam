@@ -55,10 +55,10 @@ is a dry run that executes nothing.
 | 24 — Build enterprise funding, budgets, reports and offboarding | **ACCEPTED after fixes** (read-only funding/budget view, departmental reporting/export and durable offboarding scope; live funding, invoices and carrier confirmation external); merged in [PR #128](https://github.com/block-sig-hash/damdam/pull/128) | accepted dependency head `858bd66` / replayed `a4acda5` / corrected `2d6d128`, `7ba1340` / accepted head `586732e` / merge `d891c76` | [Independent review](reviews/24.md) | **D1/D3/D4/D5 OPEN** — no funding collection, invoice issuance, approved carrier suspension adapter/reconciler or refund policy. No enterprise dashboard is included |
 | 25 — Build internal support and exception operations | **ACCEPTED after fixes** (constrained admin API, immutable audit, receipt-bound payment resolution and V03 call correction; live provider scope external) | accepted base `d891c76` / replayed `7e9558e` / corrected `c59094c` | [Independent review](reviews/25.md), [handoff](handoffs/25.md) | Admin sub-roles and dashboard remain open. **D1/D3/D4/D5 OPEN** — no live supplier/carrier reconciliation, merchant, bank-report or payment-processor evidence is claimed |
 | 26 — Harden environments, backups and operational visibility | **ACCEPTED after fixes** (prepared/local evidence; production deployment not claimed) | accepted base `951c1e8` / replayed `7514c3f`, `e3dcca9` / corrected `2ad58c9` | [Independent review](reviews/26.md), [handoff](handoffs/26.md) | Correlation ids, redaction-safe logs, production refusals, metrics, safe key rotation, worker durability, tested role adoption and a reconciled local PITR drill (`recovery_time_seconds=11`). **Open:** provider-outage integration and staging migration rollback (chunk 28), applying roles/configuration to production, and exactly-once notification dispatch |
-| 27 — Update signed builds, privacy disclosures and release automation | NOT_STARTED | — | — | See assignment |
+| 27 — Update signed builds, privacy disclosures and release automation | **ACCEPTED after fixes for preparatory software and native CI only**; full signed/live release scope **EXTERNAL_BLOCKED** | base `247974b` / implementation `3f95b09` / reviewed software head `ab5ac44` | [Independent review](reviews/27.md), [handoff](handoffs/27.md), [distribution worklist](release/27-SIGNING-PRIVACY.md) | Exact-head Android/iOS simulator jobs passed with 72 images each. D1–D6 remain open: EAS signed cloud builds, physical internal testing, provider/merchant/market/legal proof and real eSIM/data/native-call evidence are absent; dedicated status App, protected environment, external release key, strict required status and merge queue need admin bootstrap |
 | 28 — Prove integrated flows, migrations and failure recovery | NOT_STARTED | — | — | See assignment |
-| 29 — Run the authorized physical-device and enterprise pilot | NOT_STARTED | — | — | See assignment |
-| 30 — Close release findings and prepare the production handoff | NOT_STARTED | — | — | See assignment |
+| 29 — Run the authorized physical-device and enterprise pilot | NOT_STARTED | — | [Assignment](chunks/29-physical-device-and-enterprise-pilot.md) | Arrange authorized TestFlight and Android internal testing with consenting physical-device owners; real eSIM, cellular-data and native-call evidence remains a hard gate, not replaceable by EAS or generic labs |
+| 30 — Close release findings and prepare the production handoff | NOT_STARTED | — | [Assignment](chunks/30-release-candidate-and-handoff.md) | Reconcile exact-head EAS/cloud signing, native CI, internal-testing and real carrier evidence before any readiness claim |
 
 ## Legacy release compatibility boundary — closed by chunk 04E
 
@@ -70,11 +70,11 @@ tested**, so a truthful signoff could never satisfy them again and
 evidence to pass the gate.
 
 04E removed all eight from both files. It did **not** replace them with an empty
-loop that silently passes: until chunk 27 re-cuts the release gates, the
-scenario check fails loudly and names chunk 27 as the owner. Every other check
-in that script — signoff artifact, tester, date and staleness, device matrix,
-HTO usability — is untouched. Promotion to `main` is therefore blocked until
-chunk 27, which is the intended state, not a side effect.
+loop that silently passes: the scenario check failed loudly and named chunk 27
+as owner. Chunk 27's implementation branch now proposes a reset-product
+validator and template, with negative tests and channel-specific scenarios;
+this work is awaiting independent review and merge. Production promotion
+remains blocked without a complete, current signoff and external evidence.
 
 Current server-side branch protection was not verified; see
 [BASELINE.md](BASELINE.md).
@@ -82,8 +82,7 @@ Current server-side branch protection was not verified; see
 Chunk 01 deliberately left this alone — release automation is **chunk 27**'s
 scope. AC-42.5 requires updating template and validator together, retaining
 relevant protection and adding rejection tests. The reset product cannot use
-the old matrix as release certification or invent evidence to pass it. This
-boundary does not prevent reviewed implementation branches or chunk 02.
+the old matrix as release certification or invent evidence to pass it.
 
 ## External decisions
 

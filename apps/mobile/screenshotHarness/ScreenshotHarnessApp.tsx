@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text } from 'react-native';
+import { LogBox, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text } from 'react-native';
 import { color, space, typography } from '../src/theme/tokens';
 import { installHarnessFetchMock } from './fetchMock';
 import { HARNESS_REGISTRY } from './registry';
 import {setAppLocale} from '../src/i18n';
 
 installHarnessFetchMock();
+// The Debug-only LogBox toast obscures the bottom picker rows on iOS and can
+// intercept Maestro taps after scrollUntilVisible. Console logs remain in CI.
+// This module is loaded only by SCREENSHOT_HARNESS_MODE, never a release app.
+LogBox.ignoreAllLogs();
 
 /**
  * Test-only entry point (screenshotHarness/README.md) -- registered by
@@ -68,7 +72,8 @@ export function ScreenshotHarnessApp(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.gray50 },
-  list: { padding: space.space5, gap: space.space3 },
+  // Extra scroll runway lets Maestro center the final rows before tapping.
+  list: { padding: space.space5, paddingBottom: 360, gap: space.space3 },
   heading: {
     fontSize: typography.heading1.fontSize,
     lineHeight: typography.heading1.lineHeight,

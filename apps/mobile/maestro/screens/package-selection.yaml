@@ -5,6 +5,13 @@ appId: com.damdam.app
     id: "harness-locale-en"
 - assertVisible:
     id: "harness-locale-active-en"
+- scrollUntilVisible:
+    element:
+      id: "harness-target-package-selection"
+    direction: DOWN
+    centerElement: true
+    speed: 20
+    timeout: 60000
 - tapOn:
     id: "harness-target-package-selection"
 - assertVisible:
@@ -16,6 +23,13 @@ appId: com.damdam.app
     id: "harness-locale-fr"
 - assertVisible:
     id: "harness-locale-active-fr"
+- scrollUntilVisible:
+    element:
+      id: "harness-target-package-selection"
+    direction: DOWN
+    centerElement: true
+    speed: 20
+    timeout: 60000
 - tapOn:
     id: "harness-target-package-selection"
 - assertVisible:
