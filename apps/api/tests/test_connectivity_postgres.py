@@ -67,7 +67,11 @@ from app.connectivity.service import (
 )
 from app.fulfilment.models import AttemptOutcome, SupplierAttempt
 from app.fulfilment.service import FulfilmentService
+from app.ledger.service import LedgerService
 from app.orders.models import Order, OrderItem, ProvisioningState
+from app.usage.contract import CounterSnapshot
+from app.usage.models import UsageRecord
+from app.usage.service import UsageService
 
 pytestmark = pytest.mark.skipif(
     "TEST_DATABASE_URL" not in os.environ,
@@ -393,6 +397,55 @@ def test_reconciliation_adopts_the_line_the_purchase_actually_created(
     assert item.provisioning_state is ProvisioningState.PROVISIONED
     # And nothing was bought to get there.
     assert len(carrier.provision_calls) == 1
+
+
+def test_recovered_order_item_installation_and_usage_survive_worker_restart(
+    session: Session,
+    engine,
+    clock: Clock,
+    vault: CredentialVault,
+    service: ConnectivityService,
+    carrier: FakeCarrier,
+) -> None:
+    """US-43: recovery must feed later device and usage states only once."""
+    item = _order_item(session)
+    attempt = service.begin_provisioning(session, item, carrier)
+    session.commit()
+    carrier.lose_response = True
+    service.dispatch_provisioning(session, attempt, carrier)
+    session.commit()
+
+    carrier.lose_response = False
+    carrier.reconcile_answer = ProvisionResult(lines=(carrier._line("recovered-1"),))
+    restarted = ConnectivityService(
+        FulfilmentService(clock=clock), vault, clock=clock
+    )
+    with Session(engine) as resumed:
+        persisted_attempt = resumed.get(SupplierAttempt, attempt.id)
+        assert persisted_attempt is not None
+        restarted.reconcile_provisioning(resumed, persisted_attempt, carrier)
+        resumed.commit()
+
+        line = resumed.exec(select(CarrierLine)).one()
+        installation = resumed.exec(select(EsimInstallation)).one()
+        entitlement = resumed.exec(select(Entitlement)).one()
+        assert installation.installation_state is InstallationState.NOT_INSTALLED
+        assert line.network_state is NetworkState.UNKNOWN
+
+        restarted.record_device_installation(resumed, installation)
+        usage = UsageService(LedgerService(clock=clock), clock=clock)
+        snapshot = CounterSnapshot(line.carrier_line_reference, 1_000_000, NOW)
+        usage.ingest_counter(resumed, line, snapshot)
+        usage.ingest_counter(resumed, line, snapshot)  # supplier replay
+        resumed.commit()
+
+        assert installation.installation_state is InstallationState.INSTALLED
+        assert line.network_state is NetworkState.UNKNOWN
+        allowance = usage.allowance(resumed, entitlement, now=NOW)
+        assert allowance.data_bytes_used == 1_000_000
+        assert len(resumed.exec(select(UsageRecord)).all()) == 1
+        assert len(carrier.provision_calls) == 1
+        assert carrier.reconcile_calls == [operation_reference(attempt.idempotency_key)]
 
 
 def test_an_unanswerable_reconciliation_stops_for_a_human(

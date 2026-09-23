@@ -369,3 +369,39 @@ def test_upgrade_is_reapplicable_after_a_downgrade(legacy_url) -> None:
         ).scalar_one()
     engine.dispose()
     assert revision == US28_REVISION
+
+
+def test_integrated_upgrade_from_populated_legacy_schema_to_head(legacy_url) -> None:
+    """US-43: every later migration must preserve deployed NGN history and jobs."""
+    _seed_legacy(legacy_url)
+    before = _snapshot(legacy_url)
+
+    command.upgrade(_alembic_config(legacy_url), "head")
+
+    assert _snapshot(legacy_url) == before
+    engine = create_engine(legacy_url)
+    with engine.connect() as connection:
+        revision = connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalar_one()
+        current_tables = set(
+            connection.execute(
+                text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_name IN "
+                    "('orders', 'entitlements', 'carrier_lines', "
+                    "'bulk_jobs', 'organization_offboardings', 'operator_actions')"
+                )
+            ).scalars()
+        )
+    engine.dispose()
+
+    assert revision == "0044_operator_actions"
+    assert current_tables == {
+        "orders",
+        "entitlements",
+        "carrier_lines",
+        "bulk_jobs",
+        "organization_offboardings",
+        "operator_actions",
+    }
