@@ -1207,10 +1207,17 @@ mobile-internet and browser-internet channels require negative eligibility
 evidence; enabled channels require their own physical/live scenarios. External
 config changes are rechecked by the release owner against the recorded digest;
 CI cannot attest to a remote secret store by reading a Markdown field.
+The signoff and its matching `.md.sig` sidecar are verified against an external
+release-owner Ed25519 public key using trusted base-branch workflow code. The
+tested commit must be the current `staging` head. This does not make arbitrary
+evidence IDs true: the signer verifies them and accepts accountability. The
+trusted workflow, public key and strict required status must be installed by a
+repository administrator before any promotion; absent bootstrap fails closed.
 
 Android production release no longer inherits the debug key; the fixture
 screenshot APK has a separate build type. iOS Release selects production APNs
 entitlements. Neither platform has approved distribution signing in this
 repository, so D6 remains open. Store submission and production promotion are
-different authorized operations. Current procedures and remaining evidence are
+different authorized operations; automatic EAS store submission on main push
+has been removed. Current procedures and remaining evidence are
 in [release/27-SIGNING-PRIVACY.md](./implementation/release/27-SIGNING-PRIVACY.md).

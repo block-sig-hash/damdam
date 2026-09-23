@@ -3,15 +3,24 @@
 Copy to `docs/release-signoffs/<tested-40-character-commit-sha>.md` only after
 the candidate commit and its exact tracked configuration have been tested. Add
 the signoff in a later commit; **do not change any other tracked file after the
-tested commit**. The promotion check reads this file from the PR head and
-rejects post-test changes, future dates, missing evidence and every `FAIL`.
+tested commit**. Add its matching `<tested-sha>.md.sig` sidecar containing a
+base64 Ed25519 signature over the exact UTF-8 `.md` bytes (including the final
+newline). The release owner signs only after personally verifying every
+external evidence reference, physical test and approval against the candidate.
+The private key must remain in the approved signing service, never in this
+repository, CI or a release artifact. The public key is provisioned separately
+as the repository variable `DAMDAM_RELEASE_PUBLIC_KEY_B64` (base64 PEM). The
+promotion check reads both files from the PR head and rejects unsigned or
+altered evidence, post-test changes, future dates, missing evidence and every
+`FAIL`. It also requires the tested SHA to equal the current `staging` head.
 Existing historical signoffs and tags are not rewritten.
 
 These are evidence references, not secrets. Refer to immutable build artifacts,
 redacted configuration snapshots, signed carrier/merchant approvals, actual
 physical-device records, migration/restore reports and incident ownership. A
 CI or emulator result is not a physical-device or provider result. The release
-owner must verify external references; CI checks structure and git ancestry.
+owner must verify external references before signing; CI checks the signature,
+structure and git ancestry, not the truth of a remote evidence ID.
 
 - **Commit SHA:** <full tested commit SHA matching filename>
 - **Tester name:** <release owner>
@@ -84,3 +93,9 @@ immutable result against the tested commit and configuration.
 Store submission and production promotion remain separate authorized actions.
 This template is not a launch approval, and it must not be filled with fixture
 or sandbox evidence in place of a carrier, merchant or physical test.
+Before promotion, an administrator must install the trusted
+`pull_request_target` workflow on `main`, require its
+`release-signoff/trusted` status, enable strict up-to-date checks and restrict
+who can change the trusted public key and branch rules. The existing legacy
+status check is not a substitute. Until that bootstrap and D1–D6 approval,
+promotion remains blocked even if local validator tests pass.

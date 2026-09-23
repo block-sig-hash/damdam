@@ -85,9 +85,22 @@ def releaseKeystorePath = System.getenv('DAMDAM_RELEASE_KEYSTORE_PATH')
 def releaseStorePassword = System.getenv('DAMDAM_RELEASE_STORE_PASSWORD')
 def releaseKeyAlias = System.getenv('DAMDAM_RELEASE_KEY_ALIAS')
 def releaseKeyPassword = System.getenv('DAMDAM_RELEASE_KEY_PASSWORD')
+def releaseCertSha256 = System.getenv('DAMDAM_RELEASE_CERT_SHA256')
 def screenshotHarness = System.getenv('SCREENSHOT_HARNESS_MODE') == 'true'
 def releaseSigningReady = [releaseKeystorePath, releaseStorePassword,
-    releaseKeyAlias, releaseKeyPassword].every { it != null && !it.trim().isEmpty() }
+    releaseKeyAlias, releaseKeyPassword, releaseCertSha256].every {
+    it != null && !it.trim().isEmpty()
+} && releaseCertSha256 ==~ /(?i)[0-9a-f]{64}/
+
+def certificateSha256 = { storePath, password, alias ->
+    def store = java.security.KeyStore.getInstance(file(storePath), password.toCharArray())
+    def certificate = store.getCertificate(alias)
+    if (certificate == null) {
+        throw new GradleException('Release keystore does not contain the configured certificate alias')
+    }
+    return java.security.MessageDigest.getInstance('SHA-256')
+        .digest(certificate.encoded).encodeHex().toString()
+}
 
 android {
     ndkVersion rootProject.ext.ndkVersion
@@ -147,9 +160,17 @@ gradle.taskGraph.whenReady { graph ->
         if (screenshotHarness) {
             throw new GradleException('SCREENSHOT_HARNESS_MODE is forbidden in a production release build')
         }
-        if (!releaseSigningReady || !file(releaseKeystorePath).isFile() ||
-            file(releaseKeystorePath).canonicalPath == file('debug.keystore').canonicalPath) {
-            throw new GradleException('Production Android release requires a non-debug keystore and all DAMDAM_RELEASE_* signing variables')
+        if (!releaseSigningReady || !file(releaseKeystorePath).isFile()) {
+            throw new GradleException('Production Android release requires a non-debug keystore and all DAMDAM_RELEASE_* signing variables, including the approved certificate SHA-256')
+        }
+        def releaseFingerprint = certificateSha256(
+            releaseKeystorePath, releaseStorePassword, releaseKeyAlias)
+        def debugFingerprint = certificateSha256('debug.keystore', 'android', 'androiddebugkey')
+        if (releaseFingerprint == debugFingerprint) {
+            throw new GradleException('Production Android release certificate matches the checked-in debug certificate')
+        }
+        if (releaseFingerprint != releaseCertSha256.toLowerCase()) {
+            throw new GradleException('Production Android release certificate does not match the approved DAMDAM_RELEASE_CERT_SHA256')
         }
     }
     if (screenshotTask && !screenshotHarness) {

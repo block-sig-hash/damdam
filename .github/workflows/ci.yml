@@ -283,6 +283,29 @@ jobs:
             *'Production Android release requires a non-debug keystore'*) ;;
             *) echo "$output" >&2; exit 1 ;;
           esac
+      - name: Reject copied debug certificate even with an external path
+        if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
+        working-directory: apps/mobile/android
+        run: |
+          temp_dir=$(mktemp -d)
+          cp app/debug.keystore "$temp_dir/copied.keystore"
+          set +e
+          output=$(DAMDAM_RELEASE_KEYSTORE_PATH="$temp_dir/copied.keystore" \
+            DAMDAM_RELEASE_STORE_PASSWORD=android \
+            DAMDAM_RELEASE_KEY_ALIAS=androiddebugkey \
+            DAMDAM_RELEASE_KEY_PASSWORD=android \
+            DAMDAM_RELEASE_CERT_SHA256=0000000000000000000000000000000000000000000000000000000000000000 \
+            ./gradlew bundleRelease --dry-run --no-daemon 2>&1)
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo 'Copied debug certificate was accepted for production' >&2
+            exit 1
+          fi
+          case "$output" in
+            *'matches the checked-in debug certificate'*) ;;
+            *) echo "$output" >&2; exit 1 ;;
+          esac
 
   # Renders real screens on a real Android emulator via the screenshot
   # harness (apps/mobile/screenshotHarness/README.md) and Maestro flows

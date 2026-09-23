@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 import subprocess
 import tempfile
@@ -44,8 +45,19 @@ class ReleaseSignoffTests(unittest.TestCase):
         (self.root / "app.txt").write_text("candidate\n")
         self.run_git("commit", "-am", "candidate")
         self.candidate = self.run_git("rev-parse", "HEAD")
+        self.run_git("update-ref", "refs/remotes/origin/staging", self.candidate)
+        self.private_key = self.root / "release-owner-key.pem"
+        self.public_key = self.root / "release-owner-public.pem"
+        subprocess.run(["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(self.private_key)], check=True, capture_output=True)
+        subprocess.run(["openssl", "pkey", "-in", str(self.private_key), "-pubout", "-out", str(self.public_key)], check=True, capture_output=True)
+        self.old_public_key = os.environ.get("DAMDAM_RELEASE_PUBLIC_KEY_B64")
+        os.environ["DAMDAM_RELEASE_PUBLIC_KEY_B64"] = base64.b64encode(self.public_key.read_bytes()).decode()
 
     def tearDown(self) -> None:
+        if self.old_public_key is None:
+            os.environ.pop("DAMDAM_RELEASE_PUBLIC_KEY_B64", None)
+        else:
+            os.environ["DAMDAM_RELEASE_PUBLIC_KEY_B64"] = self.old_public_key
         os.chdir(self.old_cwd)
         self.temp.cleanup()
 
@@ -96,11 +108,18 @@ class ReleaseSignoffTests(unittest.TestCase):
             lines.append(f"| {scenario} | {result} | evidence-001 |")
         return "\n".join(lines) + "\n"
 
-    def promote(self, body: str, change_after_test: bool = False) -> str:
+    def promote(self, body: str, change_after_test: bool = False, signed_body: str | None = None) -> str:
         signoff = self.root / "docs" / "release-signoffs" / f"{self.candidate}.md"
         signoff.parent.mkdir(parents=True)
         signoff.write_text(body)
-        self.run_git("add", str(signoff.relative_to(self.root)))
+        signed_input = self.root / "signed-input.md"
+        signed_input.write_text(signed_body if signed_body is not None else body)
+        raw_signature = self.root / "signature.bin"
+        subprocess.run(["openssl", "pkeyutl", "-sign", "-inkey", str(self.private_key),
+                        "-rawin", "-in", str(signed_input), "-out", str(raw_signature)], check=True, capture_output=True)
+        signature = signoff.with_suffix(".md.sig")
+        signature.write_bytes(base64.b64encode(raw_signature.read_bytes()) + b"\n")
+        self.run_git("add", str(signoff.relative_to(self.root)), str(signature.relative_to(self.root)))
         if change_after_test:
             (self.root / "app.txt").write_text("untested runtime change\n")
             self.run_git("add", "app.txt")
@@ -116,6 +135,17 @@ class ReleaseSignoffTests(unittest.TestCase):
         head = self.promote(self.body())
         self.assertIn(self.candidate, gate.validate(head, TODAY))
 
+    def test_untrusted_evidence_edit_blocks(self) -> None:
+        head = self.promote(self.body().replace("physical-ios-001", "fabricated-record"), signed_body=self.body())
+        with self.assertRaisesRegex(gate.SignoffError, "signature verification failed"):
+            gate.validate(head, TODAY)
+
+    def test_missing_trusted_key_blocks(self) -> None:
+        head = self.promote(self.body())
+        os.environ.pop("DAMDAM_RELEASE_PUBLIC_KEY_B64")
+        with self.assertRaisesRegex(gate.SignoffError, "public key is not configured"):
+            gate.validate(head, TODAY)
+
     def test_no_signoff_blocks(self) -> None:
         with self.assertRaisesRegex(gate.SignoffError, "exactly one signoff"):
             gate.validate(self.candidate, TODAY)
@@ -125,6 +155,14 @@ class ReleaseSignoffTests(unittest.TestCase):
             "| Carrier eSIM install and data | NOT_APPLICABLE |",
             "| Carrier eSIM install and data | FAIL |",
         )
+        self.assert_blocked(body, "Explicit FAIL")
+
+    def test_duplicate_scenario_section_cannot_hide_fail(self) -> None:
+        body = self.body() + "\n## Critical scenario results\n\n| Identity and recovery | FAIL | observed |\n"
+        self.assert_blocked(body, "Explicit FAIL")
+
+    def test_indented_fail_row_cannot_hide(self) -> None:
+        body = self.body() + "\n   | Identity and recovery | FAIL | observed |\n"
         self.assert_blocked(body, "Explicit FAIL")
 
     def test_future_dated_signoff_blocks(self) -> None:
@@ -162,6 +200,12 @@ class ReleaseSignoffTests(unittest.TestCase):
     def test_untested_runtime_change_blocks(self) -> None:
         head = self.promote(self.body(), change_after_test=True)
         with self.assertRaisesRegex(gate.SignoffError, "changed after tested commit"):
+            gate.validate(head, TODAY)
+
+    def test_candidate_not_current_staging_blocks(self) -> None:
+        head = self.promote(self.body())
+        self.run_git("update-ref", "refs/remotes/origin/staging", self.base)
+        with self.assertRaisesRegex(gate.SignoffError, "current staging"):
             gate.validate(head, TODAY)
 
     def test_filename_and_internal_commit_must_match(self) -> None:

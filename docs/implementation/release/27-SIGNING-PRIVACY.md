@@ -9,7 +9,8 @@ passwords, activation material, customer data or API keys in this directory.
 
 Android `release` now uses an externally supplied keystore and fails before
 building when any `DAMDAM_RELEASE_*` value is missing, the file does not exist,
-or the configured path is the checked-in debug keystore. The independent
+or the configured certificate matches the checked-in debug certificate even
+from a copied keystore path. The independent
 `screenshot` build type bundles fixture UI and uses the debug key; it is not
 the artifact to publish. It requires `SCREENSHOT_HARNESS_MODE=true`, while a
 production release rejects that setting. CI installs
@@ -20,7 +21,8 @@ With an authorized signing environment (D6), from `apps/mobile/android`:
 ```bash
 # Supply these through the approved secret manager, not a checked-in file:
 # DAMDAM_RELEASE_KEYSTORE_PATH, DAMDAM_RELEASE_STORE_PASSWORD,
-# DAMDAM_RELEASE_KEY_ALIAS, DAMDAM_RELEASE_KEY_PASSWORD.
+# DAMDAM_RELEASE_KEY_ALIAS, DAMDAM_RELEASE_KEY_PASSWORD,
+# DAMDAM_RELEASE_CERT_SHA256 (release-owner-approved certificate fingerprint).
 ./gradlew clean bundleRelease --no-daemon
 ```
 
@@ -109,17 +111,30 @@ screen-reader and large-text review. These remain release gates.
 ## Promotion evidence and authorization boundary
 
 `docs/release-signoffs/TEMPLATE.md` and
-`scripts/validate-release-signoff.sh` now bind a signoff to a tested commit and
+`scripts/validate-release-signoff.sh` now bind a signoff to the current
+`staging` commit and
 reject tracked changes after it. They require configuration fingerprint,
 accepted dependency SHAs, exact channel scope, markets, carrier/merchant
 references, physical devices, signed artifacts, scenario PASS evidence and
 incident/rollback owners. Disabled channels need negative eligibility proof.
-The configuration fingerprint is a human-signed reference to a redacted
+The PR must add a matching Ed25519 signature sidecar over the exact signoff
+bytes. The trusted base-branch workflow verifies it against a public key
+provisioned outside the PR. The release owner must verify every external
+reference before signing; a valid signature is an accountable attestation, not
+proof that the provider or device actually worked. The configuration fingerprint
+is a signed reference to a redacted
 deployment snapshot, not a CI attestation of remote secret state; the release
 owner must compare it again before promotion. Store submission and production
-promotion are separate authorized actions. No historical tag is moved.
+promotion are separate authorized actions. Automatic main-push EAS builds and
+submissions have been removed. No historical tag is moved.
 
 On 23 September 2026, the GitHub API returned `main` branch protection with
-`Validate release signoff artifact` required and admin enforcement enabled; no
-repository rulesets were returned. This is a point-in-time API observation,
-not an immutable guarantee. Recheck immediately before any promotion.
+`Validate release signoff artifact` required, admin enforcement enabled,
+`strict=false`, no required PR reviews and no repository rulesets. The old
+workflow runs PR-head code and is not an adequate trust boundary. D6 therefore
+also requires an administrator to install the new base-branch workflow on
+`main`, require its `release-signoff/trusted` status on the PR head, enable
+strict up-to-date checks and restrict public-key/branch-rule administration.
+The new workflow will fail closed until the public key is provisioned. These
+are **not** performed or approved by this implementation. Recheck the server
+settings and current staging SHA immediately before any promotion.

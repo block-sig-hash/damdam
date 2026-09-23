@@ -8,9 +8,13 @@ needs a human release owner and cannot be manufactured by this script.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -61,6 +65,38 @@ def git_ok(*args: str) -> bool:
     return subprocess.run(["git", *args], capture_output=True).returncode == 0
 
 
+def git_blob(revision: str, path: str) -> bytes:
+    result = subprocess.run(["git", "show", f"{revision}:{path}"], capture_output=True)
+    if result.returncode:
+        raise SignoffError(f"Cannot read committed signoff object: {path}")
+    return result.stdout
+
+
+def verify_release_owner_signature(body: bytes, signature_b64: bytes) -> None:
+    """Verify exact committed bytes against an out-of-repository release key."""
+    public_key_b64 = os.environ.get("DAMDAM_RELEASE_PUBLIC_KEY_B64", "")
+    if not public_key_b64:
+        raise SignoffError("Trusted release-owner public key is not configured")
+    try:
+        public_key = base64.b64decode(public_key_b64, validate=True)
+        signature = base64.b64decode(signature_b64.strip(), validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise SignoffError("Invalid release-owner key or signature encoding") from exc
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        key_path, body_path, sig_path = (root / name for name in ("key.pem", "body.md", "signature.bin"))
+        key_path.write_bytes(public_key)
+        body_path.write_bytes(body)
+        sig_path.write_bytes(signature)
+        result = subprocess.run(
+            ["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(key_path),
+             "-rawin", "-in", str(body_path), "-sigfile", str(sig_path)],
+            capture_output=True,
+        )
+        if result.returncode:
+            raise SignoffError("Release-owner signature verification failed")
+
+
 def paths(*args: str) -> list[str]:
     output = subprocess.run(["git", *args], capture_output=True, check=True).stdout
     return [p.decode("utf-8") for p in output.split(b"\0") if p]
@@ -83,14 +119,17 @@ def substantive(value: str, description: str) -> None:
 
 
 def table(body: str, heading: str) -> dict[str, list[str]]:
-    section = re.search(
+    sections = list(re.finditer(
         rf"^## {re.escape(heading)}\s*$([\s\S]*?)(?=^## |\Z)",
         body, re.MULTILINE,
-    )
-    if not section:
-        raise SignoffError(f"Missing '{heading}' section")
+    ))
+    if len(sections) != 1:
+        raise SignoffError(f"Expected exactly one '{heading}' section")
     rows: dict[str, list[str]] = {}
-    for line in section.group(1).splitlines():
+    for raw_line in sections[0].group(1).splitlines():
+        # Up to three leading spaces are valid Markdown table indentation.
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+        line = raw_line.lstrip(" ") if indent <= 3 else raw_line
         if not line.startswith("|"):
             continue
         cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
@@ -103,6 +142,9 @@ def table(body: str, heading: str) -> dict[str, list[str]]:
 
 
 def validate_body(body: str, tested: str, today: date) -> None:
+    # A second, misleading table elsewhere must not hide an observed failure.
+    if re.search(r"^\s*\|[^|\n]+\|\s*FAIL\s*\|", body, re.MULTILINE):
+        raise SignoffError("Explicit FAIL result in signoff")
     if field(body, "Commit SHA").lower() != tested:
         raise SignoffError("Commit SHA does not match signoff filename")
     for name in (
@@ -190,12 +232,18 @@ def validate(head: str, today: date | None = None) -> str:
         raise SignoffError("PR head must be a resolvable full commit SHA")
     if not git_ok("cat-file", "-e", "origin/main^{commit}"):
         raise SignoffError("origin/main is missing; fetch full history")
+    if not git_ok("cat-file", "-e", "origin/staging^{commit}"):
+        raise SignoffError("origin/staging is missing; fetch full history")
     base = git("merge-base", "origin/main", head)
     added = paths("diff", "--name-only", "-z", "--diff-filter=A", base, head, "--", SIGNOFF_DIR)
     added = [p for p in added if p not in {f"{SIGNOFF_DIR}TEMPLATE.md", f"{SIGNOFF_DIR}README.md"}]
-    if len(added) != 1:
+    signoffs = [p for p in added if p.endswith(".md")]
+    if len(signoffs) != 1:
         raise SignoffError("Promotion must add exactly one signoff artifact")
-    path = added[0]
+    path = signoffs[0]
+    signature_path = f"{path}.sig"
+    if set(added) != {path, signature_path}:
+        raise SignoffError("Promotion must add only a signoff and matching signature")
     if Path(path).parent.as_posix() != SIGNOFF_DIR.rstrip("/") or not path.endswith(".md"):
         raise SignoffError("Signoff must be a direct .md file in docs/release-signoffs")
     tested = Path(path).stem
@@ -203,10 +251,17 @@ def validate(head: str, today: date | None = None) -> str:
         raise SignoffError("Signoff filename must be a resolvable full commit SHA")
     if not git_ok("merge-base", "--is-ancestor", tested, head) or not git_ok("merge-base", "--is-ancestor", base, tested):
         raise SignoffError("Tested commit is outside this promotion ancestry")
-    changed_after_test = [p for p in paths("diff", "--name-only", "-z", tested, head, "--") if p != path]
+    if tested != git("rev-parse", "origin/staging"):
+        raise SignoffError("Tested commit must equal the current staging branch head")
+    changed_after_test = [p for p in paths("diff", "--name-only", "-z", tested, head, "--") if p not in {path, signature_path}]
     if changed_after_test:
         raise SignoffError("Tracked code/config changed after tested commit: " + ", ".join(changed_after_test[:5]))
-    body = git("show", f"{head}:{path}")
+    body_bytes = git_blob(head, path)
+    verify_release_owner_signature(body_bytes, git_blob(head, signature_path))
+    try:
+        body = body_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise SignoffError("Signoff must be UTF-8") from exc
     validate_body(body, tested, today or datetime.now(timezone.utc).date())
     return f"Release signoff valid for tested commit {tested}"
 
@@ -217,7 +272,7 @@ def main() -> int:
         return 2
     try:
         print(validate(sys.argv[1]))
-    except (SignoffError, subprocess.CalledProcessError) as exc:
+    except (SignoffError, subprocess.CalledProcessError, FileNotFoundError) as exc:
         print(f"::error::{exc}", file=sys.stderr)
         return 1
     return 0

@@ -1,22 +1,16 @@
 name: Release Promotion Signoff
 
-# CI-enforced half of the staging->main promotion gate described in
-# docs/infrastructure.md's "Amendment -- Three-Branch Promotion and
-# Release Signoff Gate". Runs on every PR targeting `main` (not just
-# ones from `staging` -- there's no other legitimate way into `main`
-# under that convention, so the check doesn't need to special-case the
-# source branch) and fails the PR if it doesn't carry a real, fresh,
-# complete release-signoff artifact for the commit actually being
-# promoted. This is only a real blocker because `main`'s branch
-# protection requires this job's status check to pass before merging
-# -- a red X alone wouldn't stop anyone from merging anyway.
+# Run only trusted base-branch code; treat promotion PR objects as data.
+# The custom PR-head status must be required by main branch protection.
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   validate-release-signoff:
@@ -25,10 +19,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          # Full history, not the default shallow clone -- the
-          # validator needs `git merge-base` against origin/main and
-          # to walk ancestry for the anti-staleness check.
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
-      - name: Validate signoff artifact for this promotion
-        run: scripts/validate-release-signoff.sh "${{ github.event.pull_request.head.sha }}"
+          persist-credentials: false
+      - name: Fetch promotion and staging commits as data
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/heads/staging:refs/remotes/origin/staging
+          git fetch origin "$PR_HEAD"
+      - name: Validate using trusted base-branch code
+        id: validation
+        continue-on-error: true
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          DAMDAM_RELEASE_PUBLIC_KEY_B64: ${{ vars.DAMDAM_RELEASE_PUBLIC_KEY_B64 }}
+        run: scripts/validate-release-signoff.sh "$PR_HEAD"
+      - name: Report trusted result on exact PR head
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          RESULT: ${{ steps.validation.outcome }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ "$RESULT" = success ]; then
+            state=success
+          else
+            state=failure
+          fi
+          gh api "repos/$GH_REPOSITORY/statuses/$PR_HEAD" \
+            -f state="$state" \
+            -f context='release-signoff/trusted' \
+            -f description="Trusted release signoff validation: $state"
+          test "$state" = success
