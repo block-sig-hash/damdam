@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text } from 'react-native';
+import { LogBox, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text } from 'react-native';
 import { color, space, typography } from '../src/theme/tokens';
 import { installHarnessFetchMock } from './fetchMock';
 import { HARNESS_REGISTRY } from './registry';
 import {setAppLocale} from '../src/i18n';
 
 installHarnessFetchMock();
+// The Debug-only LogBox toast obscures the bottom picker rows on iOS and can
+// intercept Maestro taps after scrollUntilVisible. Console logs remain in CI.
+// This module is loaded only by SCREENSHOT_HARNESS_MODE, never a release app.
+LogBox.ignoreAllLogs();
 
 /**
  * Test-only entry point (screenshotHarness/README.md) -- registered by

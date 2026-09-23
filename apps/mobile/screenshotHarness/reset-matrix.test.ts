@@ -147,6 +147,8 @@ describe('the re-cut screenshot matrix', () => {
     ['esim-activation-android.yaml', 'harness-target-esim-activation-prompt-android'],
     ['esim-activation-ios.yaml', 'harness-target-esim-activation-guide-ios'],
     ['activation-success.yaml', 'harness-target-activation-success'],
+    ['activation-code-entry.yaml', 'harness-target-activation-code-entry'],
+    ['package-selection.yaml', 'harness-target-package-selection'],
     ['plans.yaml', 'harness-target-plans'],
     ['plans-device-unsupported.yaml', 'harness-target-plans-device-unsupported'],
     ['checkout.yaml', 'harness-target-checkout-review'],
