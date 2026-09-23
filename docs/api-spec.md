@@ -2478,3 +2478,66 @@ no field in any response shape here.
 through an order whose payer *is* that organization, so there is no filter
 parameter an operator could widen. Every cell passes `csv_safe`, and the export
 writes its own `view_sensitive_record` row.
+## 7.44 Amendment — Correlation, Redaction and Operational Metrics (US-42)
+
+Chunk 26, subchunks A–C. Two new endpoints and one new header on **every**
+response.
+
+### The correlation header
+
+Every response carries `X-Correlation-Id`. A client may send its own on the
+request and it is kept, so a mobile app's own identifier survives into our logs
+and a support ticket can quote one id that means the same thing on both sides.
+
+A supplied id is **validated, not trusted**: it is echoed into a response header
+and written into every log line for the request, so an unvalidated one is both a
+header-injection vector and a way to write arbitrary text into our logs. Ids
+that are not 8–64 characters of `[A-Za-z0-9._-]` are replaced with a generated
+one rather than truncated — truncating turns a caller's id into a *different*
+id, and then their logs and ours disagree about what the request was called.
+
+The header is in the CORS `expose_headers` list, or a browser would set it and
+then hide it, which looks identical to not setting it at all.
+
+### Browser origins are configured, not derived
+
+`CORS` previously allowed exactly `DASHBOARD_BASE_URL`. V05 put a consumer
+calling client in a browser, so the allowed set is now
+`DASHBOARD_BASE_URL` plus `ADDITIONAL_BROWSER_ORIGINS` (comma-separated). It is
+a list rather than a wildcard because `*` with credentials is refused by every
+browser anyway and reads, wrongly, as though it works.
+
+In production, an origin that is `http://` or names localhost fails at startup.
+
+### Endpoints
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /v1/admin/metrics` | admin session **or** `METRICS_SCRAPE_TOKEN` | Prometheus text format |
+| `GET /v1/admin/metrics.json` | the same | The same observation, for a dashboard |
+
+**Why a second credential.** A scraper is a process, not a person, and has no
+way to complete an operator login. Giving it one would put an operator
+credential in a scrape config, which is how operator credentials end up in
+monitoring repositories. `METRICS_SCRAPE_TOKEN` grants exactly this one read;
+unset, the endpoints are admin-only. The comparison is constant-time.
+
+### Null is not zero
+
+Every "oldest" and "lag" field is nullable and **absent means never observed**.
+A system that has never recorded usage and one whose usage is perfectly fresh
+would report the same number if absence collapsed to zero — one is healthy, the
+other has a poller that never started. The Prometheus rendering omits the sample
+line entirely rather than exporting `0` or `-1`.
+
+### Carrier and calling failures are separate series
+
+`unknown_supplier_outcomes` and `unknown_call_outcomes` are counted apart, as
+the calling amendment requires. They share a supplier and nothing else: a
+stalled eSIM issuance and a lost call outcome need different people, different
+runbooks and different urgency, and one combined number would read green while
+either half was on fire.
+
+`quarantined_events` is likewise kept apart from `unmatched_events`. An
+unmatched event arrived early and is ordinary; a quarantined one contradicted
+our records and is a security signal.

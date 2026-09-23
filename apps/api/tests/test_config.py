@@ -1,3 +1,5 @@
+from base64 import b64encode
+
 import pytest
 from pydantic import ValidationError
 
@@ -72,3 +74,109 @@ def test_esim_access_package_codes_accepts_new_format_from_real_env_var(
     monkeypatch.setenv("ESIM_ACCESS_PACKAGE_CODES", '{"SA:5":"SA_5GB"}')
     settings = Settings(**_BASE_SETTINGS)
     assert settings.esim_access_package_codes == {"SA:5": "SA_5GB"}
+
+
+class TestActivationKeyRotationConfiguration:
+    def test_a_retired_reference_cannot_be_repeated(self) -> None:
+        encoded = b64encode(b"o" * 32).decode()
+
+        with pytest.raises(ValidationError, match="repeats key reference"):
+            Settings(
+                **_BASE_SETTINGS,
+                activation_material_retired_keys=(
+                    f"material-v1:{encoded},material-v1:{encoded}"
+                ),
+            )
+
+    @pytest.mark.parametrize("reference", ["", "has:colon", "has space"])
+    def test_key_references_must_survive_the_rotation_list_format(
+        self, reference: str
+    ) -> None:
+        with pytest.raises(ValidationError, match="KEY_REFERENCE"):
+            Settings(
+                **_BASE_SETTINGS,
+                activation_material_key_reference=reference,
+            )
+
+
+class TestProductionRejectsDeveloperDefaults:
+    """US-42, chunk 26B — a deployment that boots is a deployment somebody trusts.
+
+    Each of these settings is fine in development and an incident in production.
+    They fail at startup on purpose: a deployment that refuses to boot is found
+    by whoever deployed it, and one that boots and cannot sign anybody in is
+    found by customers.
+    """
+
+    def _production(self, **overrides: object) -> dict[str, object]:
+        base: dict[str, object] = {
+            "app_env": "production",
+            "jwt_secret": "a-real-production-secret-of-sufficient-length",
+            "resend_api_key": "re_live_example",
+            "dashboard_base_url": "https://dashboard.damdam.example",
+        }
+        base.update(overrides)
+        return base
+
+    def test_a_valid_production_configuration_starts(self) -> None:
+        settings = Settings(**self._production())  # type: ignore[arg-type]
+
+        assert settings.app_env == "production"
+        assert settings.browser_origins == ["https://dashboard.damdam.example"]
+
+    def test_the_published_development_jwt_secret_is_refused(self) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            Settings(  # type: ignore[arg-type]
+                **self._production(
+                    jwt_secret="development-only-secret-change-before-deploy"
+                )
+            )
+
+        assert "JWT_SECRET" in str(excinfo.value)
+
+    def test_identity_mail_with_no_provider_is_refused(self) -> None:
+        """`NullDeliveryTransport` discards messages and logs nothing.
+
+        In staging that is correct. In production it is a total authentication
+        outage that reports itself as healthy.
+        """
+        with pytest.raises(ValidationError) as excinfo:
+            Settings(**self._production(resend_api_key=""))  # type: ignore[arg-type]
+
+        assert "RESEND_API_KEY" in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        "origin",
+        [
+            "http://dashboard.damdam.example",
+            "https://localhost:3000",
+            "http://127.0.0.1:3000",
+        ],
+    )
+    def test_an_insecure_browser_origin_is_refused(self, origin: str) -> None:
+        with pytest.raises(ValidationError) as excinfo:
+            Settings(**self._production(dashboard_base_url=origin))  # type: ignore[arg-type]
+
+        assert "browser origins" in str(excinfo.value)
+
+    def test_additional_origins_are_parsed_and_deduplicated(self) -> None:
+        settings = Settings(  # type: ignore[arg-type]
+            **self._production(
+                additional_browser_origins=(
+                    "https://app.damdam.example/, https://dashboard.damdam.example"
+                )
+            )
+        )
+
+        # Trailing slash normalized, duplicate of the dashboard URL dropped.
+        assert settings.browser_origins == [
+            "https://dashboard.damdam.example",
+            "https://app.damdam.example",
+        ]
+
+    def test_development_is_left_alone(self) -> None:
+        """The rules are production's. Making them global would stop every
+        developer's checkout from starting, and the check would be deleted."""
+        settings = Settings(app_env="development")  # type: ignore[arg-type]
+
+        assert settings.jwt_secret.startswith("development-only")

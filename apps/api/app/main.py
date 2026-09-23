@@ -86,6 +86,7 @@ from app.manifests.service import ManifestError, ManifestService
 from app.mfa.service import MfaError, MfaService
 from app.monitoring import PostHogExceptionMiddleware, build_exception_tracker
 from app.notifications.service import EmailSender, WhatsAppSender
+from app.observability import CORRELATION_HEADER, CorrelationIdMiddleware
 from app.operations.routes import router as operations_router
 from app.operations.service import OperationsError, OperationsService
 from app.operations.support import SupportDirectory
@@ -140,6 +141,10 @@ def _build_credential_vault(
         b64decode(settings.activation_material_key, validate=True),
         settings.activation_material_key_reference,
         clock=clock,
+        # Rotation (chunk 26D): material sealed under a retired key stays
+        # readable. Without this, rotating the key destroys every existing
+        # one-time-use profile.
+        retired_keys=settings.retired_activation_material_keys,
     )
 
 
@@ -182,11 +187,18 @@ def create_app(
     api = FastAPI(title="DamDam API", version="0.1.0")
     api.add_middleware(
         CORSMiddleware,
-        allow_origins=[resolved_settings.dashboard_base_url.rstrip("/")],
+        allow_origins=resolved_settings.browser_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # So a browser client can read back the id it needs to quote in a
+        # support ticket. Without this the header is set and then hidden by the
+        # user agent, which looks identical to not setting it.
+        expose_headers=[CORRELATION_HEADER],
     )
+    # Outermost of the two, so the correlation id exists before anything else
+    # runs and is still set when the exception tracker reports a failure.
+    api.add_middleware(CorrelationIdMiddleware)
     exception_tracker = build_exception_tracker(resolved_settings)
     if exception_tracker is not None:
         api.add_middleware(

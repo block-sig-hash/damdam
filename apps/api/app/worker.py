@@ -49,6 +49,63 @@ from app.usage.service import UsageService
 
 settings = get_settings()
 celery_app = Celery("damdam", broker=settings.redis_url, backend=settings.redis_url)
+
+# --- worker reliability (US-42, chunk 26D) ---------------------------------
+#
+# Celery's defaults are tuned for throughput on work that can be lost. None of
+# the work in this file can be: it provisions eSIMs, settles calls and moves
+# money. Chunk 15 reached the same conclusion for `app.esim.issue` and set
+# `acks_late` on that one task; every other task, including V03's deadline
+# resolver, was still running on defaults where a killed worker silently drops
+# whatever it was holding.
+#
+# These are global because the per-task version is a decision each new task
+# author has to remember, and the failure of forgetting is invisible.
+celery_app.conf.update(
+    # **Acknowledge after the work, not on receipt.** The default acks a task
+    # when the worker picks it up, so `kill -9` mid-provisioning loses it with
+    # no trace. Late acks mean a lost worker's task is redelivered.
+    #
+    # This makes delivery at-least-once, not magically exactly-once. The
+    # financial and supplier-purchase paths write through idempotency keys
+    # (chunks 10, 11, V03), and retention sweeps converge. Notification sends
+    # still have the classic crash window between the provider accepting a
+    # message and our recording that acceptance; a redelivery can repeat that
+    # message. That limitation is recorded in the chunk handoff and requires a
+    # provider idempotency key or transactional dispatch receipt to close.
+    # Silently losing the task on worker death is not a safer fallback.
+    task_acks_late=True,
+    # A task whose worker vanished is requeued rather than quietly discarded.
+    task_reject_on_worker_lost=True,
+    # **Take one task at a time.** With late acks, prefetching means a crashed
+    # worker redelivers everything it was holding, turning one lost task into a
+    # burst. It also stops a single slow task from parking a queue behind it.
+    worker_prefetch_multiplier=1,
+    # Redis has no broker-side ack timeout, so an unacked task is redelivered
+    # only after this. It must exceed the slowest task's hard limit, or a task
+    # still running gets a second worker — which is the duplicate-purchase
+    # scenario chunk 11 exists to prevent.
+    broker_transport_options={"visibility_timeout": 3600},
+    # Bounded, not unbounded. A task that hangs on a supplier socket holds a
+    # worker forever; the soft limit raises an exception the task can handle,
+    # and the hard limit is the backstop 30 seconds later.
+    task_soft_time_limit=600,
+    task_time_limit=630,
+    # Recycle workers periodically. A long-lived process leaking a connection
+    # or a little memory per task is a slow outage that looks like nothing.
+    worker_max_tasks_per_child=500,
+    # A broker that is not up yet when the worker starts is ordinary during a
+    # deploy, and not a reason to exit.
+    broker_connection_retry_on_startup=True,
+    # Warm shutdown: on SIGTERM, finish the task in hand before exiting.
+    worker_soft_shutdown_timeout=30,
+    # Results are diagnostic here, never the source of truth — every task
+    # records its outcome in the database. Expiring them keeps Redis from
+    # growing without bound.
+    result_expires=timedelta(hours=6),
+    task_track_started=True,
+)
+
 celery_app.conf.beat_schedule = {
     "enqueue-due-esim-issuance": {
         "task": "app.esim.enqueue_due",
