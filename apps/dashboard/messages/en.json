@@ -532,6 +532,7 @@
       "calling_route_disabled": "Browser calling is switched off right now. Nothing has been charged.",
       "attempt_expired": "That call was not started in time. Nothing has been charged.",
       "device_not_authorized": "This browser is not set up for calling. Sign in again.",
+      "device_identity_unavailable": "This browser cannot create a stable calling identity. Allow site storage, then reload before calling.",
       "rate_unavailable": "We have no rate for that destination, so we cannot place the call.",
       "entitlement_not_available": "You have no calling allowance on this account.",
       "generic": "The call could not be placed. Nothing has been charged unless a cost is shown below."

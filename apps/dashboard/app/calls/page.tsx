@@ -12,10 +12,12 @@ import {
 } from "@/lib/callingClient";
 import {
   clearConsumerSession,
+  readOrCreateCallingDeviceId,
   readConsumerSession,
   type ConsumerSession,
 } from "@/lib/consumerSession";
 import { confirmConsumerSignIn, requestConsumerSignIn } from "@/lib/consumerAuth";
+import { getClientLocale } from "@/lib/clientI18n";
 import { mediaSupport } from "@/lib/calling/adapter";
 import { requestMicrophone } from "@/lib/calling/microphone";
 import { resolveCallAdapter } from "@/lib/calling/registry";
@@ -93,7 +95,7 @@ function ConsumerSignIn({ onSignedIn }: { onSignedIn: () => void }) {
     setBusy(true);
     setError("");
     try {
-      await requestConsumerSignIn(email, "en");
+      await requestConsumerSignIn(email, getClientLocale());
       setSent(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t("signIn.failed"));
@@ -186,11 +188,16 @@ function CallingArea({
   const [snapshot, setSnapshot] = useState<CallSnapshot | null>(null);
   const callRef = useRef<BrowserCallSession | null>(null);
   const support = useMemo(() => mediaSupport(), []);
+  const deviceId = useMemo(() => readOrCreateCallingDeviceId(), []);
 
   useEffect(() => {
+    if (!deviceId) {
+      return;
+    }
     const call = new BrowserCallSession({
+      accessToken: session.accessToken,
       userId: session.userId,
-      deviceId: session.userId,
+      deviceId,
       currency: CURRENCY,
       adapter: resolveCallAdapter(),
       requestMicrophone,
@@ -219,7 +226,7 @@ function CallingArea({
       call.dispose();
       callRef.current = null;
     };
-  }, [session.userId]);
+  }, [deviceId, session.accessToken, session.userId]);
 
   const loadHistory = useCallback(() => {
     setHistoryError(null);
@@ -234,6 +241,16 @@ function CallingArea({
   }, [loadHistory]);
 
   useEffect(() => {
+    if (
+      snapshot?.attemptId &&
+      (snapshot.phase === "ended" || snapshot.phase === "failed")
+    ) {
+      const timer = window.setTimeout(loadHistory, 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [loadHistory, snapshot?.attemptId, snapshot?.phase]);
+
+  useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(() => {
       if (!destination.startsWith("+") || destination.length < 7) {
@@ -242,6 +259,7 @@ function CallingArea({
         return;
       }
       setPricing(true);
+      setEligibility(null);
       setEligibilityError(null);
       priceDestination();
     }, 0);
@@ -273,15 +291,21 @@ function CallingArea({
     ["preparing", "connecting", "ringing", "answered"].includes(snapshot.phase);
   const callable =
     !live &&
+    !pricing &&
+    deviceId !== null &&
     support === "supported" &&
     destination.startsWith("+") &&
     destination.length > 6 &&
     eligibility !== null &&
+    eligibility.destination_e164 === destination &&
+    snapshot?.attemptId == null &&
     eligibility.route_enabled &&
     eligibility.fundable;
 
   const failureCode =
-    support === "insecure_context"
+    deviceId === null
+      ? "device_identity_unavailable"
+      : support === "insecure_context"
       ? "insecure_context"
       : support === "unsupported"
         ? "browser_unsupported"
@@ -299,7 +323,18 @@ function CallingArea({
           </div>
           <div>
             <LocaleSwitcher />
-            <button type="button" data-testid="calls-sign-out" onClick={onSignOut}>
+            <button
+              type="button"
+              data-testid="calls-sign-out"
+              onClick={() => {
+                const call = callRef.current;
+                if (!call) {
+                  onSignOut();
+                  return;
+                }
+                call.hangup("signed_out").finally(onSignOut);
+              }}
+            >
               {t("signIn.signOut")}
             </button>
           </div>
@@ -416,6 +451,9 @@ function CallingArea({
                       currency: eligibility.currency,
                       minutes: Math.max(1, Math.floor(eligibility.max_seconds / 60)),
                     })}
+                  </p>
+                  <p data-testid="calls-identity">
+                    {t("preview.identity", { number: eligibility.identity_e164 })}
                   </p>
                   <p>
                     {t("preview.available", {

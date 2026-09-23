@@ -532,6 +532,7 @@
       "calling_route_disabled": "Les appels par navigateur sont désactivés pour le moment. Rien n'a été débité.",
       "attempt_expired": "Cet appel n'a pas été lancé à temps. Rien n'a été débité.",
       "device_not_authorized": "Ce navigateur n'est pas configuré pour les appels. Reconnectez-vous.",
+      "device_identity_unavailable": "Ce navigateur ne peut pas créer d'identifiant d'appel stable. Autorisez le stockage du site, puis rechargez la page avant d'appeler.",
       "rate_unavailable": "Nous n'avons aucun tarif pour cette destination, l'appel est impossible.",
       "entitlement_not_available": "Vous n'avez aucun forfait d'appel sur ce compte.",
       "generic": "L'appel n'a pas pu être passé. Rien n'a été débité sauf si un coût est indiqué ci-dessous."

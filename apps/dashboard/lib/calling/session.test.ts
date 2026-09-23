@@ -108,6 +108,7 @@ class FakeAdapter implements CallClientAdapter {
 function build(overrides: Partial<ConstructorParameters<typeof BrowserCallSession>[0]> = {}) {
   const adapter = new FakeAdapter();
   const session = new BrowserCallSession({
+    accessToken: "token",
     userId: "user-1",
     deviceId: "device-1",
     currency: "NGN",
@@ -169,6 +170,22 @@ describe("no accidental paid retries", () => {
     expect(new Set(keys).size).toBe(1);
   });
 
+  it("starts a later completed placement with a fresh idempotency key", async () => {
+    const { adapter, session } = build();
+    authorizeCall
+      .mockResolvedValueOnce(ATTEMPT)
+      .mockResolvedValueOnce({ ...ATTEMPT, attempt_id: "attempt-2" });
+
+    await session.place("+441632960011");
+    adapter.emit({ kind: "ended", reason: "remote_hangup" });
+    await vi.waitFor(() => expect(session.snapshot().phase).toBe("ended"));
+    await session.place("+441632960011");
+
+    const keys = authorizeCall.mock.calls.map(([args]) => args.idempotencyKey);
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
+  });
+
   it("AC-48.2: a refreshed tab reconciles the live attempt instead of redialing", async () => {
     rememberActiveCall("user-1", "attempt-1");
     getCall.mockResolvedValue({ ...ATTEMPT, state: "answered", answered_at: "2026-09-13T12:00:10Z" });
@@ -178,7 +195,7 @@ describe("no accidental paid retries", () => {
 
     // The durable attempt is the source of truth. Dialling again would be a
     // second call and a second charge for one thing the customer did once.
-    expect(getCall).toHaveBeenCalledWith("attempt-1");
+    expect(getCall).toHaveBeenCalledWith("attempt-1", "token");
     expect(authorizeCall).not.toHaveBeenCalled();
     expect(session.snapshot().phase).toBe("answered");
   });
@@ -198,9 +215,51 @@ describe("no accidental paid retries", () => {
     expect(session.snapshot().phase).toBe("ended");
     expect(readActiveCall("user-1")).toBeNull();
   });
+
+  it("keeps an unknown live attempt recoverable while offline", async () => {
+    rememberActiveCall("user-1", "attempt-1");
+    getCall.mockRejectedValueOnce(
+      new CallingApiError("network_error", "offline", 0),
+    );
+    const { session } = build();
+
+    await session.reconcile();
+
+    expect(readActiveCall("user-1")).toBe("attempt-1");
+    expect(session.snapshot().failureCode).toBe("offline");
+
+    getCall.mockResolvedValueOnce({
+      ...ATTEMPT,
+      state: "answered",
+      answered_at: "2026-09-13T12:00:10Z",
+    });
+    await session.retry();
+
+    expect(getCall).toHaveBeenCalledTimes(2);
+    expect(session.snapshot().phase).toBe("answered");
+  });
 });
 
 describe("the browser is asked what it can do before money moves", () => {
+  it("uses the captured account token and the browser device boundary", async () => {
+    const { session } = build();
+
+    await session.place("+441632960011");
+
+    expect(authorizeCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessToken: "token",
+        deviceId: "device-1",
+      }),
+    );
+    expect(issueClientSession).toHaveBeenCalledWith(
+      "device-1",
+      "browser",
+      "token",
+    );
+    expect(startCall).toHaveBeenCalledWith("attempt-1", "device-1", "token");
+  });
+
   it("AC-48.3: a build with no dialling path never prompts and never authorizes", async () => {
     const requestMicrophone = vi.fn(async () => "granted" as const);
     const adapter = new FakeAdapter();
@@ -243,7 +302,7 @@ describe("an abandoned attempt is always reported", () => {
 
     await session.place("+441632960011");
 
-    expect(stopCall).toHaveBeenCalledWith("attempt-1", expect.any(String));
+    expect(stopCall).toHaveBeenCalledWith("attempt-1", expect.any(String), "token");
   });
 
   it("AC-48.2: closing the tab is best effort and is not the spending control", async () => {
@@ -256,6 +315,29 @@ describe("an abandoned attempt is always reported", () => {
     // throw, and the guarantee that the call stops is V03's server-side cutoff,
     // not this.
     await expect(session.releaseOnUnload()).resolves.toBeUndefined();
+  });
+
+  it("acknowledges a provider-side end on the server", async () => {
+    const { adapter, session } = build();
+    await session.place("+441632960011");
+    stopCall.mockClear();
+
+    adapter.emit({ kind: "ended", reason: "remote_hangup" });
+
+    await vi.waitFor(() => {
+      expect(stopCall).toHaveBeenCalledWith("attempt-1", "remote_hangup", "token");
+      expect(session.snapshot().phase).toBe("ended");
+    });
+  });
+
+  it("hangup enters a terminal phase after stopping the attempt", async () => {
+    const { session } = build();
+    await session.place("+441632960011");
+
+    await session.hangup();
+
+    expect(session.snapshot().phase).toBe("ended");
+    expect(readActiveCall("user-1")).toBeNull();
   });
 });
 
@@ -282,6 +364,37 @@ describe("one account's call cannot reach another", () => {
 
     expect(readActiveCall("user-1")).toBeNull();
     session.dispose();
+  });
+
+  it("stops a live attempt when its owner session is disposed", async () => {
+    const { session } = build();
+    await session.place("+441632960011");
+    stopCall.mockClear();
+
+    session.dispose();
+
+    await vi.waitFor(() =>
+      expect(stopCall).toHaveBeenCalledWith("attempt-1", "client_disposed", "token"),
+    );
+  });
+
+  it("releases an authorization that returns after disposal", async () => {
+    let resolveAuthorization!: (attempt: AttemptView) => void;
+    authorizeCall.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveAuthorization = resolve;
+      }),
+    );
+    const { session } = build();
+
+    const placing = session.place("+441632960011");
+    await vi.waitFor(() => expect(authorizeCall).toHaveBeenCalledTimes(1));
+    session.dispose();
+    clearConsumerSession();
+    resolveAuthorization(ATTEMPT);
+    await placing;
+
+    expect(stopCall).toHaveBeenCalledWith("attempt-1", "client_disposed", "token");
   });
 
   it("AC-48.1: an expired session is reported as sign-in, not as a call failure", async () => {

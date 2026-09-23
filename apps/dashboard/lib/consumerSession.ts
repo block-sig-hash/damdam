@@ -23,6 +23,7 @@
 
 const ACCESS_TOKEN_KEY = "damdam_consumer_access_token";
 const USER_ID_KEY = "damdam_consumer_user_id";
+const CALLING_DEVICE_ID_KEY = "damdam_consumer_calling_device_id";
 /** Namespaced per user, so a signed-out account leaves nothing addressable. */
 const ACTIVE_CALL_PREFIX = "damdam_consumer_active_call:";
 
@@ -49,6 +50,42 @@ export function readConsumerSession(): ConsumerSession | null {
     return null;
   }
   return { accessToken, userId };
+}
+
+/**
+ * Return an opaque, installation-scoped name for the browser credential.
+ *
+ * This is deliberately not the account id: one customer's browsers must remain
+ * independently revocable. It is not a secret and survives sign-out, just as a
+ * native installation id does. If durable browser storage or secure randomness
+ * is unavailable, calling fails closed rather than collapsing devices together.
+ */
+export function readOrCreateCallingDeviceId(): string | null {
+  if (typeof window === "undefined" || typeof globalThis.crypto === "undefined") {
+    return null;
+  }
+  try {
+    const existing = window.localStorage.getItem(CALLING_DEVICE_ID_KEY)?.trim();
+    if (existing) {
+      return existing;
+    }
+
+    let random: string;
+    if (typeof globalThis.crypto.randomUUID === "function") {
+      random = globalThis.crypto.randomUUID();
+    } else if (typeof globalThis.crypto.getRandomValues === "function") {
+      const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+      random = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+    } else {
+      return null;
+    }
+
+    const deviceId = `web-${random}`;
+    window.localStorage.setItem(CALLING_DEVICE_ID_KEY, deviceId);
+    return deviceId;
+  } catch {
+    return null;
+  }
 }
 
 export function writeConsumerSession(session: ConsumerSession): void {

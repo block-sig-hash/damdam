@@ -68,6 +68,8 @@ export type CallSnapshot = {
 };
 
 export type BrowserCallSessionOptions = {
+  /** Captured per controller so teardown never authenticates as the next user. */
+  accessToken: string;
   userId: string;
   deviceId: string;
   currency: string;
@@ -151,15 +153,25 @@ export class BrowserCallSession {
       return;
     }
     const generation = this.generation;
+    this.update({ attemptId, phase: "connecting", failureCode: null });
     try {
-      const attempt = await getCall(attemptId);
+      const attempt = await getCall(attemptId, this.options.accessToken);
       if (this.stale(generation)) return;
       this.adoptServerState(attempt);
     } catch (error) {
       if (this.stale(generation)) return;
-      // A call we cannot ask about is a call we must not claim is running.
-      rememberActiveCall(this.options.userId, null);
-      this.update({ phase: "idle", failureCode: failureCodeFor(error) });
+      const gone =
+        error instanceof CallingApiError &&
+        (error.status === 403 || error.status === 404);
+      if (gone) {
+        rememberActiveCall(this.options.userId, null);
+      }
+      // A transient failure is not evidence that a billable attempt ended.
+      this.update({
+        attemptId: gone ? null : attemptId,
+        phase: gone ? "idle" : "failed",
+        failureCode: failureCodeFor(error),
+      });
     }
   }
 
@@ -180,9 +192,12 @@ export class BrowserCallSession {
       this.fail("calling_unavailable");
       return;
     }
+    const reusePending = this.pending?.destination === destination;
     this.pending = {
       destination,
-      idempotencyKey: this.pending?.idempotencyKey ?? newIdempotencyKey(),
+      idempotencyKey: reusePending
+        ? this.pending!.idempotencyKey
+        : newIdempotencyKey(),
     };
     this.inFlight = this.run(this.generation, this.pending);
     try {
@@ -194,14 +209,20 @@ export class BrowserCallSession {
 
   /** The lost-response path: the same key, so the server returns the same hold. */
   async retry(): Promise<void> {
-    if (this.disposed || !this.pending) {
+    if (this.disposed) {
       return;
     }
+    if (readActiveCall(this.options.userId)) {
+      await this.reconcile();
+      return;
+    }
+    if (!this.pending) return;
     await this.place(this.pending.destination);
   }
 
   async hangup(reason = "stopped"): Promise<void> {
     const attemptId = this.state.attemptId;
+    this.generation += 1;
     try {
       await this.options.adapter.hangup();
     } catch {
@@ -210,7 +231,9 @@ export class BrowserCallSession {
     if (attemptId) {
       await this.stopOnServer(attemptId, reason);
     }
+    this.pending = null;
     rememberActiveCall(this.options.userId, null);
+    this.update({ phase: "ended", endReason: reason });
   }
 
   /**
@@ -226,7 +249,7 @@ export class BrowserCallSession {
       return;
     }
     try {
-      await stopCall(attemptId, "tab_closed");
+      await stopCall(attemptId, "tab_closed", this.options.accessToken);
     } catch {
       // Swallowed deliberately. See the method note.
     }
@@ -254,13 +277,29 @@ export class BrowserCallSession {
   }
 
   dispose(): void {
+    const rememberedAttemptId = readActiveCall(this.options.userId);
+    const attemptId =
+      rememberedAttemptId ??
+      (LIVE_PHASES.includes(this.state.phase) ? this.state.attemptId : null);
     this.disposed = true;
     this.generation += 1;
     this.pending = null;
     this.state = idleSnapshot();
     this.unsubscribe?.();
     this.unsubscribe = null;
-    this.options.adapter.disconnect().catch(() => undefined);
+    rememberActiveCall(this.options.userId, null);
+    const teardown = async () => {
+      if (attemptId) {
+        try {
+          await this.options.adapter.hangup();
+        } catch {
+          // The server acknowledgement below remains authoritative.
+        }
+        await this.stopOnServer(attemptId, "client_disposed");
+      }
+      await this.options.adapter.disconnect();
+    };
+    teardown().catch(() => undefined);
   }
 
   // --- internals ---------------------------------------------------------
@@ -279,7 +318,9 @@ export class BrowserCallSession {
     });
 
     const permission = await this.options.requestMicrophone();
-    if (this.stale(generation)) return;
+    if (this.stale(generation)) {
+      return;
+    }
     if (permission !== "granted") {
       // Before authorize. A declined prompt must not leave money held.
       this.fail(
@@ -299,13 +340,21 @@ export class BrowserCallSession {
         idempotencyKey: pending.idempotencyKey,
         currency: this.options.currency,
         deviceId: this.options.deviceId,
+        accessToken: this.options.accessToken,
       });
     } catch (error) {
       if (this.stale(generation)) return;
       this.fail(failureCodeFor(error));
       return;
     }
-    if (this.stale(generation)) return;
+    if (this.stale(generation)) {
+      await this.stopOnServer(attempt.attempt_id, "client_disposed");
+      return;
+    }
+
+    // A response removes the only ambiguity that justified preserving this
+    // idempotency key. Any later placement is a new request and a new hold.
+    this.pending = null;
 
     // The hold is real from here, so every exit tells the server — and the
     // attempt is remembered so a refresh reconciles rather than redials.
@@ -321,27 +370,52 @@ export class BrowserCallSession {
     });
 
     try {
-      const provider = await issueClientSession(this.options.deviceId, "browser");
-      if (this.stale(generation)) return;
+      const provider = await issueClientSession(
+        this.options.deviceId,
+        "browser",
+        this.options.accessToken,
+      );
+      if (this.stale(generation)) {
+        await this.stopOnServer(attempt.attempt_id, "client_disposed");
+        return;
+      }
       await this.options.adapter.connect({
         token: provider.token,
         sipIdentity: provider.sip_identity,
         expiresAt: provider.expires_at,
       });
-      const instruction = await startCall(attempt.attempt_id, this.options.deviceId);
-      if (this.stale(generation)) return;
+      if (this.stale(generation)) {
+        await this.stopOnServer(attempt.attempt_id, "client_disposed");
+        return;
+      }
+      const instruction = await startCall(
+        attempt.attempt_id,
+        this.options.deviceId,
+        this.options.accessToken,
+      );
+      if (this.stale(generation)) {
+        await this.stopOnServer(attempt.attempt_id, "client_disposed");
+        return;
+      }
       await this.options.adapter.dial({
         attemptId: instruction.attempt_id,
         destinationE164: instruction.destination_e164,
         correlation: instruction.correlation,
         maxSeconds: instruction.max_seconds,
       });
+      if (this.stale(generation)) {
+        await this.stopOnServer(attempt.attempt_id, "client_disposed");
+      }
     } catch (error) {
       if (this.stale(generation)) return;
       const code = failureCodeFor(error);
       await this.stopOnServer(attempt.attempt_id, code);
       rememberActiveCall(this.options.userId, null);
       if (this.stale(generation)) return;
+      this.pending = {
+        destination: pending.destination,
+        idempotencyKey: newIdempotencyKey(),
+      };
       this.fail(code);
     }
   }
@@ -367,7 +441,11 @@ export class BrowserCallSession {
 
   private async stopOnServer(attemptId: string, reason: string): Promise<void> {
     try {
-      const attempt = await stopCall(attemptId, reason.slice(0, 100));
+      const attempt = await stopCall(
+        attemptId,
+        reason.slice(0, 100),
+        this.options.accessToken,
+      );
       if (this.state.attemptId === attemptId) {
         this.update({ endReason: attempt.end_reason, charge: attempt.charge });
       }
@@ -391,18 +469,47 @@ export class BrowserCallSession {
         this.update({ phase: "answered", answeredAt: this.now() });
         return;
       case "ended":
-        rememberActiveCall(this.options.userId, null);
-        this.update({ phase: "ended", endReason: event.reason });
+        this.pending = null;
+        if (this.state.attemptId) {
+          this.finishFromAdapter(this.state.attemptId, event).catch(() => undefined);
+        } else {
+          this.update({ phase: "ended", endReason: event.reason });
+        }
         return;
       case "failed":
-        rememberActiveCall(this.options.userId, null);
-        this.fail(event.reason);
+        if (this.state.attemptId) {
+          this.finishFromAdapter(this.state.attemptId, event).catch(() => undefined);
+        } else {
+          this.fail(event.reason);
+        }
         return;
     }
   }
 
   private fail(code: string): void {
     this.update({ phase: "failed", failureCode: code });
+  }
+
+  private async finishFromAdapter(
+    attemptId: string,
+    event: Extract<CallAdapterEvent, { kind: "ended" | "failed" }>,
+  ): Promise<void> {
+    await this.stopOnServer(attemptId, event.reason);
+    if (this.disposed || this.state.attemptId !== attemptId) {
+      return;
+    }
+    rememberActiveCall(this.options.userId, null);
+    if (event.kind === "ended") {
+      this.update({ phase: "ended", endReason: event.reason });
+      return;
+    }
+    if (this.state.destinationE164) {
+      this.pending = {
+        destination: this.state.destinationE164,
+        idempotencyKey: newIdempotencyKey(),
+      };
+    }
+    this.fail(event.reason);
   }
 
   private stale(generation: number): boolean {

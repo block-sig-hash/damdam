@@ -67,6 +67,8 @@ export type EligibilityView = {
   destination_e164: string;
   destination_country: string;
   destination_kind: string;
+  /** Chosen by the server; the browser displays but never nominates it. */
+  identity_e164: string;
   currency: string;
   max_seconds: number;
   max_charge_amount: string;
@@ -103,25 +105,30 @@ export class CallingApiError extends Error {
   }
 }
 
-function consumerHeaders(): HeadersInit {
-  const session = readConsumerSession();
-  if (!session) {
+function consumerHeaders(accessToken?: string): HeadersInit {
+  const token = accessToken ?? readConsumerSession()?.accessToken;
+  if (!token) {
     throw new CallingApiError(
       "unauthenticated",
       clientMessage("common.errors.signInRequired"),
       401,
     );
   }
-  return { Authorization: `Bearer ${session.accessToken}`, ...localeHeader() };
+  return { Authorization: `Bearer ${token}`, ...localeHeader() };
 }
 
 async function callingRequest<T>(
   path: string,
-  init: { method?: string; body?: unknown; idempotencyKey?: string } = {},
+  init: {
+    method?: string;
+    body?: unknown;
+    idempotencyKey?: string;
+    accessToken?: string;
+  } = {},
 ): Promise<T> {
-  const { method = "GET", body, idempotencyKey } = init;
+  const { method = "GET", body, idempotencyKey, accessToken } = init;
   const headers: Record<string, string> = {
-    ...(consumerHeaders() as Record<string, string>),
+    ...(consumerHeaders(accessToken) as Record<string, string>),
   };
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
@@ -180,10 +187,12 @@ export async function getEligibility(params: {
 export async function issueClientSession(
   deviceId: string,
   deviceLabel?: string,
+  accessToken?: string,
 ): Promise<ClientSessionView> {
   return callingRequest<ClientSessionView>("/calls/client-session", {
     method: "POST",
     body: { device_id: deviceId, device_label: deviceLabel ?? null },
+    accessToken,
   });
 }
 
@@ -199,10 +208,12 @@ export async function authorizeCall(params: {
   idempotencyKey: string;
   currency: string;
   deviceId: string;
+  accessToken?: string;
 }): Promise<AttemptView> {
   return callingRequest<AttemptView>("/calls/authorize", {
     method: "POST",
     idempotencyKey: params.idempotencyKey,
+    accessToken: params.accessToken,
     body: {
       destination: params.destination,
       idempotency_key: params.idempotencyKey,
@@ -220,25 +231,31 @@ export async function authorizeCall(params: {
 export async function startCall(
   attemptId: string,
   deviceId: string,
+  accessToken?: string,
 ): Promise<StartInstruction> {
   return callingRequest<StartInstruction>(
     `/calls/${attemptId}/start?device_id=${encodeURIComponent(deviceId)}`,
-    { method: "POST" },
+    { method: "POST", accessToken },
   );
 }
 
 export async function stopCall(
   attemptId: string,
   reason?: string,
+  accessToken?: string,
 ): Promise<AttemptView> {
   return callingRequest<AttemptView>(`/calls/${attemptId}/stop`, {
     method: "POST",
     body: { reason: reason ?? null },
+    accessToken,
   });
 }
 
-export async function getCall(attemptId: string): Promise<AttemptView> {
-  return callingRequest<AttemptView>(`/calls/${attemptId}`);
+export async function getCall(
+  attemptId: string,
+  accessToken?: string,
+): Promise<AttemptView> {
+  return callingRequest<AttemptView>(`/calls/${attemptId}`, { accessToken });
 }
 
 export async function listCalls(limit = 20): Promise<AttemptView[]> {

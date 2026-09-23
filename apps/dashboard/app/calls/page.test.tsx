@@ -45,6 +45,7 @@ const ELIGIBILITY: EligibilityView = {
   destination_e164: "+441632960011",
   destination_country: "GB",
   destination_kind: "fixed",
+  identity_e164: "+2348000000001",
   currency: "NGN",
   max_seconds: 600,
   max_charge_amount: "1200.00",
@@ -82,6 +83,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   window.sessionStorage.clear();
   window.localStorage.clear();
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: vi.fn() },
+  });
   getEligibility.mockResolvedValue(ELIGIBILITY);
   listCalls.mockResolvedValue([]);
 });
@@ -158,7 +163,9 @@ describe("AC-48.2 — a browser cannot bypass the server's controls", () => {
 
     render(<CallsPage />);
 
-    await waitFor(() => expect(getCall).toHaveBeenCalledWith("attempt-1"));
+    await waitFor(() =>
+      expect(getCall).toHaveBeenCalledWith("attempt-1", "consumer-token"),
+    );
     // The durable attempt is the truth. A second dial would be a second charge
     // for one thing the customer did once.
     expect(authorizeCall).not.toHaveBeenCalled();
@@ -226,9 +233,32 @@ describe("AC-48.3 — what the surface says", () => {
     });
 
     await waitFor(() => expect(screen.getByTestId("calls-rate")).toBeTruthy());
+    expect(screen.getByTestId("calls-identity")).toHaveTextContent(
+      "They will see +2348000000001",
+    );
     // Eligibility holds no money and writes no attempt, so editing a number
     // must not move a balance.
     expect(authorizeCall).not.toHaveBeenCalled();
+  });
+
+  it("does not place a new destination using the previous destination's quote", async () => {
+    signInAsConsumer();
+    render(<CallsPage />);
+    await waitFor(() => expect(screen.getByTestId("calls-setup")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("calls-destination"), {
+      target: { value: "+441632960011" },
+    });
+    await waitFor(() => expect(screen.getByTestId("calls-rate")).toBeTruthy());
+
+    getEligibility.mockReturnValueOnce(new Promise(() => undefined));
+    fireEvent.change(screen.getByTestId("calls-destination"), {
+      target: { value: "+33123456789" },
+    });
+    await waitFor(() =>
+      expect(screen.getByText("Working out the rate…")).toBeTruthy(),
+    );
+
+    expect(screen.getByTestId("calls-place")).toHaveProperty("disabled", true);
   });
 
   it("builds a number from the keypad and can correct it", async () => {
@@ -298,6 +328,24 @@ describe("AC-48.3 — what the surface says", () => {
     expect(auth.requestConsumerSignIn).toHaveBeenCalledWith(
       "someone@example.test",
       "en",
+    );
+  });
+
+  it("requests the sign-in message in the selected locale", async () => {
+    window.localStorage.setItem("damdam_locale", "fr");
+    render(<CallsPage />);
+    await waitFor(() => expect(screen.getByTestId("calls-email")).toBeTruthy());
+    fireEvent.change(screen.getByTestId("calls-email"), {
+      target: { value: "someone@example.test" },
+    });
+
+    fireEvent.click(screen.getByTestId("calls-send-code"));
+
+    await waitFor(() =>
+      expect(auth.requestConsumerSignIn).toHaveBeenCalledWith(
+        "someone@example.test",
+        "fr",
+      ),
     );
   });
 
