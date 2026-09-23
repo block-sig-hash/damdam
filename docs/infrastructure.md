@@ -1190,3 +1190,27 @@ real Postgres + WAL-G image, and now also **records the recovery time** and
 and no transaction may be half-present. A restore that returns rows is not the
 same as a restore that returns a consistent business state, and a double-entry
 transaction split by recovery is the failure a row count cannot see.
+
+---
+
+## 11.17 Amendment — Reset Release Promotion and Signing Boundary (US-42)
+
+Chunk 27 replaces the temporary fail-closed signoff placeholder with a
+capability-specific scenario table. The template and validator move together;
+historical signoffs and tags are retained. A promotion signoff names a tested
+source commit, environment, redacted runtime-configuration digest, carrier and
+merchant configuration references, accepted dependency commits, release
+markets/modes, physical devices, signed artifacts, incident/rollback owners and
+scenario evidence. Any explicit FAIL, missing evidence, future/stale signoff or
+tracked change after the tested commit blocks promotion. Disabled carrier,
+mobile-internet and browser-internet channels require negative eligibility
+evidence; enabled channels require their own physical/live scenarios. External
+config changes are rechecked by the release owner against the recorded digest;
+CI cannot attest to a remote secret store by reading a Markdown field.
+
+Android production release no longer inherits the debug key; the fixture
+screenshot APK has a separate build type. iOS Release selects production APNs
+entitlements. Neither platform has approved distribution signing in this
+repository, so D6 remains open. Store submission and production promotion are
+different authorized operations. Current procedures and remaining evidence are
+in [release/27-SIGNING-PRIVACY.md](./implementation/release/27-SIGNING-PRIVACY.md).

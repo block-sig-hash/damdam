@@ -1,0 +1,125 @@
+# Chunk 27 release preparation — signing, permissions and disclosures
+
+Recorded 23 September 2026 against `develop` merge `247974b`. This is a
+repository inventory and an operator procedure, **not** a signed build, store
+submission, legal approval or production release. Do not put keystores,
+passwords, activation material, customer data or API keys in this directory.
+
+## Build separation and reproducible commands
+
+Android `release` now uses an externally supplied keystore and fails before
+building when any `DAMDAM_RELEASE_*` value is missing, the file does not exist,
+or the configured path is the checked-in debug keystore. The independent
+`screenshot` build type bundles fixture UI and uses the debug key; it is not
+the artifact to publish. It requires `SCREENSHOT_HARNESS_MODE=true`, while a
+production release rejects that setting. CI installs
+`android/app/build/outputs/apk/screenshot/app-screenshot.apk` for Maestro.
+
+With an authorized signing environment (D6), from `apps/mobile/android`:
+
+```bash
+# Supply these through the approved secret manager, not a checked-in file:
+# DAMDAM_RELEASE_KEYSTORE_PATH, DAMDAM_RELEASE_STORE_PASSWORD,
+# DAMDAM_RELEASE_KEY_ALIAS, DAMDAM_RELEASE_KEY_PASSWORD.
+./gradlew clean bundleRelease --no-daemon
+```
+
+Record the full source SHA, Gradle/Java/Android SDK versions, AAB SHA-256,
+signing-certificate SHA-256 and the matching app version. Verify the certificate
+against the release owner's approved fingerprint before distributing the AAB.
+No key or fingerprint is approved in this repository yet. `assembleRelease`
+and `bundleRelease` without the signing environment must fail, not fall back to
+the debug key. An emulator screenshot build is not a signed-store build.
+
+iOS Release references `DamDamRelease.entitlements`, which requests production
+APNs and the same associated domains as Debug. It needs an Apple developer
+team, an approved distribution certificate/profile, a macOS/Xcode environment
+and verified AASA domains; none is configured here (D6). The repeatable
+archive command once those inputs exist is:
+
+```bash
+cd apps/mobile/ios
+xcodebuild archive -workspace DamDam.xcworkspace -scheme DamDam \
+  -configuration Release -destination 'generic/platform=iOS' \
+  -archivePath build/DamDam.xcarchive
+```
+
+Record Xcode version, source SHA, profile/team and entitlements, archive and
+exported IPA SHA-256, certificate fingerprint and install result. The
+on-demand EAS workflow is a separate optional build probe, not proof that an
+IPA was signed with an approved production identity; its historic comments
+about removed incoming-call bridges are obsolete. No iOS archive was run on
+this Linux host.
+
+## Actual native declarations and SDK inventory
+
+| Surface | Repository declaration or use | Release implication |
+|---|---|---|
+| Android permissions | `INTERNET`, `ACCESS_NETWORK_STATE`, `POST_NOTIFICATIONS`, `WRITE_EMBEDDED_SUBSCRIPTIONS` | Verify merged release manifest and Play Data safety; device eSIM write capability is not proven by a manifest declaration |
+| iOS permissions/entitlements | No microphone, location, camera or contacts usage key in `Info.plist`; APNs and associated domains entitlements | Verify exported IPA entitlements and APNs/AASA service configuration. Removed Hajj location strings are no longer bundled as permission copy |
+| Outbound internet audio | V04's adapter is unavailable; `RECORD_AUDIO` and `NSMicrophoneUsageDescription` are absent | Do not enable mobile internet calling. Add only the SDK-required permission and bilingual purpose copy after real integration and review |
+| Notifications | Android Firebase Messaging service and notification permission; iOS APNs entitlement | Push token/device registration and notification categories need store disclosure and live transport/config proof; no incoming-call push bridge is restored |
+| Monitoring | Optional PostHog React Native provider; absent project key disables it; AsyncStorage is its custom storage | If enabled, inventory SDK-emitted crash/event identifiers and destinations from the signed binary and update Apple/Google declarations accordingly |
+| Local state | AsyncStorage account/line/cache slices, Keychain PIN/session material, per-installation device identifier | Validate account-scoped erasure and secure storage on physical devices; do not describe these as server-side-only data |
+| Checkout | Hosted processor page in WebView; conditional Paystack/local NGN routing and no approved global processor | Do not claim native wallet checkout or a live merchant. Obtain store-policy review and D3/D4/D5 decisions before submission |
+| Browser calling | V05 browser adapter unavailable; browser microphone is not used for a live call | Browser privacy notice and supported-browser microphone evidence remain pending with SDK/provider integration |
+
+The checked-in `PrivacyInfo.xcprivacy` lists SDK required-reason API categories
+and no collected data. That file alone is **not** a complete Apple App Privacy
+answer for account, financial, usage, support, device or optional analytics
+data. The full app and SDK behavior, including third-party privacy manifests,
+must be inspected in the actual signed binary. No label is submitted here.
+
+## Store/privacy/terms draft for counsel and release owner
+
+The current product stores account identifiers and recovery addresses,
+membership/organization relationships, order and receipt records, entitlement
+and eSIM installation state, provider-derived usage/charges, support requests,
+device/session metadata and masked operational logs. It may send push tokens and
+optional crash/analytics telemetry. It does not currently request device
+location, contacts, camera or microphone. Hosted payment providers handle card
+entry; DamDam retains payment references and financial ledger records, not full
+card numbers. Cross-border destinations, processors and data retention must be
+checked against `security.md` and the signed build before any store form or
+consumer terms are finalized.
+
+Unresolved: D1 supplier/route approval, D2 saleable markets/devices, D3 legal
+seller and taxes, D4 merchant accounts and store payment treatment, D5 prices,
+refund/funding economics and limits, D6 signing, domains, support and physical
+devices. Emergency calling and callback limitations require per-mode/market
+legal and product review. English/French legal copy and native-speaker review
+are not complete. This inventory is a disclosure worklist, not legal advice.
+
+## Screenshot, localization and accessibility evidence
+
+The mobile manifest derives its exact English/French images from Maestro
+flows. Chunk 27 adds Home, Account and Receipts, including a nonempty receipt,
+on both platforms. Calls setup/active/history are fixture-only captures and
+cannot certify live media. Android runs on each affected PR; iOS runs nightly
+or on demand. The final mobile images must be visually inspected on the exact
+candidate, including clipped French text and activation-secret handling.
+
+The dashboard gallery checks English/French, widths 320/768/1280 and 200%
+text, but it is **not** an enterprise journey capture. Actual people/import,
+bulk, lines, billing/budgets, offboarding and internal-operations screenshots
+remain owed by the browser matrix. Neither a component gallery nor automation
+substitutes for VoiceOver/TalkBack, physical installation, keyboard/focus,
+screen-reader and large-text review. These remain release gates.
+
+## Promotion evidence and authorization boundary
+
+`docs/release-signoffs/TEMPLATE.md` and
+`scripts/validate-release-signoff.sh` now bind a signoff to a tested commit and
+reject tracked changes after it. They require configuration fingerprint,
+accepted dependency SHAs, exact channel scope, markets, carrier/merchant
+references, physical devices, signed artifacts, scenario PASS evidence and
+incident/rollback owners. Disabled channels need negative eligibility proof.
+The configuration fingerprint is a human-signed reference to a redacted
+deployment snapshot, not a CI attestation of remote secret state; the release
+owner must compare it again before promotion. Store submission and production
+promotion are separate authorized actions. No historical tag is moved.
+
+On 23 September 2026, the GitHub API returned `main` branch protection with
+`Validate release signoff artifact` required and admin enforcement enabled; no
+repository rulesets were returned. This is a point-in-time API observation,
+not an immutable guarantee. Recheck immediately before any promotion.

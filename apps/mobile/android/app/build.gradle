@@ -79,6 +79,16 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// Production must never inherit the checked-in debug key. CI's screenshot
+// harness has a separate, explicitly non-production build type below.
+def releaseKeystorePath = System.getenv('DAMDAM_RELEASE_KEYSTORE_PATH')
+def releaseStorePassword = System.getenv('DAMDAM_RELEASE_STORE_PASSWORD')
+def releaseKeyAlias = System.getenv('DAMDAM_RELEASE_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('DAMDAM_RELEASE_KEY_PASSWORD')
+def screenshotHarness = System.getenv('SCREENSHOT_HARNESS_MODE') == 'true'
+def releaseSigningReady = [releaseKeystorePath, releaseStorePassword,
+    releaseKeyAlias, releaseKeyPassword].every { it != null && !it.trim().isEmpty() }
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -99,18 +109,51 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            if (releaseSigningReady) {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
+        screenshot {
+            // Offline-bundled Maestro fixture; never a production artifact.
+            initWith release
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
+    }
+}
+
+gradle.taskGraph.whenReady { graph ->
+    def productionTask = graph.allTasks.any { task ->
+        task.project == project && task.name ==~ /(?i)(assemble|bundle|package|publish).*Release/
+    }
+    def screenshotTask = graph.allTasks.any { task ->
+        task.project == project && task.name ==~ /(?i)(assemble|bundle|package).*Screenshot/
+    }
+    if (productionTask) {
+        if (screenshotHarness) {
+            throw new GradleException('SCREENSHOT_HARNESS_MODE is forbidden in a production release build')
+        }
+        if (!releaseSigningReady || !file(releaseKeystorePath).isFile() ||
+            file(releaseKeystorePath).canonicalPath == file('debug.keystore').canonicalPath) {
+            throw new GradleException('Production Android release requires a non-debug keystore and all DAMDAM_RELEASE_* signing variables')
+        }
+    }
+    if (screenshotTask && !screenshotHarness) {
+        throw new GradleException('Screenshot build requires SCREENSHOT_HARNESS_MODE=true')
     }
 }
 

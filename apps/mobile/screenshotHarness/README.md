@@ -76,12 +76,12 @@ picker, not at build time.
 
 ## What's explicitly out of scope
 
-**Calling is no longer an app surface at all.** US-30 retired in-app
-WebRTC calling, the dial pad and the caller-ID verification screens,
-so their harness targets and Maestro flows are gone. Carrier voice
-happens in the platform dialer, which is OS-level chrome outside this
-app's view hierarchy and outside any CI screenshot approach. Chunk 15
-owns whatever in-app call surface the carrier line needs.
+Carrier voice happens in the platform dialer, outside this app's view
+hierarchy. The approved V04 expansion adds an outbound internet-calling
+surface in the app, so its setup, active and history states are captured.
+The screenshot adapter is a fixture and proves neither SDK integration nor
+live audio. The retired incoming-call/PushKit and caller-ID enrollment flows
+remain absent.
 
 The `esim-activation-prompt-android` / `esim-activation-guide-ios`
 targets similarly bypass `EsimActivationFlow`'s real container (which

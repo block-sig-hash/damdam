@@ -1,54 +1,86 @@
-# Release Signoff
+# Release signoff — reset product
 
-Copy this file to `<full-40-character-commit-sha>.md` in this same
-directory, fill it in, and commit it as part of the commit set you're
-promoting from `staging` into `main`. `scripts/validate-release-signoff.sh`
-(run automatically by `.github/workflows/release-promotion.yml` on any
-PR targeting `main`) parses this exact structure — see that script's
-header comment before renaming headings or field labels here.
+Copy to `docs/release-signoffs/<tested-40-character-commit-sha>.md` only after
+the candidate commit and its exact tracked configuration have been tested. Add
+the signoff in a later commit; **do not change any other tracked file after the
+tested commit**. The promotion check reads this file from the PR head and
+rejects post-test changes, future dates, missing evidence and every `FAIL`.
+Existing historical signoffs and tags are not rewritten.
 
-- **Commit SHA:** <full 40-character commit SHA being promoted — must
-  match this file's own filename exactly>
-- **Tester name:** <name>
-- **Date:** <YYYY-MM-DD>
+These are evidence references, not secrets. Refer to immutable build artifacts,
+redacted configuration snapshots, signed carrier/merchant approvals, actual
+physical-device records, migration/restore reports and incident ownership. A
+CI or emulator result is not a physical-device or provider result. The release
+owner must verify external references; CI checks structure and git ancestry.
+
+- **Commit SHA:** <full tested commit SHA matching filename>
+- **Tester name:** <release owner>
+- **Date:** <YYYY-MM-DD, UTC>
+- **Environment:** production
+- **Runtime configuration SHA-256:** <64 hex digits of redacted deployment configuration manifest>
+- **Carrier configuration reference:** <immutable carrier evidence ID, or disabled if carrier channel disabled>
+- **Merchant configuration reference:** <immutable approved merchant and settlement evidence ID>
+- **Schema revision:** <applied migration revision and evidence ID>
+- **Accepted dependency commits:** <comma-separated full merge/accepted commit SHAs>
+- **Release markets:** <approved selling, visited, origin and destination market evidence ID>
+- **Release manifest reference:** <immutable capability/flag/route manifest evidence ID>
+- **Mock supplier mode:** disabled
+- **Signed Android build evidence:** <signed AAB/APK artifact and signing-certificate evidence ID>
+- **Signed iOS build evidence:** <signed IPA/archive artifact and provisioning evidence ID>
+- **Store privacy and payment disclosure evidence:** <reviewed Apple/Google disclosures and terms evidence ID>
+- **Incident owner:** <named on-call owner and route>
+- **Rollback owner:** <named operator and tested rollback evidence ID>
+
+## Released channels
+
+Declare all three. `ENABLED` requires the corresponding provider, rate,
+identity, eligibility and live evidence. `DISABLED` requires a negative test
+showing the route cannot be authorized. The last column must be `PASS` for
+either enabled eligibility or disabled denial. No channel is enabled by default.
+
+| Channel | Status | Decision evidence | Eligibility/denial result |
+|---|---|---|---|
+| Carrier eSIM | <ENABLED or DISABLED> | <evidence ID> | <PASS> |
+| Mobile internet | <ENABLED or DISABLED> | <evidence ID> | <PASS> |
+| Browser internet | <ENABLED or DISABLED> | <evidence ID> | <PASS> |
 
 ## Device matrix tested
 
-Map against the real-device matrix in `docs/pre-pilot-checklist.md`
-§6 — use the actual model tested, not a substitute or an
-emulator/simulator.
+Use physical supported devices, not an emulator. Include the visited network
+and an immutable test report. Additional rows may be described outside this
+table; these two are mandatory for this combined mobile release gate.
 
-| Platform | Device | OS version |
-|---|---|---|
-| Android | <device model> | <OS version> |
-| iOS | <device model> | <OS version> |
+| Platform | Model | OS version | Visited network | Evidence |
+|---|---|---|---|---|
+| Android | <model> | <version> | <network> | <evidence ID> |
+| iOS | <model> | <version> | <network> | <evidence ID> |
 
 ## Critical scenario results
 
-Every row below is required, each with a PASS or FAIL result — not a
-subset. Add extra rows for anything else tested, but don't remove or
-rename these.
+Every common row must be `PASS`. A released channel's rows must be `PASS`;
+disabled-channel rows must say `NOT_APPLICABLE`. Any explicit `FAIL` blocks
+promotion, even on an otherwise optional row. Link each passing row to an
+immutable result against the tested commit and configuration.
 
-| Scenario | Result (PASS/FAIL) | Notes |
+| Scenario | Result | Evidence |
 |---|---|---|
-<!-- US-30 (chunk 04E) removed every scenario this table used to list:
-     incoming-call wake, CallKit lock-screen UI, PushKit delivery, offline
-     check-in survival and offline SOS survival all tested features chunk 04
-     retired. Chunk 27 re-cuts the release gates and fills this table in;
-     chunk 29's physical-device pilot produces the evidence. Never re-add a
-     retired scenario to make the gate pass. -->
+| Identity and recovery | <PASS> | <evidence ID> |
+| Purchase, payment and refund | <PASS> | <evidence ID> |
+| Enterprise isolation and offboarding | <PASS> | <evidence ID> |
+| Supplier timeout, replay and recovery | <PASS> | <evidence ID> |
+| Migration and rollback | <PASS> | <evidence ID> |
+| Support and incident escalation | <PASS> | <evidence ID> |
+| Signed Android and iOS installation | <PASS> | <evidence ID> |
+| Store privacy and payment disclosures | <PASS> | <evidence ID> |
+| Production mock-mode rejection | <PASS> | <evidence ID> |
+| Carrier eSIM install and data | <PASS or NOT_APPLICABLE> | <evidence ID if enabled> |
+| Native call to Nigeria with app closed | <PASS or NOT_APPLICABLE> | <evidence ID if enabled> |
+| Carrier usage, top-up and limit | <PASS or NOT_APPLICABLE> | <evidence ID if enabled> |
+| Mobile outbound call, identity and DTMF | <PASS or NOT_APPLICABLE> | <evidence ID if enabled> |
+| Mobile interruption, logout and cutoff | <PASS or NOT_APPLICABLE> | <evidence ID if enabled> |
+| Browser outbound call, identity and DTMF | <PASS or NOT_APPLICABLE> | <evidence ID if enabled> |
+| Browser refresh, logout and cutoff | <PASS or NOT_APPLICABLE> | <evidence ID if enabled> |
 
-## HTO usability test signoff
-
-Either write the signoff directly here, or link to a separate linked
-artifact that covers it (e.g. `docs/pre-pilot-checklist.md` §7's
-usability observation, once it has a real writeup).
-
-<!--
-Photo/video evidence of device testing is NOT required yet. It
-becomes mandatory the first time someone other than the founder is
-authorized to promote to `main`, OR 3 months before the Hajj 2027
-pilot launch — whichever comes first. When that trigger hits, add a
-required `evidence_links` field to this template and update
-scripts/validate-release-signoff.sh to enforce it.
--->
+Store submission and production promotion remain separate authorized actions.
+This template is not a launch approval, and it must not be filled with fixture
+or sandbox evidence in place of a carrier, merchant or physical test.
