@@ -175,9 +175,12 @@ export class CallSessionController {
       this.fail('calling_unavailable');
       return;
     }
+    const reusePending = this.pending && samePlacement(this.pending.request, request);
     this.pending = {
       request,
-      idempotencyKey: this.pending?.idempotencyKey ?? newIdempotencyKey(),
+      idempotencyKey: reusePending
+        ? this.pending!.idempotencyKey
+        : newIdempotencyKey(),
     };
     this.inFlight = this.run(this.generation, this.pending);
     try {
@@ -212,6 +215,8 @@ export class CallSessionController {
     if (attemptId) {
       await this.stopOnServer(attemptId, reason);
     }
+    this.pending = null;
+    this.update({ phase: 'ended', endReason: reason });
   }
 
   async setMuted(muted: boolean): Promise<boolean> {
@@ -258,13 +263,27 @@ export class CallSessionController {
    * that no longer matches and are dropped.
    */
   dispose(): void {
+    const attemptId = LIVE_PHASES.includes(this.state.phase)
+      ? this.state.attemptId
+      : null;
     this.disposed = true;
     this.generation += 1;
     this.pending = null;
     this.state = this.idleSnapshot();
     this.unsubscribe?.();
     this.unsubscribe = null;
-    this.options.adapter.disconnect().catch(() => undefined);
+    const teardown = async () => {
+      if (attemptId) {
+        try {
+          await this.options.adapter.hangup();
+        } catch {
+          // The server stop below remains the authoritative safety path.
+        }
+        await this.stopOnServer(attemptId, 'client_disposed');
+      }
+      await this.options.adapter.disconnect();
+    };
+    teardown().catch(() => undefined);
   }
 
   // --- internals ---------------------------------------------------------
@@ -285,7 +304,9 @@ export class CallSessionController {
     });
 
     const permission = await this.options.requestMicrophone();
-    if (this.stale(generation)) return;
+    if (this.stale(generation)) {
+      return;
+    }
     if (permission !== 'granted') {
       // Before authorize, deliberately. See the class note.
       this.fail(permission === 'blocked' ? 'microphone_blocked' : 'microphone_denied');
@@ -308,7 +329,15 @@ export class CallSessionController {
       this.fail(failureCodeFor(error));
       return;
     }
-    if (this.stale(generation)) return;
+    if (this.stale(generation)) {
+      await this.stopOnServer(attempt.attempt_id, 'client_disposed');
+      return;
+    }
+
+    // An authorization response removes the ambiguity the pending key was
+    // preserving. Any later retry is a genuinely new placement and must use a
+    // new key, even when it calls the same destination again.
+    this.pending = null;
 
     // From here the hold is real, and every exit has to tell the server.
     this.update({
@@ -327,29 +356,46 @@ export class CallSessionController {
         deviceId: this.options.deviceId,
         deviceLabel: this.options.deviceLabel ?? null,
       });
-      if (this.stale(generation)) return;
+      if (this.stale(generation)) {
+        await this.stopOnServer(attempt.attempt_id, 'client_disposed');
+        return;
+      }
       await this.options.adapter.connect({
         token: session.token,
         sipIdentity: session.sip_identity,
         expiresAt: session.expires_at,
       });
+      if (this.stale(generation)) {
+        await this.stopOnServer(attempt.attempt_id, 'client_disposed');
+        return;
+      }
       const instruction = await startCall({
         accessToken: this.options.accessToken,
         attemptId: attempt.attempt_id,
         deviceId: this.options.deviceId,
       });
-      if (this.stale(generation)) return;
+      if (this.stale(generation)) {
+        await this.stopOnServer(attempt.attempt_id, 'client_disposed');
+        return;
+      }
       await this.options.adapter.dial({
         attemptId: instruction.attempt_id,
         destinationE164: instruction.destination_e164,
         correlation: instruction.correlation,
         maxSeconds: instruction.max_seconds,
       });
+      if (this.stale(generation)) {
+        await this.stopOnServer(attempt.attempt_id, 'client_disposed');
+      }
     } catch (error) {
       if (this.stale(generation)) return;
       const code = failureCodeFor(error);
       await this.stopOnServer(attempt.attempt_id, code);
       if (this.stale(generation)) return;
+      this.pending = {
+        request,
+        idempotencyKey: newIdempotencyKey(),
+      };
       this.fail(code);
     }
   }
@@ -386,16 +432,50 @@ export class CallSessionController {
         this.update({ phase: 'answered', answeredAt: this.now() });
         return;
       case 'ended':
-        this.update({ phase: 'ended', endReason: event.reason });
+        this.pending = null;
+        if (this.state.attemptId) {
+          this.finishFromAdapter(this.state.attemptId, event).catch(() => undefined);
+        } else {
+          this.update({ phase: 'ended', endReason: event.reason });
+        }
         return;
       case 'failed':
-        this.fail(event.reason);
+        if (this.state.attemptId) {
+          this.finishFromAdapter(this.state.attemptId, event).catch(() => undefined);
+        } else {
+          this.fail(event.reason);
+        }
         return;
     }
   }
 
   private fail(code: string): void {
     this.update({ phase: 'failed', failureCode: code });
+  }
+
+  private async finishFromAdapter(
+    attemptId: string,
+    event: Extract<CallAdapterEvent, { kind: 'ended' | 'failed' }>,
+  ): Promise<void> {
+    await this.stopOnServer(attemptId, event.reason);
+    if (this.disposed || this.state.attemptId !== attemptId) {
+      return;
+    }
+    if (event.kind === 'ended') {
+      this.update({ phase: 'ended', endReason: event.reason });
+      return;
+    }
+    if (this.state.destinationE164 && this.state.currency) {
+      this.pending = {
+        request: {
+          destination: this.state.destinationE164,
+          currency: this.state.currency,
+          organizationId: this.state.organizationId,
+        },
+        idempotencyKey: newIdempotencyKey(),
+      };
+    }
+    this.fail(event.reason);
   }
 
   private stale(generation: number): boolean {
@@ -440,4 +520,13 @@ export class CallSessionController {
 export function newIdempotencyKey(): string {
   const random = Math.random().toString(36).slice(2, 12);
   return `call-${Date.now().toString(36)}-${random}`;
+}
+
+function samePlacement(left: PlaceRequest, right: PlaceRequest): boolean {
+  return (
+    left.destination === right.destination &&
+    left.currency === right.currency &&
+    (left.organizationId ?? null) === (right.organizationId ?? null) &&
+    left.requestedSeconds === right.requestedSeconds
+  );
 }

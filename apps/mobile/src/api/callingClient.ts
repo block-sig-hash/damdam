@@ -31,6 +31,8 @@ export interface EligibilityView {
   destination_e164: string;
   destination_country: string;
   destination_kind: string;
+  /** Chosen by the server; the client can display but never nominate it. */
+  identity_e164: string;
   currency: string;
   max_seconds: number;
   /** Decimal strings. See the file note — never parse these to render them. */

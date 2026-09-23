@@ -391,6 +391,7 @@ export const FIXTURE_CALL_ELIGIBILITY: CallEligibility = {
   destination_e164: '+441632960011',
   destination_country: 'GB',
   destination_kind: 'fixed',
+  identity_e164: '+2348000000001',
   currency: 'NGN',
   max_seconds: 600,
   max_charge_amount: '1200.00',

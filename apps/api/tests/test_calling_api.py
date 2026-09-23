@@ -256,6 +256,7 @@ class TestEligibility:
         assert response.status_code == 200
         body = response.json()
         assert body["destination_e164"] == "+2348031234567"
+        assert body["identity_e164"] == "+2347000000001"
         assert body["max_charge_amount"] == "300.00"
         assert body["fundable"] is True
         assert body["route_enabled"] is True

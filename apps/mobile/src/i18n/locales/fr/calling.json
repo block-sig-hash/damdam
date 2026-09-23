@@ -2,6 +2,12 @@
   "tab": "Appels",
   "title": "Appels par internet",
   "subtitle": "Appels passés dans DamDam. Aucune eSIM nécessaire.",
+  "deviceIdentity": {
+    "preparingTitle": "Préparation des appels",
+    "preparingBody": "Vérification de cette installation avant de créer un identifiant d'appel.",
+    "unavailableTitle": "Les appels sont indisponibles sur cette installation",
+    "unavailableBody": "DamDam n'a pas pu identifier cette installation de manière sûre. Fermez puis rouvrez l'application avant de réessayer."
+  },
   "mode": {
     "internet": "Appel par internet",
     "carrier": "Appel opérateur",

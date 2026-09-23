@@ -45,6 +45,7 @@ const ELIGIBILITY: EligibilityView = {
   destination_e164: '+441632960011',
   destination_country: 'GB',
   destination_kind: 'fixed',
+  identity_e164: '+2348000000001',
   currency: 'NGN',
   max_seconds: 600,
   max_charge_amount: '1200.00',
@@ -125,6 +126,9 @@ it('AC-47.1: an internet-only customer previews a rate and calls without any eSI
 
   // The rate arrives from the server's own preview, which holds nothing.
   expect(screen.getByTestId('calls-rate')).toBeTruthy();
+  expect(screen.getByTestId('calls-identity')).toHaveTextContent(
+    'They will see +2348000000001',
+  );
   expect(client.getEligibility).toHaveBeenCalledWith(
     expect.objectContaining({ destination: '+441632960011', currency: 'NGN' }),
   );
@@ -135,6 +139,22 @@ it('AC-47.1: an internet-only customer previews a rate and calls without any eSI
   expect(screen.getByTestId('call-in-progress')).toBeTruthy();
   // Nothing on this path consulted an installation, an entitlement or a line.
   expect(client.getEligibility).toHaveBeenCalled();
+});
+
+it('uses a stable installation id rather than collapsing every device onto the user', async () => {
+  await mount({ deviceId: undefined });
+  await act(async () => undefined);
+  await dial('441632960011');
+  await act(async () => undefined);
+
+  await press('calls-place');
+
+  expect(client.issueClientSession).toHaveBeenCalledWith(
+    expect.objectContaining({ deviceId: 'test-installation-id' }),
+  );
+  expect(client.authorizeCall).toHaveBeenCalledWith(
+    expect.objectContaining({ deviceId: 'test-installation-id' }),
+  );
 });
 
 it('AC-47.1: the screen names the mode and does not offer to place a carrier call', async () => {

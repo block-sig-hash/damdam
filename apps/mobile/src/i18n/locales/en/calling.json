@@ -2,6 +2,12 @@
   "tab": "Calls",
   "title": "Internet calling",
   "subtitle": "Calls placed inside DamDam. No eSIM needed.",
+  "deviceIdentity": {
+    "preparingTitle": "Preparing calling",
+    "preparingBody": "Checking this installation before creating a calling credential.",
+    "unavailableTitle": "Calling is unavailable on this installation",
+    "unavailableBody": "DamDam could not identify this installation safely. Close and reopen the app before trying again."
+  },
   "mode": {
     "internet": "Internet call",
     "carrier": "Carrier call",

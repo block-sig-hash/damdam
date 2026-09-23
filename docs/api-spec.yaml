@@ -6617,6 +6617,9 @@ components:
         destination_kind:
           type: string
           title: Destination Kind
+        identity_e164:
+          type: string
+          title: Identity E164
         currency:
           type: string
           title: Currency
@@ -6650,6 +6653,7 @@ components:
       - destination_e164
       - destination_country
       - destination_kind
+      - identity_e164
       - currency
       - max_seconds
       - max_charge_amount

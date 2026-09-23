@@ -86,9 +86,11 @@ export function CallsScreen(props: CallsScreenProps): React.JSX.Element {
   const live = LIVE.has(snapshot.phase);
   const callable =
     !live &&
+    !eligibilityLoading &&
     destination.startsWith('+') &&
     destination.length > 6 &&
     eligibility !== null &&
+    eligibility.destination_e164 === destination &&
     eligibility.route_enabled &&
     eligibility.fundable;
 
@@ -190,6 +192,9 @@ export function CallsScreen(props: CallsScreenProps): React.JSX.Element {
                 currency: eligibility.currency,
                 minutes: minutesFor(eligibility.max_seconds),
               })}
+            </Text>
+            <Text style={styles.previewLine} testID="calls-identity">
+              {t('preview.identity', { number: eligibility.identity_e164 })}
             </Text>
             <Text style={styles.caption}>
               {t('preview.available', {

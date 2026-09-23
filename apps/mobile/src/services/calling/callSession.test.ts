@@ -116,6 +116,22 @@ describe('the money is not held before the call can happen', () => {
     const [second] = client.authorizeCall.mock.calls[1];
     expect(second.idempotencyKey).toBe(first.idempotencyKey);
   });
+
+  it('a completed call to the same number gets a fresh placement key', async () => {
+    const { adapter, controller } = build();
+
+    await controller.place({ destination: '+441632960011', currency: 'NGN' });
+    adapter.emit({ kind: 'ended', reason: 'remote_hangup' });
+    await Promise.resolve();
+    await Promise.resolve();
+    await controller.place({ destination: '+441632960011', currency: 'NGN' });
+
+    const keys = client.authorizeCall.mock.calls.map(
+      ([args]) => args.idempotencyKey,
+    );
+    expect(client.authorizeCall).toHaveBeenCalledTimes(2);
+    expect(new Set(keys).size).toBe(2);
+  });
 });
 
 describe('never leave an untracked billable call', () => {
@@ -142,6 +158,23 @@ describe('never leave an untracked billable call', () => {
     await controller.hangup();
 
     expect(client.stopCall).toHaveBeenCalledTimes(1);
+    expect(controller.snapshot().phase).toBe('ended');
+  });
+
+  it('AC-47.2: a remote end is acknowledged to the server', async () => {
+    const { adapter, controller } = build();
+    await controller.place({ destination: '+441632960011', currency: 'NGN' });
+
+    adapter.emit({ kind: 'ended', reason: 'remote_hangup' });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(client.stopCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attemptId: 'attempt-1',
+        reason: 'remote_hangup',
+      }),
+    );
   });
 });
 
@@ -154,12 +187,47 @@ describe('a previous account cannot be shown or controlled', () => {
 
     controller.dispose();
     adapter.emit({ kind: 'ended', reason: 'remote_hangup' });
+    await Promise.resolve();
+    await Promise.resolve();
 
     // The SDK does not know an account changed and will keep talking. The
     // guard has to be ours: a disposed controller reports nothing and mutates
     // nothing, so the next user's screen cannot inherit this call.
     expect(controller.snapshot().phase).toBe('idle');
     expect(controller.snapshot().attemptId).toBeNull();
+    expect(client.stopCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attemptId: 'attempt-1',
+        reason: 'client_disposed',
+      }),
+    );
+  });
+
+  it('AC-47.2: an authorization completing during disposal releases its hold', async () => {
+    let release!: (attempt: AttemptView) => void;
+    client.authorizeCall.mockReturnValueOnce(
+      new Promise<AttemptView>(resolve => {
+        release = resolve;
+      }),
+    );
+    const { controller } = build();
+    const placement = controller.place({
+      destination: '+441632960011',
+      currency: 'NGN',
+    });
+
+    await Promise.resolve();
+    controller.dispose();
+    release(ATTEMPT);
+    await placement;
+
+    expect(client.stopCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attemptId: 'attempt-1',
+        reason: 'client_disposed',
+      }),
+    );
+    expect(client.startCall).not.toHaveBeenCalled();
   });
 
   it('AC-47.2: a disposed controller refuses to place a new call', async () => {

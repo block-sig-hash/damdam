@@ -206,7 +206,6 @@ export function ConsumerApp({
           <CallsFlow
             accessToken={accessToken}
             userId={currentUserId}
-            deviceId={currentUserId}
             organizations={(session?.organizations ?? []).map(membership => ({
               id: membership.organization_id,
               name: membership.name,

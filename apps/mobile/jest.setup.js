@@ -30,6 +30,7 @@ jest.mock('react-native-device-info', () => ({
     getModel: () => 'Test phone',
     getSystemVersion: () => '16.0',
     getDeviceId: () => 'iPhone14,2',
+    getUniqueId: () => Promise.resolve('test-installation-id'),
   },
 }));
 

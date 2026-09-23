@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import DeviceInfo from 'react-native-device-info';
 
 import {
   getEligibility,
@@ -8,6 +9,7 @@ import {
   type EligibilityView,
 } from '../../api/callingClient';
 import { ApiError } from '../../api/http';
+import { StateMessage } from '../../components/StateMessage/StateMessage';
 import {
   CallSessionController,
   failureCodeFor,
@@ -47,8 +49,8 @@ const CALL_CURRENCY = 'NGN';
 interface CallsFlowProps {
   accessToken: string;
   userId: string;
-  /** Stable per installation. Names the credential a revocation later targets. */
-  deviceId: string;
+  /** Test/embedding override. Production derives a stable installation id. */
+  deviceId?: string;
   /** Overrides {@link CALL_CURRENCY}; supplied by tests and future callers. */
   currency?: string;
   /** Organizations this person may bill a call to. Empty for a personal-only account. */
@@ -72,14 +74,56 @@ export function CallsFlow({
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<CallSnapshot | null>(null);
+  const [resolvedDeviceId, setResolvedDeviceId] = useState<string | null>(
+    deviceId?.trim() || null,
+  );
+  const [deviceIdentityFailed, setDeviceIdentityFailed] = useState(false);
 
   const controllerRef = useRef<CallSessionController | null>(null);
 
   useEffect(() => {
+    const override = deviceId?.trim();
+    if (override) {
+      setResolvedDeviceId(override);
+      setDeviceIdentityFailed(false);
+      return;
+    }
+    let active = true;
+    setResolvedDeviceId(null);
+    setDeviceIdentityFailed(false);
+    DeviceInfo.getUniqueId()
+      .then(value => {
+        if (!active) return;
+        const normalized = value.trim();
+        if (!normalized) {
+          setResolvedDeviceId(null);
+          setDeviceIdentityFailed(true);
+          return;
+        }
+        setResolvedDeviceId(normalized);
+        setDeviceIdentityFailed(false);
+      })
+      .catch(() => {
+        if (active) {
+          setResolvedDeviceId(null);
+          setDeviceIdentityFailed(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [deviceId]);
+
+  useEffect(() => {
+    if (!resolvedDeviceId) {
+      controllerRef.current = null;
+      setSnapshot(null);
+      return;
+    }
     const controller = new CallSessionController({
       accessToken,
       userId,
-      deviceId,
+      deviceId: resolvedDeviceId,
       adapter: resolveCallAdapter(),
       requestMicrophone,
       onChange: setSnapshot,
@@ -92,7 +136,7 @@ export function CallsFlow({
       controller.dispose();
       controllerRef.current = null;
     };
-  }, [accessToken, userId, deviceId]);
+  }, [accessToken, userId, resolvedDeviceId]);
 
   const payers = useMemo<PayerOption[]>(
     () => [
@@ -121,6 +165,15 @@ export function CallsFlow({
     loadHistory().catch(() => undefined);
   }, [loadHistory]);
 
+  useEffect(() => {
+    if (
+      snapshot?.attemptId &&
+      (snapshot.phase === 'ended' || snapshot.phase === 'failed')
+    ) {
+      loadHistory().catch(() => undefined);
+    }
+  }, [loadHistory, snapshot?.attemptId, snapshot?.phase]);
+
   // Price the destination as it is edited. This holds nothing and writes no
   // attempt, so a customer correcting a typo does not watch their balance move.
   useEffect(() => {
@@ -131,6 +184,10 @@ export function CallsFlow({
     }
     let cancelled = false;
     setEligibilityLoading(true);
+    // A quote belongs to one exact destination/payer. Keeping the previous
+    // quote visible while this request is in flight would leave the call button
+    // enabled for a number that has not been priced yet.
+    setEligibility(null);
     setEligibilityError(null);
     (async () => {
       try {
@@ -173,7 +230,22 @@ export function CallsFlow({
   }, [loadHistory]);
 
   if (!current) {
-    return <></>;
+    return (
+      <StateMessage
+        variant={deviceIdentityFailed ? 'error' : 'pending'}
+        title={t(
+          deviceIdentityFailed
+            ? 'deviceIdentity.unavailableTitle'
+            : 'deviceIdentity.preparingTitle',
+        )}
+        body={t(
+          deviceIdentityFailed
+            ? 'deviceIdentity.unavailableBody'
+            : 'deviceIdentity.preparingBody',
+        )}
+        testID="calls-device-identity"
+      />
+    );
   }
 
   return (
