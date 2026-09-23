@@ -18,6 +18,12 @@ V04/V05 are required for each released internet channel. Apply the calling amend
 3. Inventory actual permissions, SDK collection and payment methods for store/privacy/terms disclosures, with unresolved entity/legal details marked pending.
 4. Require release evidence to identify commit, environment, carrier/merchant configuration and device coverage; preserve existing historical release tags.
 5. Keep store submission and production promotion as distinct authorized actions, not side effects of completing this chunk.
+6. Configure and verify EAS cloud builds for the existing bare React Native
+   app on both platforms once D6 signing access is approved; record actual
+   credentials/artifact identities without exposing secrets. Keep incomplete
+   cloud signing explicit if access is absent.
+7. Run Android emulator and iOS simulator automation in CI, retain rendered
+   screenshot evidence, and report skipped/failed jobs as incomplete.
 
 ## Acceptance and evidence
 

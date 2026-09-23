@@ -33,6 +33,32 @@ No key or fingerprint is approved in this repository yet. `assembleRelease`
 and `bundleRelease` without the signing environment must fail, not fall back to
 the debug key. An emulator screenshot build is not a signed-store build.
 
+## Remaining distribution and device work — user addition, 23 September 2026
+
+- **EAS cloud builds (D6; chunks 27/30):** configure the existing bare React
+  Native app's EAS project, profiles and credentials under approved accounts;
+  verify iOS and Android cloud builds against the exact source/configuration,
+  including the approved distribution certificate, provisioning profile,
+  Android upload certificate and resulting artifact hashes. The current
+  on-demand EAS workflow is only a probe and no signed cloud result is claimed.
+  Never put signing material in the repository or treat an EAS build as a store
+  submission.
+- **Automated native CI (chunk 27):** run the Android emulator and iOS
+  simulator screenshot/journey checks on the candidate, retain validated image
+  artifacts and record any runner/driver failure. The Android PR job is
+  automatic; iOS is nightly/on-demand. A skipped or timed-out iOS job is not
+  passing evidence.
+- **Internal distribution (chunk 29):** after signing and approvals, arrange
+  TestFlight and an approved Android internal-testing track with named,
+  consenting testers who possess supported physical devices. Record build
+  versions, invitations, install results, device/OS/network and findings;
+  do not invite people or upload builds without the release owner's authority.
+- **Hard physical release gate (chunks 29/30):** real eSIM provisioning and
+  installation, cellular-data use, and carrier native calling (including a
+  Nigeria call with DamDam closed where offered) require the approved carrier,
+  market, spend and device evidence. EAS builds, simulator/emulator CI and
+  generic device labs cannot substitute for live carrier/merchant proof.
+
 iOS Release references `DamDamRelease.entitlements`, which requests production
 APNs and the same associated domains as Debug. Its React Native bundle phase
 calls `release-bundle-guard.sh` **after** `.xcode.env` and `.xcode.env.local`

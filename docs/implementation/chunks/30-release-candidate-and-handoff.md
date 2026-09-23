@@ -18,6 +18,10 @@ Use the reviewed capability manifest to identify included channels and accepted 
 3. Complete incident/refund/support ownership, alert routing, migration/rollback procedures and founder-approved pilot limits.
 4. Provide a truthful readiness assessment distinguishing passing code checks from supplier, merchant, device, legal/entity and operations evidence.
 5. Prepare the reviewable rollout plan and store submission assets. Do not merge, publish, deploy, submit to stores or incur spend without the user's applicable authorization.
+6. Reconcile exact-head EAS iOS/Android cloud signing evidence, automated
+   simulator/emulator results, and TestFlight/Android internal-device findings
+   with the final candidate. Keep live eSIM/data/native-call proof separate;
+   none can be inferred from a cloud build or generic device lab.
 
 ## Acceptance and evidence
 
