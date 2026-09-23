@@ -455,5 +455,97 @@
       "loadFailed": "Nous n'avons pas pu charger vos personnes.",
       "uploadFailed": "Nous n'avons pas pu lire ce fichier."
     }
+  },
+  "calling": {
+    "title": "Appels",
+    "subtitle": "Appelez n'importe quel numéro international depuis votre navigateur. Aucune eSIM requise.",
+    "signIn": {
+      "heading": "Connectez-vous pour appeler",
+      "intro": "Les appels utilisent votre compte DamDam personnel. Une connexion opérateur ou personnel interne n'ouvre pas cette page.",
+      "emailLabel": "Adresse e-mail",
+      "send": "Envoyez-moi un lien de connexion",
+      "sent": "Nous avons envoyé un code de connexion à cette adresse si un compte existe.",
+      "codeLabel": "Code de connexion",
+      "confirm": "Se connecter",
+      "failed": "Ce code de connexion n'a pas fonctionné. Demandez-en un nouveau.",
+      "signOut": "Se déconnecter"
+    },
+    "personal": {
+      "heading": "Ceci est votre compte personnel",
+      "body": "Les appels passés ici sont facturés sur votre propre solde DamDam. Ils ne sont visibles par aucune organisation, et aucune organisation ne les paie."
+    },
+    "destination": {
+      "label": "Numéro à appeler",
+      "hint": "Indiquez l'indicatif du pays, par exemple +44 20 7946 0011",
+      "clear": "Effacer le dernier chiffre"
+    },
+    "preview": {
+      "heading": "Avant d'appeler",
+      "rate": "{amount} {currency} par minute",
+      "maximum": "Jusqu'à {amount} {currency} pour {minutes} minutes",
+      "identity": "Ils verront {number}",
+      "identityUnknown": "Nous ne pouvons pas confirmer le numéro qu'ils verront",
+      "available": "{amount} {currency} disponibles",
+      "pricing": "Calcul du tarif…",
+      "unavailable": "Aucun tarif pour cette destination",
+      "routeDisabled": "Les appels par navigateur sont désactivés pour le moment. Rien n'a été débité.",
+      "notFundable": "Solde DamDam insuffisant pour cet appel."
+    },
+    "action": {
+      "call": "Appeler",
+      "hangUp": "Raccrocher",
+      "mute": "Couper le micro",
+      "unmute": "Réactiver le micro",
+      "retry": "Réessayer",
+      "dismiss": "Fermer",
+      "keypad": "Clavier"
+    },
+    "phase": {
+      "idle": "Prêt",
+      "preparing": "Préparation…",
+      "connecting": "Connexion…",
+      "ringing": "Sonnerie…",
+      "answered": "En communication",
+      "ended": "Appel terminé",
+      "failed": "Échec de l'appel"
+    },
+    "elapsed": {
+      "estimate": "Estimation. Le coût final provient de nos enregistrements, pas de ce compteur."
+    },
+    "unsupported": {
+      "mute": "Cette version navigateur ne peut pas couper le micro.",
+      "dtmf": "Cette version navigateur ne peut pas envoyer de tonalités.",
+      "leaving": "Fermer cet onglet nous demande de terminer l'appel, mais l'appel est terminé par nos serveurs dans tous les cas."
+    },
+    "failure": {
+      "calling_unavailable": "Les appels par navigateur ne sont pas encore disponibles dans cette version.",
+      "sdk_unavailable": "Les appels par navigateur ne sont pas encore disponibles dans cette version.",
+      "browser_unsupported": "Ce navigateur ne peut pas passer d'appels. Essayez une version récente de Chrome, Edge, Firefox ou Safari via une connexion sécurisée.",
+      "insecure_context": "Les appels nécessitent une connexion sécurisée. Ouvrez cette page en HTTPS.",
+      "microphone_denied": "DamDam a besoin du microphone pour appeler. Rien n'a été débité.",
+      "no_microphone": "Nous n'avons trouvé aucun microphone sur cet appareil. Rien n'a été débité.",
+      "session_expired": "Votre session a expiré. Reconnectez-vous pour appeler.",
+      "offline": "Vous semblez hors ligne. Rien n'a été débité.",
+      "not_permitted": "Ce compte ne peut pas passer d'appels.",
+      "insufficient_funds": "Solde DamDam insuffisant pour cet appel.",
+      "insufficient_available_balance": "Solde disponible insuffisant — une partie est retenue pour un autre appel.",
+      "calling_route_disabled": "Les appels par navigateur sont désactivés pour le moment. Rien n'a été débité.",
+      "attempt_expired": "Cet appel n'a pas été lancé à temps. Rien n'a été débité.",
+      "device_not_authorized": "Ce navigateur n'est pas configuré pour les appels. Reconnectez-vous.",
+      "device_identity_unavailable": "Ce navigateur ne peut pas créer d'identifiant d'appel stable. Autorisez le stockage du site, puis rechargez la page avant d'appeler.",
+      "rate_unavailable": "Nous n'avons aucun tarif pour cette destination, l'appel est impossible.",
+      "entitlement_not_available": "Vous n'avez aucun forfait d'appel sur ce compte.",
+      "generic": "L'appel n'a pas pu être passé. Rien n'a été débité sauf si un coût est indiqué ci-dessous."
+    },
+    "history": {
+      "heading": "Appels récents",
+      "empty": "Aucun appel pour le moment.",
+      "loading": "Chargement de vos appels…",
+      "error": "Nous n'avons pas pu charger vos appels.",
+      "cost": "{amount} {currency}",
+      "costPending": "Coût en cours de calcul",
+      "costProvisional": "{amount} {currency} jusqu'ici — peut changer",
+      "unanswered": "Sans réponse"
+    }
   }
 }
