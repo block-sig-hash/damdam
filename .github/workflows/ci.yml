@@ -92,7 +92,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Test release signoff acceptance and refusal cases
-        run: python3 -m unittest discover -s scripts -p 'test_validate_release_signoff.py' -v
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_validate_release_signoff.py' -v
+          python3 -m unittest discover -s scripts -p 'test_release_build_guards.py' -v
 
   # US-42 / AC-27.7: the specification suite is now a working artifact --
   # docs/implementation/ routes every build chunk through relative links

@@ -34,7 +34,10 @@ and `bundleRelease` without the signing environment must fail, not fall back to
 the debug key. An emulator screenshot build is not a signed-store build.
 
 iOS Release references `DamDamRelease.entitlements`, which requests production
-APNs and the same associated domains as Debug. It needs an Apple developer
+APNs and the same associated domains as Debug. Its React Native bundle phase
+also refuses `SCREENSHOT_HARNESS_MODE=true`, preventing fixture UI from entering
+a production archive. A Linux regression executes that guard, but only a macOS
+archive verifies the entire iOS build. It needs an Apple developer
 team, an approved distribution certificate/profile, a macOS/Xcode environment
 and verified AASA domains; none is configured here (D6). The repeatable
 archive command once those inputs exist is:
