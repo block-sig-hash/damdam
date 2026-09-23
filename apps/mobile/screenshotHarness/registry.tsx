@@ -113,6 +113,20 @@ function ConsumerHomeErrorTarget(): React.JSX.Element {
   );
 }
 
+function ReceiptsTarget(): React.JSX.Element {
+  const { i18n } = useTranslation();
+  // The backend stores a purchase-time description snapshot. Use two fixture
+  // snapshots to exercise layout in each locale; never rewrite real receipts.
+  const description = i18n.language.startsWith('fr')
+    ? 'Forfait de connectivité exemple'
+    : 'Example connectivity plan';
+  const receipt = {
+    ...FIXTURE_RECEIPT,
+    lines: FIXTURE_RECEIPT.lines.map(line => ({ ...line, description })),
+  };
+  return <ReceiptsScreen receipts={[receipt]} fromCache={false} onBack={noop} />;
+}
+
 export interface HarnessTarget {
   label: string;
   render: () => React.JSX.Element;
@@ -289,9 +303,7 @@ export const HARNESS_REGISTRY: Record<string, HarnessTarget> = {
   },
   receipts: {
     label: 'Account — receipts',
-    render: () => (
-      <ReceiptsScreen receipts={[FIXTURE_RECEIPT]} fromCache={false} onBack={noop} />
-    ),
+    render: () => <ReceiptsTarget />,
   },
 
   /*
