@@ -169,9 +169,9 @@ describe('the re-cut screenshot matrix', () => {
     ['home.yaml', 'harness-target-home'],
     ['account.yaml', 'harness-target-account'],
     ['receipts.yaml', 'harness-target-receipts'],
-  ])('scrolls each below-fold target into view in both locales: %s', (flow, target) => {
+  ])('centers each below-fold target in both locales: %s', (flow, target) => {
     const contents = readFileSync(join(FLOWS, flow), 'utf8');
-    const marker = `- scrollUntilVisible:\n    element:\n      id: "${target}"\n    direction: DOWN`;
+    const marker = `- scrollUntilVisible:\n    element:\n      id: "${target}"\n    direction: DOWN\n    centerElement: true\n    speed: 20\n    timeout: 60000`;
     expect(contents.split(marker)).toHaveLength(3);
   });
 

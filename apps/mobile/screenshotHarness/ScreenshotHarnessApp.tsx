@@ -72,7 +72,8 @@ export function ScreenshotHarnessApp(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.gray50 },
-  list: { padding: space.space5, gap: space.space3 },
+  // Extra scroll runway lets Maestro center the final rows before tapping.
+  list: { padding: space.space5, paddingBottom: 360, gap: space.space3 },
   heading: {
     fontSize: typography.heading1.fontSize,
     lineHeight: typography.heading1.lineHeight,

@@ -9,6 +9,9 @@ appId: com.damdam.app
     element:
       id: "harness-target-checkout-review"
     direction: DOWN
+    centerElement: true
+    speed: 20
+    timeout: 60000
 - tapOn:
     id: "harness-target-checkout-review"
 - assertVisible:
@@ -24,6 +27,9 @@ appId: com.damdam.app
     element:
       id: "harness-target-checkout-review"
     direction: DOWN
+    centerElement: true
+    speed: 20
+    timeout: 60000
 - tapOn:
     id: "harness-target-checkout-review"
 - assertVisible:
