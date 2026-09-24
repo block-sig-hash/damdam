@@ -67,7 +67,11 @@ from app.connectivity.service import (
 )
 from app.fulfilment.models import AttemptOutcome, SupplierAttempt
 from app.fulfilment.service import FulfilmentService
+from app.ledger.service import LedgerService
 from app.orders.models import Order, OrderItem, ProvisioningState
+from app.usage.contract import CounterSnapshot
+from app.usage.models import UsageRecord
+from app.usage.service import UsageService
 
 pytestmark = pytest.mark.skipif(
     "TEST_DATABASE_URL" not in os.environ,
@@ -114,9 +118,11 @@ class FakeCarrier:
         self.provision_calls: list[UUID] = []
         self.reconcile_calls: list[UUID] = []
         self.lose_response = False
+        self.persist_before_losing_response = False
         self.refuse: str | None = None
         self.reconcile_answer: ProvisionResult | None = None
         self.reconcile_returns_none = False
+        self.created_by_operation: dict[UUID, ProvisionResult] = {}
         self.lines: dict[str, ProviderLine] = {}
         self.actions: dict[str, ProviderAction] = {}
         self.next_number: str | None = None
@@ -137,6 +143,15 @@ class FakeCarrier:
         self, operation: UUID, quantity: int, options: dict[str, Any] | None = None
     ) -> ProvisionResult:
         self.provision_calls.append(operation)
+        if self.lose_response and self.persist_before_losing_response:
+            lines = tuple(
+                self._line(f"line-{operation}-{index}") for index in range(quantity)
+            )
+            result = ProvisionResult(lines=lines)
+            self.created_by_operation[operation] = result
+            for line in lines:
+                self.lines[line.provider_reference] = line
+            raise ConnectivityOutcomeUnknown("the line was created; response lost")
         if self.lose_response:
             raise ConnectivityOutcomeUnknown("the response never arrived")
         if self.refuse:
@@ -152,7 +167,7 @@ class FakeCarrier:
         self.reconcile_calls.append(operation)
         if self.reconcile_returns_none:
             return None
-        return self.reconcile_answer
+        return self.reconcile_answer or self.created_by_operation.get(operation)
 
     def fetch_line(self, provider_reference: str) -> ProviderLine | None:
         return self.lines.get(provider_reference)
@@ -393,6 +408,72 @@ def test_reconciliation_adopts_the_line_the_purchase_actually_created(
     assert item.provisioning_state is ProvisioningState.PROVISIONED
     # And nothing was bought to get there.
     assert len(carrier.provision_calls) == 1
+
+
+def test_recovered_order_item_installation_and_usage_survive_worker_restart(
+    session: Session,
+    engine,
+    clock: Clock,
+    vault: CredentialVault,
+    service: ConnectivityService,
+    carrier: FakeCarrier,
+) -> None:
+    """US-43: recovery must feed later device and usage states only once."""
+    item = _order_item(session)
+    attempt = service.begin_provisioning(session, item, carrier)
+    session.commit()
+    carrier.lose_response = True
+    carrier.persist_before_losing_response = True
+    service.dispatch_provisioning(session, attempt, carrier)
+    session.commit()
+
+    original_operation = operation_reference(attempt.idempotency_key)
+    original_line = carrier.created_by_operation[original_operation].lines[0]
+    restarted = ConnectivityService(
+        FulfilmentService(clock=clock), vault, clock=clock
+    )
+    with Session(engine) as resumed:
+        persisted_attempt = resumed.get(SupplierAttempt, attempt.id)
+        assert persisted_attempt is not None
+        assert persisted_attempt.outcome is AttemptOutcome.OUTCOME_UNKNOWN
+        resolved = restarted.reconcile_provisioning(resumed, persisted_attempt, carrier)
+        resumed.commit()
+
+        line = resumed.exec(select(CarrierLine)).one()
+        recovered_item = resumed.get(OrderItem, item.id)
+        assert recovered_item is not None
+        assert resolved.outcome is AttemptOutcome.ACCEPTED
+        assert recovered_item.provisioning_state is ProvisioningState.PROVISIONED
+        assert line.carrier_line_reference == original_line.provider_reference
+        installation = resumed.exec(select(EsimInstallation)).one()
+        entitlement = resumed.exec(select(Entitlement)).one()
+        assert installation.installation_state is InstallationState.NOT_INSTALLED
+        assert line.network_state is NetworkState.UNKNOWN
+
+        restarted.record_device_installation(resumed, installation)
+        usage = UsageService(LedgerService(clock=clock), clock=clock)
+        snapshot = CounterSnapshot(line.carrier_line_reference, 1_000_000, NOW)
+        usage.ingest_counter(resumed, line, snapshot)
+        resumed.commit()
+
+        assert installation.installation_state is InstallationState.INSTALLED
+        assert line.network_state is NetworkState.UNKNOWN
+        line_id = line.id
+        entitlement_id = entitlement.id
+
+    with Session(engine) as replayed:
+        persisted_line = replayed.get(CarrierLine, line_id)
+        persisted_entitlement = replayed.get(Entitlement, entitlement_id)
+        assert persisted_line is not None
+        assert persisted_entitlement is not None
+        usage.ingest_counter(replayed, persisted_line, snapshot)  # supplier replay
+        replayed.commit()
+
+        allowance = usage.allowance(replayed, persisted_entitlement, now=NOW)
+        assert allowance.data_bytes_used == 1_000_000
+        assert len(replayed.exec(select(UsageRecord)).all()) == 1
+        assert len(carrier.provision_calls) == 1
+        assert carrier.reconcile_calls == [original_operation]
 
 
 def test_an_unanswerable_reconciliation_stops_for_a_human(
