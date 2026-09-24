@@ -268,6 +268,13 @@ class ReleaseSignoffTests(unittest.TestCase):
         )
         self.assert_blocked(body, "Carrier configuration reference")
 
+    def test_disabled_carrier_cannot_claim_unverified_configuration(self) -> None:
+        self.assert_blocked(
+            self.body().replace("Carrier configuration reference:** disabled",
+                                "Carrier configuration reference:** unverified"),
+            "Disabled carrier configuration",
+        )
+
     def test_missing_physical_device_blocks(self) -> None:
         self.assert_blocked(self.body().replace(evidence("physical-ios-001"), "<device evidence>"), "physical-device")
 

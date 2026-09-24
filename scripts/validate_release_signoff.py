@@ -247,6 +247,8 @@ def validate_body(body: str, tested: str, today: date) -> None:
         raise SignoffError("At least one release channel must be enabled")
     if "Carrier eSIM" in enabled:
         artifact_field(body, "Carrier configuration reference")
+    elif field(body, "Carrier configuration reference") != "disabled":
+        raise SignoffError("Disabled carrier configuration must be exactly disabled")
 
     devices = table(body, "Device matrix tested")
     if set(devices) != {"Android", "iOS"}:
