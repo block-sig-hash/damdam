@@ -308,6 +308,9 @@ jobs:
             *'matches the checked-in debug certificate'*) ;;
             *) echo "$output" >&2; exit 1 ;;
           esac
+      - name: Check EAS-injected Android release signing
+        if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
+        run: bash scripts/test-android-eas-signing.sh
 
   # Renders real screens on a real Android emulator via the screenshot
   # harness (apps/mobile/screenshotHarness/README.md) and Maestro flows

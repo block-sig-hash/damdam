@@ -33,6 +33,13 @@ No key or fingerprint is approved in this repository yet. `assembleRelease`
 and `bundleRelease` without the signing environment must fail, not fall back to
 the debug key. An emulator screenshot build is not a signed-store build.
 
+Chunk 29's preparatory guard also accepts a keystore injected into the
+effective `signingConfigs.release` by EAS Build, but still requires the
+release-owner-approved `DAMDAM_RELEASE_CERT_SHA256` and rejects the checked-in
+debug certificate. CI checks this path with a throwaway test key; it is not an
+EAS cloud build or approval of an upload certificate. See the
+[pilot runbook](29-PILOT-RUNBOOK.md) and [blank evidence forms](29-PILOT-EVIDENCE.md).
+
 ## Remaining distribution and device work — user addition, 23 September 2026
 
 - **EAS cloud builds (D6; chunks 27/30):** configure the existing bare React
