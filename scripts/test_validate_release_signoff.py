@@ -27,6 +27,9 @@ class ReleaseSignoffTests(unittest.TestCase):
             set(gate.table(template, "Critical scenario results")),
             set(gate.COMMON).union(*gate.CONDITIONAL.values()),
         )
+        for name in (*gate.REQUIRED_EXTERNAL_REFERENCES, *gate.EXACT_HEAD_FIELDS,
+                     "Blocking review findings status"):
+            self.assertEqual(template.count(f"- **{name}:**"), 1, name)
 
     def setUp(self) -> None:
         self.old_cwd = Path.cwd()
@@ -82,6 +85,17 @@ class ReleaseSignoffTests(unittest.TestCase):
             "Mock supplier mode": "disabled",
             "Signed Android build evidence": "android-signed-001",
             "Signed iOS build evidence": "ios-signed-001",
+            "EAS build source SHA": self.candidate,
+            "Android EAS signed artifact evidence": "eas-android-001",
+            "iOS EAS signed artifact evidence": "eas-ios-001",
+            "Native CI source SHA": self.candidate,
+            "Native simulator/emulator CI evidence": "native-ci-001",
+            "TestFlight physical installation evidence": "testflight-install-001",
+            "Android internal physical installation evidence": "android-internal-install-001",
+            "Evidence configuration compatibility reference": "compatibility-review-001",
+            "Blocking review findings status": "CLEAR",
+            "Blocking review findings evidence": "closed-findings-001",
+            "Pilot limits approval evidence": "approved-limits-001",
             "Store privacy and payment disclosure evidence": "store-review-001",
             "Incident owner": "On-call owner",
             "Rollback owner": "Rollback operator",
@@ -192,6 +206,50 @@ class ReleaseSignoffTests(unittest.TestCase):
 
     def test_missing_physical_device_blocks(self) -> None:
         self.assert_blocked(self.body().replace("physical-ios-001", "<device evidence>"), "physical-device")
+
+    def test_missing_eas_artifact_blocks(self) -> None:
+        self.assert_blocked(self.body().replace("eas-ios-001", "disabled"), "EAS signed artifact")
+
+    def test_blocked_eas_artifact_blocks(self) -> None:
+        self.assert_blocked(
+            self.body().replace("eas-ios-001", "BLOCKED — no approved signing identity"),
+            "EAS signed artifact",
+        )
+
+    def test_eas_build_from_other_commit_blocks(self) -> None:
+        body = self.body().replace(
+            f"EAS build source SHA:** {self.candidate}",
+            f"EAS build source SHA:** {self.base}",
+        )
+        self.assert_blocked(body, "EAS build source SHA")
+
+    def test_native_ci_from_other_commit_blocks(self) -> None:
+        body = self.body().replace(
+            f"Native CI source SHA:** {self.candidate}",
+            f"Native CI source SHA:** {self.base}",
+        )
+        self.assert_blocked(body, "Native CI source SHA")
+
+    def test_missing_internal_install_blocks(self) -> None:
+        self.assert_blocked(
+            self.body().replace("android-internal-install-001", "disabled"),
+            "internal physical installation",
+        )
+
+    def test_open_blocking_review_finding_blocks(self) -> None:
+        self.assert_blocked(
+            self.body().replace("Blocking review findings status:** CLEAR", "Blocking review findings status:** OPEN"),
+            "Blocking review findings",
+        )
+
+    def test_missing_pilot_limits_approval_blocks(self) -> None:
+        self.assert_blocked(self.body().replace("approved-limits-001", "disabled"), "Pilot limits approval")
+
+    def test_missing_compatibility_assessment_blocks(self) -> None:
+        self.assert_blocked(
+            self.body().replace("compatibility-review-001", "disabled"),
+            "Evidence configuration compatibility",
+        )
 
     def test_required_scenario_cannot_be_skipped(self) -> None:
         body = self.body().replace(

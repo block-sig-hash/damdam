@@ -48,6 +48,17 @@ CONDITIONAL = {
         "Browser refresh, logout and cutoff",
     ),
 }
+REQUIRED_EXTERNAL_REFERENCES = (
+    "Android EAS signed artifact evidence",
+    "iOS EAS signed artifact evidence",
+    "Native simulator/emulator CI evidence",
+    "TestFlight physical installation evidence",
+    "Android internal physical installation evidence",
+    "Evidence configuration compatibility reference",
+    "Blocking review findings evidence",
+    "Pilot limits approval evidence",
+)
+EXACT_HEAD_FIELDS = ("EAS build source SHA", "Native CI source SHA")
 
 
 class SignoffError(Exception):
@@ -118,6 +129,15 @@ def substantive(value: str, description: str) -> None:
         raise SignoffError(f"Missing or placeholder {description}")
 
 
+def mandatory_reference(body: str, name: str) -> str:
+    value = field(body, name)
+    if value.casefold() in {"disabled", "none", "not available", "not yet"} or re.search(
+        r"\b(BLOCKED|FAIL(?:ED)?|UNVERIFIED)\b", value, re.I
+    ):
+        raise SignoffError(f"Missing mandatory {name}")
+    return value
+
+
 def table(body: str, heading: str) -> dict[str, list[str]]:
     sections = list(re.finditer(
         rf"^## {re.escape(heading)}\s*$([\s\S]*?)(?=^## |\Z)",
@@ -155,6 +175,13 @@ def validate_body(body: str, tested: str, today: date) -> None:
         "Store privacy and payment disclosure evidence",
     ):
         field(body, name)
+    for name in REQUIRED_EXTERNAL_REFERENCES:
+        mandatory_reference(body, name)
+    for name in EXACT_HEAD_FIELDS:
+        if field(body, name).lower() != tested:
+            raise SignoffError(f"{name} must match tested commit")
+    if field(body, "Blocking review findings status") != "CLEAR":
+        raise SignoffError("Blocking review findings must be CLEAR")
     if field(body, "Environment") != "production":
         raise SignoffError("Release environment must be production")
     if not DIGEST.fullmatch(field(body, "Runtime configuration SHA-256").lower()):

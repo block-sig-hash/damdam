@@ -36,6 +36,17 @@ structure and git ancestry, not the truth of a remote evidence ID.
 - **Mock supplier mode:** disabled
 - **Signed Android build evidence:** <signed AAB/APK artifact and signing-certificate evidence ID>
 - **Signed iOS build evidence:** <signed IPA/archive artifact and provisioning evidence ID>
+- **EAS build source SHA:** <full tested commit SHA shared by both EAS cloud builds>
+- **Android EAS signed artifact evidence:** <cloud build ID, AAB hash and independently checked upload-certificate evidence ID>
+- **iOS EAS signed artifact evidence:** <cloud build ID, IPA hash and independently checked team/certificate/profile evidence ID>
+- **Native CI source SHA:** <full tested commit SHA shared by Android emulator and iOS simulator runs>
+- **Native simulator/emulator CI evidence:** <both platform run IDs, flow counts and validated image artifact IDs>
+- **TestFlight physical installation evidence:** <approved internal group, consenting device install and build evidence ID>
+- **Android internal physical installation evidence:** <approved Play internal track, consenting device install and build evidence ID>
+- **Evidence configuration compatibility reference:** <reviewed comparison of build, pilot and production config/capability manifests>
+- **Blocking review findings status:** <CLEAR only after independent review and disposition>
+- **Blocking review findings evidence:** <accepted review/closed-finding and exact-retest evidence ID>
+- **Pilot limits approval evidence:** <founder-approved market, spend, exposure, quality and stop-threshold record ID>
 - **Store privacy and payment disclosure evidence:** <reviewed Apple/Google disclosures and terms evidence ID>
 - **Incident owner:** <named on-call owner and route>
 - **Rollback owner:** <named operator and tested rollback evidence ID>
@@ -93,6 +104,12 @@ immutable result against the tested commit and configuration.
 Store submission and production promotion remain separate authorized actions.
 This template is not a launch approval, and it must not be filled with fixture
 or sandbox evidence in place of a carrier, merchant or physical test.
+The EAS and native-CI source SHAs must equal the tested commit. The release
+owner must verify that each referenced build/install and physical pilot record
+uses compatible configuration and capabilities; the validator checks the
+signed reference and SHA fields, not remote artifact contents. A simulator,
+emulator, cloud build or generic lab never substitutes for real eSIM install,
+Wi-Fi-off cellular data and native-call proof when carrier service is enabled.
 Before promotion, an administrator must install the trusted
 `pull_request_target` workflow on `main`, require its
 `release-signoff/trusted` status, and require a merge queue that revalidates
