@@ -21,24 +21,56 @@ physical-device records, migration/restore reports and incident ownership. A
 CI or emulator result is not a physical-device or provider result. The release
 owner must verify external references before signing; CI checks the signature,
 structure and git ancestry, not the truth of a remote evidence ID.
+Every mandatory evidence reference in the fields and tables below must be
+exactly `sha256:<64 lowercase hex characters>`: the SHA-256 of an immutable,
+restricted evidence record or manifest that binds multiple artifacts. Free-form
+prose, approval-status words and bare build IDs are not references. The schema
+field must be `applied_revision @ sha256:<64 lowercase hex characters>`.
+That revision must equal the tested source commit's single Alembic head; the
+digest references proof that the target deployment actually applied it.
+The release owner still has to inspect the underlying record and confirm the
+actual approval, source/configuration and artifacts; a digest alone does not
+prove that a test or approval occurred.
+Tester and operator identities use `owner:<32 lowercase hex characters>` from
+the restricted operator roster. The separate incident/support, refund/finance
+and rollback evidence digests must bind those identities to named humans,
+on-call routes, backups and exercised procedures without publishing contact
+details in this signoff. The validator checks syntax; the signer verifies the
+actual roster and consent.
 
 - **Commit SHA:** <full tested commit SHA matching filename>
-- **Tester name:** <release owner>
+- **Tester identity:** <owner:32 lowercase hex characters for the release owner>
 - **Date:** <YYYY-MM-DD, UTC>
 - **Environment:** production
 - **Runtime configuration SHA-256:** <64 hex digits of redacted deployment configuration manifest>
 - **Carrier configuration reference:** <immutable carrier evidence ID, or disabled if carrier channel disabled>
 - **Merchant configuration reference:** <immutable approved merchant and settlement evidence ID>
-- **Schema revision:** <applied migration revision and evidence ID>
+- **Schema revision:** <applied_revision @ sha256:64 lowercase hex characters>
 - **Accepted dependency commits:** <comma-separated full merge/accepted commit SHAs>
 - **Release markets:** <approved selling, visited, origin and destination market evidence ID>
 - **Release manifest reference:** <immutable capability/flag/route manifest evidence ID>
 - **Mock supplier mode:** disabled
 - **Signed Android build evidence:** <signed AAB/APK artifact and signing-certificate evidence ID>
 - **Signed iOS build evidence:** <signed IPA/archive artifact and provisioning evidence ID>
+- **EAS build source SHA:** <full tested commit SHA shared by both EAS cloud builds>
+- **Android EAS signed artifact evidence:** <cloud build ID, AAB hash and independently checked upload-certificate evidence ID>
+- **iOS EAS signed artifact evidence:** <cloud build ID, IPA hash and independently checked team/certificate/profile evidence ID>
+- **Native CI source SHA:** <full tested commit SHA shared by Android emulator and iOS simulator runs>
+- **Native simulator/emulator CI evidence:** <both platform run IDs, flow counts and validated image artifact IDs>
+- **TestFlight physical installation evidence:** <approved internal group, consenting device install and build evidence ID>
+- **Android internal physical installation evidence:** <approved Play internal track, consenting device install and build evidence ID>
+- **Evidence configuration compatibility reference:** <reviewed comparison of build, pilot and production config/capability manifests>
+- **Blocking review findings status:** <CLEAR only after independent review and disposition>
+- **Blocking review findings evidence:** <accepted review/closed-finding and exact-retest evidence ID>
+- **Pilot limits approval evidence:** <founder-approved market, spend, exposure, quality and stop-threshold record ID>
+- **Incident and support ownership evidence:** <sha256 digest of named roster, route and exercised escalation>
+- **Refund and finance ownership evidence:** <sha256 digest of named payer/refund/reconciliation roster and approval>
+- **Rollback rehearsal and owner evidence:** <sha256 digest of tested rollback/restore decision and named operator>
 - **Store privacy and payment disclosure evidence:** <reviewed Apple/Google disclosures and terms evidence ID>
-- **Incident owner:** <named on-call owner and route>
-- **Rollback owner:** <named operator and tested rollback evidence ID>
+- **Incident owner:** <owner:32 lowercase hex characters; see incident/support ownership evidence>
+- **Support owner:** <owner:32 lowercase hex characters; see incident/support ownership evidence>
+- **Refund and finance owner:** <owner:32 lowercase hex characters; see refund/finance ownership evidence>
+- **Rollback owner:** <owner:32 lowercase hex characters; see rollback rehearsal and owner evidence>
 
 ## Released channels
 
@@ -69,7 +101,8 @@ table; these two are mandatory for this combined mobile release gate.
 Every common row must be `PASS`. A released channel's rows must be `PASS`;
 disabled-channel rows must say `NOT_APPLICABLE`. Any explicit `FAIL` blocks
 promotion, even on an otherwise optional row. Link each passing row to an
-immutable result against the tested commit and configuration.
+immutable result against the tested commit and configuration using the
+`sha256:<64 lowercase hex characters>` form above.
 
 | Scenario | Result | Evidence |
 |---|---|---|
@@ -93,6 +126,12 @@ immutable result against the tested commit and configuration.
 Store submission and production promotion remain separate authorized actions.
 This template is not a launch approval, and it must not be filled with fixture
 or sandbox evidence in place of a carrier, merchant or physical test.
+The EAS and native-CI source SHAs must equal the tested commit. The release
+owner must verify that each referenced build/install and physical pilot record
+uses compatible configuration and capabilities; the validator checks the
+signed reference and SHA fields, not remote artifact contents. A simulator,
+emulator, cloud build or generic lab never substitutes for real eSIM install,
+Wi-Fi-off cellular data and native-call proof when carrier service is enabled.
 Before promotion, an administrator must install the trusted
 `pull_request_target` workflow on `main`, require its
 `release-signoff/trusted` status, and require a merge queue that revalidates
