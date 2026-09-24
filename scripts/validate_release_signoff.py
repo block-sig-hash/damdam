@@ -134,11 +134,15 @@ def substantive(value: str, description: str) -> None:
         raise SignoffError(f"Missing or placeholder {description}")
 
 
-def mandatory_reference(body: str, name: str) -> str:
-    value = field(body, name)
+def required_evidence(value: str, description: str) -> str:
+    substantive(value, description)
     if NEGATIVE_EVIDENCE.search(value):
-        raise SignoffError(f"Missing mandatory {name}")
+        raise SignoffError(f"Missing mandatory {description}")
     return value
+
+
+def mandatory_reference(body: str, name: str) -> str:
+    return required_evidence(field(body, name), name)
 
 
 def table(body: str, heading: str) -> dict[str, list[str]]:
@@ -170,15 +174,15 @@ def validate_body(body: str, tested: str, today: date) -> None:
         raise SignoffError("Explicit FAIL result in signoff")
     if field(body, "Commit SHA").lower() != tested:
         raise SignoffError("Commit SHA does not match signoff filename")
-    for name in (
-        "Tester name", "Environment", "Carrier configuration reference",
-        "Merchant configuration reference", "Schema revision", "Incident owner",
-        "Rollback owner", "Release markets", "Release manifest reference",
-        "Signed Android build evidence", "Signed iOS build evidence",
-        "Store privacy and payment disclosure evidence",
-    ):
+    for name in ("Environment", "Carrier configuration reference"):
         field(body, name)
-    for name in REQUIRED_EXTERNAL_REFERENCES:
+    for name in (
+        "Tester name", "Merchant configuration reference", "Schema revision",
+        "Incident owner", "Rollback owner", "Release markets",
+        "Release manifest reference", "Signed Android build evidence",
+        "Signed iOS build evidence", "Store privacy and payment disclosure evidence",
+        *REQUIRED_EXTERNAL_REFERENCES,
+    ):
         mandatory_reference(body, name)
     for name in EXACT_HEAD_FIELDS:
         if field(body, name).lower() != tested:
@@ -216,17 +220,15 @@ def validate_body(body: str, tested: str, today: date) -> None:
         values = channels[name]
         if len(values) != 3 or values[0] not in {"ENABLED", "DISABLED"}:
             raise SignoffError(f"{name} needs a status, decision evidence and eligibility result")
-        substantive(values[1], f"{name} decision evidence")
+        required_evidence(values[1], f"{name} decision evidence")
         if values[2] != "PASS":
             raise SignoffError(f"{name} eligibility or denial result must PASS")
         if values[0] == "ENABLED":
             enabled.add(name)
     if not enabled:
         raise SignoffError("At least one release channel must be enabled")
-    if "Carrier eSIM" in enabled and field(body, "Carrier configuration reference").lower() == "disabled":
-        raise SignoffError("Carrier configuration evidence is required")
-    if field(body, "Merchant configuration reference").lower() == "disabled":
-        raise SignoffError("Merchant configuration evidence is required")
+    if "Carrier eSIM" in enabled:
+        required_evidence(field(body, "Carrier configuration reference"), "Carrier configuration evidence")
 
     devices = table(body, "Device matrix tested")
     if set(devices) != {"Android", "iOS"}:
@@ -235,7 +237,7 @@ def validate_body(body: str, tested: str, today: date) -> None:
         if len(values) != 4:
             raise SignoffError(f"{platform} needs model, OS, network and evidence")
         for value in values:
-            substantive(value, f"{platform} physical-device evidence")
+            required_evidence(value, f"{platform} physical-device evidence")
 
     scenarios = table(body, "Critical scenario results")
     all_scenarios = set(COMMON).union(*CONDITIONAL.values())
@@ -252,7 +254,7 @@ def validate_body(body: str, tested: str, today: date) -> None:
         if name in required:
             if values[0] != "PASS":
                 raise SignoffError(f"Required scenario must PASS: {name}")
-            substantive(values[1], f"{name} evidence")
+            required_evidence(values[1], f"{name} evidence")
         elif values[0] != "NOT_APPLICABLE":
             raise SignoffError(f"Disabled-channel scenario must be NOT_APPLICABLE: {name}")
 

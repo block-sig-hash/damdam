@@ -198,6 +198,39 @@ class ReleaseSignoffTests(unittest.TestCase):
     def test_missing_merchant_blocks(self) -> None:
         self.assert_blocked(self.body().replace("approved-merchant-001", "<merchant approval>"), "Merchant configuration")
 
+    def test_explicitly_unapproved_merchant_blocks(self) -> None:
+        self.assert_blocked(
+            self.body().replace("approved-merchant-001", "not approved — no merchant account"),
+            "Merchant configuration",
+        )
+
+    def test_unapplied_schema_reference_blocks(self) -> None:
+        self.assert_blocked(
+            self.body().replace("0044 with migration report 123", "0044 — no applied migration report"),
+            "Schema revision",
+        )
+
+    def test_missing_required_scenario_proof_blocks_even_if_pass(self) -> None:
+        self.assert_blocked(
+            self.body().replace(
+                "| Purchase, payment and refund | PASS | evidence-001 |",
+                "| Purchase, payment and refund | PASS | no payment evidence |",
+            ),
+            "Purchase, payment and refund evidence",
+        )
+
+    def test_missing_channel_decision_proof_blocks(self) -> None:
+        self.assert_blocked(
+            self.body().replace("mobile-approval-001", "no approval"),
+            "Mobile internet decision evidence",
+        )
+
+    def test_missing_physical_install_proof_blocks(self) -> None:
+        self.assert_blocked(
+            self.body().replace("physical-ios-001", "no installation"),
+            "iOS physical-device evidence",
+        )
+
     def test_enabled_carrier_without_configuration_blocks(self) -> None:
         body = self.body().replace(
             "| Carrier eSIM | DISABLED |", "| Carrier eSIM | ENABLED |"
