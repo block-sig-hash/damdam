@@ -31,9 +31,15 @@ digest references proof that the target deployment actually applied it.
 The release owner still has to inspect the underlying record and confirm the
 actual approval, source/configuration and artifacts; a digest alone does not
 prove that a test or approval occurred.
+Tester and operator identities use `owner:<32 lowercase hex characters>` from
+the restricted operator roster. The separate incident/support, refund/finance
+and rollback evidence digests must bind those identities to named humans,
+on-call routes, backups and exercised procedures without publishing contact
+details in this signoff. The validator checks syntax; the signer verifies the
+actual roster and consent.
 
 - **Commit SHA:** <full tested commit SHA matching filename>
-- **Tester name:** <release owner>
+- **Tester identity:** <owner:32 lowercase hex characters for the release owner>
 - **Date:** <YYYY-MM-DD, UTC>
 - **Environment:** production
 - **Runtime configuration SHA-256:** <64 hex digits of redacted deployment configuration manifest>
@@ -61,8 +67,10 @@ prove that a test or approval occurred.
 - **Refund and finance ownership evidence:** <sha256 digest of named payer/refund/reconciliation roster and approval>
 - **Rollback rehearsal and owner evidence:** <sha256 digest of tested rollback/restore decision and named operator>
 - **Store privacy and payment disclosure evidence:** <reviewed Apple/Google disclosures and terms evidence ID>
-- **Incident owner:** <named on-call owner and route>
-- **Rollback owner:** <named operator and on-call route; see required rollback rehearsal and owner evidence>
+- **Incident owner:** <owner:32 lowercase hex characters; see incident/support ownership evidence>
+- **Support owner:** <owner:32 lowercase hex characters; see incident/support ownership evidence>
+- **Refund and finance owner:** <owner:32 lowercase hex characters; see refund/finance ownership evidence>
+- **Rollback owner:** <owner:32 lowercase hex characters; see rollback rehearsal and owner evidence>
 
 ## Released channels
 

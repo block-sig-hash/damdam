@@ -22,6 +22,11 @@ def evidence(label: str) -> str:
     return "sha256:" + hashlib.sha256(label.encode()).hexdigest()
 
 
+def owner(label: str) -> str:
+    """A synthetic restricted-roster identity reference, not a real person."""
+    return "owner:" + hashlib.sha256(label.encode()).hexdigest()[:32]
+
+
 class ReleaseSignoffTests(unittest.TestCase):
     def test_template_and_validator_matrix_stay_in_sync(self) -> None:
         template = (
@@ -81,7 +86,7 @@ class ReleaseSignoffTests(unittest.TestCase):
     def body(self) -> str:
         fields = {
             "Commit SHA": self.candidate,
-            "Tester name": "Release owner",
+            "Tester identity": owner("release-tester"),
             "Date": TODAY.isoformat(),
             "Environment": "production",
             "Runtime configuration SHA-256": "a" * 64,
@@ -109,8 +114,10 @@ class ReleaseSignoffTests(unittest.TestCase):
             "Refund and finance ownership evidence": evidence("refund-owner-001"),
             "Rollback rehearsal and owner evidence": evidence("rollback-owner-001"),
             "Store privacy and payment disclosure evidence": evidence("store-review-001"),
-            "Incident owner": "On-call owner",
-            "Rollback owner": "Rollback operator",
+            "Incident owner": owner("incident-commander"),
+            "Support owner": owner("support-lead"),
+            "Refund and finance owner": owner("finance-lead"),
+            "Rollback owner": owner("rollback-operator"),
         }
         lines = [f"- **{name}:** {value}" for name, value in fields.items()]
         lines += [
@@ -244,10 +251,46 @@ class ReleaseSignoffTests(unittest.TestCase):
             "Schema revision does not match tested source migration head",
         )
 
+    def test_new_tested_migration_changes_required_schema_revision(self) -> None:
+        migration = self.root / "apps/api/migrations/versions/0045_next.py"
+        migration.write_text(
+            'revision: str = "0045_next"\n'
+            'down_revision: str | None = "0044_operator_actions"\n'
+        )
+        self.run_git("add", str(migration.relative_to(self.root)))
+        self.run_git("commit", "-m", "new source migration")
+        self.candidate = self.run_git("rev-parse", "HEAD")
+        self.run_git("update-ref", "refs/remotes/origin/staging", self.candidate)
+        self.assert_blocked(self.body(), "Schema revision does not match tested source migration head")
+
+    def test_disconnected_migration_cycle_blocks(self) -> None:
+        versions = self.root / "apps/api/migrations/versions"
+        for revision, parent in (("cycle_a", "cycle_b"), ("cycle_b", "cycle_a")):
+            (versions / f"{revision}.py").write_text(
+                f'revision = "{revision}"\ndown_revision = "{parent}"\n'
+            )
+            self.run_git("add", str((versions / f"{revision}.py").relative_to(self.root)))
+        self.run_git("commit", "-m", "invalid migration cycle")
+        self.candidate = self.run_git("rev-parse", "HEAD")
+        self.run_git("update-ref", "refs/remotes/origin/staging", self.candidate)
+        self.assert_blocked(self.body(), "disconnected revisions")
+
     def test_rollback_owner_needs_rehearsal_reference(self) -> None:
         self.assert_blocked(
             self.body().replace(evidence("rollback-owner-001"), "Alice was assigned"),
             "Rollback rehearsal and owner evidence",
+        )
+
+    def test_generic_owner_label_is_not_an_identity(self) -> None:
+        self.assert_blocked(
+            self.body().replace(owner("incident-commander"), "On-call owner"),
+            "Incident owner",
+        )
+
+    def test_generic_tester_label_is_not_an_identity(self) -> None:
+        self.assert_blocked(
+            self.body().replace(owner("release-tester"), "Release owner"),
+            "Tester identity",
         )
 
     def test_missing_required_scenario_proof_blocks_even_if_pass(self) -> None:

@@ -23,6 +23,7 @@ SIGNOFF_DIR = "docs/release-signoffs/"
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 EVIDENCE_REF = re.compile(r"sha256:[0-9a-f]{64}\Z")
+OWNER_REF = re.compile(r"owner:[0-9a-f]{32}\Z")
 CHANNELS = ("Carrier eSIM", "Mobile internet", "Browser internet")
 COMMON = (
     "Identity and recovery",
@@ -147,10 +148,6 @@ def required_evidence(value: str, description: str) -> str:
     return value
 
 
-def mandatory_reference(body: str, name: str) -> str:
-    return required_evidence(field(body, name), name)
-
-
 def artifact_reference(value: str, description: str) -> str:
     if not EVIDENCE_REF.fullmatch(value):
         raise SignoffError(f"Missing immutable evidence reference: {description}")
@@ -159,6 +156,13 @@ def artifact_reference(value: str, description: str) -> str:
 
 def artifact_field(body: str, name: str) -> str:
     return artifact_reference(field(body, name), name)
+
+
+def owner_field(body: str, name: str) -> str:
+    value = field(body, name)
+    if not OWNER_REF.fullmatch(value):
+        raise SignoffError(f"Missing named-owner identity reference: {name}")
+    return value
 
 
 def source_migration_head(tested: str) -> str:
@@ -172,6 +176,7 @@ def source_migration_head(tested: str) -> str:
         raise SignoffError("Tested commit has no Alembic migrations")
     revisions: set[str] = set()
     predecessors: set[str] = set()
+    parent_map: dict[str, tuple[str, ...]] = {}
     for path in migration_paths:
         try:
             tree = ast.parse(git_blob(tested, path).decode("utf-8"), filename=path)
@@ -198,8 +203,12 @@ def source_migration_head(tested: str) -> str:
         revisions.add(revision)
         if isinstance(parent, str):
             predecessors.add(parent)
+            parent_map[revision] = (parent,)
         elif isinstance(parent, (tuple, list)) and parent and all(isinstance(item, str) for item in parent):
             predecessors.update(parent)
+            parent_map[revision] = tuple(parent)
+        elif parent is None:
+            parent_map[revision] = ()
         elif parent is not None:
             raise SignoffError(f"Invalid migration predecessor: {path}")
     if predecessors - revisions:
@@ -207,7 +216,25 @@ def source_migration_head(tested: str) -> str:
     heads = revisions - predecessors
     if len(heads) != 1:
         raise SignoffError("Tested migration graph must have one head")
-    return next(iter(heads))
+    head = next(iter(heads))
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(revision: str) -> None:
+        if revision in visiting:
+            raise SignoffError("Tested migration graph contains a cycle")
+        if revision in visited:
+            return
+        visiting.add(revision)
+        for parent in parent_map[revision]:
+            visit(parent)
+        visiting.remove(revision)
+        visited.add(revision)
+
+    visit(head)
+    if visited != revisions:
+        raise SignoffError("Tested migration graph contains disconnected revisions")
+    return head
 
 
 def table(body: str, heading: str) -> dict[str, list[str]]:
@@ -241,8 +268,11 @@ def validate_body(body: str, tested: str, today: date) -> None:
         raise SignoffError("Commit SHA does not match signoff filename")
     for name in ("Environment", "Carrier configuration reference"):
         field(body, name)
-    for name in ("Tester name", "Incident owner", "Rollback owner"):
-        mandatory_reference(body, name)
+    for name in (
+        "Tester identity", "Incident owner", "Support owner",
+        "Refund and finance owner", "Rollback owner",
+    ):
+        owner_field(body, name)
     for name in (
         "Merchant configuration reference", "Release markets",
         "Release manifest reference", "Signed Android build evidence",
