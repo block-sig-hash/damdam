@@ -42,8 +42,9 @@ one channel's simulated tests.
 The exact-head signoff validator requires EAS and native-CI source SHAs, both
 signed cloud artifacts, both physical internal installs, a config-compatibility
 assessment, cleared blocking findings and approved pilot limits. Its Ed25519
-signature proves the release owner signed the text; it cannot attest that a
-remote artifact is real. The release owner verifies each immutable locator and
+signature proves the release owner signed the text; mandatory evidence must be
+referenced by an exact `sha256:<64 lowercase hex>` digest. Neither signature
+nor digest attests that a remote artifact is real. The release owner verifies each immutable locator and
 the source, runtime configuration, capability/route manifest, package/bundle
 identity and build number across CI, EAS, internal installs, pilot and target
 deployment. Any mismatch needs a new candidate and affected retests. Changes
