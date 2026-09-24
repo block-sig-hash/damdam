@@ -31,6 +31,7 @@ one channel's simulated tests.
 | Gate | Current finding | Closure evidence and accountable role |
 |---|---|---|
 | Independent findings and exact-head checks | Chunk 27–29 preparatory reviews accepted; open combined journeys and cloud signing compatibility remain | Engineering owner closes findings, reruns affected checks on final SHA, records review disposition and CI run IDs |
+| WAL-G CI test dependency | **BLOCKED** on chunk 30 runs: pinned Quay MinIO server/client images return `unauthorized`/no manifest, so the PITR job is not green | CI/operations owner restores a trusted reproducible S3-compatible fixture and reruns the real archive/PITR drill; do not skip or infer a pass from chunk 29 |
 | EAS iOS/Android signed cloud builds | **BLOCKED**: no approved project/signing identities; Android EAS-shaped callback encountered Gradle 9.3.1 `storeFilePath` finalization | Release owner approves credentials; mobile engineer proves compatible signing route, builds same SHA, compares AAB/IPA hashes and signing identities independently |
 | Automated native CI | Prior chunk 29 SHA `e1ff1de` passed Android emulator and iOS simulator 36 flows/72 PNGs each; not evidence for a later final SHA | CI owner runs both jobs on exact frozen SHA and records both artifact IDs, flow results, source/config comparison |
 | Internal physical distribution | **BLOCKED**: no approved TestFlight/Play identities or consenting testers | Release owner authorizes groups/track; named testers install signed builds on actual iOS/Android devices and record build/device/OS |
