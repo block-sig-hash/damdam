@@ -168,8 +168,9 @@ gradle.taskGraph.whenReady { graph ->
         // Read the effective configuration after EAS's eas-build.gradle (when
         // present) has injected its keystore. Never trust EAS_BUILD alone as a
         // signing bypass: an approved fingerprint is required on either path.
-        def effectiveSigning = android.signingConfigs.release
+        def effectiveSigning = android.buildTypes.release.signingConfig
         if (!(releaseCertSha256 ==~ /(?i)[0-9a-f]{64}/) ||
+            effectiveSigning == null ||
             effectiveSigning.storeFile == null || !effectiveSigning.storeFile.isFile() ||
             [effectiveSigning.storePassword, effectiveSigning.keyAlias,
                 effectiveSigning.keyPassword].any { it == null || it.trim().isEmpty() }) {

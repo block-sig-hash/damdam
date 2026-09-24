@@ -310,6 +310,7 @@ jobs:
           esac
       - name: Check EAS-injected Android release signing
         if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
+        working-directory: .
         run: bash scripts/test-android-eas-signing.sh
 
   # Renders real screens on a real Android emulator via the screenshot

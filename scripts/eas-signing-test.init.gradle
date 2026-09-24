@@ -1,13 +1,20 @@
-// CI-only simulation of the signingConfigs.release mutation EAS Build makes
-// after evaluating app/build.gradle. Never use this init script for a release.
+// CI-only simulation of the tasks.whenTaskAdded signing mutation made by
+// EAS's generated eas-build.gradle. Never use this init script for a release.
 gradle.beforeProject { project ->
     if (project.path == ':app') {
         project.afterEvaluate {
-            def signing = project.extensions.getByName('android').signingConfigs.release
-            signing.storeFile = project.file(System.getenv('DAMDAM_TEST_EAS_KEYSTORE_PATH'))
-            signing.storePassword = System.getenv('DAMDAM_TEST_EAS_STORE_PASSWORD')
-            signing.keyAlias = System.getenv('DAMDAM_TEST_EAS_KEY_ALIAS')
-            signing.keyPassword = System.getenv('DAMDAM_TEST_EAS_KEY_PASSWORD')
+            project.tasks.whenTaskAdded {
+                def android = project.extensions.getByName('android')
+                def signing = android.signingConfigs.release
+                signing.storeFile = project.file(System.getenv('DAMDAM_TEST_EAS_KEYSTORE_PATH'))
+                signing.storePassword = System.getenv('DAMDAM_TEST_EAS_STORE_PASSWORD')
+                signing.keyAlias = System.getenv('DAMDAM_TEST_EAS_KEY_ALIAS')
+                signing.keyPassword = System.getenv('DAMDAM_TEST_EAS_KEY_PASSWORD')
+                android.buildTypes.release.signingConfig signing
+            }
+            // Force the callback even if this Gradle/AGP version registered
+            // its release tasks before the init script attached the listener.
+            project.tasks.create('damdamEasInjectionProbe')
         }
     }
 }

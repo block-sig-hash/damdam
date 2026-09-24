@@ -42,4 +42,24 @@ if ! rg -q 'does not match the approved DAMDAM_RELEASE_CERT_SHA256' \
   sed -n '1,100p' "$test_dir/wrong-fingerprint.log" >&2
   exit 1
 fi
-echo 'EAS-injected release signing: approved key accepted; wrong fingerprint rejected'
+
+export DAMDAM_RELEASE_KEYSTORE_PATH="$test_key"
+export DAMDAM_RELEASE_STORE_PASSWORD="$test_password"
+export DAMDAM_RELEASE_KEY_ALIAS="$test_alias"
+export DAMDAM_RELEASE_KEY_PASSWORD="$test_password"
+DAMDAM_RELEASE_CERT_SHA256="$test_fingerprint" ./gradlew bundleRelease --dry-run \
+  --no-daemon > "$test_dir/local-approved.log" 2>&1 || {
+    sed -n '1,100p' "$test_dir/local-approved.log" >&2
+    exit 1
+  }
+if DAMDAM_RELEASE_CERT_SHA256="$test_fingerprint" ./gradlew bundleRelease --dry-run \
+  --no-daemon --init-script "$repo_root/scripts/rebind-release-signing-test.init.gradle" \
+  > "$test_dir/rebound-debug.log" 2>&1; then
+  echo 'Release rebound to debug signing was accepted' >&2
+  exit 1
+fi
+if ! rg -q 'matches the checked-in debug certificate' "$test_dir/rebound-debug.log"; then
+  sed -n '1,100p' "$test_dir/rebound-debug.log" >&2
+  exit 1
+fi
+echo 'Release signing: EAS callback and local keys accepted; wrong fingerprint and debug rebind rejected'
