@@ -41,7 +41,9 @@ one channel's simulated tests.
 
 The exact-head signoff validator requires EAS and native-CI source SHAs, both
 signed cloud artifacts, both physical internal installs, a config-compatibility
-assessment, cleared blocking findings and approved pilot limits. Its Ed25519
+assessment, cleared blocking findings, named incident/support/refund/rollback
+ownership, a rollback rehearsal and approved pilot limits. The applied schema
+revision must equal the tested source commit's single Alembic head. Its Ed25519
 signature proves the release owner signed the text; mandatory evidence must be
 referenced by an exact `sha256:<64 lowercase hex>` digest. Neither signature
 nor digest attests that a remote artifact is real. The release owner verifies each immutable locator and
