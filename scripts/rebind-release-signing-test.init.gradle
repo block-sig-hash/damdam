@@ -1,0 +1,10 @@
+// Negative CI fixture: a later project configuration points Release at debug
+// while the otherwise approved release signing config remains populated.
+gradle.beforeProject { project ->
+    if (project.path == ':app') {
+        project.afterEvaluate {
+            def android = project.extensions.getByName('android')
+            android.buildTypes.release.signingConfig android.signingConfigs.debug
+        }
+    }
+}

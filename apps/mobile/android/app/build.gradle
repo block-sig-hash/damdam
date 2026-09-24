@@ -79,8 +79,10 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
-// Production must never inherit the checked-in debug key. CI's screenshot
-// harness has a separate, explicitly non-production build type below.
+// Production must never inherit the checked-in debug key. Local builds may
+// supply DAMDAM_RELEASE_* variables; any remote injection must also land in
+// the effective Release signing config and match the approved fingerprint.
+// EAS/Gradle injection compatibility is not certified by this guard alone.
 def releaseKeystorePath = System.getenv('DAMDAM_RELEASE_KEYSTORE_PATH')
 def releaseStorePassword = System.getenv('DAMDAM_RELEASE_STORE_PASSWORD')
 def releaseKeyAlias = System.getenv('DAMDAM_RELEASE_KEY_ALIAS')
@@ -163,11 +165,19 @@ gradle.taskGraph.whenReady { graph ->
         if (screenshotHarness) {
             throw new GradleException('SCREENSHOT_HARNESS_MODE is forbidden in a production release build')
         }
-        if (!releaseSigningReady || !file(releaseKeystorePath).isFile()) {
-            throw new GradleException('Production Android release requires a non-debug keystore and all DAMDAM_RELEASE_* signing variables, including the approved certificate SHA-256')
+        // Read the effective build-type configuration, not an unused named
+        // signing config. Never trust EAS_BUILD alone as a signing bypass.
+        def effectiveSigning = android.buildTypes.release.signingConfig
+        if (!(releaseCertSha256 ==~ /(?i)[0-9a-f]{64}/) ||
+            effectiveSigning == null ||
+            effectiveSigning.storeFile == null || !effectiveSigning.storeFile.isFile() ||
+            [effectiveSigning.storePassword, effectiveSigning.keyAlias,
+                effectiveSigning.keyPassword].any { it == null || it.trim().isEmpty() }) {
+            throw new GradleException('Production Android release requires a non-debug keystore and the approved DAMDAM_RELEASE_CERT_SHA256 fingerprint')
         }
         def releaseFingerprint = certificateSha256(
-            releaseKeystorePath, releaseStorePassword, releaseKeyAlias)
+            effectiveSigning.storeFile, effectiveSigning.storePassword,
+            effectiveSigning.keyAlias)
         def debugFingerprint = certificateSha256('debug.keystore', 'android', 'androiddebugkey')
         if (releaseFingerprint == debugFingerprint) {
             throw new GradleException('Production Android release certificate matches the checked-in debug certificate')
