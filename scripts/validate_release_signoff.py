@@ -115,7 +115,7 @@ def paths(*args: str) -> list[str]:
 
 def field(body: str, name: str) -> str:
     matches = re.findall(
-        rf"^- \*\*{re.escape(name)}:\*\*\s*(.*?)\s*$", body, re.MULTILINE
+        rf"^- \*\*{re.escape(name)}:\*\*[ \t]*(.*?)[ \t]*$", body, re.MULTILINE
     )
     if len(matches) != 1:
         raise SignoffError(f"Expected exactly one '{name}' field")

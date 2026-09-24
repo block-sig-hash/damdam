@@ -210,6 +210,13 @@ class ReleaseSignoffTests(unittest.TestCase):
     def test_missing_eas_artifact_blocks(self) -> None:
         self.assert_blocked(self.body().replace("eas-ios-001", "disabled"), "EAS signed artifact")
 
+    def test_empty_reference_cannot_consume_next_field(self) -> None:
+        self.assert_blocked(
+            self.body().replace("- **iOS EAS signed artifact evidence:** eas-ios-001",
+                                "- **iOS EAS signed artifact evidence:**"),
+            "iOS EAS signed artifact evidence",
+        )
+
     def test_blocked_eas_artifact_blocks(self) -> None:
         self.assert_blocked(
             self.body().replace("eas-ios-001", "BLOCKED — no approved signing identity"),
