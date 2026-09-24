@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
 import subprocess
 import tempfile
@@ -14,6 +15,11 @@ import validate_release_signoff as gate
 
 
 TODAY = date(2026, 9, 23)
+
+
+def evidence(label: str) -> str:
+    """An opaque fixture locator, never a claim about a real external artifact."""
+    return "sha256:" + hashlib.sha256(label.encode()).hexdigest()
 
 
 class ReleaseSignoffTests(unittest.TestCase):
@@ -77,26 +83,26 @@ class ReleaseSignoffTests(unittest.TestCase):
             "Environment": "production",
             "Runtime configuration SHA-256": "a" * 64,
             "Carrier configuration reference": "disabled",
-            "Merchant configuration reference": "approved-merchant-001",
-            "Schema revision": "0044 with migration report 123",
+            "Merchant configuration reference": evidence("approved-merchant-001"),
+            "Schema revision": "0044_operator_actions @ " + evidence("migration-report-123"),
             "Accepted dependency commits": self.base,
-            "Release markets": "approved-market-record-001",
-            "Release manifest reference": "manifest-001",
+            "Release markets": evidence("approved-market-record-001"),
+            "Release manifest reference": evidence("manifest-001"),
             "Mock supplier mode": "disabled",
-            "Signed Android build evidence": "android-signed-001",
-            "Signed iOS build evidence": "ios-signed-001",
+            "Signed Android build evidence": evidence("android-signed-001"),
+            "Signed iOS build evidence": evidence("ios-signed-001"),
             "EAS build source SHA": self.candidate,
-            "Android EAS signed artifact evidence": "eas-android-001",
-            "iOS EAS signed artifact evidence": "eas-ios-001",
+            "Android EAS signed artifact evidence": evidence("eas-android-001"),
+            "iOS EAS signed artifact evidence": evidence("eas-ios-001"),
             "Native CI source SHA": self.candidate,
-            "Native simulator/emulator CI evidence": "native-ci-001",
-            "TestFlight physical installation evidence": "testflight-install-001",
-            "Android internal physical installation evidence": "android-internal-install-001",
-            "Evidence configuration compatibility reference": "compatibility-review-001",
+            "Native simulator/emulator CI evidence": evidence("native-ci-001"),
+            "TestFlight physical installation evidence": evidence("testflight-install-001"),
+            "Android internal physical installation evidence": evidence("android-internal-install-001"),
+            "Evidence configuration compatibility reference": evidence("compatibility-review-001"),
             "Blocking review findings status": "CLEAR",
-            "Blocking review findings evidence": "closed-findings-001",
-            "Pilot limits approval evidence": "approved-limits-001",
-            "Store privacy and payment disclosure evidence": "store-review-001",
+            "Blocking review findings evidence": evidence("closed-findings-001"),
+            "Pilot limits approval evidence": evidence("approved-limits-001"),
+            "Store privacy and payment disclosure evidence": evidence("store-review-001"),
             "Incident owner": "On-call owner",
             "Rollback owner": "Rollback operator",
         }
@@ -105,21 +111,21 @@ class ReleaseSignoffTests(unittest.TestCase):
             "", "## Released channels", "",
             "| Channel | Status | Decision evidence | Eligibility/denial result |",
             "|---|---|---|---|",
-            "| Carrier eSIM | DISABLED | carrier-denial-001 | PASS |",
-            "| Mobile internet | ENABLED | mobile-approval-001 | PASS |",
-            "| Browser internet | DISABLED | browser-denial-001 | PASS |",
+            f"| Carrier eSIM | DISABLED | {evidence('carrier-denial-001')} | PASS |",
+            f"| Mobile internet | ENABLED | {evidence('mobile-approval-001')} | PASS |",
+            f"| Browser internet | DISABLED | {evidence('browser-denial-001')} | PASS |",
             "", "## Device matrix tested", "",
             "| Platform | Model | OS version | Visited network | Evidence |",
             "|---|---|---|---|---|",
-            "| Android | Pixel 9 | 16 | Operator A | physical-android-001 |",
-            "| iOS | iPhone 16 | 19 | Operator B | physical-ios-001 |",
+            f"| Android | Pixel 9 | 16 | Operator A | {evidence('physical-android-001')} |",
+            f"| iOS | iPhone 16 | 19 | Operator B | {evidence('physical-ios-001')} |",
             "", "## Critical scenario results", "",
             "| Scenario | Result | Evidence |", "|---|---|---|",
         ]
         required = set(gate.COMMON) | set(gate.CONDITIONAL["Mobile internet"])
         for scenario in (*gate.COMMON, *sum(gate.CONDITIONAL.values(), ())):
             result = "PASS" if scenario in required else "NOT_APPLICABLE"
-            lines.append(f"| {scenario} | {result} | evidence-001 |")
+            lines.append(f"| {scenario} | {result} | {evidence(scenario)} |")
         return "\n".join(lines) + "\n"
 
     def promote(self, body: str, change_after_test: bool = False, signed_body: str | None = None) -> str:
@@ -157,7 +163,10 @@ class ReleaseSignoffTests(unittest.TestCase):
         self.assertIn(self.candidate, gate.validate(group_head, TODAY))
 
     def test_untrusted_evidence_edit_blocks(self) -> None:
-        head = self.promote(self.body().replace("physical-ios-001", "fabricated-record"), signed_body=self.body())
+        head = self.promote(
+            self.body().replace(evidence("physical-ios-001"), evidence("fabricated-record")),
+            signed_body=self.body(),
+        )
         with self.assertRaisesRegex(gate.SignoffError, "signature verification failed"):
             gate.validate(head, TODAY)
 
@@ -196,38 +205,60 @@ class ReleaseSignoffTests(unittest.TestCase):
         self.assert_blocked(self.body().replace("Mock supplier mode:** disabled", "Mock supplier mode:** enabled"), "Mock supplier")
 
     def test_missing_merchant_blocks(self) -> None:
-        self.assert_blocked(self.body().replace("approved-merchant-001", "<merchant approval>"), "Merchant configuration")
+        self.assert_blocked(self.body().replace(evidence("approved-merchant-001"), "<merchant approval>"), "Merchant configuration")
 
     def test_explicitly_unapproved_merchant_blocks(self) -> None:
         self.assert_blocked(
-            self.body().replace("approved-merchant-001", "not approved — no merchant account"),
+            self.body().replace(evidence("approved-merchant-001"), "not approved — no merchant account"),
             "Merchant configuration",
+        )
+
+    def test_denied_merchant_approval_blocks(self) -> None:
+        self.assert_blocked(
+            self.body().replace(evidence("approved-merchant-001"), "merchant approval denied"),
+            "Merchant configuration",
+        )
+
+    def test_unresolved_review_evidence_blocks(self) -> None:
+        self.assert_blocked(
+            self.body().replace(evidence("closed-findings-001"), "blocking findings unresolved"),
+            "Blocking review findings evidence",
         )
 
     def test_unapplied_schema_reference_blocks(self) -> None:
         self.assert_blocked(
-            self.body().replace("0044 with migration report 123", "0044 — no applied migration report"),
+            self.body().replace("0044_operator_actions @ " + evidence("migration-report-123"),
+                                "0044 — no applied migration report"),
             "Schema revision",
         )
 
     def test_missing_required_scenario_proof_blocks_even_if_pass(self) -> None:
         self.assert_blocked(
             self.body().replace(
-                "| Purchase, payment and refund | PASS | evidence-001 |",
+                f"| Purchase, payment and refund | PASS | {evidence('Purchase, payment and refund')} |",
                 "| Purchase, payment and refund | PASS | no payment evidence |",
             ),
             "Purchase, payment and refund evidence",
         )
 
+    def test_untested_rollback_cannot_be_marked_pass(self) -> None:
+        self.assert_blocked(
+            self.body().replace(
+                f"| Migration and rollback | PASS | {evidence('Migration and rollback')} |",
+                "| Migration and rollback | PASS | rollback untested |",
+            ),
+            "Migration and rollback evidence",
+        )
+
     def test_missing_channel_decision_proof_blocks(self) -> None:
         self.assert_blocked(
-            self.body().replace("mobile-approval-001", "no approval"),
+            self.body().replace(evidence("mobile-approval-001"), "no approval"),
             "Mobile internet decision evidence",
         )
 
     def test_missing_physical_install_proof_blocks(self) -> None:
         self.assert_blocked(
-            self.body().replace("physical-ios-001", "no installation"),
+            self.body().replace(evidence("physical-ios-001"), "no installation"),
             "iOS physical-device evidence",
         )
 
@@ -235,24 +266,24 @@ class ReleaseSignoffTests(unittest.TestCase):
         body = self.body().replace(
             "| Carrier eSIM | DISABLED |", "| Carrier eSIM | ENABLED |"
         )
-        self.assert_blocked(body, "Carrier configuration evidence")
+        self.assert_blocked(body, "Carrier configuration reference")
 
     def test_missing_physical_device_blocks(self) -> None:
-        self.assert_blocked(self.body().replace("physical-ios-001", "<device evidence>"), "physical-device")
+        self.assert_blocked(self.body().replace(evidence("physical-ios-001"), "<device evidence>"), "physical-device")
 
     def test_missing_eas_artifact_blocks(self) -> None:
-        self.assert_blocked(self.body().replace("eas-ios-001", "disabled"), "EAS signed artifact")
+        self.assert_blocked(self.body().replace(evidence("eas-ios-001"), "disabled"), "EAS signed artifact")
 
     def test_empty_reference_cannot_consume_next_field(self) -> None:
         self.assert_blocked(
-            self.body().replace("- **iOS EAS signed artifact evidence:** eas-ios-001",
+            self.body().replace("- **iOS EAS signed artifact evidence:** " + evidence("eas-ios-001"),
                                 "- **iOS EAS signed artifact evidence:**"),
             "iOS EAS signed artifact evidence",
         )
 
     def test_blocked_eas_artifact_blocks(self) -> None:
         self.assert_blocked(
-            self.body().replace("eas-ios-001", "BLOCKED — no approved signing identity"),
+            self.body().replace(evidence("eas-ios-001"), "BLOCKED — no approved signing identity"),
             "EAS signed artifact",
         )
 
@@ -267,15 +298,21 @@ class ReleaseSignoffTests(unittest.TestCase):
             "not yet approved",
         ):
             with self.subTest(value=value):
-                gate.mandatory_reference(
-                    self.body().replace("eas-ios-001", value),
+                gate.artifact_field(
+                    self.body().replace(evidence("eas-ios-001"), value),
                     "Android EAS signed artifact evidence",
                 )
-                with self.assertRaisesRegex(gate.SignoffError, "Missing mandatory iOS EAS"):
-                    gate.mandatory_reference(
-                        self.body().replace("eas-ios-001", value),
+                with self.assertRaisesRegex(gate.SignoffError, "iOS EAS signed artifact evidence"):
+                    gate.artifact_field(
+                        self.body().replace(evidence("eas-ios-001"), value),
                         "iOS EAS signed artifact evidence",
                     )
+
+    def test_artifact_reference_cannot_append_denial_to_digest(self) -> None:
+        self.assert_blocked(
+            self.body().replace(evidence("eas-ios-001"), evidence("eas-ios-001") + " — approval denied"),
+            "iOS EAS signed artifact evidence",
+        )
 
     def test_eas_build_from_other_commit_blocks(self) -> None:
         body = self.body().replace(
@@ -293,7 +330,7 @@ class ReleaseSignoffTests(unittest.TestCase):
 
     def test_missing_internal_install_blocks(self) -> None:
         self.assert_blocked(
-            self.body().replace("android-internal-install-001", "disabled"),
+            self.body().replace(evidence("android-internal-install-001"), "disabled"),
             "internal physical installation",
         )
 
@@ -304,11 +341,11 @@ class ReleaseSignoffTests(unittest.TestCase):
         )
 
     def test_missing_pilot_limits_approval_blocks(self) -> None:
-        self.assert_blocked(self.body().replace("approved-limits-001", "disabled"), "Pilot limits approval")
+        self.assert_blocked(self.body().replace(evidence("approved-limits-001"), "disabled"), "Pilot limits approval")
 
     def test_missing_compatibility_assessment_blocks(self) -> None:
         self.assert_blocked(
-            self.body().replace("compatibility-review-001", "disabled"),
+            self.body().replace(evidence("compatibility-review-001"), "disabled"),
             "Evidence configuration compatibility",
         )
 
@@ -320,7 +357,7 @@ class ReleaseSignoffTests(unittest.TestCase):
         self.assert_blocked(body, "Required scenario")
 
     def test_missing_scenario_blocks(self) -> None:
-        body = self.body().replace("| Migration and rollback | PASS | evidence-001 |\n", "")
+        body = self.body().replace(f"| Migration and rollback | PASS | {evidence('Migration and rollback')} |\n", "")
         self.assert_blocked(body, "Scenario matrix")
 
     def test_untested_runtime_change_blocks(self) -> None:

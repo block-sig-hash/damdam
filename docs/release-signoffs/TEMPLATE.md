@@ -21,6 +21,14 @@ physical-device records, migration/restore reports and incident ownership. A
 CI or emulator result is not a physical-device or provider result. The release
 owner must verify external references before signing; CI checks the signature,
 structure and git ancestry, not the truth of a remote evidence ID.
+Every mandatory evidence reference in the fields and tables below must be
+exactly `sha256:<64 lowercase hex characters>`: the SHA-256 of an immutable,
+restricted evidence record or manifest that binds multiple artifacts. Free-form
+prose, approval-status words and bare build IDs are not references. The schema
+field must be `applied_revision @ sha256:<64 lowercase hex characters>`.
+The release owner still has to inspect the underlying record and confirm the
+actual approval, source/configuration and artifacts; a digest alone does not
+prove that a test or approval occurred.
 
 - **Commit SHA:** <full tested commit SHA matching filename>
 - **Tester name:** <release owner>
@@ -29,7 +37,7 @@ structure and git ancestry, not the truth of a remote evidence ID.
 - **Runtime configuration SHA-256:** <64 hex digits of redacted deployment configuration manifest>
 - **Carrier configuration reference:** <immutable carrier evidence ID, or disabled if carrier channel disabled>
 - **Merchant configuration reference:** <immutable approved merchant and settlement evidence ID>
-- **Schema revision:** <applied migration revision and evidence ID>
+- **Schema revision:** <applied_revision @ sha256:64 lowercase hex characters>
 - **Accepted dependency commits:** <comma-separated full merge/accepted commit SHAs>
 - **Release markets:** <approved selling, visited, origin and destination market evidence ID>
 - **Release manifest reference:** <immutable capability/flag/route manifest evidence ID>
@@ -80,7 +88,8 @@ table; these two are mandatory for this combined mobile release gate.
 Every common row must be `PASS`. A released channel's rows must be `PASS`;
 disabled-channel rows must say `NOT_APPLICABLE`. Any explicit `FAIL` blocks
 promotion, even on an otherwise optional row. Link each passing row to an
-immutable result against the tested commit and configuration.
+immutable result against the tested commit and configuration using the
+`sha256:<64 lowercase hex characters>` form above.
 
 | Scenario | Result | Evidence |
 |---|---|---|

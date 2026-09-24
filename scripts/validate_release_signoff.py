@@ -21,6 +21,7 @@ from pathlib import Path
 SIGNOFF_DIR = "docs/release-signoffs/"
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+EVIDENCE_REF = re.compile(r"sha256:[0-9a-f]{64}\Z")
 CHANNELS = ("Carrier eSIM", "Mobile internet", "Browser internet")
 COMMON = (
     "Identity and recovery",
@@ -61,7 +62,8 @@ REQUIRED_EXTERNAL_REFERENCES = (
 EXACT_HEAD_FIELDS = ("EAS build source SHA", "Native CI source SHA")
 NEGATIVE_EVIDENCE = re.compile(
     r"\b(?:BLOCKED|DISABLED|NONE|UNAVAILABLE|MISSING|ABSENT|OPEN|"
-    r"FAIL(?:ED)?|UNVERIFIED|INVALID|NO|NOT|WITHOUT|AWAITING)\b",
+    r"FAIL(?:ED)?|UNVERIFIED|INVALID|NO|NOT|WITHOUT|AWAITING|"
+    r"DENIED|UNAPPROVED|UNAPPLIED|UNRESOLVED|UNTESTED|REJECTED|NEVER|UNASSIGNED)\b",
     re.I,
 )
 
@@ -145,6 +147,16 @@ def mandatory_reference(body: str, name: str) -> str:
     return required_evidence(field(body, name), name)
 
 
+def artifact_reference(value: str, description: str) -> str:
+    if not EVIDENCE_REF.fullmatch(value):
+        raise SignoffError(f"Missing immutable evidence reference: {description}")
+    return value
+
+
+def artifact_field(body: str, name: str) -> str:
+    return artifact_reference(field(body, name), name)
+
+
 def table(body: str, heading: str) -> dict[str, list[str]]:
     sections = list(re.finditer(
         rf"^## {re.escape(heading)}\s*$([\s\S]*?)(?=^## |\Z)",
@@ -176,14 +188,20 @@ def validate_body(body: str, tested: str, today: date) -> None:
         raise SignoffError("Commit SHA does not match signoff filename")
     for name in ("Environment", "Carrier configuration reference"):
         field(body, name)
+    for name in ("Tester name", "Incident owner", "Rollback owner"):
+        mandatory_reference(body, name)
     for name in (
-        "Tester name", "Merchant configuration reference", "Schema revision",
-        "Incident owner", "Rollback owner", "Release markets",
+        "Merchant configuration reference", "Release markets",
         "Release manifest reference", "Signed Android build evidence",
         "Signed iOS build evidence", "Store privacy and payment disclosure evidence",
         *REQUIRED_EXTERNAL_REFERENCES,
     ):
-        mandatory_reference(body, name)
+        artifact_field(body, name)
+    schema = field(body, "Schema revision")
+    revision, separator, schema_evidence = schema.partition(" @ ")
+    if not separator or not re.fullmatch(r"[0-9a-z_]+", revision):
+        raise SignoffError("Schema revision needs applied revision and immutable evidence reference")
+    artifact_reference(schema_evidence, "Schema revision")
     for name in EXACT_HEAD_FIELDS:
         if field(body, name).lower() != tested:
             raise SignoffError(f"{name} must match tested commit")
@@ -220,7 +238,7 @@ def validate_body(body: str, tested: str, today: date) -> None:
         values = channels[name]
         if len(values) != 3 or values[0] not in {"ENABLED", "DISABLED"}:
             raise SignoffError(f"{name} needs a status, decision evidence and eligibility result")
-        required_evidence(values[1], f"{name} decision evidence")
+        artifact_reference(values[1], f"{name} decision evidence")
         if values[2] != "PASS":
             raise SignoffError(f"{name} eligibility or denial result must PASS")
         if values[0] == "ENABLED":
@@ -228,7 +246,7 @@ def validate_body(body: str, tested: str, today: date) -> None:
     if not enabled:
         raise SignoffError("At least one release channel must be enabled")
     if "Carrier eSIM" in enabled:
-        required_evidence(field(body, "Carrier configuration reference"), "Carrier configuration evidence")
+        artifact_field(body, "Carrier configuration reference")
 
     devices = table(body, "Device matrix tested")
     if set(devices) != {"Android", "iOS"}:
@@ -236,8 +254,9 @@ def validate_body(body: str, tested: str, today: date) -> None:
     for platform, values in devices.items():
         if len(values) != 4:
             raise SignoffError(f"{platform} needs model, OS, network and evidence")
-        for value in values:
-            required_evidence(value, f"{platform} physical-device evidence")
+        for value in values[:3]:
+            required_evidence(value, f"{platform} physical-device detail")
+        artifact_reference(values[3], f"{platform} physical-device evidence")
 
     scenarios = table(body, "Critical scenario results")
     all_scenarios = set(COMMON).union(*CONDITIONAL.values())
@@ -254,7 +273,7 @@ def validate_body(body: str, tested: str, today: date) -> None:
         if name in required:
             if values[0] != "PASS":
                 raise SignoffError(f"Required scenario must PASS: {name}")
-            required_evidence(values[1], f"{name} evidence")
+            artifact_reference(values[1], f"{name} evidence")
         elif values[0] != "NOT_APPLICABLE":
             raise SignoffError(f"Disabled-channel scenario must be NOT_APPLICABLE: {name}")
 
