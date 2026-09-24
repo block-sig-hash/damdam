@@ -223,6 +223,27 @@ class ReleaseSignoffTests(unittest.TestCase):
             "EAS signed artifact",
         )
 
+    def test_negative_evidence_prose_cannot_pass(self) -> None:
+        for value in (
+            "Not available: no approved signing identity",
+            "disabled — no EAS build",
+            "NONE (no build)",
+            "Unavailable",
+            "OPEN — awaiting artifact",
+            "No artifact was produced",
+            "not yet approved",
+        ):
+            with self.subTest(value=value):
+                gate.mandatory_reference(
+                    self.body().replace("eas-ios-001", value),
+                    "Android EAS signed artifact evidence",
+                )
+                with self.assertRaisesRegex(gate.SignoffError, "Missing mandatory iOS EAS"):
+                    gate.mandatory_reference(
+                        self.body().replace("eas-ios-001", value),
+                        "iOS EAS signed artifact evidence",
+                    )
+
     def test_eas_build_from_other_commit_blocks(self) -> None:
         body = self.body().replace(
             f"EAS build source SHA:** {self.candidate}",

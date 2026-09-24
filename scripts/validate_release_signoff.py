@@ -59,6 +59,11 @@ REQUIRED_EXTERNAL_REFERENCES = (
     "Pilot limits approval evidence",
 )
 EXACT_HEAD_FIELDS = ("EAS build source SHA", "Native CI source SHA")
+NEGATIVE_EVIDENCE = re.compile(
+    r"\b(?:BLOCKED|DISABLED|NONE|UNAVAILABLE|MISSING|ABSENT|OPEN|"
+    r"FAIL(?:ED)?|UNVERIFIED|INVALID|NO|NOT|WITHOUT|AWAITING)\b",
+    re.I,
+)
 
 
 class SignoffError(Exception):
@@ -131,9 +136,7 @@ def substantive(value: str, description: str) -> None:
 
 def mandatory_reference(body: str, name: str) -> str:
     value = field(body, name)
-    if value.casefold() in {"disabled", "none", "not available", "not yet"} or re.search(
-        r"\b(BLOCKED|FAIL(?:ED)?|UNVERIFIED)\b", value, re.I
-    ):
+    if NEGATIVE_EVIDENCE.search(value):
         raise SignoffError(f"Missing mandatory {name}")
     return value
 
