@@ -46,7 +46,10 @@ class ReleaseSignoffTests(unittest.TestCase):
         self.run_git("config", "user.email", "release-test@example.invalid")
         self.run_git("config", "user.name", "Release Test")
         (self.root / "app.txt").write_text("baseline\n")
-        self.run_git("add", "app.txt")
+        migration = self.root / "apps/api/migrations/versions/0044_operator_actions.py"
+        migration.parent.mkdir(parents=True)
+        migration.write_text('revision: str = "0044_operator_actions"\ndown_revision = None\n')
+        self.run_git("add", "app.txt", str(migration.relative_to(self.root)))
         self.run_git("commit", "-m", "baseline")
         self.base = self.run_git("rev-parse", "HEAD")
         self.run_git("update-ref", "refs/remotes/origin/main", self.base)
@@ -102,6 +105,9 @@ class ReleaseSignoffTests(unittest.TestCase):
             "Blocking review findings status": "CLEAR",
             "Blocking review findings evidence": evidence("closed-findings-001"),
             "Pilot limits approval evidence": evidence("approved-limits-001"),
+            "Incident and support ownership evidence": evidence("incident-owner-001"),
+            "Refund and finance ownership evidence": evidence("refund-owner-001"),
+            "Rollback rehearsal and owner evidence": evidence("rollback-owner-001"),
             "Store privacy and payment disclosure evidence": evidence("store-review-001"),
             "Incident owner": "On-call owner",
             "Rollback owner": "Rollback operator",
@@ -230,6 +236,18 @@ class ReleaseSignoffTests(unittest.TestCase):
             self.body().replace("0044_operator_actions @ " + evidence("migration-report-123"),
                                 "0044 — no applied migration report"),
             "Schema revision",
+        )
+
+    def test_schema_revision_must_match_tested_source_head(self) -> None:
+        self.assert_blocked(
+            self.body().replace("0044_operator_actions @", "0001_us01_auth @"),
+            "Schema revision does not match tested source migration head",
+        )
+
+    def test_rollback_owner_needs_rehearsal_reference(self) -> None:
+        self.assert_blocked(
+            self.body().replace(evidence("rollback-owner-001"), "Alice was assigned"),
+            "Rollback rehearsal and owner evidence",
         )
 
     def test_missing_required_scenario_proof_blocks_even_if_pass(self) -> None:

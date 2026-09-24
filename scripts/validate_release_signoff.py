@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import ast
 import os
 import re
 import subprocess
@@ -58,6 +59,9 @@ REQUIRED_EXTERNAL_REFERENCES = (
     "Evidence configuration compatibility reference",
     "Blocking review findings evidence",
     "Pilot limits approval evidence",
+    "Incident and support ownership evidence",
+    "Refund and finance ownership evidence",
+    "Rollback rehearsal and owner evidence",
 )
 EXACT_HEAD_FIELDS = ("EAS build source SHA", "Native CI source SHA")
 NEGATIVE_EVIDENCE = re.compile(
@@ -157,6 +161,55 @@ def artifact_field(body: str, name: str) -> str:
     return artifact_reference(field(body, name), name)
 
 
+def source_migration_head(tested: str) -> str:
+    """Read the single Alembic head from the tested commit, never the PR worktree."""
+    migration_paths = [
+        path for path in paths("ls-tree", "-r", "--name-only", "-z", tested,
+                               "--", "apps/api/migrations/versions")
+        if path.endswith(".py") and not path.endswith("/__init__.py")
+    ]
+    if not migration_paths:
+        raise SignoffError("Tested commit has no Alembic migrations")
+    revisions: set[str] = set()
+    predecessors: set[str] = set()
+    for path in migration_paths:
+        try:
+            tree = ast.parse(git_blob(tested, path).decode("utf-8"), filename=path)
+            values: dict[str, object] = {}
+            for node in tree.body:
+                if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                    targets = [node.target.id]
+                    value = node.value
+                elif isinstance(node, ast.Assign):
+                    targets = [target.id for target in node.targets if isinstance(target, ast.Name)]
+                    value = node.value
+                else:
+                    continue
+                if value is not None:
+                    for target in targets:
+                        if target in {"revision", "down_revision"}:
+                            values[target] = ast.literal_eval(value)
+        except (SyntaxError, UnicodeError, ValueError) as exc:
+            raise SignoffError(f"Cannot read migration identity: {path}") from exc
+        revision = values.get("revision")
+        parent = values.get("down_revision")
+        if "down_revision" not in values or not isinstance(revision, str) or not revision or revision in revisions:
+            raise SignoffError(f"Invalid or duplicate migration revision: {path}")
+        revisions.add(revision)
+        if isinstance(parent, str):
+            predecessors.add(parent)
+        elif isinstance(parent, (tuple, list)) and parent and all(isinstance(item, str) for item in parent):
+            predecessors.update(parent)
+        elif parent is not None:
+            raise SignoffError(f"Invalid migration predecessor: {path}")
+    if predecessors - revisions:
+        raise SignoffError("Tested migration graph has missing predecessors")
+    heads = revisions - predecessors
+    if len(heads) != 1:
+        raise SignoffError("Tested migration graph must have one head")
+    return next(iter(heads))
+
+
 def table(body: str, heading: str) -> dict[str, list[str]]:
     sections = list(re.finditer(
         rf"^## {re.escape(heading)}\s*$([\s\S]*?)(?=^## |\Z)",
@@ -202,6 +255,8 @@ def validate_body(body: str, tested: str, today: date) -> None:
     if not separator or not re.fullmatch(r"[0-9a-z_]+", revision):
         raise SignoffError("Schema revision needs applied revision and immutable evidence reference")
     artifact_reference(schema_evidence, "Schema revision")
+    if revision != source_migration_head(tested):
+        raise SignoffError("Schema revision does not match tested source migration head")
     for name in EXACT_HEAD_FIELDS:
         if field(body, name).lower() != tested:
             raise SignoffError(f"{name} must match tested commit")

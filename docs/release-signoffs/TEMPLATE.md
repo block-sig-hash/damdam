@@ -26,6 +26,8 @@ exactly `sha256:<64 lowercase hex characters>`: the SHA-256 of an immutable,
 restricted evidence record or manifest that binds multiple artifacts. Free-form
 prose, approval-status words and bare build IDs are not references. The schema
 field must be `applied_revision @ sha256:<64 lowercase hex characters>`.
+That revision must equal the tested source commit's single Alembic head; the
+digest references proof that the target deployment actually applied it.
 The release owner still has to inspect the underlying record and confirm the
 actual approval, source/configuration and artifacts; a digest alone does not
 prove that a test or approval occurred.
@@ -55,9 +57,12 @@ prove that a test or approval occurred.
 - **Blocking review findings status:** <CLEAR only after independent review and disposition>
 - **Blocking review findings evidence:** <accepted review/closed-finding and exact-retest evidence ID>
 - **Pilot limits approval evidence:** <founder-approved market, spend, exposure, quality and stop-threshold record ID>
+- **Incident and support ownership evidence:** <sha256 digest of named roster, route and exercised escalation>
+- **Refund and finance ownership evidence:** <sha256 digest of named payer/refund/reconciliation roster and approval>
+- **Rollback rehearsal and owner evidence:** <sha256 digest of tested rollback/restore decision and named operator>
 - **Store privacy and payment disclosure evidence:** <reviewed Apple/Google disclosures and terms evidence ID>
 - **Incident owner:** <named on-call owner and route>
-- **Rollback owner:** <named operator and tested rollback evidence ID>
+- **Rollback owner:** <named operator and on-call route; see required rollback rehearsal and owner evidence>
 
 ## Released channels
 
