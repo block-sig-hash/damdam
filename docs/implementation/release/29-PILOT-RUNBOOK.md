@@ -19,6 +19,12 @@ record. The on-demand [EAS workflow](../../../.github/workflows/eas-verify-build
 does not submit to stores. The production Android build requires
 `DAMDAM_RELEASE_CERT_SHA256` to match the release-owner-approved certificate;
 EAS can inject the keystore into the bare app's release signing config.
+However, an EAS-shaped task-callback fixture hit Gradle 9.3.1's finalized
+`storeFilePath` during CI preparation. Do not assume the current EAS-generated
+script works on this Android toolchain. Before an authorized cloud build, the
+release owner must choose and review a compatible credential path; the
+repository has **not** set `withoutCredentials` or selected a signing identity.
+An actual EAS build and AAB signature inspection are required to close this.
 
 Separately, the founder or delegated commercial owner must approve the exact
 carrier/merchant accounts, legal seller, countries, plans and rate versions,

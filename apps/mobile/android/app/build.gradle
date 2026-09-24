@@ -79,10 +79,10 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
-// Production must never inherit the checked-in debug key. EAS Build injects
-// remote credentials into signingConfigs.release; local builds may supply the
-// DAMDAM_RELEASE_* keystore variables. Both paths must match the release owner's
-// approved certificate fingerprint. CI's screenshot harness is separate.
+// Production must never inherit the checked-in debug key. Local builds may
+// supply DAMDAM_RELEASE_* variables; any remote injection must also land in
+// the effective Release signing config and match the approved fingerprint.
+// EAS/Gradle injection compatibility is not certified by this guard alone.
 def releaseKeystorePath = System.getenv('DAMDAM_RELEASE_KEYSTORE_PATH')
 def releaseStorePassword = System.getenv('DAMDAM_RELEASE_STORE_PASSWORD')
 def releaseKeyAlias = System.getenv('DAMDAM_RELEASE_KEY_ALIAS')
@@ -165,9 +165,8 @@ gradle.taskGraph.whenReady { graph ->
         if (screenshotHarness) {
             throw new GradleException('SCREENSHOT_HARNESS_MODE is forbidden in a production release build')
         }
-        // Read the effective configuration after EAS's eas-build.gradle (when
-        // present) has injected its keystore. Never trust EAS_BUILD alone as a
-        // signing bypass: an approved fingerprint is required on either path.
+        // Read the effective build-type configuration, not an unused named
+        // signing config. Never trust EAS_BUILD alone as a signing bypass.
         def effectiveSigning = android.buildTypes.release.signingConfig
         if (!(releaseCertSha256 ==~ /(?i)[0-9a-f]{64}/) ||
             effectiveSigning == null ||

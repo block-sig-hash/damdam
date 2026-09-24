@@ -33,11 +33,14 @@ No key or fingerprint is approved in this repository yet. `assembleRelease`
 and `bundleRelease` without the signing environment must fail, not fall back to
 the debug key. An emulator screenshot build is not a signed-store build.
 
-Chunk 29's preparatory guard also accepts a keystore injected into the
-effective `signingConfigs.release` by EAS Build, but still requires the
-release-owner-approved `DAMDAM_RELEASE_CERT_SHA256` and rejects the checked-in
-debug certificate. CI checks this path with a throwaway test key; it is not an
-EAS cloud build or approval of an upload certificate. See the
+Chunk 29's preparatory guard checks the effective Release build-type signing
+config, requires the release-owner-approved `DAMDAM_RELEASE_CERT_SHA256` and
+rejects the checked-in debug certificate even if Release is rebound to it.
+CI checks the local-key path with a throwaway test key, **not** EAS injection.
+An EAS-shaped `tasks.whenTaskAdded` fixture failed with AGP's "too late to set
+storeFilePath" on Gradle 9.3.1; the actual EAS cloud path and an approved
+upload certificate remain unverified. The release owner must resolve the
+credential-injection approach, then inspect a real signed artifact. See the
 [pilot runbook](29-PILOT-RUNBOOK.md) and [blank evidence forms](29-PILOT-EVIDENCE.md).
 
 ## Remaining distribution and device work — user addition, 23 September 2026

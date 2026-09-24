@@ -62,8 +62,7 @@ jobs:
               - '.github/workflows/ci.yml'
             mobile:
               - 'apps/mobile/**'
-              - 'scripts/test-android-eas-signing.sh'
-              - 'scripts/eas-signing-test.init.gradle'
+              - 'scripts/test-android-release-signing.sh'
               - 'scripts/rebind-release-signing-test.init.gradle'
               - '.github/workflows/ci.yml'
             docker:
@@ -311,10 +310,10 @@ jobs:
             *'matches the checked-in debug certificate'*) ;;
             *) echo "$output" >&2; exit 1 ;;
           esac
-      - name: Check EAS-injected Android release signing
+      - name: Check Android release signing and debug rebind
         if: ${{ hashFiles('apps/mobile/android/gradlew') != '' }}
         working-directory: .
-        run: bash scripts/test-android-eas-signing.sh
+        run: bash scripts/test-android-release-signing.sh
 
   # Renders real screens on a real Android emulator via the screenshot
   # harness (apps/mobile/screenshotHarness/README.md) and Maestro flows
