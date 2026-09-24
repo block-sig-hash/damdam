@@ -34,7 +34,7 @@ if DAMDAM_RELEASE_CERT_SHA256=00000000000000000000000000000000000000000000000000
   echo 'Release signing accepted an unapproved fingerprint' >&2
   exit 1
 fi
-if ! rg -q 'does not match the approved DAMDAM_RELEASE_CERT_SHA256' \
+if ! grep -Fq 'does not match the approved DAMDAM_RELEASE_CERT_SHA256' \
   "$test_dir/wrong-fingerprint.log"; then
   sed -n '1,100p' "$test_dir/wrong-fingerprint.log" >&2
   exit 1
@@ -45,7 +45,7 @@ if DAMDAM_RELEASE_CERT_SHA256="$test_fingerprint" ./gradlew bundleRelease --dry-
   echo 'Release rebound to debug signing was accepted' >&2
   exit 1
 fi
-if ! rg -q 'matches the checked-in debug certificate' "$test_dir/rebound-debug.log"; then
+if ! grep -Fq 'matches the checked-in debug certificate' "$test_dir/rebound-debug.log"; then
   sed -n '1,100p' "$test_dir/rebound-debug.log" >&2
   exit 1
 fi
