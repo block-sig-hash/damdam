@@ -62,6 +62,9 @@ jobs:
               - '.github/workflows/ci.yml'
             mobile:
               - 'apps/mobile/**'
+              - 'scripts/test-android-eas-signing.sh'
+              - 'scripts/eas-signing-test.init.gradle'
+              - 'scripts/rebind-release-signing-test.init.gradle'
               - '.github/workflows/ci.yml'
             docker:
               - 'apps/api/**'
