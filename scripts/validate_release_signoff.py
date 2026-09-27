@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import ast
 import os
 import re
 import subprocess
@@ -21,6 +22,8 @@ from pathlib import Path
 SIGNOFF_DIR = "docs/release-signoffs/"
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+EVIDENCE_REF = re.compile(r"sha256:[0-9a-f]{64}\Z")
+OWNER_REF = re.compile(r"owner:[0-9a-f]{32}\Z")
 CHANNELS = ("Carrier eSIM", "Mobile internet", "Browser internet")
 COMMON = (
     "Identity and recovery",
@@ -48,6 +51,26 @@ CONDITIONAL = {
         "Browser refresh, logout and cutoff",
     ),
 }
+REQUIRED_EXTERNAL_REFERENCES = (
+    "Android EAS signed artifact evidence",
+    "iOS EAS signed artifact evidence",
+    "Native simulator/emulator CI evidence",
+    "TestFlight physical installation evidence",
+    "Android internal physical installation evidence",
+    "Evidence configuration compatibility reference",
+    "Blocking review findings evidence",
+    "Pilot limits approval evidence",
+    "Incident and support ownership evidence",
+    "Refund and finance ownership evidence",
+    "Rollback rehearsal and owner evidence",
+)
+EXACT_HEAD_FIELDS = ("EAS build source SHA", "Native CI source SHA")
+NEGATIVE_EVIDENCE = re.compile(
+    r"\b(?:BLOCKED|DISABLED|NONE|UNAVAILABLE|MISSING|ABSENT|OPEN|"
+    r"FAIL(?:ED)?|UNVERIFIED|INVALID|NO|NOT|WITHOUT|AWAITING|"
+    r"DENIED|UNAPPROVED|UNAPPLIED|UNRESOLVED|UNTESTED|REJECTED|NEVER|UNASSIGNED)\b",
+    re.I,
+)
 
 
 class SignoffError(Exception):
@@ -104,7 +127,7 @@ def paths(*args: str) -> list[str]:
 
 def field(body: str, name: str) -> str:
     matches = re.findall(
-        rf"^- \*\*{re.escape(name)}:\*\*\s*(.*?)\s*$", body, re.MULTILINE
+        rf"^- \*\*{re.escape(name)}:\*\*[ \t]*(.*?)[ \t]*$", body, re.MULTILINE
     )
     if len(matches) != 1:
         raise SignoffError(f"Expected exactly one '{name}' field")
@@ -116,6 +139,102 @@ def field(body: str, name: str) -> str:
 def substantive(value: str, description: str) -> None:
     if not value or re.search(r"<[^>]+>|\b(TODO|TBD|PENDING|UNKNOWN|N/A)\b", value, re.I):
         raise SignoffError(f"Missing or placeholder {description}")
+
+
+def required_evidence(value: str, description: str) -> str:
+    substantive(value, description)
+    if NEGATIVE_EVIDENCE.search(value):
+        raise SignoffError(f"Missing mandatory {description}")
+    return value
+
+
+def artifact_reference(value: str, description: str) -> str:
+    if not EVIDENCE_REF.fullmatch(value):
+        raise SignoffError(f"Missing immutable evidence reference: {description}")
+    return value
+
+
+def artifact_field(body: str, name: str) -> str:
+    return artifact_reference(field(body, name), name)
+
+
+def owner_field(body: str, name: str) -> str:
+    value = field(body, name)
+    if not OWNER_REF.fullmatch(value):
+        raise SignoffError(f"Missing named-owner identity reference: {name}")
+    return value
+
+
+def source_migration_head(tested: str) -> str:
+    """Read the single Alembic head from the tested commit, never the PR worktree."""
+    migration_paths = [
+        path for path in paths("ls-tree", "-r", "--name-only", "-z", tested,
+                               "--", "apps/api/migrations/versions")
+        if path.endswith(".py") and not path.endswith("/__init__.py")
+    ]
+    if not migration_paths:
+        raise SignoffError("Tested commit has no Alembic migrations")
+    revisions: set[str] = set()
+    predecessors: set[str] = set()
+    parent_map: dict[str, tuple[str, ...]] = {}
+    for path in migration_paths:
+        try:
+            tree = ast.parse(git_blob(tested, path).decode("utf-8"), filename=path)
+            values: dict[str, object] = {}
+            for node in tree.body:
+                if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                    targets = [node.target.id]
+                    value = node.value
+                elif isinstance(node, ast.Assign):
+                    targets = [target.id for target in node.targets if isinstance(target, ast.Name)]
+                    value = node.value
+                else:
+                    continue
+                if value is not None:
+                    for target in targets:
+                        if target in {"revision", "down_revision"}:
+                            values[target] = ast.literal_eval(value)
+        except (SyntaxError, UnicodeError, ValueError) as exc:
+            raise SignoffError(f"Cannot read migration identity: {path}") from exc
+        revision = values.get("revision")
+        parent = values.get("down_revision")
+        if "down_revision" not in values or not isinstance(revision, str) or not revision or revision in revisions:
+            raise SignoffError(f"Invalid or duplicate migration revision: {path}")
+        revisions.add(revision)
+        if isinstance(parent, str):
+            predecessors.add(parent)
+            parent_map[revision] = (parent,)
+        elif isinstance(parent, (tuple, list)) and parent and all(isinstance(item, str) for item in parent):
+            predecessors.update(parent)
+            parent_map[revision] = tuple(parent)
+        elif parent is None:
+            parent_map[revision] = ()
+        elif parent is not None:
+            raise SignoffError(f"Invalid migration predecessor: {path}")
+    if predecessors - revisions:
+        raise SignoffError("Tested migration graph has missing predecessors")
+    heads = revisions - predecessors
+    if len(heads) != 1:
+        raise SignoffError("Tested migration graph must have one head")
+    head = next(iter(heads))
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(revision: str) -> None:
+        if revision in visiting:
+            raise SignoffError("Tested migration graph contains a cycle")
+        if revision in visited:
+            return
+        visiting.add(revision)
+        for parent in parent_map[revision]:
+            visit(parent)
+        visiting.remove(revision)
+        visited.add(revision)
+
+    visit(head)
+    if visited != revisions:
+        raise SignoffError("Tested migration graph contains disconnected revisions")
+    return head
 
 
 def table(body: str, heading: str) -> dict[str, list[str]]:
@@ -147,14 +266,32 @@ def validate_body(body: str, tested: str, today: date) -> None:
         raise SignoffError("Explicit FAIL result in signoff")
     if field(body, "Commit SHA").lower() != tested:
         raise SignoffError("Commit SHA does not match signoff filename")
-    for name in (
-        "Tester name", "Environment", "Carrier configuration reference",
-        "Merchant configuration reference", "Schema revision", "Incident owner",
-        "Rollback owner", "Release markets", "Release manifest reference",
-        "Signed Android build evidence", "Signed iOS build evidence",
-        "Store privacy and payment disclosure evidence",
-    ):
+    for name in ("Environment", "Carrier configuration reference"):
         field(body, name)
+    for name in (
+        "Tester identity", "Incident owner", "Support owner",
+        "Refund and finance owner", "Rollback owner",
+    ):
+        owner_field(body, name)
+    for name in (
+        "Merchant configuration reference", "Release markets",
+        "Release manifest reference", "Signed Android build evidence",
+        "Signed iOS build evidence", "Store privacy and payment disclosure evidence",
+        *REQUIRED_EXTERNAL_REFERENCES,
+    ):
+        artifact_field(body, name)
+    schema = field(body, "Schema revision")
+    revision, separator, schema_evidence = schema.partition(" @ ")
+    if not separator or not re.fullmatch(r"[0-9a-z_]+", revision):
+        raise SignoffError("Schema revision needs applied revision and immutable evidence reference")
+    artifact_reference(schema_evidence, "Schema revision")
+    if revision != source_migration_head(tested):
+        raise SignoffError("Schema revision does not match tested source migration head")
+    for name in EXACT_HEAD_FIELDS:
+        if field(body, name).lower() != tested:
+            raise SignoffError(f"{name} must match tested commit")
+    if field(body, "Blocking review findings status") != "CLEAR":
+        raise SignoffError("Blocking review findings must be CLEAR")
     if field(body, "Environment") != "production":
         raise SignoffError("Release environment must be production")
     if not DIGEST.fullmatch(field(body, "Runtime configuration SHA-256").lower()):
@@ -186,17 +323,17 @@ def validate_body(body: str, tested: str, today: date) -> None:
         values = channels[name]
         if len(values) != 3 or values[0] not in {"ENABLED", "DISABLED"}:
             raise SignoffError(f"{name} needs a status, decision evidence and eligibility result")
-        substantive(values[1], f"{name} decision evidence")
+        artifact_reference(values[1], f"{name} decision evidence")
         if values[2] != "PASS":
             raise SignoffError(f"{name} eligibility or denial result must PASS")
         if values[0] == "ENABLED":
             enabled.add(name)
     if not enabled:
         raise SignoffError("At least one release channel must be enabled")
-    if "Carrier eSIM" in enabled and field(body, "Carrier configuration reference").lower() == "disabled":
-        raise SignoffError("Carrier configuration evidence is required")
-    if field(body, "Merchant configuration reference").lower() == "disabled":
-        raise SignoffError("Merchant configuration evidence is required")
+    if "Carrier eSIM" in enabled:
+        artifact_field(body, "Carrier configuration reference")
+    elif field(body, "Carrier configuration reference") != "disabled":
+        raise SignoffError("Disabled carrier configuration must be exactly disabled")
 
     devices = table(body, "Device matrix tested")
     if set(devices) != {"Android", "iOS"}:
@@ -204,8 +341,9 @@ def validate_body(body: str, tested: str, today: date) -> None:
     for platform, values in devices.items():
         if len(values) != 4:
             raise SignoffError(f"{platform} needs model, OS, network and evidence")
-        for value in values:
-            substantive(value, f"{platform} physical-device evidence")
+        for value in values[:3]:
+            required_evidence(value, f"{platform} physical-device detail")
+        artifact_reference(values[3], f"{platform} physical-device evidence")
 
     scenarios = table(body, "Critical scenario results")
     all_scenarios = set(COMMON).union(*CONDITIONAL.values())
@@ -222,7 +360,7 @@ def validate_body(body: str, tested: str, today: date) -> None:
         if name in required:
             if values[0] != "PASS":
                 raise SignoffError(f"Required scenario must PASS: {name}")
-            substantive(values[1], f"{name} evidence")
+            artifact_reference(values[1], f"{name} evidence")
         elif values[0] != "NOT_APPLICABLE":
             raise SignoffError(f"Disabled-channel scenario must be NOT_APPLICABLE: {name}")
 
