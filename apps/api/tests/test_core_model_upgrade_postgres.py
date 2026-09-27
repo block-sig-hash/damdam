@@ -22,8 +22,12 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
+from sqlmodel import Session, select
 
 from app.config import get_settings
+from app.ledger.backfill import LegacyBackfill
+from app.ledger.models import AccountKind, JournalEntry, LedgerAccount
+from app.ledger.service import LedgerService
 
 PRE_US28_REVISION = "0026_i18n_locales"
 US28_REVISION = "0027_core_domain_model"
@@ -369,3 +373,67 @@ def test_upgrade_is_reapplicable_after_a_downgrade(legacy_url) -> None:
         ).scalar_one()
     engine.dispose()
     assert revision == US28_REVISION
+
+
+def test_integrated_upgrade_from_populated_legacy_schema_to_head(legacy_url) -> None:
+    """US-43: head migration and real backfill preserve one legacy sale."""
+    ids = _seed_legacy(legacy_url)
+    before = _snapshot(legacy_url)
+
+    command.upgrade(_alembic_config(legacy_url), "head")
+
+    assert _snapshot(legacy_url) == before
+    engine = create_engine(legacy_url)
+    with engine.connect() as connection:
+        revision = connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalar_one()
+        current_tables = set(
+            connection.execute(
+                text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_name IN "
+                    "('orders', 'entitlements', 'carrier_lines', "
+                    "'bulk_jobs', 'organization_offboardings', 'operator_actions')"
+                )
+            ).scalars()
+        )
+    engine.dispose()
+
+    assert revision == "0044_operator_actions"
+    assert current_tables == {
+        "orders",
+        "entitlements",
+        "carrier_lines",
+        "bulk_jobs",
+        "organization_offboardings",
+        "operator_actions",
+    }
+
+    ledger = LedgerService()
+    engine = create_engine(legacy_url)
+    with Session(engine) as session:
+        backfill = LegacyBackfill(ledger)
+        report = backfill.run(session)
+        session.commit()
+        assert report.posted == 1
+        assert report.posted_total == NGN_PRICE
+        assert report.reconciles
+
+        entry = session.exec(select(JournalEntry)).one()
+        assert entry.business_event_id == f"legacy:transaction:{ids['transaction']}"
+        assert entry.occurred_at == PURCHASED_AT
+        assert entry.reference == f"backfilled from transactions.{ids['transaction']}"
+        assert ledger.trial_balance(session, "NGN")["difference"] == Decimal("0.00")
+        assert session.exec(
+            select(LedgerAccount).where(
+                LedgerAccount.kind == AccountKind.SERVICE_CREDIT
+            )
+        ).all() == []
+
+        replay = backfill.run(session)
+        session.commit()
+        assert replay.reconciles
+        assert len(session.exec(select(JournalEntry)).all()) == 1
+    engine.dispose()
+    assert _snapshot(legacy_url) == before
