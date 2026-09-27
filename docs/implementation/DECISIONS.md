@@ -36,8 +36,10 @@ Required evidence, all in writing from Telnyx:
 1. Consumer-handset and resale eligibility for the branded eSIM product.
 2. Whether the *same* eSIM profile carries data and native-dialer voice
    (incoming and outgoing) in each proposed market.
-3. VoLTE access terms while the product is documented as **beta** — production
-   support commitment, API stability and support SLA.
+3. Mobile Voice production-access terms — including any account-, market- or
+   use-case-specific beta/preview restriction, support commitment, API
+   stability and SLA despite the current public page no longer showing the
+   earlier beta warning.
 4. A capability matrix by profile/IMSI, visited network, device and service.
    The "650+ networks / 180+ countries" figure is a data claim and is not
    evidence for voice, inbound calls, local numbers or permanent roaming.
