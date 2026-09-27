@@ -1,13 +1,16 @@
 # UNSENT DRAFT — Telnyx capability and commercial enquiry
 
-> **STATUS: UNSENT. DO NOT SEND.**
+> **STATUS: UNSENT. FOUNDER-AUTHORIZED.**
 >
 > Prepared by [chunk 03](../chunks/03-telnyx-feasibility.md) on 8 September 2026
+> and refreshed against the public Telnyx site on 27 September 2026
 > as preparation for gate **D1**. No message has been sent to Telnyx, no account
 > has been opened, no sales contact has been made and no commercial commitment
 > exists. Sending this is the founder's decision and requires their own review —
 > particularly of the volume and market statements in §1, which are **planning
-> assumptions and must be corrected to reality before any outreach.**
+> assumptions and must be corrected to reality before any outreach. The
+> founder authorized sending on 27 September 2026 and confirmed the forecast
+> and launch target used below.**
 >
 > Placeholders are written as `[[LIKE THIS]]`. Every one must be filled or
 > deleted before sending; none may be guessed.
@@ -26,20 +29,23 @@ the questions below are deliberately the ones the documentation does not answer.
 
 ## 1. What we are building
 
-`[[FOUNDER: correct all of this before sending — the figures below are internal
-planning placeholders, not commitments, and must not be sent as if they were
-real forecasts.]]`
+The founder approved the product description, initial candidate market and
+outreach on 27 September 2026. The legal entity is deliberately omitted pending
+D3. Exact expansion countries remain a D2 decision.
 
 A consumer mobile app and an enterprise/government dashboard selling prepaid
 connectivity. Customers install an eSIM and then use their phone's **normal
 dialer and mobile data** — no VoIP app, no SIP client. The same profile must
 carry data and native voice.
 
-- Legal selling entity: `[[UNDECIDED — see D3]]`
-- First selling markets: `[[UNDECIDED — see D2]]`
+- Legal selling entity: not yet selected; please advise what eligibility or
+  contracting constraints should inform that D3 decision
+- Initial candidate selling market: **Nigeria**
+- Later expansion: exact countries are not yet selected; West Africa and
+  Muslim-majority markets are strategic regions, not an approved catalog
 - Primary calling destination: **Nigeria** (mobile and landline)
-- Expected first-year volume: `[[FOUNDER TO SUPPLY — do not send a guess]]`
-- Target launch: `[[FOUNDER TO SUPPLY]]`
+- Projected first-year annual customer revenue: **USD 50,000**
+- Target launch: **November 2026**
 
 ## 2. The decisive question
 
@@ -50,20 +56,29 @@ each market we intend to sell in?**
 If the answer is market-dependent, we need the list of markets where it holds,
 not a global statement. We would rather exclude a market than mis-sell one.
 
-## 3. VoLTE production readiness
+## 3. Production contract and API maturity
 
-Your [VoLTE overview](https://developers.telnyx.com/docs/iot-sim/voice-enabled-iot)
-states, as of 8 September 2026: "**Beta** — VoLTE is in beta. API reference and
-detailed configuration docs coming soon."
+The public position changed after the original draft. On 27 September 2026,
+the [Mobile Voice product page](https://telnyx.com/products/mobile-voice) no
+longer carried the earlier beta warning. It advertised enterprise-grade
+reliability, enterprise SLAs, SIM/eSIM provisioning, number assignment,
+policies, QoS and CDR visibility. A public
+[Mobile Voice Connections API](https://developers.telnyx.com/api-reference/mobile-voice-connections/list-mobile-voice-connections)
+also exists. These are public product claims, not terms granted to our account.
 
-1. What are the terms of the beta — is production, revenue-generating consumer
-   use permitted today?
-2. What is the expected GA timeline, and what changes at GA?
-3. What API-stability guarantee applies during beta? Will the voice action and
-   `mobile_phone_numbers` schemas change?
-4. What support commitment and SLA applies to beta VoLTE in production?
-5. When will the voice API reference and configuration documentation publish?
-6. Are there beta customers running consumer smartphone voice at scale today?
+1. Is Mobile Voice generally available for revenue-generating resale to
+   consumers and enterprise/government users under our proposed model?
+2. Which contract, service description, SLA and support terms would govern our
+   account? Please identify any beta, preview, country or use-case restriction
+   that still applies despite the current public product page.
+3. What versioning, deprecation and backward-compatibility guarantees apply to
+   Mobile Voice Connections, Mobile Phone Numbers, call events and CDRs?
+4. Which exact APIs activate voice on an eSIM, assign/replace a number, enforce
+   policies and retrieve final/corrected CDRs? Which are enabled in a test
+   account without production spend?
+5. The current page is oriented toward enterprises, AI agents and managed
+   fleets. Is ordinary human consumer-smartphone use explicitly supported, and
+   can you provide customers or device certification evidence for that use?
 
 ## 4. Coverage — four separate matrices, please
 
@@ -100,10 +115,12 @@ consumer smartphones.
 
 ## 6. Calls to Nigeria — complete cost
 
-No mobile-voice per-minute rate is published on
-[telnyx.com/pricing](https://telnyx.com/pricing) or
-[pricing/mobile-voice](https://telnyx.com/pricing/mobile-voice), so we need a
-rate deck. For calls **to Nigeria** from a Telnyx mobile line, please state:
+The current [Mobile Voice pricing page](https://telnyx.com/pricing/mobile-voice)
+labels the minute rate as custom and describes carrier fee plus SIP-trunking
+fee, while the general [pricing page](https://telnyx.com/pricing) advertises
+Mobile Voice "from $5 per SIM per month." Please reconcile those statements
+and provide the account-specific rate deck. For calls **to Nigeria** from a
+Telnyx mobile line, please state:
 
 1. Per-minute rate to Nigerian **mobile** networks, by operator if it varies.
 2. Per-minute rate to Nigerian **landline**.
@@ -115,9 +132,10 @@ rate deck. For calls **to Nigeria** from a Telnyx mobile line, please state:
    These are test candidates, not confirmed markets.
 7. Any surcharge while roaming.
 8. Data pricing by zone for the countries in §4.1.
-9. Monthly recurring charges — we understand $2/month active and $0.20/month
-   disabled or standby per SIM, and $0.70 per eSIM activation. Please confirm and
-   state anything else recurring, including per-number monthly charges.
+9. Monthly recurring charges for the eSIM/data service, Mobile Voice and the
+   assigned number. Explain whether the public "from $5 per SIM per month" is
+   additional to the wireless SIM/eSIM charges and which account/market
+   conditions determine it.
 10. Taxes, regulatory fees and surcharges, by selling market.
 11. Minimum commitments, ramp requirements or volume tiers.
 12. Rate-change notice period.
@@ -224,20 +242,20 @@ authorised to place a paid order under this enquiry.
 
 Thank you,
 
-`[[FOUNDER NAME]]`
-`[[ROLE]]`
-`[[ENTITY — leave blank until D3 is decided; do not name an entity that does not exist]]`
-`[[CONTACT]]`
+Ibrahim Adamu
+Tech Lead
+`[[APPROVED BUSINESS CONTACT — held outside this public repository]]`
 
 ---
 
 ## Pre-send checklist
 
 - [ ] Every `[[PLACEHOLDER]]` filled or deleted; no guessed volumes or dates
-- [ ] §1 corrected by the founder; no invented forecast sent
-- [ ] Entity naming consistent with D3, or omitted entirely
-- [ ] Markets in §4 consistent with D2, or stated as undecided
-- [ ] Confirmed no order, commitment or payment is implied anywhere
-- [ ] Founder has approved sending, and to whom
+- [x] §1 corrected by the founder; no invented forecast sent
+- [x] Entity naming consistent with D3, or omitted entirely
+- [x] Markets in §4 consistent with D2, or stated as undecided
+- [x] Confirmed no order, commitment or payment is implied anywhere
+- [x] Founder approved sending both D1 enquiries to `sales@telnyx.com` on
+      27 September 2026
 - [ ] Answers, once received, recorded in [`../DECISIONS.md`](../DECISIONS.md)
       under D1 with date and artifact — not summarised into code comments

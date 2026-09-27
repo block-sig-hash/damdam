@@ -36,8 +36,10 @@ Required evidence, all in writing from Telnyx:
 1. Consumer-handset and resale eligibility for the branded eSIM product.
 2. Whether the *same* eSIM profile carries data and native-dialer voice
    (incoming and outgoing) in each proposed market.
-3. VoLTE access terms while the product is documented as **beta** — production
-   support commitment, API stability and support SLA.
+3. Mobile Voice production-access terms — including any account-, market- or
+   use-case-specific beta/preview restriction, support commitment, API
+   stability and SLA despite the current public page no longer showing the
+   earlier beta warning.
 4. A capability matrix by profile/IMSI, visited network, device and service.
    The "650+ networks / 180+ countries" figure is a data claim and is not
    evidence for voice, inbound calls, local numbers or permanent roaming.
@@ -52,6 +54,37 @@ Required evidence, all in writing from Telnyx:
 Recorded so far: the documentation review dated 8 September 2026 in
 [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) §5. That is a reading of public
 documentation, not commercial confirmation, and it does not move D1.
+
+#### Evidence rechecked — 2026-09-27 — carrier/mobile-voice track
+
+- Gathered by: Codex from current public Telnyx product, pricing and developer
+  pages. **Not a decision. D1 stays OPEN.** No account was opened, no supplier
+  contact was made, no API call was authenticated and no paid action occurred.
+- Material change: the public Mobile Voice page no longer carries the earlier
+  beta/API-coming-soon language, and a Mobile Voice Connections API reference
+  now exists. Telnyx markets number assignment, policies, CDR visibility and
+  enterprise SLAs.
+- Still missing: written consumer resale eligibility, account-specific terms,
+  voice coverage by market/network/profile, certified handset matrix, number
+  availability, roaming/permanent-roaming position, Nigeria rate deck, hard
+  data/voice spending bounds, WDR/CDR correction behavior and test access.
+- Pricing remains insufficient for an offer: the general page says "from $5
+  per SIM per month" while the detailed Mobile Voice page says custom and
+  carrier fee plus SIP-trunking fee. Neither supplies an all-in Nigeria route.
+- Artifacts: refreshed
+  [telnyx/CAPABILITY-MATRIX.md](telnyx/CAPABILITY-MATRIX.md) and
+  [telnyx/ENQUIRY-DRAFT.md](telnyx/ENQUIRY-DRAFT.md), plus the staged
+  [D1 closure checklist](telnyx/D1-CLOSURE-CHECKLIST.md). The draft remains
+  unsent.
+- Founder input recorded 27 September 2026: Ibrahim Adamu, Tech Lead,
+  authorized sending the carrier/mobile-voice and internet-calling enquiries
+  to `sales@telnyx.com`; Nigeria is the initial candidate market; no Telnyx
+  account exists. The business contact is retained outside this public
+  repository. The founder subsequently confirmed projected first-year annual
+  customer revenue of USD 50,000 and a November 2026 launch target. Outreach
+  now waits only on the approved mail connection. This authorization does not
+  permit account creation, acceptance of terms, payment details, provisioning,
+  calls or spend, and it does not close D1.
 
 #### Evidence gathered — 2026-09-09 (chunk V01, US-44) — internet track
 
