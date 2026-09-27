@@ -1,8 +1,10 @@
 # UNSENT enquiry — Telnyx internet calling
 
-> **STATUS: UNSENT. DRAFT ONLY.**
-> No message has been sent to Telnyx or any other supplier. This chunk had no
-> authority to contact anyone, and did not. Sending requires founder approval.
+> **STATUS: UNSENT. FOUNDER-AUTHORIZED.**
+> No message has been sent to Telnyx or any other supplier. Ibrahim Adamu,
+> Tech Lead, authorized sending this enquiry to `sales@telnyx.com` on
+> 27 September 2026. Delivery still requires the approved mail connection; the
+> authorization does not extend to account creation, paid orders or spend.
 
 Prepared by chunk V01 on 9 September 2026. It covers the **internet-calling**
 track only. The carrier/eSIM enquiry is separate and already drafted at
@@ -97,7 +99,10 @@ measure the spending-control behaviour in question 2 ourselves.
 
 Thank you,
 
-DamDam
+Ibrahim Adamu<br>
+Tech Lead<br>
+DamDam<br>
+`[[APPROVED BUSINESS CONTACT — held outside this public repository]]`
 
 ---
 

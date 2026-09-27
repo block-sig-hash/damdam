@@ -1,6 +1,6 @@
 # UNSENT DRAFT — Telnyx capability and commercial enquiry
 
-> **STATUS: UNSENT. DO NOT SEND.**
+> **STATUS: UNSENT. FOUNDER-AUTHORIZED.**
 >
 > Prepared by [chunk 03](../chunks/03-telnyx-feasibility.md) on 8 September 2026
 > and refreshed against the public Telnyx site on 27 September 2026
@@ -8,7 +8,9 @@
 > has been opened, no sales contact has been made and no commercial commitment
 > exists. Sending this is the founder's decision and requires their own review —
 > particularly of the volume and market statements in §1, which are **planning
-> assumptions and must be corrected to reality before any outreach.**
+> assumptions and must be corrected to reality before any outreach. The
+> founder authorized sending on 27 September 2026 and confirmed the forecast
+> and launch target used below.**
 >
 > Placeholders are written as `[[LIKE THIS]]`. Every one must be filled or
 > deleted before sending; none may be guessed.
@@ -27,20 +29,23 @@ the questions below are deliberately the ones the documentation does not answer.
 
 ## 1. What we are building
 
-`[[FOUNDER: correct all of this before sending — the figures below are internal
-planning placeholders, not commitments, and must not be sent as if they were
-real forecasts.]]`
+The founder approved the product description, initial candidate market and
+outreach on 27 September 2026. The legal entity is deliberately omitted pending
+D3. Exact expansion countries remain a D2 decision.
 
 A consumer mobile app and an enterprise/government dashboard selling prepaid
 connectivity. Customers install an eSIM and then use their phone's **normal
 dialer and mobile data** — no VoIP app, no SIP client. The same profile must
 carry data and native voice.
 
-- Legal selling entity: `[[UNDECIDED — see D3]]`
-- First selling markets: `[[UNDECIDED — see D2]]`
+- Legal selling entity: not yet selected; please advise what eligibility or
+  contracting constraints should inform that D3 decision
+- Initial candidate selling market: **Nigeria**
+- Later expansion: exact countries are not yet selected; West Africa and
+  Muslim-majority markets are strategic regions, not an approved catalog
 - Primary calling destination: **Nigeria** (mobile and landline)
-- Expected first-year volume: `[[FOUNDER TO SUPPLY — do not send a guess]]`
-- Target launch: `[[FOUNDER TO SUPPLY]]`
+- Projected first-year annual customer revenue: **USD 50,000**
+- Target launch: **November 2026**
 
 ## 2. The decisive question
 
@@ -237,20 +242,20 @@ authorised to place a paid order under this enquiry.
 
 Thank you,
 
-`[[FOUNDER NAME]]`
-`[[ROLE]]`
-`[[ENTITY — leave blank until D3 is decided; do not name an entity that does not exist]]`
-`[[CONTACT]]`
+Ibrahim Adamu
+Tech Lead
+`[[APPROVED BUSINESS CONTACT — held outside this public repository]]`
 
 ---
 
 ## Pre-send checklist
 
 - [ ] Every `[[PLACEHOLDER]]` filled or deleted; no guessed volumes or dates
-- [ ] §1 corrected by the founder; no invented forecast sent
-- [ ] Entity naming consistent with D3, or omitted entirely
-- [ ] Markets in §4 consistent with D2, or stated as undecided
-- [ ] Confirmed no order, commitment or payment is implied anywhere
-- [ ] Founder has approved sending, and to whom
+- [x] §1 corrected by the founder; no invented forecast sent
+- [x] Entity naming consistent with D3, or omitted entirely
+- [x] Markets in §4 consistent with D2, or stated as undecided
+- [x] Confirmed no order, commitment or payment is implied anywhere
+- [x] Founder approved sending both D1 enquiries to `sales@telnyx.com` on
+      27 September 2026
 - [ ] Answers, once received, recorded in [`../DECISIONS.md`](../DECISIONS.md)
       under D1 with date and artifact — not summarised into code comments

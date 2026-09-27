@@ -1,17 +1,34 @@
 # D1 closure checklist — Telnyx carrier and internet calling
 
 Prepared 27 September 2026. D1 is **OPEN**. This checklist coordinates the
-evidence needed to close it; it does not authorize contact, account creation,
-spend, provisioning or calls.
+evidence needed to close it. Founder authorization to send the two enquiries
+was recorded on 27 September 2026; that authorization does not extend to
+account creation, spend, provisioning or calls.
+
+### Founder input recorded 27 September 2026
+
+- Accountable contact: Ibrahim Adamu, Tech Lead. The approved business email is
+  retained outside this public repository.
+- Initial candidate market: Nigeria. Later expansion was described as other
+  West African and Muslim-majority countries; exact countries remain a D2
+  decision and must not be represented as an approved catalog.
+- Commercial input: projected first-year annual customer revenue of USD 50,000.
+- Target launch: November 2026.
+- Telnyx account: none. Enquiry authorization does not authorize creating one,
+  accepting terms, adding payment details or incurring spend.
+- Outreach: the founder authorized sending both D1 enquiries. The current
+  official recipient is `sales@telnyx.com`; delivery still requires the
+  approved mail account.
 
 ## 1. Founder inputs and outreach authorization
 
-- [ ] Founder name, role and business contact approved for the enquiry.
-- [ ] Honest first-year volume range and target launch window supplied.
-- [ ] Candidate selling markets and physical-test markets identified as
+- [x] Founder name, role and business contact approved for the enquiry.
+- [x] Honest first-year revenue forecast and target launch window supplied.
+- [x] Initial candidate selling market identified; physical-test markets and
+      later countries remain to be selected under D2, and all are
       candidates, not approved catalog entries.
-- [ ] Legal entity omitted until D3 closes, or the actual approved entity used.
-- [ ] Founder approves the recipients and sending the separate
+- [x] Legal entity omitted until D3 closes, or the actual approved entity used.
+- [x] Founder approves sending to `sales@telnyx.com` the separate
       [carrier/mobile-voice enquiry](ENQUIRY-DRAFT.md) and
       [internet-calling enquiry](../voice/ENQUIRY-DRAFT.md).
 - [ ] The sent message and every written response are retained in the
@@ -93,4 +110,3 @@ decision, date and immutable locators/digests for the written response, account
 configuration, rate deck and completed probes. Partial answers close only their
 named rows. Any unsupported channel remains fail-closed and receives an
 explicit `DISABLED` release decision with negative eligibility tests.
-

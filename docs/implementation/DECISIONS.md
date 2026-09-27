@@ -74,6 +74,15 @@ documentation, not commercial confirmation, and it does not move D1.
   [telnyx/ENQUIRY-DRAFT.md](telnyx/ENQUIRY-DRAFT.md), plus the staged
   [D1 closure checklist](telnyx/D1-CLOSURE-CHECKLIST.md). The draft remains
   unsent.
+- Founder input recorded 27 September 2026: Ibrahim Adamu, Tech Lead,
+  authorized sending the carrier/mobile-voice and internet-calling enquiries
+  to `sales@telnyx.com`; Nigeria is the initial candidate market; no Telnyx
+  account exists. The business contact is retained outside this public
+  repository. The founder subsequently confirmed projected first-year annual
+  customer revenue of USD 50,000 and a November 2026 launch target. Outreach
+  now waits only on the approved mail connection. This authorization does not
+  permit account creation, acceptance of terms, payment details, provisioning,
+  calls or spend, and it does not close D1.
 
 #### Evidence gathered — 2026-09-09 (chunk V01, US-44) — internet track
 
