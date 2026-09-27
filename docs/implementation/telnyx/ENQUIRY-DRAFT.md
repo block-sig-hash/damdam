@@ -3,6 +3,7 @@
 > **STATUS: UNSENT. DO NOT SEND.**
 >
 > Prepared by [chunk 03](../chunks/03-telnyx-feasibility.md) on 8 September 2026
+> and refreshed against the public Telnyx site on 27 September 2026
 > as preparation for gate **D1**. No message has been sent to Telnyx, no account
 > has been opened, no sales contact has been made and no commercial commitment
 > exists. Sending this is the founder's decision and requires their own review —
@@ -50,20 +51,29 @@ each market we intend to sell in?**
 If the answer is market-dependent, we need the list of markets where it holds,
 not a global statement. We would rather exclude a market than mis-sell one.
 
-## 3. VoLTE production readiness
+## 3. Production contract and API maturity
 
-Your [VoLTE overview](https://developers.telnyx.com/docs/iot-sim/voice-enabled-iot)
-states, as of 8 September 2026: "**Beta** — VoLTE is in beta. API reference and
-detailed configuration docs coming soon."
+The public position changed after the original draft. On 27 September 2026,
+the [Mobile Voice product page](https://telnyx.com/products/mobile-voice) no
+longer carried the earlier beta warning. It advertised enterprise-grade
+reliability, enterprise SLAs, SIM/eSIM provisioning, number assignment,
+policies, QoS and CDR visibility. A public
+[Mobile Voice Connections API](https://developers.telnyx.com/api-reference/mobile-voice-connections/list-mobile-voice-connections)
+also exists. These are public product claims, not terms granted to our account.
 
-1. What are the terms of the beta — is production, revenue-generating consumer
-   use permitted today?
-2. What is the expected GA timeline, and what changes at GA?
-3. What API-stability guarantee applies during beta? Will the voice action and
-   `mobile_phone_numbers` schemas change?
-4. What support commitment and SLA applies to beta VoLTE in production?
-5. When will the voice API reference and configuration documentation publish?
-6. Are there beta customers running consumer smartphone voice at scale today?
+1. Is Mobile Voice generally available for revenue-generating resale to
+   consumers and enterprise/government users under our proposed model?
+2. Which contract, service description, SLA and support terms would govern our
+   account? Please identify any beta, preview, country or use-case restriction
+   that still applies despite the current public product page.
+3. What versioning, deprecation and backward-compatibility guarantees apply to
+   Mobile Voice Connections, Mobile Phone Numbers, call events and CDRs?
+4. Which exact APIs activate voice on an eSIM, assign/replace a number, enforce
+   policies and retrieve final/corrected CDRs? Which are enabled in a test
+   account without production spend?
+5. The current page is oriented toward enterprises, AI agents and managed
+   fleets. Is ordinary human consumer-smartphone use explicitly supported, and
+   can you provide customers or device certification evidence for that use?
 
 ## 4. Coverage — four separate matrices, please
 
@@ -100,10 +110,12 @@ consumer smartphones.
 
 ## 6. Calls to Nigeria — complete cost
 
-No mobile-voice per-minute rate is published on
-[telnyx.com/pricing](https://telnyx.com/pricing) or
-[pricing/mobile-voice](https://telnyx.com/pricing/mobile-voice), so we need a
-rate deck. For calls **to Nigeria** from a Telnyx mobile line, please state:
+The current [Mobile Voice pricing page](https://telnyx.com/pricing/mobile-voice)
+labels the minute rate as custom and describes carrier fee plus SIP-trunking
+fee, while the general [pricing page](https://telnyx.com/pricing) advertises
+Mobile Voice "from $5 per SIM per month." Please reconcile those statements
+and provide the account-specific rate deck. For calls **to Nigeria** from a
+Telnyx mobile line, please state:
 
 1. Per-minute rate to Nigerian **mobile** networks, by operator if it varies.
 2. Per-minute rate to Nigerian **landline**.
@@ -115,9 +127,10 @@ rate deck. For calls **to Nigeria** from a Telnyx mobile line, please state:
    These are test candidates, not confirmed markets.
 7. Any surcharge while roaming.
 8. Data pricing by zone for the countries in §4.1.
-9. Monthly recurring charges — we understand $2/month active and $0.20/month
-   disabled or standby per SIM, and $0.70 per eSIM activation. Please confirm and
-   state anything else recurring, including per-number monthly charges.
+9. Monthly recurring charges for the eSIM/data service, Mobile Voice and the
+   assigned number. Explain whether the public "from $5 per SIM per month" is
+   additional to the wireless SIM/eSIM charges and which account/market
+   conditions determine it.
 10. Taxes, regulatory fees and surcharges, by selling market.
 11. Minimum commitments, ramp requirements or volume tiers.
 12. Rate-change notice period.

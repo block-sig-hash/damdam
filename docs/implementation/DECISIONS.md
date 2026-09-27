@@ -53,6 +53,28 @@ Recorded so far: the documentation review dated 8 September 2026 in
 [IMPLEMENTATION-PLAN.md](IMPLEMENTATION-PLAN.md) §5. That is a reading of public
 documentation, not commercial confirmation, and it does not move D1.
 
+#### Evidence rechecked — 2026-09-27 — carrier/mobile-voice track
+
+- Gathered by: Codex from current public Telnyx product, pricing and developer
+  pages. **Not a decision. D1 stays OPEN.** No account was opened, no supplier
+  contact was made, no API call was authenticated and no paid action occurred.
+- Material change: the public Mobile Voice page no longer carries the earlier
+  beta/API-coming-soon language, and a Mobile Voice Connections API reference
+  now exists. Telnyx markets number assignment, policies, CDR visibility and
+  enterprise SLAs.
+- Still missing: written consumer resale eligibility, account-specific terms,
+  voice coverage by market/network/profile, certified handset matrix, number
+  availability, roaming/permanent-roaming position, Nigeria rate deck, hard
+  data/voice spending bounds, WDR/CDR correction behavior and test access.
+- Pricing remains insufficient for an offer: the general page says "from $5
+  per SIM per month" while the detailed Mobile Voice page says custom and
+  carrier fee plus SIP-trunking fee. Neither supplies an all-in Nigeria route.
+- Artifacts: refreshed
+  [telnyx/CAPABILITY-MATRIX.md](telnyx/CAPABILITY-MATRIX.md) and
+  [telnyx/ENQUIRY-DRAFT.md](telnyx/ENQUIRY-DRAFT.md), plus the staged
+  [D1 closure checklist](telnyx/D1-CLOSURE-CHECKLIST.md). The draft remains
+  unsent.
+
 #### Evidence gathered — 2026-09-09 (chunk V01, US-44) — internet track
 
 - Gathered by: Claude, chunk V01. **Not a decision. D1 stays OPEN.**

@@ -166,3 +166,32 @@ same beta labels and prose as the rendered pages.
 
 **Documentation changes without notice.** Re-date this file on every recheck
 rather than assuming it still holds.
+
+## 5. Public-documentation recheck — 27 September 2026
+
+This recheck found a material change, but no account or physical evidence:
+
+- The current [Mobile Voice product page](https://telnyx.com/products/mobile-voice)
+  no longer displays the September 8 beta warning. It now advertises
+  SIM/eSIM VoLTE for people, devices and AI agents, number assignment,
+  inbound/outbound calling, policies, QoS/CDR visibility and enterprise SLAs.
+- A public [Mobile Voice Connections API](https://developers.telnyx.com/api-reference/mobile-voice-connections/list-mobile-voice-connections)
+  now documents `/v2/mobile_voice_connections`. This closes the narrow
+  "API reference does not exist" observation; it does not prove that the
+  required features are enabled or stable for DamDam's account.
+- The [general pricing page](https://telnyx.com/pricing) advertises Mobile Voice
+  "from $5 per SIM per month," while the
+  [Mobile Voice pricing page](https://telnyx.com/pricing/mobile-voice) calls the
+  rate custom and describes carrier fees plus SIP-trunking fees. It still does
+  not publish DamDam's all-in Nigeria mobile/landline rates, billing increments,
+  number charges, taxes or roaming costs.
+- The [Nigeria IoT SIM page](https://telnyx.com/sim-cards/nigeria) advertises
+  Nigerian data connectivity and a starting per-MB price. It is explicitly
+  IoT/data marketing and supplies no Nigerian VoLTE network, handset, assigned
+  number or native-call evidence.
+
+Therefore D1 remains **OPEN**. Marketing and unauthenticated API schemas do not
+establish consumer resale permission, per-market voice coverage, smartphone
+compatibility, emergency obligations, hard prepaid enforcement, account rate
+cards or a tested line. The refreshed questions are in
+[ENQUIRY-DRAFT.md](ENQUIRY-DRAFT.md).
