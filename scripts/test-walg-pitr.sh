@@ -42,8 +42,8 @@ wait_for_archive_count() {
   done
 }
 
-echo "== Build the real Postgres + WAL-G image =="
-$compose build postgres
+echo "== Build the real Postgres + WAL-G image and checksum-verified S3 fixture =="
+$compose build postgres minio
 
 echo "== Start Postgres with a local S3-compatible MinIO target =="
 start_postgres

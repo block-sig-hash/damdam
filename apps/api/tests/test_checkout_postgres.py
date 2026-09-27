@@ -47,6 +47,8 @@ from app.catalog.models import (
 from app.catalog.service import CatalogError, CatalogService, DeviceFacts, LineRequest
 from app.catalog.tariffs import DestinationKind, OriginKind, Tariff, TariffRate
 from app.checkout.service import CheckoutError, CheckoutService
+from app.ledger.models import AccountKind, JournalEntry
+from app.ledger.service import LedgerService
 from app.orders.models import Order, OrderItem, PaymentState
 from app.payments.contract import (
     AttemptStatus,
@@ -62,6 +64,8 @@ from app.payments.routing import (
     PaymentRoutingError,
     ProcessorCharge,
 )
+from app.refunds.models import Refund, RefundStatus
+from app.refunds.service import RefundError, RefundOutcome, RefundService
 
 pytestmark = pytest.mark.skipif(
     "TEST_DATABASE_URL" not in os.environ,
@@ -72,6 +76,7 @@ NOW = datetime(2026, 9, 10, 12, 0, tzinfo=timezone.utc)
 TABLES = (
     "excess_payments, payment_attempts, payment_intents, "
     "merchant_payment_methods, merchant_accounts, "
+    "journal_lines, journal_entries, ledger_reservations, ledger_accounts, "
     "quote_items, quotes, order_items, orders, number_policies, "
     "tariff_rates, tariffs, "
     "device_eligibility_rules, provider_offerings, product_coverage, "
@@ -562,6 +567,129 @@ def test_a_paid_order_is_never_offered_a_new_payment_session(
         "that has already been collected"
     )
     assert len(session.exec(select(PaymentAttempt)).all()) == 1
+
+
+def test_checkout_capture_and_refund_reconcile_across_restarts(
+    engine,
+    session: Session,
+    service: CheckoutService,
+    catalog: CatalogService,
+    clock: Clock,
+    processor: FakeProcessor,
+) -> None:
+    """A full customer money journey, not separately seeded payment/refund rows.
+
+    The checkout's real intent and captured attempt must be the refundable
+    charge. A retry after each process boundary must not create a second order,
+    charge, payout, or journal entry. The original capture remains in history;
+    the refund posts an equal opposite entry rather than editing it.
+    """
+    _entity, product, _market, merchant = _sellable(session, clock)
+    payer = _user(session)
+    quote_id = _quote(session, catalog, product, recipient=payer)
+    placed = service.place(
+        session,
+        quote_id=quote_id,
+        payer=payer,
+        method=PaymentMethodKind.CARD,
+        adapter=processor,
+    )
+    assert placed.attempt is not None
+    order_id = placed.order.id
+    attempt_id = placed.attempt.id
+    payer_id = payer.id
+    charge_reference = placed.attempt.idempotency_key
+    amount = placed.intent.amount
+    session.commit()
+
+    charge = ProcessorCharge(
+        processor_reference=charge_reference,
+        status="success",
+        amount=amount,
+        currency="NGN",
+        merchant_reference=merchant.approval_reference,
+        succeeded=True,
+    )
+    with Session(engine) as capture_session:
+        router = PaymentRouter(clock=clock)
+        captured = router.capture(capture_session, charge, processor="fakepay")
+        assert isinstance(captured, PaymentAttempt)
+        assert captured.id == attempt_id
+        capture_session.commit()
+
+    with Session(engine) as refund_session:
+        attempt = refund_session.get(PaymentAttempt, attempt_id)
+        assert attempt is not None
+        refund_service = RefundService(LedgerService(clock=clock), clock=clock)
+        refund = refund_service.request_refund(
+            refund_session,
+            attempt,
+            amount,
+            "customer requested cancellation",
+            f"refund:order:{order_id}",
+        )
+        refund_id = refund.id
+        refund_service.record_refund_outcome(
+            refund_session,
+            refund,
+            RefundOutcome(succeeded=True, processor_reference="refund-confirmed-1"),
+        )
+        refund_session.commit()
+
+    with Session(engine) as verify:
+        order = verify.get(Order, order_id)
+        payer = verify.get(User, payer_id)
+        attempt = verify.get(PaymentAttempt, attempt_id)
+        refund = verify.get(Refund, refund_id)
+        assert order is not None and payer is not None and attempt is not None
+        assert refund is not None
+        assert order.payment_state is PaymentState.PAID
+        assert attempt.status is AttemptStatus.SUCCEEDED
+        assert refund.status is RefundStatus.SUCCEEDED
+        assert refund.payment_attempt_id == attempt_id
+        assert refund.currency == order.currency == "NGN"
+        assert refund.amount == order.total_amount == amount
+        assert refund_service.refundable_remaining(verify, attempt) == Decimal("0.00")
+
+        entries = verify.exec(select(JournalEntry)).all()
+        assert {entry.business_event_id for entry in entries} == {
+            f"payment:{attempt_id}:captured",
+            f"refund:order:{order_id}:posted",
+        }
+        revenue = refund_service.ledger.account(verify, "NGN", AccountKind.REVENUE)
+        clearing = refund_service.ledger.account(
+            verify, "NGN", AccountKind.SETTLEMENT_CLEARING
+        )
+        assert refund_service.ledger.balance(verify, revenue) == Decimal("0.00")
+        assert refund_service.ledger.balance(verify, clearing) == Decimal("0.00")
+
+        resumed = service.place(
+            verify,
+            quote_id=quote_id,
+            payer=payer,
+            method=PaymentMethodKind.CARD,
+            adapter=processor,
+        )
+        assert resumed.resumed and resumed.order.id == order_id
+        assert resumed.session is None
+        assert router.capture(verify, charge, processor="fakepay").id == attempt_id
+        assert (
+            refund_service.record_refund_outcome(
+                verify,
+                refund,
+                RefundOutcome(succeeded=True, processor_reference="refund-confirmed-1"),
+            ).id
+            == refund_id
+        )
+        with pytest.raises(RefundError) as raised:
+            refund_service.request_refund(
+                verify, attempt, Decimal("0.01"), "duplicate", "refund:second"
+            )
+        assert raised.value.code == "exceeds_refundable"
+        assert len(verify.exec(select(Order)).all()) == 1
+        assert len(verify.exec(select(PaymentAttempt)).all()) == 1
+        assert len(verify.exec(select(Refund)).all()) == 1
+        assert len(verify.exec(select(JournalEntry)).all()) == 2
 
 
 def test_two_simultaneous_checkouts_produce_one_order(

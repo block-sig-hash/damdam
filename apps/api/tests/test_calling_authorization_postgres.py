@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from threading import Barrier
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
@@ -29,7 +29,13 @@ from app.calling.service import CallAuthorizationError, CallAuthorizationService
 from app.catalog.market import PublicationStatus
 from app.catalog.models import Product, ProductKind
 from app.catalog.tariffs import DestinationKind, OriginKind, Tariff, TariffRate
-from app.ledger.models import AccountKind, Direction, OwnerKind, Reservation
+from app.ledger.models import (
+    AccountKind,
+    Direction,
+    LedgerAccount,
+    OwnerKind,
+    Reservation,
+)
 from app.ledger.service import LedgerService, Posting
 from app.organizations.models import (
     MembershipStatus,
@@ -713,6 +719,151 @@ class TestRouteGate:
 
 class TestConcurrency:
     """Two threads, one database, and the guarantees that only exist there."""
+
+    def test_mobile_and_browser_share_funds_but_not_device_grants(self, engine, clock):
+        """Competing clients cannot spend the same credit or copy the winner's grant.
+
+        Both installations belong to one user and race for the last NGN 300.
+        After the winner cancels, the loser may reserve again, but each grant
+        remains bound to its own installation. This is backend policy evidence,
+        not mobile/browser SDK or media evidence.
+        """
+        with Session(engine) as setup:
+            setup.exec(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+            ledger = LedgerService(clock=clock)
+            user = _user(setup)
+            credit = _fund(setup, ledger, user, "300.00")
+            _tariff(setup, clock)
+            credentials = {}
+            for label in ("mobile", "browser"):
+                credential = CallingClientCredential(
+                    user_id=user.id,
+                    device_id=f"{label}-installation",
+                    device_label=label,
+                    provider="fake",
+                    provider_credential_id=f"{label}-{uuid4().hex}",
+                    expires_at=clock() + timedelta(hours=1),
+                    created_at=clock(),
+                )
+                setup.add(credential)
+                setup.flush()
+                credentials[label] = credential.id
+            user_id = user.id
+            credit_id = credit.id
+            setup.commit()
+
+        barrier = Barrier(2)
+
+        def authorize(label: str) -> tuple[str, object]:
+            service = CallAuthorizationService(
+                LedgerService(clock=clock),
+                clock=clock,
+                supported_countries=frozenset({"NG"}),
+                route_enabled=True,
+            )
+            with Session(engine) as scoped:
+                caller = scoped.get(User, user_id)
+                assert caller is not None
+                barrier.wait(timeout=10)
+                try:
+                    attempt = _authorize(
+                        service,
+                        scoped,
+                        caller,
+                        idempotency_key=f"{label}-call",
+                        requested_seconds=600,
+                        client_credential_id=credentials[label],
+                    )
+                    scoped.commit()
+                    return label, attempt.id
+                except CallAuthorizationError as error:
+                    scoped.rollback()
+                    return label, error.code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = dict(pool.map(authorize, ("mobile", "browser")))
+        successful = [
+            label for label, outcome in outcomes.items() if isinstance(outcome, UUID)
+        ]
+        assert len(successful) == 1, outcomes
+        winner = successful[0]
+        loser = next(label for label in outcomes if label != winner)
+        assert outcomes[loser] == "insufficient_funds"
+
+        policy = CallAuthorizationService(
+            LedgerService(clock=clock),
+            clock=clock,
+            supported_countries=frozenset({"NG"}),
+            route_enabled=True,
+        )
+        with Session(engine) as scoped:
+            caller = scoped.get(User, user_id)
+            assert caller is not None
+            winning_attempt = scoped.get(CallAttempt, outcomes[winner])
+            assert winning_attempt is not None
+            credit = scoped.get(LedgerAccount, credit_id)
+            assert credit is not None
+            assert policy.ledger.available(scoped, credit) == Decimal("0.00")
+            with pytest.raises(CallAuthorizationError) as copied:
+                policy.start(
+                    scoped,
+                    caller,
+                    winning_attempt.id,
+                    device_id=f"{loser}-installation",
+                )
+            assert copied.value.code == "device_not_authorized"
+            assert (
+                policy.start(
+                    scoped,
+                    caller,
+                    winning_attempt.id,
+                    device_id=f"{winner}-installation",
+                ).attempt_id
+                == winning_attempt.id
+            )
+            policy.stop(scoped, caller, winning_attempt.id, reason="cancelled")
+            scoped.commit()
+
+        with Session(engine) as retry:
+            caller = retry.get(User, user_id)
+            assert caller is not None
+            replacement = _authorize(
+                policy,
+                retry,
+                caller,
+                idempotency_key=f"{loser}-call-after-release",
+                requested_seconds=600,
+                client_credential_id=credentials[loser],
+            )
+            with pytest.raises(CallAuthorizationError) as copied:
+                policy.start(
+                    retry,
+                    caller,
+                    replacement.id,
+                    device_id=f"{winner}-installation",
+                )
+            assert copied.value.code == "device_not_authorized"
+            assert (
+                policy.start(
+                    retry,
+                    caller,
+                    replacement.id,
+                    device_id=f"{loser}-installation",
+                ).attempt_id
+                == replacement.id
+            )
+            retry.commit()
+
+        with Session(engine) as verify:
+            assert len(verify.exec(select(CallAttempt)).all()) == 2
+            reservations = verify.exec(select(Reservation)).all()
+            assert len(reservations) == 2
+            assert sum(
+                reservation.amount
+                - reservation.released_amount
+                - reservation.settled_amount
+                for reservation in reservations
+            ) == Decimal("300.00")
 
     def test_n16_two_calls_race_for_insufficient_funds(self, engine, clock):
         """Only one of two concurrent calls may hold the last of the money."""
