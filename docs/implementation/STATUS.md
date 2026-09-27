@@ -60,6 +60,17 @@ is a dry run that executes nothing.
 | 29 — Run the authorized physical-device and enterprise pilot | **ACCEPTED after fixes for preparatory runbook/forms and local Android signing guard only; live pilot EXTERNAL_BLOCKED** | base `33a9fce` / reviewed code `e1ff1de` | [Independent review](reviews/29.md), [handoff](handoffs/29.md), [draft PR #136](https://github.com/block-sig-hash/damdam/pull/136) | Exact-head CI passed API 1,733 tests and Android/iOS 36 flows/72 validated PNGs each. Founder confirms no approved EAS project/signing/testers or live carrier/merchant/spending authorization. EAS-shaped injection hit Gradle 9.3.1 finalization; actual cloud signing path unresolved. No TestFlight/Play invites, physical installs, enterprise pilot or real eSIM/data/native-call evidence. These remain hard release gates |
 | 30 — Close release findings and prepare the production handoff | **ACCEPTED after fixes for preparatory validator and NO-GO dossier only; full release EXTERNAL_BLOCKED; integrated CI red** | base `d7fe6d2` / corrected code `c9d110a` / CI documentation head `6e3446d` | [Independent review](reviews/30.md), [handoff](handoffs/30.md), [NO-GO dossier](release/30-READINESS.md), [draft PR #137](https://github.com/block-sig-hash/damdam/pull/137) | Exact-head EAS/cloud signing, internal installs and real carrier evidence are absent. Native CI passed 36 flows/72 PNGs each but full CI WAL-G job was blocked by Quay MinIO `unauthorized`. No approved EAS/signing/testers/live pilot or founder spend limit; D1–D6, V01 B1–B5, combined journeys and operational bootstrap remain open. No production release candidate or readiness claim |
 
+**Post-review integration follow-up (27 September):** [draft PR #138](https://github.com/block-sig-hash/damdam/pull/138)
+proposes three joined-state PostgreSQL regressions and a checksum-verified,
+test-only MinIO build for the WAL-G CI drill. At code head `9e29ec8`, the
+[on-demand CI run](https://github.com/block-sig-hash/damdam/actions/runs/36289126468)
+has passed the API suite (1,736 passed, 5 skipped, 89.93% coverage) and the
+Docker/PITR job (proof and reconciliation markers, 7-second recovery); the
+native screenshot jobs were still running when this note was written. See the
+[follow-up handoff](handoffs/28-integration-followup.md) for exact scope and
+remaining gaps. This follow-up is **READY_FOR_REVIEW**, not an amendment to the
+accepted chunk 28–30 scope, a merge authorization or a release GO.
+
 ## Legacy release compatibility boundary — closed by chunk 04E
 
 `scripts/validate-release-signoff.sh` and `docs/release-signoffs/TEMPLATE.md`

@@ -39,6 +39,17 @@ one channel's simulated tests.
 | Internet calling | V01–V05 preparatory software only; no live SDK/media/route/cost proof | Separate approved route, device/browser, audio, DTMF, identity, cutoff and charge evidence before enabling either channel |
 | Merchant, enterprise and operations | D1–D6 open; no approved seller/processor/pilot organization, settled pilot or representative staging restore | Founder/commercial/finance owners approve scope; pilot and operations owners record reconciled scenarios and tested rollback |
 
+**27 September follow-up, not yet independently accepted:**
+[draft PR #138](https://github.com/block-sig-hash/damdam/pull/138) replaces the
+broken Quay dependency with a checksum-verified, test-only MinIO fixture. The
+[code-head CI run](https://github.com/block-sig-hash/damdam/actions/runs/36289126468)
+passed the WAL-G archive/PITR job and API suite; native screenshot jobs were
+still running when this note was written. It also adds three service-level
+joined-state regressions, described in the
+[integration follow-up handoff](../handoffs/28-integration-followup.md). This
+removes neither the production restore gate nor the external/signed/physical
+evidence gates. The NO-GO decision and unset candidate SHA remain unchanged.
+
 The exact-head signoff validator requires EAS and native-CI source SHAs, both
 signed cloud artifacts, both physical internal installs, a config-compatibility
 assessment, cleared blocking findings, named incident/support/refund/rollback
