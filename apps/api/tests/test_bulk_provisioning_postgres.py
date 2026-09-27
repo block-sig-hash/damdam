@@ -37,6 +37,7 @@ from app.bulk.models import (
     ActivationRequestState,
     BulkItemState,
     BulkJob,
+    BulkJobItem,
     BulkJobState,
 )
 from app.bulk.service import BulkError, BulkProvisioningService
@@ -47,12 +48,16 @@ from app.catalog.models import (
     ProductAllowance,
     ProductKind,
 )
+from app.connectivity.models import Entitlement
 from app.connectivity.service import ConnectivityService
+from app.enterprise.offboarding import OffboardingService
+from app.enterprise.reporting import EnterpriseReportingService
 from app.fulfilment.service import FulfilmentService
 from app.ledger.models import AccountKind, Direction, OwnerKind, Reservation
 from app.ledger.service import LedgerService, Posting
 from app.orders.models import Order, OrderItem, ProvisioningState
 from app.people.models import OrganizationPerson, PersonStatus
+from app.people.service import PeopleService
 
 pytestmark = pytest.mark.skipif(
     "TEST_DATABASE_URL" not in os.environ,
@@ -262,6 +267,124 @@ def _awaiting_supplier(session: Session, job: BulkJob, item) -> None:
     session.add(item)
     session.add(job)
     session.flush()
+
+
+def test_import_partial_funding_offboarding_and_report_share_one_history(
+    engine,
+    session: Session,
+    service: BulkProvisioningService,
+    ledger: LedgerService,
+    clock: Clock,
+) -> None:
+    """The enterprise journey joins real import, funding, order and report rows.
+
+    One of two imported staff can be funded. Offboarding that recipient ends
+    their local work grant without erasing the original purchase from the
+    departmental report or accidentally archiving the unfunded colleague.
+    Supplier confirmation is a test fixture, not a claim of live fulfilment.
+    """
+    organization = _organization(session)
+    entity = _entity(session)
+    market = _market(session, entity)
+    product = _product(session)
+    people_service = PeopleService(clock=clock)
+    team = people_service.create_team(session, organization.id, name="Field")
+    _fund_organization(session, ledger, organization, "1000.00")
+    organization_id = organization.id
+    team_id = team.id
+    entity_id = entity.id
+    market_id = market.id
+    product_id = product.id
+    session.commit()
+
+    with Session(engine) as importing:
+        record, parsed = people_service.preview_import(
+            importing,
+            organization_id,
+            filename="field-staff.csv",
+            content=(
+                b"Full Name,Email,Team\n"
+                b"Ada Obi,ada@example.test,Field\n"
+                b"Ben Musa,ben@example.test,Field\n"
+            ),
+            uploaded_by_user_id=None,
+        )
+        assert parsed is not None and len(parsed.valid_rows) == 2
+        summary = people_service.apply_import(importing, organization_id, record.id)
+        assert summary.created_count == 2
+        people = people_service.people(importing, organization_id)
+        assert len(people) == 2
+        assert all(person.team_id == team_id for person in people)
+        person_ids = [person.id for person in people]
+
+    with Session(engine) as ordering:
+        product = ordering.get(Product, product_id)
+        assert product is not None
+        job = service.plan(
+            ordering,
+            organization_id,
+            idempotency_key="imported-field-staff",
+            product=product,
+            sales_market_id=market_id,
+            person_ids=person_ids,
+            currency="NGN",
+            unit_amount=UNIT,
+        )
+        service.fund(ordering, job)
+        items = ordering.exec(
+            select(BulkJobItem).where(BulkJobItem.job_id == job.id)
+        ).all()
+        reserved = [item for item in items if item.state is BulkItemState.RESERVED]
+        unfunded = [item for item in items if item.error_code == "insufficient_funds"]
+        assert len(reserved) == len(unfunded) == 1
+        funded_person_id = reserved[0].person_id
+        unfunded_person_id = unfunded[0].person_id
+
+        service.provision(ordering, job, seller_legal_entity_id=entity_id)
+        ordering.refresh(reserved[0])
+        assert reserved[0].state is BulkItemState.PROVISIONED
+        assert reserved[0].order_item_id is not None
+        entitlement = ordering.exec(
+            select(Entitlement).where(
+                Entitlement.order_item_id == reserved[0].order_item_id
+            )
+        ).one()
+        entitlement_id = entitlement.id
+        order_id = job.order_id
+        ordering.commit()
+
+    with Session(engine) as departing:
+        result = OffboardingService(ledger, clock=clock).offboard(
+            departing, organization_id, funded_person_id
+        )
+        assert result.failed == 0
+        departing.commit()
+
+    with Session(engine) as verify:
+        funded_person = verify.get(OrganizationPerson, funded_person_id)
+        unfunded_person = verify.get(OrganizationPerson, unfunded_person_id)
+        entitlement = verify.get(Entitlement, entitlement_id)
+        order = verify.get(Order, order_id)
+        assert funded_person is not None and unfunded_person is not None
+        assert entitlement is not None and order is not None
+        assert funded_person.status is PersonStatus.ARCHIVED
+        assert unfunded_person.status is PersonStatus.ACTIVE
+        assert entitlement.expires_at == NOW
+        assert order.total_amount == UNIT
+        assert order.payer_organization_id == organization_id
+        report = EnterpriseReportingService(ledger, clock=clock).departmental(
+            verify,
+            organization_id,
+            "NGN",
+            period_from=NOW - timedelta(days=1),
+            period_to=NOW + timedelta(days=1),
+        )
+        assert report.purchased_total == UNIT
+        assert report.usage_total == Decimal("0.00")
+        assert len(report.totals) == 1
+        assert report.totals[0].label == "Field"
+        assert report.totals[0].lines == 1
+        assert report.totals[0].people == 2
 
 
 class TestPlanning:
