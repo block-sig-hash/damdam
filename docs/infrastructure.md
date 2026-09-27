@@ -1190,3 +1190,41 @@ real Postgres + WAL-G image, and now also **records the recovery time** and
 and no transaction may be half-present. A restore that returns rows is not the
 same as a restore that returns a consistent business state, and a double-entry
 transaction split by recovery is the failure a row count cannot see.
+
+---
+
+## 11.17 Amendment — Reset Release Promotion and Signing Boundary (US-42)
+
+Chunk 27 replaces the temporary fail-closed signoff placeholder with a
+capability-specific scenario table. The template and validator move together;
+historical signoffs and tags are retained. A promotion signoff names a tested
+source commit, environment, redacted runtime-configuration digest, carrier and
+merchant configuration references, accepted dependency commits, release
+markets/modes, physical devices, signed artifacts, incident/rollback owners and
+scenario evidence. Any explicit FAIL, missing evidence, future/stale signoff or
+tracked change after the tested commit blocks promotion. Disabled carrier,
+mobile-internet and browser-internet channels require negative eligibility
+evidence; enabled channels require their own physical/live scenarios. External
+config changes are rechecked by the release owner against the recorded digest;
+CI cannot attest to a remote secret store by reading a Markdown field.
+The signoff and its matching `.md.sig` sidecar are verified against an external
+release-owner Ed25519 public key using trusted base-branch workflow code. The
+tested commit must be the current `staging` head. This does not make arbitrary
+evidence IDs true: the signer verifies them and accepts accountability. The
+trusted workflow, public key and strict required status must be installed by a
+repository administrator before any promotion. A required merge queue invokes
+a trusted revalidation on the merge-group SHA against current staging and UTC
+time, preventing an old green PR-head status from authorizing promotion.
+The status must come from a dedicated release GitHub App, configured as the
+required check's expected source; its status-only credential and release key
+live in a protected environment inaccessible to ordinary PR workflows.
+Staging must be frozen during the short queue window; absent bootstrap fails
+closed.
+
+Android production release no longer inherits the debug key; the fixture
+screenshot APK has a separate build type. iOS Release selects production APNs
+entitlements. Neither platform has approved distribution signing in this
+repository, so D6 remains open. Store submission and production promotion are
+different authorized operations; automatic EAS store submission on main push
+has been removed. Current procedures and remaining evidence are
+in [release/27-SIGNING-PRIVACY.md](./implementation/release/27-SIGNING-PRIVACY.md).

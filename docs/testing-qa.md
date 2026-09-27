@@ -947,3 +947,17 @@ exercise path and header tenant selection, and keep personal orders unreachable
 from organization assignment. Migration tests populate the preceding identity
 revision before upgrading; a fresh upgrade must also reach
 `0029_organization_memberships` through the full revision chain.
+
+---
+
+## 14.18 Amendment — Release Signoff Negative Matrix (US-42)
+
+Chunk 27's release validator has disposable-git-history regressions for a
+valid signoff and refusal of missing artifacts, an explicit FAIL, skipped
+required channel evidence, missing merchant or physical-device evidence,
+mock mode, future/stale dates, mismatched commits, unaccepted dependency
+history and tracked changes after the tested candidate. The mobile screenshot
+matrix adds Home, Account and Receipts in both locales and retains exact-set,
+PNG integrity and per-platform checks. These are software gates; chunk 29
+still owes real-device and provider/merchant proof. No fixture result closes a
+live pilot criterion.

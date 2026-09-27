@@ -1,13 +1,9 @@
 name: EAS On-Demand Build Verification
 
-# Manual, on-demand real EAS cloud build -- for verifying that native
-# code (e.g. CallKit/PushKit's RNCallKeep, RNVoipPushNotificationManager,
-# and the custom VoipCallKitBridge added in PR #87) actually compiles on
-# Expo's own infrastructure, independent of GitHub Actions' Linux
-# runners or any local machine. Not part of the release pipeline
-# (deploy.yml already handles real releases on push to main) -- this
-# exists purely so "does this compile on EAS" can be checked without
-# waiting for a production release.
+# Manual EAS cloud build probe. The old incoming CallKit/PushKit bridge was
+# retired in chunk 04; this workflow does not restore it. A successful probe
+# is not proof of approved distribution signing, privacy labels, live calling
+# or physical installation. It never submits to a store.
 #
 # Deliberately blocks and waits for the real build result (no
 # --no-wait) so this job's own exit code and log directly reflect

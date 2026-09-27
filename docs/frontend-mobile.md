@@ -994,3 +994,17 @@ failed attempts. A local `paymentStarted` flag only says whether this device
 completed the browser handoff. Pending payment, provisioning and unknown
 supplier states do not offer a route back to plan purchase; failed or
 never-opened payment sessions retry the same quote and order.
+
+---
+
+## 8.17 Amendment — Native Release and Current Screenshot Boundary (US-42)
+
+Chunk 27 adds Home, Account and Receipts to the real-screen English/French
+Maestro matrix on both mobile platforms. The outbound Calls setup, active and
+history captures remain fixtures, not live SDK/audio evidence. Android's
+non-production `screenshot` build is distinct from the distribution-signed
+`release` build; iOS Release uses production APNs entitlements but cannot be
+archived and signed without D6 Apple access. Neither the screenshot harness nor
+a native binary build authorizes an unverified carrier or internet calling
+mode. The mobile permission/privacy inventory and open device evidence are in
+[release/27-SIGNING-PRIVACY.md](./implementation/release/27-SIGNING-PRIVACY.md).

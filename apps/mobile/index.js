@@ -7,8 +7,8 @@ import { name as appName } from './app.json';
 
 // Testing-infra-only seam (screenshotHarness/README.md): SCREENSHOT_HARNESS_MODE
 // is inlined at build time by babel-plugin-transform-inline-environment-variables
-// and is never set for a real app build, so this branch is dead code in
-// production -- only CI's screenshot-generation job ever sets it.
+// and must remain false for a real app build. Android release task-graph and
+// iOS Release bundle-phase guards reject a production build if it is true.
 const RootComponent =
   process.env.SCREENSHOT_HARNESS_MODE === 'true'
     ? require('./screenshotHarness/ScreenshotHarnessApp').ScreenshotHarnessApp

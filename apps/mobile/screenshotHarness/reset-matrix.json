@@ -63,7 +63,8 @@
       "screens": [
         "consumer-sign-in",
         "consumer-home-no-service",
-        "consumer-home-error"
+        "consumer-home-error",
+        "home"
       ],
       "why": "The new signed-out entry and the explicit no-service and load-error Home states required by chunk 18. Each state has a route out and is captured in both supported locales.",
       "platforms": [
@@ -117,19 +118,16 @@
         "ios",
         "android"
       ]
+    },
+    "consumerAccount": {
+      "owner": "chunk 21",
+      "screens": ["account", "receipts"],
+      "why": "The real account and receipt components with non-secret fixtures, rendered in both locales on both platforms.",
+      "platforms": ["ios", "android"]
     }
   },
   "pending": {
-    "$comment": "Owed by the reset, not yet built. Listed with an owning chunk so chunk 27's release gate can fail against a named owner rather than a silence. A screen may only move to `implemented` when a flow actually captures it -- reset-matrix.test.ts fails if a pending name appears in the derived matrix, so it cannot be quietly ticked off.",
-    "consumer": {
-      "owner": "chunks 18-21",
-      "screens": [
-        "home",
-        "account",
-        "receipts"
-      ],
-      "why": "Chunk 19 moved `plans` and `checkout` to `implemented` and removed `plan-detail` (the reset has no separate detail screen -- price, contents, number policy and priced call destinations are all on the plan card). Chunk 20 moved `my-line` to `implemented` and replaced `my-line-installation` with six line/installation captures. Chunk 18 built Home but captured no screenshots, so `home` stays owed; `account` and `receipts` are chunk 21's."
-    },
+    "$comment": "The mobile screen flows above are captured. These remaining reset surfaces live in the dashboard or internal operations, not in the mobile app; they require separate browser evidence before release. A screen may only move to `implemented` when its platform's harness actually captures it.",
     "enterprise": {
       "owner": "chunks 22-24",
       "screens": [

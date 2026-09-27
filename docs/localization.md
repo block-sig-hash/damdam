@@ -166,3 +166,21 @@ What changes is the **content** those processes apply to:
 
 The completed English/French architecture recorded in `i18n-scoping.md` §10
 remains current. Additional languages remain future work.
+
+---
+
+## 10. Amendment — Current Release Image and Permission-Copy Scope (US-42)
+
+Chunk 27 adds Home, Account and Receipts to the mobile English/French capture
+matrix. The old 32-image Hajj baseline in §6 is historical, not the current
+expected set; Maestro flows and the exact-set validator define the current
+images per platform. The dashboard gallery's English/French and 200%-text
+captures are component evidence, not final enterprise/internal journey images.
+Those and native-speaker/assistive-technology review remain release work.
+
+The retired iOS location-purpose strings are removed from both `en.lproj` and
+`fr.lproj`. No microphone purpose string is added before an outbound SDK
+actually requests microphone access. Store/legal, emergency and callback
+copy needs mode- and market-specific review; older SOS/family and Saudi-arrival
+copy in §§5–7 is superseded by the product reset and must not become a release
+criterion again.

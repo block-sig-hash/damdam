@@ -611,3 +611,21 @@ world.
 the browser client and chunks 25–26 own the CORS and rotation configuration; this
 chunk adds no browser surface and changes no CORS policy, so nothing here should
 be read as having settled them.
+
+---
+
+## 10.21 Amendment — Release Privacy Inventory and Disclosure Gate (US-42)
+
+Chunk 27 records the native permission, SDK, local-storage, hosted-payment and
+browser-microphone inventory in
+[release/27-SIGNING-PRIVACY.md](./implementation/release/27-SIGNING-PRIVACY.md).
+The checked-in iOS required-reason API manifest is not the complete App Store
+privacy label. The Android merged manifest and both signed binaries must be
+inspected before completing store forms. Optional PostHog telemetry, push
+tokens, account and financial records, device metadata, usage and support data
+need actual data-flow and processor disclosure review. No location, contacts,
+camera or microphone permission is declared in the current mobile source; an
+outbound media SDK cannot be enabled until the necessary permission and
+bilingual purpose copy are reviewed. D3/D4 and counsel still own legal seller,
+payment treatment, privacy notice and terms approval. Passing CI does not
+close those gates.

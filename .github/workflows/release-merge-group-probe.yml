@@ -1,0 +1,19 @@
+name: Release Merge Group Probe
+
+# Unprivileged signal only. The trusted workflow_run consumer on the default
+# branch validates the merge-group SHA; no PR/merge-group code is executed with
+# a write token. Main must require its release-signoff/trusted status in a
+# merge queue before promotion.
+on:
+  merge_group:
+    types: [checks_requested]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  signal:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Trusted release validation follows this merge-group event.'

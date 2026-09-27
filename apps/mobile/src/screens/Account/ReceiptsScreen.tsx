@@ -27,7 +27,7 @@ interface ReceiptsScreenProps {
  * their list.
  */
 export function ReceiptsScreen({ receipts, fromCache, onBack }: ReceiptsScreenProps) {
-  const { t } = useTranslation('account');
+  const { t, i18n } = useTranslation('account');
 
   return (
     <ScrollView
@@ -59,7 +59,7 @@ export function ReceiptsScreen({ receipts, fromCache, onBack }: ReceiptsScreenPr
         >
           <Text style={styles.reference}>{receipt.reference}</Text>
           <Text style={styles.detail}>
-            {t('receipts.placed', { when: receipt.placed_at })}
+            {t('receipts.placed', { when: receiptDate(receipt.placed_at, i18n.language) })}
           </Text>
           {receipt.organization_id ? (
             <Text style={styles.detail}>{t('receipts.paidFor')}</Text>
@@ -68,15 +68,15 @@ export function ReceiptsScreen({ receipts, fromCache, onBack }: ReceiptsScreenPr
           {receipt.lines.map((line, index) => (
             <View key={`${receipt.order_id}-${index}`} style={styles.row}>
               <Text style={styles.body}>{line.description}</Text>
-              <Text style={styles.body}>
-                {money(line.total_amount, receipt.currency)}
+              <Text style={styles.lineAmount}>
+                {receiptMoney(line.total_amount, receipt.currency)}
               </Text>
             </View>
           ))}
           <View style={styles.row}>
             <Text style={styles.totalLabel}>{t('receipts.total')}</Text>
             <Text style={styles.total} testID={`receipt-total-${receipt.order_id}`}>
-              {money(receipt.total_amount, receipt.currency)}
+              {receiptMoney(receipt.total_amount, receipt.currency)}
             </Text>
           </View>
         </View>
@@ -85,6 +85,38 @@ export function ReceiptsScreen({ receipts, fromCache, onBack }: ReceiptsScreenPr
       <SecondaryButton label={t('actions.refresh')} onPress={onBack} />
     </ScrollView>
   );
+}
+
+/** Keep the server's decimal value exact; remove only redundant zeroes. */
+function receiptMoney(amount: string, currency: string): string {
+  const parts = /^(-?\d+)(?:\.(\d+))?$/.exec(amount);
+  if (!parts) return money(amount, currency);
+
+  let minorDigits = currency === 'NGN' ? 2 : 0;
+  try {
+    minorDigits = new Intl.NumberFormat('en', { style: 'currency', currency })
+      .resolvedOptions().minimumFractionDigits ?? minorDigits;
+  } catch {
+    // An unknown currency still displays the exact amount and code.
+  }
+  const significant = (parts[2] ?? '').replace(/0+$/, '');
+  const fraction = significant.padEnd(minorDigits, '0');
+  return money(`${parts[1]}${fraction ? `.${fraction}` : ''}`, currency);
+}
+
+/** State the timezone rather than showing a raw ISO instant as customer copy. */
+function receiptDate(value: string, locale: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value;
+  return new Intl.DateTimeFormat(locale.startsWith('fr') ? 'fr-FR' : 'en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+    timeZoneName: 'short',
+  }).format(date);
 }
 
 const styles = StyleSheet.create({
@@ -116,9 +148,7 @@ const styles = StyleSheet.create({
     color: color.gray700,
   },
   row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: space.space3,
+    gap: space.space1,
   },
   detail: {
     fontSize: typography.caption.fontSize,
@@ -129,6 +159,12 @@ const styles = StyleSheet.create({
     fontSize: typography.body.fontSize,
     lineHeight: typography.body.lineHeight,
     color: color.gray700,
+  },
+  lineAmount: {
+    fontSize: typography.body.fontSize,
+    lineHeight: typography.body.lineHeight,
+    color: color.gray700,
+    textAlign: 'right',
   },
   totalLabel: {
     fontSize: typography.body.fontSize,
@@ -141,6 +177,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.numeral.lineHeight,
     fontWeight: typography.numeral.fontWeight,
     color: color.gray900,
+    textAlign: 'right',
   },
   note: {
     fontSize: typography.caption.fontSize,

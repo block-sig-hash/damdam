@@ -11,6 +11,9 @@ tags:
     element:
       id: "harness-target-esim-activation-prompt-android"
     direction: DOWN
+    centerElement: true
+    speed: 20
+    timeout: 60000
 - tapOn:
     id: "harness-target-esim-activation-prompt-android"
 - assertVisible:
@@ -26,6 +29,9 @@ tags:
     element:
       id: "harness-target-esim-activation-prompt-android"
     direction: DOWN
+    centerElement: true
+    speed: 20
+    timeout: 60000
 - tapOn:
     id: "harness-target-esim-activation-prompt-android"
 - assertVisible:
