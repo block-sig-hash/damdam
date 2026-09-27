@@ -64,9 +64,9 @@ is a dry run that executes nothing.
 proposes three joined-state PostgreSQL regressions and a checksum-verified,
 test-only MinIO build for the WAL-G CI drill. At code head `9e29ec8`, the
 [on-demand CI run](https://github.com/block-sig-hash/damdam/actions/runs/36289126468)
-has passed the API suite (1,736 passed, 5 skipped, 89.93% coverage) and the
-Docker/PITR job (proof and reconciliation markers, 7-second recovery); the
-native screenshot jobs were still running when this note was written. See the
+passed overall: API (1,736 passed, 5 skipped, 89.93% coverage), Docker/PITR
+(proof and reconciliation markers, 7-second recovery), and Android/iOS native
+CI (36/36 flows and 72/72 validated PNGs each). See the
 [follow-up handoff](handoffs/28-integration-followup.md) for exact scope and
 remaining gaps. This follow-up is **READY_FOR_REVIEW**, not an amendment to the
 accepted chunk 28–30 scope, a merge authorization or a release GO.

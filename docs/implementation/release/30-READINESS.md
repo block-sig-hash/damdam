@@ -43,8 +43,8 @@ one channel's simulated tests.
 [draft PR #138](https://github.com/block-sig-hash/damdam/pull/138) replaces the
 broken Quay dependency with a checksum-verified, test-only MinIO fixture. The
 [code-head CI run](https://github.com/block-sig-hash/damdam/actions/runs/36289126468)
-passed the WAL-G archive/PITR job and API suite; native screenshot jobs were
-still running when this note was written. It also adds three service-level
+passed overall: WAL-G archive/PITR, API suite, and Android/iOS simulator jobs
+(36 flows and 72 validated screenshots each). It also adds three service-level
 joined-state regressions, described in the
 [integration follow-up handoff](../handoffs/28-integration-followup.md). This
 removes neither the production restore gate nor the external/signed/physical

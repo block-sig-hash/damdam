@@ -38,7 +38,7 @@ This is **READY_FOR_REVIEW**, not a new release acceptance or merge approval.
 | Ruff on changed API test modules | PASS |
 | Compose overlay validation, `sh -n scripts/test-walg-pitr.sh`, `git diff --check` | PASS |
 | Local `./scripts/test-walg-pitr.sh` with the newly built verified fixture | PASS: `PITR_PROOF=PASS`, `PITR_RECONCILIATION=PASS`, 11-second recovery, no post-target transaction or unbalanced entry |
-| [Clean-runner on-demand CI](https://github.com/block-sig-hash/damdam/actions/runs/36289126468) at `9e29ec8` | API PASS: 1,736 passed, 5 skipped, 89.93% coverage; Docker/PITR PASS: archive interval 48 seconds, recovery 7 seconds, both proof and reconciliation markers; dashboard, docs, mobile lint/test and release validator PASS. Android/iOS screenshot jobs still running when this record was updated; final workflow conclusion must be checked before acceptance. |
+| [Clean-runner on-demand CI](https://github.com/block-sig-hash/damdam/actions/runs/36289126468) at `9e29ec8` | **PASS overall.** API: 1,736 passed, 5 skipped, 89.93% coverage. Docker/PITR: archive interval 48 seconds, recovery 7 seconds, both proof and reconciliation markers. Android: 36/36 flows and 72/72 validated PNGs (artifact `10922320843`). iOS: 36/36 flows and 72/72 validated PNGs (artifact `10921264697`). Dashboard, docs, mobile lint/test and release validator also passed. |
 
 The local test database is `damdam_review_combined_20260925` on the existing
 dedicated PostgreSQL test container; no production data was used or changed.
